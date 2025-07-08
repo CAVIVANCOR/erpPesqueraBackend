@@ -1,8 +1,22 @@
+# Node modules
 node_modules/
+
+# Build output
 dist/
+coverage/
+logs/
+
+# Env files
 .env
 .env.*
-logs/
-coverage/
+
+# Prisma local DBs
 prisma/dev.db
 prisma/dev.db-journal
+
+# Prisma migrations (opcional, si no quieres versionar migraciones locales)
+# prisma/migrations/
+
+# OS files
+.DS_Store
+Thumbs.db
