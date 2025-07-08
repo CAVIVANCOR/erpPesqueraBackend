@@ -5,10 +5,7 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 // Define las relaciones que se incluirán al consultar cuentas corrientes
 const incluirRelaciones = {
-  banco: true, // Incluye información del banco asociado
-  tipoCuentaCorriente: true, // Incluye el tipo de cuenta corriente
-  movimientosOrigen: false, // No incluye movimientos donde es origen (optimización)
-  movimientosDestino: false // No incluye movimientos donde es destino (optimización)
+  movimientoCaja: true
 };
 
 /**
