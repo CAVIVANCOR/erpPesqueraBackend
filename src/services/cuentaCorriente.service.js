@@ -85,12 +85,25 @@ const crear = async (data) => {
   }
 };
 
+/**
+ * Actualiza una cuenta corriente existente, validando primero la existencia del ID.
+ * Luego valida referencias y duplicados antes de actualizar.
+ * @param {BigInt|number} id - ID de la cuenta corriente a actualizar
+ * @param {Object} data - Datos a actualizar
+ * @returns {Promise<Object>} - Cuenta corriente actualizada
+ */
 const actualizar = async (id, data) => {
   try {
+    // Primero valida existencia de la cuenta corriente
+    const existente = await prisma.cuentaCorriente.findUnique({ where: { id } });
+    if (!existente) throw new NotFoundError('ID de Cuenta Corriente No existe');
+
+    // Luego valida referencias y duplicados
     await validarReferencias(data);
     await validarDuplicado(data, id);
+
+    // Realiza la actualización
     const actualizada = await prisma.cuentaCorriente.update({ where: { id }, data });
-    if (!actualizada) throw new NotFoundError('Cuenta corriente no encontrada');
     return actualizada;
   } catch (err) {
     if (err.code === 'P2025') throw new NotFoundError('Cuenta corriente no encontrada');

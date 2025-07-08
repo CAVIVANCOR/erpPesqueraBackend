@@ -87,11 +87,24 @@ const crear = async (data) => {
   }
 };
 
+/**
+ * Actualiza un movimiento de caja existente, validando primero la existencia del ID.
+ * Luego valida referencias antes de actualizar.
+ * @param {BigInt|number} id - ID del movimiento de caja a actualizar
+ * @param {Object} data - Datos a actualizar
+ * @returns {Promise<Object>} - Movimiento de caja actualizado
+ */
 const actualizar = async (id, data) => {
   try {
+    // Primero valida existencia del movimiento de caja
+    const existente = await prisma.movimientoCaja.findUnique({ where: { id } });
+    if (!existente) throw new NotFoundError('Movimiento de Caja No Encontrado');
+
+    // Luego valida referencias
     await validarReferenciasMovimientoCaja(data);
+
+    // Realiza la actualización
     const actualizado = await prisma.movimientoCaja.update({ where: { id }, data });
-    if (!actualizado) throw new NotFoundError('Movimiento de caja no encontrado');
     return actualizado;
   } catch (err) {
     if (err.code === 'P2025') throw new NotFoundError('Movimiento de caja no encontrado');
