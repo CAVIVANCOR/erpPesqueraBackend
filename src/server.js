@@ -20,9 +20,9 @@ app.use(hpp());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
 
-// Rutas principales (placeholder)
-// import routes from './routes/index.js';
-// app.use('/api', routes);
+// Rutas principales
+import routes from './routes/index.js';
+app.use('/api', routes);
 
 // Middleware de manejo de errores
 app.use(errorHandler);
