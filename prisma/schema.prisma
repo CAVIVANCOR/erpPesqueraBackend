@@ -46,7 +46,6 @@ model SedesEmpresa {
 
   empresa     Empresa  @relation(fields: [empresaId], references: [id])
   areasFisicas AreaFisicaSede[]
-
 }
 
 model AreaFisicaSede {
@@ -1007,11 +1006,9 @@ model DetalleMovimientoAlmacen {
   actualizadoPor        BigInt?
   detalleReqCompraId BigInt?
 
-
   movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
   producto              Producto @relation(fields: [productoId], references: [id])
   detalleReqCompra      DetalleReqCompra? @relation(fields: [detalleReqCompraId], references: [id])
-
 }
 
 model TipoDocumento {
@@ -1134,7 +1131,6 @@ model Producto {
   detallesCotizacionCompras DetCotizacionCompras[]
   detallesProductoFinalCotizacionCompras DetProductoFinalCotizacionCompras[]
   detallesCotizacionVentas DetCotizacionVentas[]
-
 }
 
 model FamiliaProducto {
@@ -1472,6 +1468,7 @@ model DetalleReqCompra {
   ordenCompraDetalleId   BigInt?   // Relación al detalle de OC si fue enviado a compra
   cantidadDesdeAlmacen   Decimal?  // Cantidad atendida desde almacén (stock propio)
   cantidadAComprar       Decimal?  // Cantidad enviada a OC
+
   detalleMovimientos     DetalleMovimientoAlmacen[] // Relación inversa: todos los movimientos de almacén que atendieron este requerimiento
   requerimientoCompra    RequerimientoCompra @relation(fields: [requerimientoCompraId], references: [id])
   producto               Producto           @relation(fields: [productoId], references: [id])
@@ -2080,7 +2077,6 @@ model DetCotizacionVentas {
 
   cotizacionVentas    CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id])
   producto            Producto         @relation(fields: [productoId], references: [id])
-
 }
 
 model TipoProducto {
@@ -2240,7 +2236,6 @@ model AccesoInstalacion {
   urlDocumentoVisitante        String?
   createdAt                    DateTime @default(now())
 
-  // Relaciones
   tipoAcceso         TipoAccesoInstalacion @relation(fields: [tipoAccesoId], references: [id])
   tipoPersona        TipoPersona?          @relation(fields: [tipoPersonaId], references: [id])
   motivoAcceso       MotivoAcceso?         @relation(fields: [motivoId], references: [id])

@@ -28,7 +28,78 @@ import vehiculoEntidadRoutes from './Maestros/vehiculoEntidad.routes.js';
 import tipoVehiculoRoutes from './Maestros/tipoVehiculo.routes.js';
 import lineaCreditoEntidadRoutes from './Maestros/lineaCreditoEntidad.routes.js';
 import monedaRoutes from './Maestros/moneda.routes.js';
-
+import productoRoutes from './Maestros/producto.routes.js';
+import familiaProductoRoutes from './Maestros/familiaProducto.routes.js';
+import subfamiliaProductoRoutes from './Maestros/subfamiliaProducto.routes.js';
+import unidadMedidaRoutes from './Maestros/unidadMedida.routes.js';
+import tipoMaterialRoutes from './Maestros/tipoMaterial.routes.js';
+import colorRoutes from './Maestros/color.routes.js';
+import empresaRoutes from './Maestros/empresa.routes.js';
+import sedesEmpresaRoutes from './Maestros/sedesEmpresa.routes.js';
+import areaFisicaSedeRoutes from './Maestros/areaFisicaSede.routes.js';
+import especieRoutes from './Maestros/especie.routes.js';
+import activoRoutes from './Maestros/activo.routes.js';
+import tipoActivoRoutes from './Maestros/tipoActivo.routes.js';
+import detallePermisoActivoRoutes from './Maestros/detallePermisoActivo.routes.js';
+import permisoAutorizacionRoutes from './Maestros/permisoAutorizacion.routes.js';
+import estadoMultiFuncionRoutes from './Maestros/estadoMultiFuncion.routes.js';
+import tipoProvieneDeRoutes from './Maestros/tipoProvieneDe.routes.js';
+import tiposDocIdentidadRoutes from './Maestros/tiposDocIdentidad.routes.js';
+import centroCostoRoutes from './Maestros/centroCosto.routes.js';
+import categoriaCCostoRoutes from './Maestros/categoriaCCosto.routes.js';
+import empresaCentroCostoRoutes from './Maestros/empresaCentroCosto.routes.js';
+import parametroAprobadorRoutes from './Maestros/parametroAprobador.routes.js';
+import accesoInstalacionRoutes from '../routes/AccesoInstalaciones/accesoInstalacion.routes.js';
+import tipoEquipoRoutes from '../routes/AccesoInstalaciones/tipoEquipo.routes.js';
+import accesoInstalacionDetalleRoutes from '../routes/AccesoInstalaciones/accesoInstalacionDetalle.routes.js';
+import tipoMovimientoAccesoRoutes from '../routes/AccesoInstalaciones/tipoMovimientoAcceso.routes.js';
+import tipoAccesoInstalacionRoutes from '../routes/AccesoInstalaciones/tipoAccesoInstalacion.routes.js';
+import tipoPersonaRoutes from '../routes/AccesoInstalaciones/tipoPersona.routes.js';
+import motivoAccesoRoutes from '../routes/AccesoInstalaciones/motivoAcceso.routes.js';
+import movimientoAlmacenRoutes from '../routes/Almacen/movimientoAlmacen.routes.js';
+import detalleMovimientoAlmacenRoutes from '../routes/Almacen/detalleMovimientoAlmacen.routes.js';
+import tipoDocumentoRoutes from '../routes/Almacen/tipoDocumento.routes.js';
+import conceptoMovAlmacenRoutes from '../routes/Almacen/conceptoMovAlmacen.routes.js';
+import tipoConceptoRoutes from '../routes/Almacen/tipoConcepto.routes.js';
+import tipoMovimientoAlmacenRoutes from '../routes/Almacen/tipoMovimientoAlmacen.routes.js';
+import tipoAlmacenRoutes from '../routes/Almacen/tipoAlmacen.routes.js';
+import serieDocRoutes from '../routes/Almacen/serieDoc.routes.js';
+import kardexAlmacenRoutes from '../routes/Almacen/kardexAlmacen.routes.js';
+import saldosProductoClienteRoutes from '../routes/Almacen/saldosProductoCliente.routes.js';
+import saldosDetProductoClienteRoutes from '../routes/Almacen/saldosDetProductoCliente.routes.js';
+import tipoMantenimientoRoutes from '../routes/Mantenimiento/tipoMantenimiento.routes.js';
+import otMantenimientoRoutes from '../routes/Mantenimiento/otMantenimiento.routes.js';
+import motivoOriginoOTRoutes from '../routes/Mantenimiento/motivoOriginoOT.routes.js';
+import detPermisoGestionadoOTRoutes from '../routes/Mantenimiento/detPermisoGestionadoOT.routes.js';
+import detTareasOTRoutes from '../routes/Mantenimiento/detTareasOT.routes.js';
+import detInsumosTareaOTRoutes from '../routes/Mantenimiento/detInsumosTareaOT.routes.js';
+import requerimientoCompraRoutes from '../routes/Compras/requerimientoCompra.routes.js';
+import detalleReqCompraRoutes from '../routes/Compras/detalleReqCompra.routes.js';
+import ordenCompraRoutes from '../routes/Compras/ordenCompra.routes.js';
+import detalleOrdenCompraRoutes from '../routes/Compras/detalleOrdenCompra.routes.js';
+import cotizacionComprasRoutes from '../routes/Compras/cotizacionCompras.routes.js';
+import detGastosComprasProdRoutes from '../routes/Compras/detGastosComprasProd.routes.js';
+import detCotizacionComprasRoutes from '../routes/Compras/detCotizacionCompras.routes.js';
+import detProductoFinalCotizacionComprasRoutes from '../routes/Compras/detProductoFinalCotizacionCompras.routes.js';
+import detDocsReqCotizaComprasRoutes from '../routes/Compras/detDocsReqCotizaCompras.routes.js';
+import entregaARendirPComprasRoutes from '../routes/Compras/entregaARendirPCompras.routes.js';
+import detMovsEntregaRendirPComprasRoutes from '../routes/Compras/detMovsEntregaRendirPCompras.routes.js';
+import liquidacionProcesoComprasProdRoutes from '../routes/Compras/liquidacionProcesoComprasProd.routes.js';
+import movLiquidacionProcesoComprasProdRoutes from '../routes/Compras/movLiquidacionProcesoComprasProd.routes.js';
+import cotizacionVentasRoutes from '../routes/Ventas/cotizacionVentas.routes.js';
+import detCotizacionVentasRoutes from '../routes/Ventas/detCotizacionVentas.routes.js';
+import tipoProductoRoutes from '../routes/Ventas/tipoProducto.routes.js';
+import tipoEstadoProductoRoutes from '../routes/Ventas/tipoEstadoProducto.routes.js';
+import destinoProductoRoutes from '../routes/Ventas/destinoProducto.routes.js';
+import formaTransaccionRoutes from '../routes/Ventas/formaTransaccion.routes.js';
+import modoDespachoRecepcionRoutes from '../routes/Ventas/modoDespachoRecepcion.routes.js';
+import docRequeridaComprasVentasRoutes from '../routes/Ventas/docRequeridaComprasVentas.routes.js';
+import detDocsReqCotizaVentasRoutes from '../routes/Ventas/detDocsReqCotizaVentas.routes.js';
+import entregaARendirPVentasRoutes from '../routes/Ventas/entregaARendirPVentas.routes.js';
+import detMovsEntregaRendirPVentasRoutes from '../routes/Ventas/detMovsEntregaRendirPVentas.routes.js';
+import preFacturaRoutes from '../routes/Ventas/preFactura.routes.js';
+import incotermRoutes from '../routes/Ventas/incoterm.routes.js';
+import detallePreFacturaRoutes from '../routes/Ventas/detallePreFactura.routes.js';
 
 const router = express.Router();
 
@@ -78,7 +149,150 @@ router.use('/tipos-vehiculo', tipoVehiculoRoutes);
 router.use('/lineas-credito-entidad', lineaCreditoEntidadRoutes);
 // Rutas para Moneda
 router.use('/monedas', monedaRoutes);
-
+// Rutas para Producto
+router.use('/productos', productoRoutes);
+// Rutas para FamiliaProducto
+router.use('/familias-producto', familiaProductoRoutes);
+// Rutas para SubfamiliaProducto
+router.use('/subfamilias-producto', subfamiliaProductoRoutes);
+// Rutas para UnidadMedida
+router.use('/unidades-medida', unidadMedidaRoutes);
+// Rutas para TipoMaterial
+router.use('/tipos-material', tipoMaterialRoutes);
+// Rutas para Color
+router.use('/colores', colorRoutes);
+// Rutas para Empresa
+router.use('/empresas', empresaRoutes);
+// Rutas para SedesEmpresa
+router.use('/sedes-empresa', sedesEmpresaRoutes);
+// Rutas para AreaFisicaSede
+router.use('/areas-fisicas-sede', areaFisicaSedeRoutes);
+// Rutas para Especie
+router.use('/especies', especieRoutes);
+// Rutas para Activo
+router.use('/activos', activoRoutes);
+// Rutas para TipoActivo
+router.use('/tipos-activo', tipoActivoRoutes);
+// Rutas para DetallePermisoActivo
+router.use('/detalles-permiso-activo', detallePermisoActivoRoutes);
+// Rutas para PermisoAutorizacion
+router.use('/permisos-autorizacion', permisoAutorizacionRoutes);
+// Rutas para EstadoMultiFuncion
+router.use('/estados-multi-funcion', estadoMultiFuncionRoutes);
+// Rutas para TipoProvieneDe
+router.use('/tipos-proviene-de', tipoProvieneDeRoutes);
+// Rutas para TiposDocIdentidad
+router.use('/tipos-doc-identidad', tiposDocIdentidadRoutes);
+// Rutas para CentroCosto
+router.use('/centros-costo', centroCostoRoutes);
+// Rutas para CategoriaCCosto
+router.use('/categorias-centro-costo', categoriaCCostoRoutes);
+// Rutas para EmpresaCentroCosto
+router.use('/empresas-centro-costo', empresaCentroCostoRoutes);
+// Rutas para ParametroAprobador
+router.use('/parametros-aprobador', parametroAprobadorRoutes);
+// Rutas para AccesoInstalacion
+router.use('/accesos-instalacion', accesoInstalacionRoutes);
+// Rutas para TipoEquipo
+router.use('/tipos-equipo', tipoEquipoRoutes);
+// Rutas para AccesoInstalacionDetalle
+router.use('/accesos-instalacion-detalle', accesoInstalacionDetalleRoutes);
+// Rutas para TipoMovimientoAcceso
+router.use('/tipos-movimiento-acceso', tipoMovimientoAccesoRoutes);
+// Rutas para TipoAccesoInstalacion
+router.use('/tipos-acceso-instalacion', tipoAccesoInstalacionRoutes);
+// Rutas para TipoPersona
+router.use('/tipos-persona', tipoPersonaRoutes);
+// Rutas para MotivoAcceso
+router.use('/motivos-acceso', motivoAccesoRoutes);
+// Rutas para MovimientoAlmacen
+router.use('/movimientos-almacen', movimientoAlmacenRoutes);
+// Rutas para DetalleMovimientoAlmacen
+router.use('/detalles-movimiento-almacen', detalleMovimientoAlmacenRoutes);
+// Rutas para TipoDocumento
+router.use('/tipos-documento', tipoDocumentoRoutes);
+// Rutas para ConceptoMovAlmacen
+router.use('/conceptos-mov-almacen', conceptoMovAlmacenRoutes);
+// Rutas para TipoConcepto
+router.use('/tipos-concepto', tipoConceptoRoutes);
+// Rutas para TipoMovimientoAlmacen
+router.use('/tipos-movimiento-almacen', tipoMovimientoAlmacenRoutes);
+// Rutas para TipoAlmacen
+router.use('/tipos-almacen', tipoAlmacenRoutes);
+// Rutas para SerieDoc
+router.use('/series-doc', serieDocRoutes);
+// Rutas para KardexAlmacen
+router.use('/kardex-almacen', kardexAlmacenRoutes);
+// Rutas para SaldosProductoCliente
+router.use('/saldos-producto-cliente', saldosProductoClienteRoutes);
+// Rutas para SaldosDetProductoCliente
+router.use('/saldos-det-producto-cliente', saldosDetProductoClienteRoutes);
+// Rutas para OTMantenimiento
+router.use('/ot-mantenimiento', otMantenimientoRoutes);
+// Rutas para TipoMantenimiento
+router.use('/tipos-mantenimiento', tipoMantenimientoRoutes);
+// Rutas para MotivoOriginoOT
+router.use('/motivos-origen-ot', motivoOriginoOTRoutes);
+// Rutas para DetPermisoGestionadoOT
+router.use('/permisos-gestionados-ot', detPermisoGestionadoOTRoutes);
+// Rutas para DetTareasOT
+router.use('/tareas-ot', detTareasOTRoutes);
+// Rutas para DetInsumosTareaOT
+router.use('/insumos-tarea-ot', detInsumosTareaOTRoutes);
+// Rutas para RequerimientoCompra
+router.use('/requerimientos-compra', requerimientoCompraRoutes);
+// Rutas para DetalleReqCompra
+router.use('/detalles-req-compra', detalleReqCompraRoutes);
+// Rutas para OrdenCompra
+router.use('/ordenes-compra', ordenCompraRoutes);
+// Rutas para DetalleOrdenCompra
+router.use('/detalles-orden-compra', detalleOrdenCompraRoutes);
+// Rutas para CotizacionCompras
+router.use('/cotizaciones-compras', cotizacionComprasRoutes);
+// Rutas para DetGastosComprasProd
+router.use('/gastos-compras-prod', detGastosComprasProdRoutes);
+// Rutas para DetCotizacionCompras
+router.use('/detalles-cotizacion-compras', detCotizacionComprasRoutes);
+// Rutas para DetProductoFinalCotizacionCompras
+router.use('/detalles-producto-final-cotizacion-compras', detProductoFinalCotizacionComprasRoutes);
+// Rutas para DetDocsReqCotizaCompras
+router.use('/docs-req-cotiza-compras', detDocsReqCotizaComprasRoutes);
+// Rutas para EntregaARendirPCompras
+router.use('/entregas-a-rendir-compras', entregaARendirPComprasRoutes);
+// Rutas para DetMovsEntregaRendirPCompras
+router.use('/movs-entrega-rendir-compras', detMovsEntregaRendirPComprasRoutes);
+// Rutas para LiquidacionProcesoComprasProd
+router.use('/liquidaciones-proceso-compras', liquidacionProcesoComprasProdRoutes);
+// Rutas para MovLiquidacionProcesoComprasProd
+router.use('/movs-liquidacion-proceso-compras', movLiquidacionProcesoComprasProdRoutes);
+// Rutas para CotizacionVentas
+router.use('/cotizaciones-ventas', cotizacionVentasRoutes);
+// Rutas para DetCotizacionVentas
+router.use('/detalles-cotizacion-ventas', detCotizacionVentasRoutes);
+// Rutas para TipoProducto
+router.use('/tipos-producto', tipoProductoRoutes);
+// Rutas para TipoEstadoProducto
+router.use('/tipos-estado-producto', tipoEstadoProductoRoutes);
+// Rutas para DestinoProducto
+router.use('/destinos-producto', destinoProductoRoutes);
+// Rutas para FormaTransaccion
+router.use('/formas-transaccion', formaTransaccionRoutes);
+// Rutas para ModoDespachoRecepcion
+router.use('/modos-despacho-recepcion', modoDespachoRecepcionRoutes);
+// Rutas para DocRequeridaComprasVentas
+router.use('/docs-requeridas-compras-ventas', docRequeridaComprasVentasRoutes);
+// Rutas para detDocsReqCotizaVentas
+router.use('/det-docs-req-cotiza-ventas', detDocsReqCotizaVentasRoutes);
+// Rutas para EntregaARendirPVentas
+router.use('/entregas-a-rendir-ventas', entregaARendirPVentasRoutes);
+// Rutas para DetMovsEntregaRendirPVentas
+router.use('/movs-entrega-rendir-ventas', detMovsEntregaRendirPVentasRoutes);
+// Rutas para PreFactura
+router.use('/pre-facturas', preFacturaRoutes);
+// Rutas para Incoterm
+router.use('/incoterms', incotermRoutes);
+// Rutas para DetallePreFactura
+router.use('/detalles-pre-factura', detallePreFacturaRoutes);
 router.use('/movimientos-caja', movimientoCajaRoutes);
 router.use('/cuentas-corrientes', cuentaCorrienteRoutes);
 router.use('/asientos-contables-interfaz', asientoContableInterfazRoutes);
