@@ -1,0 +1,54 @@
+import cargosPersonalService from '../../services/Usuarios/cargosPersonal.service.js';
+import toJSONBigInt from '../../utils/toJSONBigInt.js';
+
+/**
+ * Controlador para CargosPersonal
+ * Documentado en español.
+ */
+export async function listar(req, res, next) {
+  try {
+    const cargos = await cargosPersonalService.listar();
+    res.json(toJSONBigInt(cargos));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function obtenerPorId(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const cargo = await cargosPersonalService.obtenerPorId(id);
+    res.json(toJSONBigInt(cargo));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function crear(req, res, next) {
+  try {
+    const nuevo = await cargosPersonalService.crear(req.body);
+    res.status(201).json(toJSONBigInt(nuevo));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function actualizar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const actualizado = await cargosPersonalService.actualizar(id, req.body);
+    res.json(toJSONBigInt(actualizado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function eliminar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    await cargosPersonalService.eliminar(id);
+    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}

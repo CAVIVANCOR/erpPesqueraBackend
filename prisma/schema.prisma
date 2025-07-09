@@ -759,6 +759,7 @@ model TipoEntidad {
   esCliente   Boolean  @default(false) // Aplica para clientes
   esProveedor Boolean  @default(false) // Aplica para proveedores
   activo      Boolean  @default(true)
+  
   entidades   EntidadComercial[]
 }
 
@@ -769,6 +770,7 @@ model FormaPago {
   esCliente   Boolean  @default(false)
   esProveedor Boolean  @default(false)
   activo      Boolean  @default(true)
+
   entidades   EntidadComercial[]
 }
 
@@ -778,6 +780,7 @@ model AgrupacionEntidad {
   descripcion String?
   esCliente   Boolean  @default(false)
   esProveedor Boolean  @default(false)
+
   entidades   EntidadComercial[]
 }
 
@@ -880,6 +883,7 @@ model Moneda {
   nombreLargo String?
   simbolo    String?
   activo     Boolean  @default(true)
+
   precios    PrecioEntidad[]
 }
 
@@ -910,6 +914,7 @@ model TipoVehiculo {
   nombre      String   @db.VarChar(50)
   descripcion String?
   activo      Boolean  @default(true)
+
   vehiculos   VehiculoEntidad[]
 }
 
