@@ -1796,7 +1796,6 @@ model EntregaARendirPescaConsumo {
   fechaActualizacion    DateTime @updatedAt
   centroCostoId       BigInt
 
-
   novedadPescaConsumo   NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
   movimientos           DetMovsEntRendirPescaConsumo[]
 }

@@ -100,6 +100,50 @@ import detMovsEntregaRendirPVentasRoutes from '../routes/Ventas/detMovsEntregaRe
 import preFacturaRoutes from '../routes/Ventas/preFactura.routes.js';
 import incotermRoutes from '../routes/Ventas/incoterm.routes.js';
 import detallePreFacturaRoutes from '../routes/Ventas/detallePreFactura.routes.js';
+import temporadaPescaRoutes from '../routes/Pesca/temporadaPesca.routes.js';
+import embarcacionRoutes from '../routes/Pesca/embarcacion.routes.js';
+import tipoEmbarcacionRoutes from '../routes/Pesca/tipoEmbarcacion.routes.js';
+import documentoPescaRoutes from '../routes/Pesca/documentoPesca.routes.js';
+import documentacionEmbarcacionRoutes from '../routes/Pesca/documentacionEmbarcacion.routes.js';
+import detalleDocEmbarcacionRoutes from '../routes/Pesca/detalleDocEmbarcacion.routes.js';
+import bolicheRedRoutes from '../routes/Pesca/bolicheRed.routes.js';
+import faenaPescaRoutes from '../routes/Pesca/faenaPesca.routes.js';
+import calaRoutes from '../routes/Pesca/cala.routes.js';
+import detalleCalaEspecieRoutes from '../routes/Pesca/detalleCalaEspecie.routes.js';
+import calaProduceRoutes from '../routes/Pesca/calaProduce.routes.js';
+import detalleCalaEspecieProduceRoutes from '../routes/Pesca/detalleCalaEspecieProduce.routes.js';
+import detalleDocTripulantesRoutes from '../routes/Pesca/detalleDocTripulantes.routes.js';
+import tripulanteFaenaRoutes from '../routes/Pesca/tripulanteFaena.routes.js';
+import descargaFaenaPescaRoutes from '../routes/Pesca/descargaFaenaPesca.routes.js';
+import detalleDescargaFaenaRoutes from '../routes/Pesca/detalleDescargaFaena.routes.js';
+import accionesPreviasFaenaRoutes from '../routes/Pesca/accionesPreviasFaena.routes.js';
+import detAccionesPreviasFaenaRoutes from '../routes/Pesca/detAccionesPreviasFaena.routes.js';
+import liquidacionFaenaPescaRoutes from '../routes/Pesca/liquidacionFaenaPesca.routes.js';
+import movLiquidacionFaenaPescaRoutes from '../routes/Pesca/movLiquidacionFaenaPesca.routes.js';
+import puertoPescaRoutes from '../routes/Pesca/puertoPesca.routes.js';
+import liquidacionTemporadaPescaRoutes from '../routes/Pesca/liquidacionTemporadaPesca.routes.js';
+import movLiquidacionTemporadaPescaRoutes from '../routes/Pesca/movLiquidacionTemporadaPesca.routes.js';
+import novedadPescaConsumoRoutes from '../routes/Pesca/novedadPescaConsumo.routes.js';
+import faenaPescaConsumoRoutes from '../routes/Pesca/faenaPescaConsumo.routes.js';
+import detAccionesPreviasFaenaConsumoRoutes from '../routes/Pesca/detAccionesPreviasFaenaConsumo.routes.js';
+import detDocTripulantesFaenaConsumoRoutes from '../routes/Pesca/detDocTripulantesFaenaConsumo.routes.js';
+import tripulanteFaenaConsumoRoutes from '../routes/Pesca/tripulanteFaenaConsumo.routes.js';
+import detDocEmbarcacionPescaConsumoRoutes from '../routes/Pesca/detDocEmbarcacionPescaConsumo.routes.js';
+import entregaARendirPescaConsumoRoutes from '../routes/Pesca/entregaARendirPescaConsumo.routes.js';
+import detMovsEntRendirPescaConsumoRoutes from '../routes/Pesca/detMovsEntRendirPescaConsumo.routes.js';
+import calaFaenaConsumoRoutes from '../routes/Pesca/calaFaenaConsumo.routes.js';
+import detCalaPescaConsumoRoutes from '../routes/Pesca/detCalaPescaConsumo.routes.js';
+import calaFaenaConsumoProduceRoutes from '../routes/Pesca/calaFaenaConsumoProduce.routes.js';
+import detCalaFaenaConsumoProduceRoutes from '../routes/Pesca/detCalaFaenaConsumoProduce.routes.js';
+import descargaFaenaConsumoRoutes from '../routes/Pesca/descargaFaenaConsumo.routes.js';
+import detDescargaFaenaConsumoRoutes from '../routes/Pesca/detDescargaFaenaConsumo.routes.js';
+import liquidacionFaenaConsumoRoutes from '../routes/Pesca/liquidacionFaenaConsumo.routes.js';
+import movLiquidacionFaenaConsumoRoutes from '../routes/Pesca/movLiquidacionFaenaConsumo.routes.js';
+import liqNovedadPescaConsumoRoutes from '../routes/Pesca/liqNovedadPescaConsumo.routes.js';
+import movLiqNovedadPescaConsumoRoutes from '../routes/Pesca/movLiqNovedadPescaConsumo.routes.js';
+import entregaARendirRoutes from '../routes/EntregaARendir/entregaARendir.routes.js';
+import detMovsEntregaRendirRoutes from '../routes/EntregaARendir/detMovsEntregaRendir.routes.js';
+import tipoMovEntregaRendirRoutes from '../routes/EntregaARendir/tipoMovEntregaRendir.routes.js';
 
 const router = express.Router();
 
@@ -293,6 +337,94 @@ router.use('/pre-facturas', preFacturaRoutes);
 router.use('/incoterms', incotermRoutes);
 // Rutas para DetallePreFactura
 router.use('/detalles-pre-factura', detallePreFacturaRoutes);
+// Rutas para TemporadaPesca
+router.use('/pesca/temporadas-pesca', temporadaPescaRoutes);
+// Rutas para Embarcacion
+router.use('/pesca/embarcaciones', embarcacionRoutes);
+// Rutas para TipoEmbarcacion
+router.use('/pesca/tipos-embarcacion', tipoEmbarcacionRoutes);
+// Rutas para DocumentoPesca
+router.use('/pesca/documentos-pesca', documentoPescaRoutes);
+// Rutas para DocumentacionEmbarcacion
+router.use('/pesca/documentaciones-embarcacion', documentacionEmbarcacionRoutes);
+// Rutas para DetalleDocEmbarcacion
+router.use('/pesca/detalles-doc-embarcacion', detalleDocEmbarcacionRoutes);
+// Rutas para BolicheRed
+router.use('/pesca/boliches-red', bolicheRedRoutes);
+// Rutas para FaenaPesca
+router.use('/pesca/faenas-pesca', faenaPescaRoutes);
+// Rutas para Cala
+router.use('/pesca/calas', calaRoutes);
+// Rutas para DetalleCalaEspecie
+router.use('/pesca/detalles-cala-especie', detalleCalaEspecieRoutes);
+// Rutas para CalaProduce
+router.use('/pesca/calas-produce', calaProduceRoutes);
+// Rutas para DetalleCalaEspecieProduce
+router.use('/pesca/detalles-cala-especie-produce', detalleCalaEspecieProduceRoutes);
+// Rutas para DetalleDocTripulantes
+router.use('/pesca/detalles-doc-tripulantes', detalleDocTripulantesRoutes);
+// Rutas para TripulanteFaena
+router.use('/pesca/tripulantes-faena', tripulanteFaenaRoutes);
+// Rutas para DescargaFaenaPesca
+router.use('/pesca/descargas-faena', descargaFaenaPescaRoutes);
+// Rutas para DetalleDescargaFaena
+router.use('/pesca/detalles-descarga-faena', detalleDescargaFaenaRoutes);
+// Rutas para AccionesPreviasFaena
+router.use('/pesca/acciones-previas-faena', accionesPreviasFaenaRoutes);
+// Rutas para DetAccionesPreviasFaena
+router.use('/pesca/detalles-acciones-previas-faena', detAccionesPreviasFaenaRoutes);
+// Rutas para LiquidacionFaenaPesca
+router.use('/pesca/liquidaciones-faena', liquidacionFaenaPescaRoutes);
+// Rutas para MovLiquidacionFaenaPesca
+router.use('/pesca/movs-liquidacion-faena', movLiquidacionFaenaPescaRoutes);
+// Rutas para PuertoPesca
+router.use('/pesca/puertos-pesca', puertoPescaRoutes);
+// Rutas para LiquidacionTemporadaPesca
+router.use('/pesca/liquidaciones-temporada', liquidacionTemporadaPescaRoutes);
+// Rutas para MovLiquidacionTemporadaPesca
+router.use('/pesca/movs-liquidacion-temporada', movLiquidacionTemporadaPescaRoutes);
+// Rutas para NovedadPescaConsumo
+router.use('/pesca/novedades-pesca-consumo', novedadPescaConsumoRoutes);
+// Rutas para FaenaPescaConsumo
+router.use('/pesca/faenas-pesca-consumo', faenaPescaConsumoRoutes);
+// Rutas para DetAccionesPreviasFaenaConsumo
+router.use('/pesca/det-acciones-previas-faena-consumo', detAccionesPreviasFaenaConsumoRoutes);
+// Rutas para DetDocTripulantesFaenaConsumo
+router.use('/pesca/det-doc-tripulantes-faena-consumo', detDocTripulantesFaenaConsumoRoutes);
+// Rutas para TripulanteFaenaConsumo
+router.use('/pesca/tripulantes-faena-consumo', tripulanteFaenaConsumoRoutes);
+// Rutas para DetDocEmbarcacionPescaConsumo
+router.use('/pesca/det-doc-embarcacion-pesca-consumo', detDocEmbarcacionPescaConsumoRoutes);
+// Rutas para EntregaARendirPescaConsumo
+router.use('/pesca/entregas-a-rendir-pesca-consumo', entregaARendirPescaConsumoRoutes);
+// Rutas para DetMovsEntRendirPescaConsumo
+router.use('/pesca/movs-entregarendir-pesca-consumo', detMovsEntRendirPescaConsumoRoutes);
+// Rutas para CalaFaenaConsumo
+router.use('/pesca/calas-faena-consumo', calaFaenaConsumoRoutes);
+// Rutas para DetCalaPescaConsumo
+router.use('/pesca/det-cala-pesca-consumo', detCalaPescaConsumoRoutes);
+// Rutas para CalaFaenaConsumoProduce
+router.use('/pesca/calas-faena-consumo-produce', calaFaenaConsumoProduceRoutes);
+// Rutas para DetCalaFaenaConsumoProduce
+router.use('/pesca/det-cala-faena-consumo-produce', detCalaFaenaConsumoProduceRoutes);
+// Rutas para DescargaFaenaConsumo
+router.use('/pesca/descargas-faena-consumo', descargaFaenaConsumoRoutes);
+// Rutas para DetDescargaFaenaConsumo
+router.use('/pesca/det-descarga-faena-consumo', detDescargaFaenaConsumoRoutes);
+// Rutas para LiquidacionFaenaConsumo
+router.use('/pesca/liquidaciones-faena-consumo', liquidacionFaenaConsumoRoutes);
+// Rutas para MovLiquidacionFaenaConsumo
+router.use('/pesca/movs-liquidacion-faena-consumo', movLiquidacionFaenaConsumoRoutes);
+// Rutas para LiqNovedadPescaConsumo
+router.use('/pesca/liq-novedad-pesca-consumo', liqNovedadPescaConsumoRoutes);
+// Rutas para MovLiqNovedadPescaConsumo
+router.use('/pesca/movs-liq-novedad-pesca-consumo', movLiqNovedadPescaConsumoRoutes);
+// Rutas para EntregaARendir
+router.use('/entregas-a-rendir', entregaARendirRoutes);
+// Rutas para DetMovsEntregaRendir
+router.use('/det-movs-entrega-rendir', detMovsEntregaRendirRoutes);
+// Rutas para TipoMovEntregaRendir
+router.use('/tipos-mov-entrega-rendir', tipoMovEntregaRendirRoutes);
 router.use('/movimientos-caja', movimientoCajaRoutes);
 router.use('/cuentas-corrientes', cuentaCorrienteRoutes);
 router.use('/asientos-contables-interfaz', asientoContableInterfazRoutes);

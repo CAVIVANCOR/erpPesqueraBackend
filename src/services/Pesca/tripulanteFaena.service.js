@@ -1,0 +1,93 @@
+import prisma from '../../config/prismaClient.js';
+import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+
+/**
+ * Servicio CRUD para TripulanteFaena
+ * Valida existencia de claves foráneas y campos obligatorios.
+ * Documentado en español.
+ */
+
+async function validarClavesForaneas(data) {
+  // faenaPescaId es requerido
+  const faenaPesca = await prisma.faenaPesca.findUnique({ where: { id: data.faenaPescaId } });
+  if (!faenaPesca) throw new ValidationError('El faenaPescaId no existe.');
+  // personalId y cargoId son opcionales
+  if (data.personalId) {
+    const personal = await prisma.personal.findUnique({ where: { id: data.personalId } });
+    if (!personal) throw new ValidationError('El personalId no existe.');
+  }
+  if (data.cargoId) {
+    const cargo = await prisma.cargo.findUnique({ where: { id: data.cargoId } });
+    if (!cargo) throw new ValidationError('El cargoId no existe.');
+  }
+}
+
+const listar = async () => {
+  try {
+    return await prisma.tripulanteFaena.findMany();
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const obtenerPorId = async (id) => {
+  try {
+    const tripulante = await prisma.tripulanteFaena.findUnique({ where: { id } });
+    if (!tripulante) throw new NotFoundError('TripulanteFaena no encontrado');
+    return tripulante;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const crear = async (data) => {
+  try {
+    if (!data.faenaPescaId) throw new ValidationError('El campo faenaPescaId es obligatorio.');
+    await validarClavesForaneas(data);
+    return await prisma.tripulanteFaena.create({ data });
+  } catch (err) {
+    if (err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const actualizar = async (id, data) => {
+  try {
+    const existente = await prisma.tripulanteFaena.findUnique({ where: { id } });
+    if (!existente) throw new NotFoundError('TripulanteFaena no encontrado');
+    // Validar claves foráneas si cambian
+    const claves = ['faenaPescaId','personalId','cargoId'];
+    if (claves.some(k => data[k] && data[k] !== existente[k])) {
+      await validarClavesForaneas({ ...existente, ...data });
+    }
+    return await prisma.tripulanteFaena.update({ where: { id }, data });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const eliminar = async (id) => {
+  try {
+    const existente = await prisma.tripulanteFaena.findUnique({ where: { id } });
+    if (!existente) throw new NotFoundError('TripulanteFaena no encontrado');
+    await prisma.tripulanteFaena.delete({ where: { id } });
+    return true;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+export default {
+  listar,
+  obtenerPorId,
+  crear,
+  actualizar,
+  eliminar
+};
