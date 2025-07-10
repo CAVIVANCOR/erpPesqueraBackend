@@ -6,6 +6,7 @@ import tipoReferenciaMovimientoCajaRoutes from './FlujoCaja/tipoReferenciaMovimi
 import bancoRoutes from './FlujoCaja/banco.routes.js';
 import tipoCuentaCorrienteRoutes from './FlujoCaja/tipoCuentaCorriente.routes.js';
 import usuarioRoutes from './Usuarios/usuario.routes.js';
+import authRoutes from './Usuarios/auth.routes.js'; // Rutas de autenticación de usuarios
 import personalRoutes from './Usuarios/personal.routes.js';
 import cargosPersonalRoutes from './Usuarios/cargosPersonal.routes.js';
 import accesosUsuarioRoutes from './Usuarios/accesosUsuario.routes.js';
@@ -145,9 +146,17 @@ import entregaARendirRoutes from '../routes/EntregaARendir/entregaARendir.routes
 import detMovsEntregaRendirRoutes from '../routes/EntregaARendir/detMovsEntregaRendir.routes.js';
 import tipoMovEntregaRendirRoutes from '../routes/EntregaARendir/tipoMovEntregaRendir.routes.js';
 
+import { autenticarJWT } from '../middlewares/authMiddleware.js';
+
 const router = express.Router();
 
-// Rutas para Usuarios
+// Rutas públicas de autenticación
+router.use('/auth', authRoutes);
+
+// Middleware global de autenticación (protege todas las rutas siguientes)
+router.use(autenticarJWT);
+
+// Rutas CRUD para Usuario
 router.use('/usuarios', usuarioRoutes);
 // Rutas para Personal
 router.use('/personal', personalRoutes);

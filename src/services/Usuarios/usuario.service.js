@@ -78,10 +78,27 @@ const obtenerPorId = async (id) => {
 /**
  * Crea un usuario nuevo validando unicidad y referencias.
  */
+const bcrypt = await import('bcrypt');
+
+/**
+ * Crea un usuario nuevo validando unicidad y referencias. Siempre almacena la contraseña de forma segura (hasheada).
+ * @param {Object} data - Datos del usuario, debe incluir 'password' en texto plano.
+ * @returns {Promise<Object>} El usuario creado
+ * @throws {ValidationError|ConflictError}
+ */
 const crear = async (data) => {
   try {
     await validarUsuario(data);
-    return await prisma.usuario.create({ data });
+    // Validar que se recibe la contraseña en texto plano
+    if (!data.password) {
+      throw new ValidationError('La contraseña es obligatoria al crear un usuario.');
+    }
+    // Hashear la contraseña
+    const passwordHash = await bcrypt.default.hash(data.password, 10);
+    // Eliminar el campo password en texto plano antes de guardar
+    const usuarioData = { ...data, passwordHash };
+    delete usuarioData.password;
+    return await prisma.usuario.create({ data: usuarioData });
   } catch (err) {
     if (err instanceof ConflictError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -92,12 +109,26 @@ const crear = async (data) => {
 /**
  * Actualiza un usuario existente, validando existencia, unicidad y referencias.
  */
+/**
+ * Actualiza un usuario existente, validando existencia, unicidad y referencias.
+ * Si se recibe un nuevo 'password', lo hashea y lo actualiza; si no, mantiene el hash existente.
+ * @param {number} id - ID del usuario a actualizar
+ * @param {Object} data - Datos a actualizar, puede incluir 'password'
+ * @returns {Promise<Object>} El usuario actualizado
+ * @throws {ValidationError|ConflictError|NotFoundError}
+ */
 const actualizar = async (id, data) => {
   try {
     const existente = await prisma.usuario.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Usuario no encontrado');
     await validarUsuario(data, id);
-    return await prisma.usuario.update({ where: { id }, data });
+    let usuarioData = { ...data };
+    // Si se recibe una nueva contraseña, hashearla
+    if (data.password) {
+      usuarioData.passwordHash = await bcrypt.default.hash(data.password, 10);
+      delete usuarioData.password;
+    }
+    return await prisma.usuario.update({ where: { id }, data: usuarioData });
   } catch (err) {
     if (err instanceof ConflictError || err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
