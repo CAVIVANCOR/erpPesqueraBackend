@@ -142,9 +142,9 @@ import liquidacionFaenaConsumoRoutes from '../routes/Pesca/liquidacionFaenaConsu
 import movLiquidacionFaenaConsumoRoutes from '../routes/Pesca/movLiquidacionFaenaConsumo.routes.js';
 import liqNovedadPescaConsumoRoutes from '../routes/Pesca/liqNovedadPescaConsumo.routes.js';
 import movLiqNovedadPescaConsumoRoutes from '../routes/Pesca/movLiqNovedadPescaConsumo.routes.js';
-import entregaARendirRoutes from '../routes/EntregaARendir/entregaARendir.routes.js';
-import detMovsEntregaRendirRoutes from '../routes/EntregaARendir/detMovsEntregaRendir.routes.js';
-import tipoMovEntregaRendirRoutes from '../routes/EntregaARendir/tipoMovEntregaRendir.routes.js';
+import entregaARendirRoutes from '../routes/Pesca/entregaARendir.routes.js';
+import detMovsEntregaRendirRoutes from '../routes/Pesca/detMovsEntregaRendir.routes.js';
+import tipoMovEntregaRendirRoutes from '../routes/Pesca/tipoMovEntregaRendir.routes.js';
 
 import { autenticarJWT } from '../middlewares/authMiddleware.js';
 

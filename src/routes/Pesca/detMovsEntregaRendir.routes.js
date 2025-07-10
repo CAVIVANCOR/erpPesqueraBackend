@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import * as detMovsEntregaRendirController from '../../controllers/EntregaARendir/detMovsEntregaRendir.controller.js';
+import * as detMovsEntregaRendirController from '../../controllers/Pesca/detMovsEntregaRendir.controller.js';
 
 const router = Router();
 

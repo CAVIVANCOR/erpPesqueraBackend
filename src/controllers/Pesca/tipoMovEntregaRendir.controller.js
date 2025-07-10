@@ -1,4 +1,4 @@
-import tipoMovEntregaRendirService from '../../services/EntregaARendir/tipoMovEntregaRendir.service.js';
+import tipoMovEntregaRendirService from '../../services/Pesca/tipoMovEntregaRendir.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
 /**

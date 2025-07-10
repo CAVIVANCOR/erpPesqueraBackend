@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import * as tipoMovEntregaRendirController from '../../controllers/EntregaARendir/tipoMovEntregaRendir.controller.js';
+import * as tipoMovEntregaRendirController from '../../controllers/Pesca/tipoMovEntregaRendir.controller.js';
 
 const router = Router();
 

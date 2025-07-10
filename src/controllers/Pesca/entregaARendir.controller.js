@@ -1,14 +1,14 @@
-import detMovsEntregaRendirService from '../../services/EntregaARendir/detMovsEntregaRendir.service.js';
+import entregaARendirService from '../../services/Pesca/entregaARendir.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
 /**
- * Controlador para DetMovsEntregaRendir
+ * Controlador para EntregaARendir
  * Documentado en español.
  */
 export async function listar(req, res, next) {
   try {
-    const movimientos = await detMovsEntregaRendirService.listar();
-    res.json(toJSONBigInt(movimientos));
+    const entregas = await entregaARendirService.listar();
+    res.json(toJSONBigInt(entregas));
   } catch (err) {
     next(err);
   }
@@ -17,8 +17,8 @@ export async function listar(req, res, next) {
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const mov = await detMovsEntregaRendirService.obtenerPorId(id);
-    res.json(toJSONBigInt(mov));
+    const entrega = await entregaARendirService.obtenerPorId(id);
+    res.json(toJSONBigInt(entrega));
   } catch (err) {
     next(err);
   }
@@ -26,7 +26,7 @@ export async function obtenerPorId(req, res, next) {
 
 export async function crear(req, res, next) {
   try {
-    const nuevo = await detMovsEntregaRendirService.crear(req.body);
+    const nuevo = await entregaARendirService.crear(req.body);
     res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
     next(err);
@@ -36,7 +36,7 @@ export async function crear(req, res, next) {
 export async function actualizar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const actualizado = await detMovsEntregaRendirService.actualizar(id, req.body);
+    const actualizado = await entregaARendirService.actualizar(id, req.body);
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
     next(err);
@@ -46,7 +46,7 @@ export async function actualizar(req, res, next) {
 export async function eliminar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    await detMovsEntregaRendirService.eliminar(id);
+    await entregaARendirService.eliminar(id);
     res.status(200).json(toJSONBigInt({ eliminado: true, id }));
   } catch (err) {
     next(err);

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import * as entregaARendirController from '../../controllers/EntregaARendir/entregaARendir.controller.js';
+import * as entregaARendirController from '../../controllers/Pesca/entregaARendir.controller.js';
 
 const router = Router();
 
