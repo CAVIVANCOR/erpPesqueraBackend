@@ -35,14 +35,14 @@ async function validarPersonal(data, excluirId = null) {
   }
 
   // Validar existencia de referencias opcionales si se proveen
+  // Solo se validan referencias que existen en el modelo Prisma actual
   const referencias = [
     { campo: 'tipoDocumentoId', modelo: 'tipoDocumento' },
     { campo: 'tipoContratoId', modelo: 'tipoContrato' },
     { campo: 'cargoId', modelo: 'cargosPersonal' },
     { campo: 'ubigeoId', modelo: 'ubigeo' },
-    { campo: 'areaFisicaId', modelo: 'areaFisica' },
-    { campo: 'sedeId', modelo: 'sede' },
-    { campo: 'sedeEmpresaId', modelo: 'sedeEmpresa' }
+    { campo: 'areaFisicaId', modelo: 'areaFisicaSede' },
+    { campo: 'sedeEmpresaId', modelo: 'sedesEmpresa' } // sedeEmpresaId referencia a la tabla sede
   ];
   for (const ref of referencias) {
     if (data[ref.campo] !== undefined && data[ref.campo] !== null) {

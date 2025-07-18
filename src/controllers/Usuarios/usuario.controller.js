@@ -52,3 +52,22 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+export async function crearSuperusuario(req, res, next) {
+  try {
+    const usuario = await usuarioService.crearSuperusuarioEnCascada(req.body);
+    res.status(201).json(toJSONBigInt(usuario));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Nuevo endpoint: contar usuarios
+export async function contarUsuarios(req, res, next) {
+  try {
+    const count = await usuarioService.contarUsuarios();
+    res.json({ count });
+  } catch (err) {
+    next(err);
+  }
+}

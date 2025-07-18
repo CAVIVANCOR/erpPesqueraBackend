@@ -9,6 +9,7 @@ import usuarioRoutes from './Usuarios/usuario.routes.js';
 import authRoutes from './Usuarios/auth.routes.js'; // Rutas de autenticación de usuarios
 import personalRoutes from './Usuarios/personal.routes.js';
 import cargosPersonalRoutes from './Usuarios/cargosPersonal.routes.js';
+import tipoContratoRoutes from './Usuarios/tipoContrato.routes.js'; // CRUD profesional de TipoContrato
 import accesosUsuarioRoutes from './Usuarios/accesosUsuario.routes.js';
 import moduloSistemaRoutes from './Usuarios/moduloSistema.routes.js';
 import submoduloSistemaRoutes from './Usuarios/submoduloSistema.routes.js';
@@ -36,6 +37,9 @@ import unidadMedidaRoutes from './Maestros/unidadMedida.routes.js';
 import tipoMaterialRoutes from './Maestros/tipoMaterial.routes.js';
 import colorRoutes from './Maestros/color.routes.js';
 import empresaRoutes from './Maestros/empresa.routes.js';
+import empresaLogoRoutes from './Maestros/empresa.logo.routes.js';
+import personalFotoRoutes from './Usuarios/personal.foto.routes.js'; // Rutas de manejo de foto de personal
+import empresaAdjuntosRoutes from './Maestros/empresa.adjunto.routes.js';
 import sedesEmpresaRoutes from './Maestros/sedesEmpresa.routes.js';
 import areaFisicaSedeRoutes from './Maestros/areaFisicaSede.routes.js';
 import especieRoutes from './Maestros/especie.routes.js';
@@ -145,13 +149,31 @@ import movLiqNovedadPescaConsumoRoutes from '../routes/Pesca/movLiqNovedadPescaC
 import entregaARendirRoutes from '../routes/Pesca/entregaARendir.routes.js';
 import detMovsEntregaRendirRoutes from '../routes/Pesca/detMovsEntregaRendir.routes.js';
 import tipoMovEntregaRendirRoutes from '../routes/Pesca/tipoMovEntregaRendir.routes.js';
+import empresaReporteRoutes from '../routes/Maestros/empresa.reporte.routes.js';
 
 import { autenticarJWT } from '../middlewares/authMiddleware.js';
+import * as usuarioController from '../controllers/Usuarios/usuario.controller.js'
 
 const router = express.Router();
 
 // Rutas públicas de autenticación
 router.use('/auth', authRoutes);
+
+// Ruta para manejo de logos de empresa (upload y serving)
+router.use('/empresas-logo', empresaLogoRoutes);
+// Ruta para manejo de fotos de personal (upload y serving)
+router.use('/personal-foto', personalFotoRoutes); // Permite subir y servir fotos de personal
+
+// Ruta para manejo de adjuntos PDF de empresa (upload y serving)
+router.use('/empresas-adjuntos', empresaAdjuntosRoutes);
+
+// Ruta para manejo de reportes generados por empresa (upload y serving)
+router.use('/empresas-reportes', empresaReporteRoutes);
+
+// Rutas públicas para usuarios (antes del middleware global)
+router.get('/usuarios/count', usuarioController.contarUsuarios);
+router.post('/usuarios/superusuario', usuarioController.crearSuperusuario);
+
 
 // Middleware global de autenticación (protege todas las rutas siguientes)
 router.use(autenticarJWT);
@@ -437,6 +459,8 @@ router.use('/tipos-mov-entrega-rendir', tipoMovEntregaRendirRoutes);
 router.use('/movimientos-caja', movimientoCajaRoutes);
 router.use('/cuentas-corrientes', cuentaCorrienteRoutes);
 router.use('/asientos-contables-interfaz', asientoContableInterfazRoutes);
+// Rutas para TipoContrato (contratos laborales)
+router.use('/tipos-contrato', tipoContratoRoutes);
 router.use('/tipos-referencia-movimiento-caja', tipoReferenciaMovimientoCajaRoutes);
 router.use('/bancos', bancoRoutes);
 router.use('/tipos-cuenta-corriente', tipoCuentaCorrienteRoutes);

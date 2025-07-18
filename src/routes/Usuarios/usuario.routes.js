@@ -9,5 +9,8 @@ router.get('/:id', usuarioController.obtenerPorId);
 router.post('/', usuarioController.crear);
 router.put('/:id', usuarioController.actualizar);
 router.delete('/:id', usuarioController.eliminar);
+router.post('/superusuario', usuarioController.crearSuperusuario);
+router.get('/count', usuarioController.contarUsuarios);
+
 
 export default router;

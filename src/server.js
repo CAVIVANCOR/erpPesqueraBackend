@@ -11,13 +11,34 @@ dotenv.config();
 
 const app = express();
 
+import path from 'path';
+// Middleware para servir archivos de logo de empresa de forma pública y segura
+app.use('/public/logos', express.static(path.join(process.cwd(), 'uploads/logos')));
+// Middleware para servir fotos de personal
+app.use('/public/personal', express.static(path.join(process.cwd(), 'uploads/personal')));
+
+
 // Middlewares globales
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 app.use(helmet());
 app.use(hpp());
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+/**
+ * Middleware global de rate limit (express-rate-limit)
+ * - En desarrollo: permite hasta 1000 peticiones por minuto por IP para evitar bloqueos durante pruebas y desarrollo frontend.
+ * - En producción: límite estricto de 100 peticiones por minuto por IP para proteger el backend de abusos.
+ * - El valor se determina según NODE_ENV y puede ajustarse fácilmente.
+ *
+ * Esta configuración garantiza una experiencia fluida en desarrollo y seguridad en producción.
+ */
+const isProduction = process.env.NODE_ENV === 'production';
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: isProduction ? 100 : 1000, // 1000/min en dev, 100/min en prod
+  message: 'Demasiadas peticiones, intenta más tarde.'
+});
+app.use(limiter);
 
 
 // Rutas principales

@@ -1,4 +1,6 @@
-// Convierte todos los campos BigInt de un objeto (o array) a string recursivamente
+// Convierte todos los campos BigInt y Date de un objeto (o array) a string recursivamente
+// Esto garantiza compatibilidad profesional entre backend (Prisma/Node) y frontend (React),
+// evitando problemas de serialización y visualización de fechas en formularios y reportes.
 export default function toJSONBigInt(obj) {
   if (Array.isArray(obj)) {
     return obj.map(toJSONBigInt);
@@ -7,6 +9,8 @@ export default function toJSONBigInt(obj) {
     for (const key in obj) {
       if (typeof obj[key] === 'bigint') {
         newObj[key] = obj[key].toString();
+      } else if (obj[key] instanceof Date) {
+        newObj[key] = obj[key].toISOString();
       } else {
         newObj[key] = toJSONBigInt(obj[key]);
       }

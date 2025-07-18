@@ -23,8 +23,6 @@ model Empresa {
   porcentajeIgv          Decimal?
   porcentajeRetencion    Decimal?
   montoMinimoRetencion   Decimal?
-  rutaArchivosAdjuntos   String?
-  rutaReportesGenerados  String?
   cuentaDetraccion      String?
   soyAgenteRetencion     Boolean @default(false)
   soyAgentePercepcion    Boolean @default(false)
@@ -395,16 +393,26 @@ model Personal {
   tipoContratoId  BigInt?
   cargoId         BigInt?
   cesado          Boolean  @default(false)
-  sedeId          BigInt?
   urlFotoPersona  String?
-  usuario         Usuario?
   areaFisicaId    BigInt?
   sedeEmpresaId   BigInt?
-
+  usuario       Usuario?
+  
   documentaciones DocumentacionPersonal[]
   cargo       CargosPersonal?    @relation(fields: [cargoId], references: [id])
   ubigeo      Ubigeo?            @relation(fields: [ubigeoId], references: [id])
+  tipoContrato TipoContrato?      @relation(fields: [tipoContratoId], references: [id])
+}
 
+model TipoContrato {
+  id          BigInt   @id @default(autoincrement())
+  codigo      String   @unique
+  nombre      String               
+  cesado      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  personal Personal[]
 }
 
 model TiposDocIdentidad {
@@ -444,6 +452,7 @@ model Usuario {
 
   personal          Personal? @relation(fields: [personalId], references: [id])
   accesosUsuario    AccesosUsuario[]
+  refreshTokens     RefreshToken[]
 }
 
 model AccesosUsuario {
@@ -2484,3 +2493,42 @@ model MovLiquidacionProcesoComprasProd {
   liquidacionProcesoComprasProd   LiquidacionProcesoComprasProd @relation(fields: [liquidacionProcesoComprasProdId], references: [id])
 }
 
+model RefreshToken {
+  id          BigInt   @id @default(autoincrement())
+  token       String   @unique
+  usuarioId   BigInt
+  expiracion  DateTime
+  creadoEn    DateTime @default(now())
+  revocado    Boolean  @default(false)
+
+  usuario     Usuario  @relation(fields: [usuarioId], references: [id])
+}
+
+/// Modelo centralizado para almacenar archivos adjuntos PDF de cualquier submódulo del ERP Megui.
+/// Permite asociar cada archivo a un proceso origen (empresa, pesca, proveedor, etc.) mediante subModuloId.
+model ArchivoAdjunto {
+  id             BigInt   @id @default(autoincrement()) // Identificador único del archivo adjunto
+  nombreArchivo  String   // Nombre físico del archivo almacenado (ej: permiso-2025-1623456789.pdf)
+  rutaRelativa   String   // Ruta relativa de almacenamiento (ej: /uploads/adjuntos/empresa-23/permiso-2025-1623456789.pdf)
+  fechaSubida    DateTime @default(now()) // Fecha y hora de subida del archivo
+  empresaId      BigInt   // Identificador de la empresa a la que pertenece el archivo adjunto
+  subModuloId    BigInt   // Identificador del submódulo o proceso origen (ej: id de pesca, id de empresa, id de proveedor, etc.)
+  usuarioSubioId BigInt?  // Usuario que subió el archivo (opcional)
+}
+
+/// Modelo profesional para almacenar los metadatos de los archivos de reportes generados por el sistema.
+/// Cada registro representa un archivo de reporte generado y almacenado en el backend,
+/// asociado a una empresa y opcionalmente a un submódulo o proceso específico.
+/// Documentado profesionalmente en español técnico.
+model ReporteGenerado {
+  id                BigInt    @id @default(autoincrement()) // Identificador único del reporte generado
+  nombreArchivo     String    // Nombre físico del archivo almacenado (incluye extensión)
+  rutaRelativa      String    // Ruta relativa donde se guarda el archivo, siguiendo la convención /uploads/reportes/empresa-{idEmpresa}/
+  fechaGeneracion   DateTime  @default(now()) // Fecha y hora de la generación y almacenamiento del reporte
+  empresaId         BigInt    // Empresa propietaria del reporte generado
+  subModuloId       BigInt?   // Submódulo o proceso origen del reporte (ej: id de faena, id de liquidación, etc.)
+  usuarioGeneroId   BigInt?   // Usuario que generó el reporte (opcional, para trazabilidad/auditoría)
+
+  @@index([empresaId])
+  @@index([subModuloId])
+}

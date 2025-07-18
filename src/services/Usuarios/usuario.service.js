@@ -152,10 +152,99 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Crea el primer superusuario y toda la jerarquía relacionada en una sola transacción.
+ * Solo permite la creación si no existen usuarios.
+ */
+const crearSuperusuarioEnCascada = async (data) => {
+  const count = await prisma.usuario.count();
+  console.log("Paso 1: contando usuarios");
+
+  if (count > 0) throw new ConflictError('Ya existen usuarios en el sistema.');
+
+  return await prisma.$transaction(async (prisma) => {
+    // 1. Verifica que exista el cargo S/C (Sin Cargo) con id=1
+    let sinCargo = await prisma.cargosPersonal.findUnique({ where: { id: 1 } });
+    console.log("Paso 2: verificando cargo S/C");
+
+    if (!sinCargo) {
+      sinCargo = await prisma.cargosPersonal.create({
+        data: {
+          id: 1,
+          descripcion: 'S/C',
+        }
+      });
+      
+    } else if (sinCargo.descripcion !== 'S/C') {
+      // Si existe pero el nombre es incorrecto, lo actualiza
+      await prisma.cargosPersonal.update({
+        where: { id: 1 },
+        data: { descripcion: 'S/C'}
+      });
+    }
+    console.log("Paso 3: creando cargo S/C");
+
+    // 2. Crear o buscar el cargo ESPECIALISTA TIC
+    let cargo = await prisma.cargosPersonal.findFirst({ where: { descripcion: 'ESPECIALISTA TIC' } });
+    console.log("Paso 4: verificando cargo ESPECIALISTA TIC", cargo);
+    if (!cargo) {
+      cargo = await prisma.cargosPersonal.create({
+        data: { descripcion: 'ESPECIALISTA TIC' }
+      });
+    }
+    console.log("Paso 5: creando cargo ESPECIALISTA TIC");
+
+    // 3. Crear el registro de personal
+    const personal = await prisma.personal.create({
+      data: {
+        nombres: data.nombres,
+        apellidos: data.apellidos,
+        correo: data.email,
+        cargoId: cargo.id,
+        numeroDocumento: data.numeroDocumento,
+        fechaNacimiento: data.fechaNacimiento,
+        sexo: data.sexo,
+        empresaId: data.empresaId,
+        // Agrega aquí otros campos requeridos por tu modelo
+        fechaIngreso: new Date(),
+        cesado: false
+      }
+    });
+    console.log("Paso 6: creando personal");
+
+    // 4. Crear el usuario asociado
+    const passwordHash = await bcrypt.default.hash(data.password, 10);
+    console.log("Paso 7: hasheando password");
+    const usuario = await prisma.usuario.create({
+      data: {
+        username: data.username,
+        passwordHash,
+        personalId: personal.id,
+        empresaId: data.empresaId,
+        esSuperUsuario: true,
+        esAdmin: true,
+        esUsuario: false,
+        cesado: false,
+        fechaCreacion: new Date(),
+        fechaUltimoAcceso: new Date(),
+        // Otros campos si tu modelo lo requiere
+      }
+    });
+    console.log("Paso 8: creando usuario");
+    return usuario;
+  });
+};
+
+const contarUsuarios = async () => {
+  return await prisma.usuario.count();
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  crearSuperusuarioEnCascada,
+  contarUsuarios
 };

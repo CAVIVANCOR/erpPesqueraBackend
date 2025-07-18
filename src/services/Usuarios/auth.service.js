@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { NotFoundError, ValidationError, ConflictError } from '../../utils/errors.js';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -59,8 +60,70 @@ export async function login(username, password) {
   };
   delete usuarioRespuesta.passwordHash;
 
-  return { usuario: usuarioRespuesta, token };
+    // Generar refresh token seguro y persistente
+  const refreshToken = await crearRefreshToken(usuario.id);
+
+  return { usuario: usuarioRespuesta, token, refreshToken: refreshToken.token };
 }
+
+/**
+ * Genera un refresh token seguro, lo almacena en la BD y lo asocia al usuario.
+ * @param {BigInt} usuarioId - ID del usuario dueño del token
+ * @param {number} expiracionMinutos - Tiempo de vida en minutos (por defecto 30 días)
+ * @returns {Promise<Object>} El refresh token creado
+ */
+export async function crearRefreshToken(usuarioId, expiracionMinutos = 43200) {
+  const token = crypto.randomBytes(40).toString('hex');
+  const expiracion = new Date(Date.now() + expiracionMinutos * 60 * 1000); // 30 días
+  const refreshToken = await prisma.refreshToken.create({
+    data: {
+      token,
+      usuarioId,
+      expiracion
+    }
+  });
+  return refreshToken;
+}
+
+/**
+ * Refresca el access token usando un refresh token válido.
+ * @param {string} refreshTokenString
+ * @returns {Promise<{token: string}>}
+ * @throws {ValidationError} Si el refresh token es inválido, revocado o expirado
+ */
+export async function refrescarAccessToken(refreshTokenString) {
+  const refreshToken = await prisma.refreshToken.findUnique({
+    where: { token: refreshTokenString },
+    include: { usuario: true }
+  });
+  if (!refreshToken || refreshToken.revocado || refreshToken.expiracion < new Date()) {
+    throw new ValidationError('Refresh token inválido o expirado.');
+  }
+  const usuario = refreshToken.usuario;
+  const payload = {
+    id: usuario.id.toString(),
+    username: usuario.username,
+    esSuperUsuario: usuario.esSuperUsuario,
+    esAdmin: usuario.esAdmin,
+    esUsuario: usuario.esUsuario,
+    empresaId: usuario.empresaId.toString()
+  };
+  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  return { token };
+}
+
+/**
+ * Revoca (invalida) un refresh token en la BD, para cierre de sesión seguro.
+ * @param {string} refreshTokenString
+ * @returns {Promise<void>}
+ */
+export async function logout(refreshTokenString) {
+  await prisma.refreshToken.updateMany({
+    where: { token: refreshTokenString },
+    data: { revocado: true }
+  });
+}
+
 
 /**
  * Registra un nuevo usuario, hasheando la contraseña.
