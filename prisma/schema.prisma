@@ -476,9 +476,7 @@ model ModuloSistema {
   id           BigInt   @id @default(autoincrement())
   nombre       String   @unique
   descripcion  String?
-  icono        String?      // Opcional: para mostrar en el frontend
   activo       Boolean  @default(true)
-  orden        Int?         // Opcional: para ordenar en el menú
 
   submodulos   SubmoduloSistema[]
 }
@@ -488,10 +486,7 @@ model SubmoduloSistema {
   moduloId       BigInt
   nombre         String
   descripcion    String?
-  icono          String?      // Opcional
-  ruta           String?      // Ruta del frontend o identificador técnico
   activo         Boolean  @default(true)
-  orden          Int?         // Para orden en menú
 
   modulo         ModuloSistema @relation(fields: [moduloId], references: [id])
   accesosUsuario AccesosUsuario[]
