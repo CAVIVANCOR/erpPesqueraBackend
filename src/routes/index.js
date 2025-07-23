@@ -324,6 +324,8 @@ router.use('/ordenes-compra', ordenCompraRoutes);
 router.use('/detalles-orden-compra', detalleOrdenCompraRoutes);
 // Rutas para CotizacionCompras
 router.use('/cotizaciones-compras', cotizacionComprasRoutes);
+// Rutas para CotizacionCompras (principal)
+router.use('/cotizacion-compras', cotizacionComprasRoutes);
 // Rutas para DetGastosComprasProd
 router.use('/gastos-compras-prod', detGastosComprasProdRoutes);
 // Rutas para DetCotizacionCompras

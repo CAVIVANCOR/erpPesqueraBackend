@@ -1020,7 +1020,6 @@ model TipoDocumento {
   codigo      String   @unique @db.VarChar(10)
   codigoSunat String?  @db.VarChar(10)           
   descripcion String?
-  moduloId    BigInt?                           
   activo      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

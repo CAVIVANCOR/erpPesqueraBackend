@@ -1,0 +1,122 @@
+// Modelo DescargaFaenaConsumo para el ERP Megui
+// Gestiona las descargas de faenas de pesca para consumo humano directo
+// Incluye información de embarcación, fechas, pesos y responsables
+
+model DescargaFaenaConsumo {
+  id                        BigInt   @id @default(autoincrement())
+  
+  // Relaciones principales
+  faenaPescaConsumoId       BigInt
+  embarcacionId             BigInt
+  puertoDescargaId          BigInt
+  empresaId                 BigInt
+  
+  // Información de descarga
+  numeroDescarga            String   @unique
+  fechaDescarga             DateTime
+  horaInicio                DateTime?
+  horaFin                   DateTime?
+  
+  // Pesos y cantidades
+  pesoTotalDescargado       Decimal  @db.Decimal(10,2)
+  pesoTotalDeclarado        Decimal? @db.Decimal(10,2)
+  diferenciaPeso            Decimal? @db.Decimal(10,2)
+  
+  // Calidad y estado
+  temperaturaProducto       Decimal? @db.Decimal(5,2)
+  estadoProducto            String?  // FRESCO, REFRIGERADO, CONGELADO
+  calidadProducto           String?  // PREMIUM, PRIMERA, SEGUNDA, TERCERA
+  
+  // Responsables
+  capitanId                 BigInt?
+  supervisorDescargaId      BigInt?
+  controlCalidadId          BigInt?
+  
+  // Documentación
+  documentoDescarga         String?
+  observaciones             String?
+  urlFotosDescarga          String?
+  
+  // Condiciones ambientales
+  condicionesClimaticas     String?
+  temperaturaAmbiente       Decimal? @db.Decimal(5,2)
+  humedadRelativa           Decimal? @db.Decimal(5,2)
+  
+  // Estado y aprobaciones
+  estadoDescarga            String   @default("PENDIENTE") // PENDIENTE, EN_PROCESO, COMPLETADA, CANCELADA
+  aprobadoPor               BigInt?
+  fechaAprobacion           DateTime?
+  motivoRechazo             String?
+  
+  // Auditoría
+  fechaCreacion             DateTime @default(now())
+  fechaModificacion         DateTime @updatedAt
+  creadoPor                 BigInt?
+  modificadoPor             BigInt?
+  
+  // Relaciones
+  faenaPescaConsumo         FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+  embarcacion               Embarcacion @relation(fields: [embarcacionId], references: [id])
+  puertoDescarga            PuertoPesca @relation(fields: [puertoDescargaId], references: [id])
+  empresa                   Empresa @relation(fields: [empresaId], references: [id])
+  
+  // Detalles de descarga
+  detallesDescarga          DetDescargaFaenaConsumo[]
+  
+  @@map("descarga_faena_consumo")
+}
+
+model DetDescargaFaenaConsumo {
+  id                        BigInt   @id @default(autoincrement())
+  
+  // Relación principal
+  descargaFaenaConsumoId    BigInt
+  
+  // Producto y especie
+  especieId                 BigInt
+  productoId                BigInt?
+  
+  // Cantidades y pesos
+  cantidadCajas             Int?
+  pesoBruto                 Decimal  @db.Decimal(10,2)
+  pesoNeto                  Decimal  @db.Decimal(10,2)
+  pesoTara                  Decimal? @db.Decimal(10,2)
+  
+  // Clasificación
+  talla                     String?
+  calibre                   String?
+  presentacion              String?  // ENTERO, FILETE, TROZO, PULPA
+  
+  // Calidad específica
+  gradoFrescura             String?  // A, B, C
+  defectos                  String?
+  porcentajeHielo           Decimal? @db.Decimal(5,2)
+  
+  // Trazabilidad
+  loteProduccion            String?
+  codigoTrazabilidad        String?
+  fechaCaptura              DateTime?
+  zonaCaptura               String?
+  
+  // Destino
+  destinoProducto           String?  // EXPORTACION, MERCADO_NACIONAL, INDUSTRIAL
+  clienteDestino            BigInt?
+  
+  // Precios (opcional)
+  precioUnitario            Decimal? @db.Decimal(10,4)
+  valorTotal                Decimal? @db.Decimal(12,2)
+  
+  // Observaciones específicas
+  observaciones             String?
+  
+  // Auditoría
+  fechaCreacion             DateTime @default(now())
+  fechaModificacion         DateTime @updatedAt
+  
+  // Relaciones
+  descargaFaenaConsumo      DescargaFaenaConsumo @relation(fields: [descargaFaenaConsumoId], references: [id])
+  especie                   Especie @relation(fields: [especieId], references: [id])
+  producto                  Producto? @relation(fields: [productoId], references: [id])
+  
+  @@map("det_descarga_faena_consumo")
+}
