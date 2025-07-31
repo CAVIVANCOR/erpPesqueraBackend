@@ -37,7 +37,7 @@ async function validarPersonal(data, excluirId = null) {
   // Validar existencia de referencias opcionales si se proveen
   // Solo se validan referencias que existen en el modelo Prisma actual
   const referencias = [
-    { campo: 'tipoDocumentoId', modelo: 'tipoDocumento' },
+    { campo: 'tipoDocumentoId', modelo: 'tiposDocIdentidad' },
     { campo: 'tipoContratoId', modelo: 'tipoContrato' },
     { campo: 'cargoId', modelo: 'cargosPersonal' },
     { campo: 'ubigeoId', modelo: 'ubigeo' },

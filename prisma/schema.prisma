@@ -402,6 +402,8 @@ model Personal {
   cargo       CargosPersonal?    @relation(fields: [cargoId], references: [id])
   ubigeo      Ubigeo?            @relation(fields: [ubigeoId], references: [id])
   tipoContrato TipoContrato?      @relation(fields: [tipoContratoId], references: [id])
+  tipoDocIdentidad TiposDocIdentidad? @relation(fields: [tipoDocumentoId], references: [id])
+
 }
 
 model TipoContrato {
@@ -425,6 +427,7 @@ model TiposDocIdentidad {
   updatedAt   DateTime @updatedAt
 
   entidadesComerciales EntidadComercial[]
+  personal Personal[]
 }
 
 model CargosPersonal {
@@ -2209,7 +2212,6 @@ model AccesoInstalacion {
   areaDestinoVisitaId        BigInt?
   empresaId                  BigInt?
   tipoAccesoId               BigInt
-  vehiculoId                 BigInt?
   tipoPersonaId              BigInt?
   motivoId                   BigInt?
   tipoEquipoId               BigInt?      // Nuevo campo para el tipo de equipo/maquinaria
