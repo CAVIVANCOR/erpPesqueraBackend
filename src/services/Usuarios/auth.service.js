@@ -26,6 +26,7 @@ const SALT_ROUNDS = 10;
 export async function login(username, password) {
   // Buscar usuario por username
   const usuario = await prisma.usuario.findUnique({ where: { username } });
+  console.log("OJOOOOOOOOOOO",usuario);
   if (!usuario || usuario.cesado) throw new NotFoundError('Usuario no encontrado o cesado.');
 
   // Comparar password con hash almacenado

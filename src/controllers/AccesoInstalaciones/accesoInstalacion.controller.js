@@ -52,3 +52,47 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Busca una persona por número de documento en registros de AccesoInstalacion.
+ * Endpoint: GET /api/acceso-instalacion/buscar-persona/:numeroDocumento
+ */
+export async function buscarPersonaPorDocumento(req, res, next) {
+  try {
+    const { numeroDocumento } = req.params;
+    const persona = await accesoInstalacionService.buscarPersonaPorDocumento(numeroDocumento);
+    
+    if (!persona) {
+      return res.status(404).json({ 
+        encontrada: false, 
+        mensaje: 'No se encontró ninguna persona con ese número de documento' 
+      });
+    }
+    
+    res.json(toJSONBigInt(persona));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Busca datos de vehículo por número de placa en registros de AccesoInstalacion.
+ * Endpoint: GET /api/acceso-instalacion/buscar-vehiculo/:numeroPlaca
+ */
+export async function buscarVehiculoPorPlaca(req, res, next) {
+  try {
+    const { numeroPlaca } = req.params;
+    const vehiculo = await accesoInstalacionService.buscarVehiculoPorPlaca(numeroPlaca);
+    
+    if (!vehiculo) {
+      return res.status(404).json({ 
+        encontrado: false, 
+        mensaje: 'No se encontró ningún vehículo con esa placa o no tiene datos completos' 
+      });
+    }
+    
+    res.json(toJSONBigInt(vehiculo));
+  } catch (err) {
+    next(err);
+  }
+}

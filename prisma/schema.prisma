@@ -2225,17 +2225,18 @@ model AccesoInstalacion {
   // Datos de vehículo y equipo/maquinaria de clientes
   vehiculoNroPlaca           String?
   vehiculoMarca              String?
+  vehiculoModelo             String?
+  vehiculoColor              String?
   equipoMarca                String?
   equipoSerie                String?
 
   // Persona destino de la visita
   personaFirmaDestinoVisitaId   BigInt?
-  nombreDestinoVisita           String?
 
   observaciones                String?
   incidenteResaltante          Boolean  @default(false)
   descripcionIncidente         String?
-  imprimeTicketIng             Boolean  @default(true)
+  imprimeTicketIng             Boolean  @default(false)
   urlImpresionTicket           String?
   urlDocumentoVisitante        String?
   createdAt                    DateTime @default(now())
@@ -2291,6 +2292,7 @@ model TipoPersona {
   id          BigInt   @id @default(autoincrement())
   nombre      String   @unique   // Ej: Empleado, Visitante, Cliente, Proveedor, Fiscalizador, etc.
   descripcion String?
+  imprimeTicketIng Boolean @default(true)
   activo      Boolean  @default(true)
 
   accesos     AccesoInstalacion[]

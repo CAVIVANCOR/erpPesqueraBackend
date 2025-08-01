@@ -16,7 +16,8 @@ import path from 'path';
 app.use('/public/logos', express.static(path.join(process.cwd(), 'uploads/logos')));
 // Middleware para servir fotos de personal
 app.use('/public/personal', express.static(path.join(process.cwd(), 'uploads/personal')));
-
+// Middleware para servir documentos de visitantes (protegido con JWT)
+app.use('/uploads/documentos-visitantes', express.static(path.join(process.cwd(), 'uploads/documentos-visitantes')));
 
 // Middlewares globales
 app.use(express.json());

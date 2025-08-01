@@ -61,6 +61,7 @@ import tipoMovimientoAccesoRoutes from '../routes/AccesoInstalaciones/tipoMovimi
 import tipoAccesoInstalacionRoutes from '../routes/AccesoInstalaciones/tipoAccesoInstalacion.routes.js';
 import tipoPersonaRoutes from '../routes/AccesoInstalaciones/tipoPersona.routes.js';
 import motivoAccesoRoutes from '../routes/AccesoInstalaciones/motivoAcceso.routes.js';
+import documentosVisitanteRoutes from '../routes/AccesoInstalaciones/documentos.visitante.routes.js';
 import movimientoAlmacenRoutes from '../routes/Almacen/movimientoAlmacen.routes.js';
 import detalleMovimientoAlmacenRoutes from '../routes/Almacen/detalleMovimientoAlmacen.routes.js';
 import tipoDocumentoRoutes from '../routes/Almacen/tipoDocumento.routes.js';
@@ -280,6 +281,8 @@ router.use('/tipos-acceso-instalacion', tipoAccesoInstalacionRoutes);
 router.use('/tipos-persona', tipoPersonaRoutes);
 // Rutas para MotivoAcceso
 router.use('/motivos-acceso', motivoAccesoRoutes);
+// Rutas para DocumentosVisitante (upload y serving de PDFs de documentos)
+router.use('/documentos-visitantes', documentosVisitanteRoutes);
 // Rutas para MovimientoAlmacen
 router.use('/movimientos-almacen', movimientoAlmacenRoutes);
 // Rutas para DetalleMovimientoAlmacen
