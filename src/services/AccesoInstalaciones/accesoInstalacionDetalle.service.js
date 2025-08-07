@@ -22,10 +22,26 @@ async function validarForaneas(accesoInstalacionId, tipoMovimientoId) {
 
 /**
  * Lista todos los detalles de acceso a instalación.
+ * Ahora soporta filtrado por accesoInstalacionId via query parameters.
  */
-const listar = async () => {
+const listar = async (filtros = {}) => {
   try {
-    return await prisma.accesoInstalacionDetalle.findMany();
+    const where = {};
+    
+    // Filtrar por accesoInstalacionId si se proporciona
+    if (filtros.accesoInstalacionId) {
+      where.accesoInstalacionId = BigInt(filtros.accesoInstalacionId);
+    }
+    
+    return await prisma.accesoInstalacionDetalle.findMany({
+      where,
+      include: {
+        tipoMovimiento: true // Incluir relación para mostrar nombres
+      },
+      orderBy: {
+        fechaHora: 'asc' // Ordenar por fecha/hora ascendente
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -99,10 +115,39 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Obtiene detalles filtrados por accesoInstalacionId específico.
+ * Función dedicada para mejor rendimiento y claridad.
+ */
+const obtenerPorAccesoInstalacion = async (accesoInstalacionId) => {
+  try {
+    if (!accesoInstalacionId) {
+      throw new ValidationError('El accesoInstalacionId es obligatorio para el filtrado.');
+    }
+    
+    return await prisma.accesoInstalacionDetalle.findMany({
+      where: {
+        accesoInstalacionId: BigInt(accesoInstalacionId)
+      },
+      include: {
+        tipoMovimiento: true // Incluir relación para mostrar nombres
+      },
+      orderBy: {
+        fechaHora: 'asc' // Ordenar por fecha/hora ascendente
+      }
+    });
+  } catch (err) {
+    if (err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  obtenerPorAccesoInstalacion
 };

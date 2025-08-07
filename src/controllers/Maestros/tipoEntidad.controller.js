@@ -29,6 +29,7 @@ export async function crear(req, res, next) {
     const nuevo = await tipoEntidadService.crear(req.body);
     res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
+    console.error("❌ ERROR en controlador crear:", err);
     next(err);
   }
 }

@@ -41,8 +41,11 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Rutas públicas de consultas externas (RENIEC y SUNAT) - ANTES del middleware JWT
+import consultaExternaRoutes from './routes/Maestros/consultaExterna.routes.js';
+app.use('/api/consultas-externas', consultaExternaRoutes);
 
-// Rutas principales
+// Rutas principales (protegidas por JWT)
 import routes from './routes/index.js';
 app.use('/api', routes);
 

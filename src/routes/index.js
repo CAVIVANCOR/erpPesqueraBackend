@@ -18,7 +18,6 @@ import ubigeoRoutes from './Usuarios/ubigeo.routes.js';
 import paisRoutes from './Usuarios/pais.routes.js';
 import departamentoRoutes from './Usuarios/departamento.routes.js';
 import provinciaRoutes from './Usuarios/provincia.routes.js';
-import distritoRoutes from './Usuarios/distrito.routes.js';
 import entidadComercialRoutes from './Maestros/entidadComercial.routes.js';
 import contactoEntidadRoutes from './Maestros/contactoEntidad.routes.js';
 import tipoEntidadRoutes from './Maestros/tipoEntidad.routes.js';
@@ -54,6 +53,7 @@ import centroCostoRoutes from './Maestros/centroCosto.routes.js';
 import categoriaCCostoRoutes from './Maestros/categoriaCCosto.routes.js';
 import empresaCentroCostoRoutes from './Maestros/empresaCentroCosto.routes.js';
 import parametroAprobadorRoutes from './Maestros/parametroAprobador.routes.js';
+import consultaExternaRoutes from './Maestros/consultaExterna.routes.js';
 import accesoInstalacionRoutes from '../routes/AccesoInstalaciones/accesoInstalacion.routes.js';
 import tipoEquipoRoutes from '../routes/AccesoInstalaciones/tipoEquipo.routes.js';
 import accesoInstalacionDetalleRoutes from '../routes/AccesoInstalaciones/accesoInstalacionDetalle.routes.js';
@@ -201,8 +201,6 @@ router.use('/paises', paisRoutes);
 router.use('/departamentos', departamentoRoutes);
 // Rutas para Provincia
 router.use('/provincias', provinciaRoutes);
-// Rutas para Distrito
-router.use('/distritos', distritoRoutes);
 // Rutas para EntidadComercial
 router.use('/entidades-comerciales', entidadComercialRoutes);
 // Rutas para ContactoEntidad
@@ -262,11 +260,13 @@ router.use('/tipos-doc-identidad', tiposDocIdentidadRoutes);
 // Rutas para CentroCosto
 router.use('/centros-costo', centroCostoRoutes);
 // Rutas para CategoriaCCosto
-router.use('/categorias-centro-costo', categoriaCCostoRoutes);
+router.use('/categorias-ccosto', categoriaCCostoRoutes);
 // Rutas para EmpresaCentroCosto
 router.use('/empresas-centro-costo', empresaCentroCostoRoutes);
 // Rutas para ParametroAprobador
 router.use('/parametros-aprobador', parametroAprobadorRoutes);
+// Rutas para Consultas Externas (RENIEC y SUNAT)
+router.use('/consultas-externas', consultaExternaRoutes);
 // Rutas para AccesoInstalacion
 router.use('/accesos-instalacion', accesoInstalacionRoutes);
 // Rutas para TipoEquipo

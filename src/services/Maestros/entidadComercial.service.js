@@ -61,10 +61,14 @@ const listar = async () => {
         formaPago: true,
         agrupacionEntidad: true,
         contactos: true,
-        direcciones: true,
+        direcciones: {
+          include: {
+            ubigeo: true
+          }
+        },
         precios: true,
         vehiculos: true,
-        lineaCredito: true
+        lineasCredito: true
       }
     });
   } catch (err) {
@@ -86,10 +90,14 @@ const obtenerPorId = async (id) => {
         formaPago: true,
         agrupacionEntidad: true,
         contactos: true,
-        direcciones: true,
+        direcciones: {
+          include: {
+            ubigeo: true
+          }
+        },
         precios: true,
         vehiculos: true,
-        lineaCredito: true
+        lineasCredito: true
       }
     });
     if (!entidad) throw new NotFoundError('Entidad comercial no encontrada');
@@ -142,7 +150,7 @@ const eliminar = async (id) => {
         direcciones: true,
         precios: true,
         vehiculos: true,
-        lineaCredito: true,
+        lineasCredito: true,
         movimientosAlmacen: true,
         kardexAlmacenes: true,
         requerimientosCompra: true,
@@ -152,15 +160,12 @@ const eliminar = async (id) => {
     });
     if (!existente) throw new NotFoundError('Entidad comercial no encontrada');
     const dependientes = [
-      'contactos', 'direcciones', 'precios', 'vehiculos', 'lineaCredito',
+      'contactos', 'direcciones', 'precios', 'vehiculos', 'lineasCredito',
       'movimientosAlmacen', 'kardexAlmacenes', 'requerimientosCompra', 'ordenesCompra', 'preFacturasCliente'
     ];
     for (const rel of dependientes) {
       if (Array.isArray(existente[rel]) && existente[rel].length > 0) {
         throw new ConflictError(`No se puede eliminar la entidad comercial porque tiene ${rel} asociados.`);
-      }
-      if (rel === 'lineaCredito' && existente[rel]) {
-        throw new ConflictError('No se puede eliminar la entidad comercial porque tiene línea de crédito asociada.');
       }
     }
     await prisma.entidadComercial.delete({ where: { id } });

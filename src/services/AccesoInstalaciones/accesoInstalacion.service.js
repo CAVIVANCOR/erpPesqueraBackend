@@ -68,6 +68,7 @@ const obtenerPorId = async (id) => {
 
 /**
  * Crea un acceso a instalación validando existencia de claves foráneas principales y campos obligatorios.
+ * Automáticamente crea también el registro de detalle inicial (ENTRADA).
  */
 const crear = async (data) => {
   try {
@@ -75,7 +76,35 @@ const crear = async (data) => {
       throw new ValidationError('Los campos sedeId, tipoAccesoId y fechaHora son obligatorios.');
     }
     await validarForaneas(data.sedeId, data.tipoAccesoId);
-    return await prisma.accesoInstalacion.create({ data });
+    
+    // Usar transacción para crear tanto el acceso como su detalle inicial
+    return await prisma.$transaction(async (tx) => {
+      // 1. Crear el registro principal de AccesoInstalacion
+      const nuevoAcceso = await tx.accesoInstalacion.create({ data });
+      
+      // 2. Crear automáticamente el registro de detalle inicial (ENTRADA)
+      await tx.accesoInstalacionDetalle.create({
+        data: {
+          accesoInstalacionId: nuevoAcceso.id,
+          fechaHora: data.fechaHora,
+          tipoMovimientoId: BigInt(1), // 1 = ENTRADA (según catálogo TipoMovimientoAcceso)
+          areaDestinoVisitaId: data.areaDestinoVisitaId || null,
+          observaciones: 'Registro automático de ingreso'
+        }
+      });
+      
+      // 3. Retornar el acceso creado con sus relaciones
+      return await tx.accesoInstalacion.findUnique({
+        where: { id: nuevoAcceso.id },
+        include: {
+          tipoAcceso: true,
+          tipoPersona: true,
+          motivoAcceso: true,
+          tipoEquipo: true,
+          detalles: true
+        }
+      });
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -213,6 +242,69 @@ const buscarVehiculoPorPlaca = async (numeroPlaca) => {
 };
 
 /**
+ * Procesa la salida definitiva de un acceso a instalación
+ * Actualiza fechaHoraSalidaDefinitiva con la fecha/hora actual y marca accesoSellado como true
+ * @param {BigInt} id - ID del acceso a instalación
+ * @returns {Object} - Acceso actualizado con todas las relaciones
+ */
+const procesarSalidaDefinitiva = async (id) => {
+  try {
+    // Verificar que el acceso existe
+    const acceso = await prisma.accesoInstalacion.findUnique({ where: { id } });
+    if (!acceso) throw new NotFoundError('AccesoInstalacion no encontrado');
+    
+    // Verificar que no esté ya sellado
+    if (acceso.accesoSellado) {
+      throw new ConflictError('Este acceso ya está sellado y no puede ser modificado');
+    }
+    
+    // Verificar que no tenga ya salida definitiva
+    if (acceso.fechaHoraSalidaDefinitiva) {
+      throw new ConflictError('Este acceso ya tiene salida definitiva procesada');
+    }
+    
+    // Usar transacción para actualizar el acceso y crear el movimiento de salida definitiva
+    return await prisma.$transaction(async (tx) => {
+      // 1. Actualizar el acceso con fecha de salida definitiva y sellado
+      const accesoActualizado = await tx.accesoInstalacion.update({
+        where: { id },
+        data: {
+          fechaHoraSalidaDefinitiva: new Date(),
+          accesoSellado: true
+        }
+      });
+      
+      // 2. Crear el movimiento de salida definitiva
+      await tx.accesoInstalacionDetalle.create({
+        data: {
+          accesoInstalacionId: id,
+          fechaHora: new Date(),
+          tipoMovimientoId: BigInt(4), // 4 = SALIDA DEFINITIVA (según catálogo TipoMovimientoAcceso)
+          areaDestinoVisitaId: acceso.areaDestinoVisitaId || null,
+          observaciones: 'Salida definitiva procesada automáticamente'
+        }
+      });
+      
+      // 3. Retornar el acceso actualizado con todas las relaciones
+      return await tx.accesoInstalacion.findUnique({
+        where: { id },
+        include: {
+          tipoAcceso: true,
+          tipoPersona: true,
+          motivoAcceso: true,
+          tipoEquipo: true,
+          detalles: true
+        }
+      });
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos al procesar salida definitiva', err.message);
+    throw err;
+  }
+};
+
+/**
  * Elimina un acceso a instalación por ID, validando existencia y que no tenga detalles asociados.
  */
 const eliminar = async (id) => {
@@ -238,5 +330,6 @@ export default {
   actualizar,
   eliminar,
   buscarPersonaPorDocumento,
-  buscarVehiculoPorPlaca
+  buscarVehiculoPorPlaca,
+  procesarSalidaDefinitiva
 };

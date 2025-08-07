@@ -35,11 +35,6 @@ async function validarUbigeo(data, excluirId = null) {
     const provincia = await prisma.provincia.findUnique({ where: { id: data.provinciaId } });
     if (!provincia) throw new ValidationError('Provincia no existente.');
   }
-  // Validar existencia de Distrito
-  if (data.distritoId) {
-    const distrito = await prisma.distrito.findUnique({ where: { id: data.distritoId } });
-    if (!distrito) throw new ValidationError('Distrito no existente.');
-  }
 }
 
 /**
@@ -52,7 +47,6 @@ const listar = async () => {
         pais: true,
         departamento: true,
         provincia: true,
-        distrito: true
       }
     });
   } catch (err) {
@@ -72,7 +66,6 @@ const obtenerPorId = async (id) => {
         pais: true,
         departamento: true,
         provincia: true,
-        distrito: true
       }
     });
     if (!ubigeo) throw new NotFoundError('Ubigeo no encontrado');

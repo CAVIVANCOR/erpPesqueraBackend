@@ -8,7 +8,7 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 
 /**
- * Valida unicidad de entidadComercialId y existencia de monedaId.
+ * Valida unicidad de entidadComercialId.
  * Lanza ConflictError y ValidationError según corresponda.
  * @param {Object} data - Datos de la línea de crédito
  * @param {number|null} excluirId - Si se actualiza, excluir el propio ID de la búsqueda
@@ -25,11 +25,6 @@ async function validarLineaCreditoEntidad(data, excluirId = null) {
     const existeLinea = await prisma.lineaCreditoEntidad.findFirst({ where });
     if (existeLinea) throw new ConflictError('Ya existe una línea de crédito para esta entidad comercial.');
   }
-  // Validar existencia de Moneda
-  if (data.monedaId) {
-    const existeMoneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
-    if (!existeMoneda) throw new ValidationError('Moneda no existente.');
-  }
 }
 
 /**
@@ -39,8 +34,7 @@ const listar = async () => {
   try {
     return await prisma.lineaCreditoEntidad.findMany({
       include: {
-        entidadComercial: true,
-        moneda: true
+        entidadComercial: true
       }
     });
   } catch (err) {
@@ -50,13 +44,13 @@ const listar = async () => {
 };
 
 /**
- * Obtiene una línea de crédito por ID (incluyendo entidad comercial y moneda asociadas).
+ * Obtiene una línea de crédito por ID (incluyendo entidad comercial asociada).
  */
 const obtenerPorId = async (id) => {
   try {
     const linea = await prisma.lineaCreditoEntidad.findUnique({
       where: { id },
-      include: { entidadComercial: true, moneda: true }
+      include: { entidadComercial: true }
     });
     if (!linea) throw new NotFoundError('Línea de crédito no encontrada');
     return linea;

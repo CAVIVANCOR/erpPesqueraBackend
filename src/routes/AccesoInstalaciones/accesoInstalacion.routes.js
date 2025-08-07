@@ -10,6 +10,7 @@ router.get('/buscar-vehiculo/:numeroPlaca', accesoInstalacionController.buscarVe
 router.get('/:id', accesoInstalacionController.obtenerPorId);
 router.post('/', accesoInstalacionController.crear);
 router.put('/:id', accesoInstalacionController.actualizar);
+router.put('/:id/salida-definitiva', accesoInstalacionController.procesarSalidaDefinitiva);
 router.delete('/:id', accesoInstalacionController.eliminar);
 
 export default router;

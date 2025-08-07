@@ -392,6 +392,7 @@ model Personal {
   fechaCese       DateTime?
   tipoContratoId  BigInt?
   cargoId         BigInt?
+  esVendedor      Boolean  @default(false)
   cesado          Boolean  @default(false)
   urlFotoPersona  String?
   areaFisicaId    BigInt?
@@ -697,8 +698,8 @@ model EntidadComercial {
   tipoDocumentoId      BigInt
   tipoEntidadId        BigInt
   formaPagoId          BigInt
-  vendedorId           BigInt
-  agenciaEnvioId       BigInt
+  vendedorId           BigInt?
+  agenciaEnvioId       BigInt?
   agrupacionEntidadId  BigInt?
   numeroDocumento      String   @db.VarChar(20)
   razonSocial          String   @db.VarChar(255)
@@ -707,6 +708,9 @@ model EntidadComercial {
   esProveedor          Boolean  @default(false)
   esCorporativo        Boolean  @default(false)
   estado               Boolean  @default(true)
+  estadoActivoSUNAT    Boolean  @default(true)
+  condicionHabidoSUNAT Boolean  @default(true)
+  esAgenteRetencion    Boolean  @default(false)
   observaciones        String?
   codigoErpFinanciero  String?  @db.VarChar(50)
   custodiaStock        Boolean  @default(false)
@@ -731,7 +735,8 @@ model EntidadComercial {
   direcciones          DireccionEntidad[]
   precios              PrecioEntidad[]
   vehiculos            VehiculoEntidad[]
-  lineaCredito         LineaCreditoEntidad?
+  lineasCredito        LineaCreditoEntidad[]
+
   movimientosAlmacen MovimientoAlmacen[]
   kardexAlmacenes   KardexAlmacen[]
   requerimientosCompra RequerimientoCompra[]
@@ -812,14 +817,13 @@ model Ubigeo {
   paisId       BigInt
   departamentoId BigInt
   provinciaId  BigInt
-  distritoId   BigInt
   codigo       String   @unique
   activo       Boolean  @default(true)
+  nombreDistrito String?
 
   pais         Pais         @relation(fields: [paisId], references: [id])
   departamento Departamento @relation(fields: [departamentoId], references: [id])
   provincia    Provincia    @relation(fields: [provinciaId], references: [id])
-  distrito     Distrito     @relation(fields: [distritoId], references: [id])
 
   direcciones  DireccionEntidad[]
   personas     Personal[]
@@ -829,7 +833,6 @@ model Pais {
   id         BigInt   @id @default(autoincrement())
   codSUNAT   String   @unique
   nombre     String
-  gentilicio String?
   activo     Boolean  @default(true)
 
   departamentos Departamento[]
@@ -854,18 +857,7 @@ model Provincia {
   departamentoId  BigInt
   departamento    Departamento @relation(fields: [departamentoId], references: [id])
 
-  distritos       Distrito[]
   ubigeos         Ubigeo[]
-}
-
-model Distrito {
-  id           BigInt   @id @default(autoincrement())
-  codSUNAT     String   @unique
-  nombre       String
-  provinciaId  BigInt
-  provincia    Provincia @relation(fields: [provinciaId], references: [id])
-
-  ubigeos      Ubigeo[]
 }
 
 model PrecioEntidad {
@@ -926,7 +918,7 @@ model TipoVehiculo {
 
 model LineaCreditoEntidad {
   id                 BigInt   @id @default(autoincrement())
-  entidadComercialId BigInt   @unique
+  entidadComercialId BigInt
   montoMaximo        Decimal
   monedaId           BigInt   
   diasCredito        Int
@@ -2216,6 +2208,9 @@ model AccesoInstalacion {
   motivoId                   BigInt?
   tipoEquipoId               BigInt?      // Nuevo campo para el tipo de equipo/maquinaria
   fechaHora                  DateTime
+  fechaHoraSalidaDefinitiva  DateTime?
+  accesoSellado              Boolean @default(false)
+
 
   // Datos de la persona o entidad que ingresa/retira
   nombrePersona              String?

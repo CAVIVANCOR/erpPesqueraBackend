@@ -26,7 +26,10 @@ async function validarTipoEntidad(data, excluirId = null) {
  */
 const listar = async () => {
   try {
-    return await prisma.tipoEntidad.findMany({ include: { entidades: true } });
+    // Simplificar sin incluir relaciones para evitar problemas de serialización
+    return await prisma.tipoEntidad.findMany({
+      orderBy: { nombre: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -38,7 +41,18 @@ const listar = async () => {
  */
 const obtenerPorId = async (id) => {
   try {
-    const tipo = await prisma.tipoEntidad.findUnique({ where: { id }, include: { entidades: true } });
+    const tipo = await prisma.tipoEntidad.findUnique({ 
+      where: { id },
+      include: { 
+        entidades: {
+          select: {
+            id: true,
+            razonSocial: true,
+            numeroDocumento: true
+          }
+        }
+      }
+    });
     if (!tipo) throw new NotFoundError('Tipo de entidad no encontrado');
     return tipo;
   } catch (err) {
@@ -53,8 +67,13 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarTipoEntidad(data);
-    return await prisma.tipoEntidad.create({ data });
+    // Usar el objeto data completo como en la implementación original
+    const nuevo = await prisma.tipoEntidad.create({ 
+      data: data
+    });
+    return nuevo;
   } catch (err) {
+    console.error("❌ ERROR en servicio crear:", err);
     if (err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -69,7 +88,17 @@ const actualizar = async (id, data) => {
     const existente = await prisma.tipoEntidad.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Tipo de entidad no encontrado');
     await validarTipoEntidad(data, id);
-    return await prisma.tipoEntidad.update({ where: { id }, data });
+    
+    return await prisma.tipoEntidad.update({ 
+      where: { id }, 
+      data: {
+        nombre: data.nombre,
+        descripcion: data.descripcion,
+        esCliente: data.esCliente,
+        esProveedor: data.esProveedor,
+        activo: data.activo
+      }
+    });
   } catch (err) {
     if (err instanceof ConflictError || err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -82,7 +111,14 @@ const actualizar = async (id, data) => {
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.tipoEntidad.findUnique({ where: { id }, include: { entidades: true } });
+    const existente = await prisma.tipoEntidad.findUnique({ 
+      where: { id }, 
+      include: { 
+        entidades: {
+          select: { id: true }
+        }
+      }
+    });
     if (!existente) throw new NotFoundError('Tipo de entidad no encontrado');
     if (existente.entidades && existente.entidades.length > 0) {
       throw new ConflictError('No se puede eliminar el tipo de entidad porque tiene entidades comerciales asociadas.');

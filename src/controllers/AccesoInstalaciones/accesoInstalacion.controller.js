@@ -96,3 +96,18 @@ export async function buscarVehiculoPorPlaca(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Procesa la salida definitiva de un acceso a instalación
+ * Actualiza fechaHoraSalidaDefinitiva y marca accesoSellado como true
+ * Endpoint: PUT /api/acceso-instalacion/:id/salida-definitiva
+ */
+export async function procesarSalidaDefinitiva(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const accesoActualizado = await accesoInstalacionService.procesarSalidaDefinitiva(id);
+    res.json(toJSONBigInt(accesoActualizado));
+  } catch (err) {
+    next(err);
+  }
+}

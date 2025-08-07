@@ -158,15 +158,10 @@ const eliminar = async (id) => {
  */
 const crearSuperusuarioEnCascada = async (data) => {
   const count = await prisma.usuario.count();
-  console.log("Paso 1: contando usuarios");
-
   if (count > 0) throw new ConflictError('Ya existen usuarios en el sistema.');
-
   return await prisma.$transaction(async (prisma) => {
     // 1. Verifica que exista el cargo S/C (Sin Cargo) con id=1
     let sinCargo = await prisma.cargosPersonal.findUnique({ where: { id: 1 } });
-    console.log("Paso 2: verificando cargo S/C");
-
     if (!sinCargo) {
       sinCargo = await prisma.cargosPersonal.create({
         data: {
@@ -182,18 +177,14 @@ const crearSuperusuarioEnCascada = async (data) => {
         data: { descripcion: 'S/C'}
       });
     }
-    console.log("Paso 3: creando cargo S/C");
 
     // 2. Crear o buscar el cargo ESPECIALISTA TIC
     let cargo = await prisma.cargosPersonal.findFirst({ where: { descripcion: 'ESPECIALISTA TIC' } });
-    console.log("Paso 4: verificando cargo ESPECIALISTA TIC", cargo);
     if (!cargo) {
       cargo = await prisma.cargosPersonal.create({
         data: { descripcion: 'ESPECIALISTA TIC' }
       });
     }
-    console.log("Paso 5: creando cargo ESPECIALISTA TIC");
-
     // 3. Crear el registro de personal
     const personal = await prisma.personal.create({
       data: {
@@ -210,11 +201,8 @@ const crearSuperusuarioEnCascada = async (data) => {
         cesado: false
       }
     });
-    console.log("Paso 6: creando personal");
-
     // 4. Crear el usuario asociado
     const passwordHash = await bcrypt.default.hash(data.password, 10);
-    console.log("Paso 7: hasheando password");
     const usuario = await prisma.usuario.create({
       data: {
         username: data.username,
@@ -230,7 +218,6 @@ const crearSuperusuarioEnCascada = async (data) => {
         // Otros campos si tu modelo lo requiere
       }
     });
-    console.log("Paso 8: creando usuario");
     return usuario;
   });
 };

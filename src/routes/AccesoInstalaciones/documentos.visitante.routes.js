@@ -34,30 +34,21 @@ const storage = multer.diskStorage({
       const baseDir = DOCUMENTOS_DIR;
       const yearDir = path.join(baseDir, String(year));
       const finalDir = path.join(yearDir, month);
-      
-      console.log(`Base dir: ${baseDir}`);
-      console.log(`Year dir: ${yearDir}`);
-      console.log(`Final dir: ${finalDir}`);
-      
       // Crear directorios paso a paso
       if (!fs.existsSync(baseDir)) {
         fs.mkdirSync(baseDir, { recursive: true });
-        console.log(`Creado directorio base: ${baseDir}`);
       }
       
       if (!fs.existsSync(yearDir)) {
         fs.mkdirSync(yearDir, { recursive: true });
-        console.log(`Creado directorio año: ${yearDir}`);
       }
       
       if (!fs.existsSync(finalDir)) {
         fs.mkdirSync(finalDir, { recursive: true });
-        console.log(`Creado directorio mes: ${finalDir}`);
       }
       
       // Verificar que el directorio final existe
       if (fs.existsSync(finalDir)) {
-        console.log(`✅ Directorio confirmado: ${finalDir}`);
         cb(null, finalDir);
       } else {
         console.error(`❌ Error: No se pudo crear el directorio ${finalDir}`);
@@ -82,7 +73,6 @@ const storage = multer.diskStorage({
       const ext = path.extname(file.originalname) || '.pdf';
       
       const fileName = `${id}-${dia}${mes}${año}${ext}`;
-      console.log(`✅ Nombre del archivo generado: ${fileName}`);
       cb(null, fileName);
       
     } catch (error) {
@@ -199,13 +189,10 @@ router.get('/archivo/*', autenticarJWT, (req, res) => {
     // Construir ruta completa del archivo
     const rutaCompleta = path.join(process.cwd(), 'uploads', 'documentos-visitantes', rutaArchivo);
     
-    console.log('📄 Sirviendo documento visitante:');
-    console.log('  - Ruta solicitada:', rutaArchivo);
-    console.log('  - Ruta completa:', rutaCompleta);
+
     
     // Verificar que el archivo existe
     if (!fs.existsSync(rutaCompleta)) {
-      console.log('  - ❌ Archivo no encontrado');
       return res.status(404).json({
         error: 'Documento no encontrado',
         codigo: 'ERR_ARCHIVO_NO_ENCONTRADO',
@@ -224,10 +211,7 @@ router.get('/archivo/*', autenticarJWT, (req, res) => {
 
     // Configurar headers para PDF
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'inline'); // Para mostrar en navegador
-    
-    console.log('  - ✅ Sirviendo archivo PDF');
-    
+    res.setHeader('Content-Disposition', 'inline'); // Para mostrar en navegador    
     // Enviar archivo
     res.sendFile(rutaCompleta, (err) => {
       if (err) {

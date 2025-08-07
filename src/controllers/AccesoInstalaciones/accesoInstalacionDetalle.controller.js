@@ -4,10 +4,19 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
 /**
  * Controlador para AccesoInstalacionDetalle
  * Documentado en español.
+ * Ahora soporta filtrado por query parameters.
  */
 export async function listar(req, res, next) {
   try {
-    const detalles = await accesoInstalacionDetalleService.listar();
+    // Extraer filtros de query parameters
+    const filtros = {};
+    
+    // Filtrar por accesoInstalacionId si se proporciona
+    if (req.query.accesoInstalacionId) {
+      filtros.accesoInstalacionId = req.query.accesoInstalacionId;
+    }
+    
+    const detalles = await accesoInstalacionDetalleService.listar(filtros);
     res.json(toJSONBigInt(detalles));
   } catch (err) {
     next(err);

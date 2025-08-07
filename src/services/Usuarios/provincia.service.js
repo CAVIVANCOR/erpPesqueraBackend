@@ -28,11 +28,11 @@ async function validarProvincia(data, excluirId = null) {
 }
 
 /**
- * Lista todas las provincias, incluyendo distritos, ubigeos y departamento asociado.
+ * Lista todas las provincias, incluyendo ubigeos y departamento asociado.
  */
 const listar = async () => {
   try {
-    return await prisma.provincia.findMany({ include: { distritos: true, ubigeos: true, departamento: true } });
+    return await prisma.provincia.findMany({ include: { ubigeos: true, departamento: true } });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -40,11 +40,11 @@ const listar = async () => {
 };
 
 /**
- * Obtiene una provincia por ID (incluyendo distritos, ubigeos y departamento asociado).
+ * Obtiene una provincia por ID (incluyendo ubigeos y departamento asociado).
  */
 const obtenerPorId = async (id) => {
   try {
-    const provincia = await prisma.provincia.findUnique({ where: { id }, include: { distritos: true, ubigeos: true, departamento: true } });
+    const provincia = await prisma.provincia.findUnique({ where: { id }, include: { ubigeos: true, departamento: true } });
     if (!provincia) throw new NotFoundError('Provincia no encontrada');
     return provincia;
   } catch (err) {
@@ -84,14 +84,14 @@ const actualizar = async (id, data) => {
 };
 
 /**
- * Elimina una provincia por ID, validando existencia y que no tenga distritos o ubigeos asociados.
+ * Elimina una provincia por ID, validando existencia y que no tenga ubigeos asociados.
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.provincia.findUnique({ where: { id }, include: { distritos: true, ubigeos: true } });
+    const existente = await prisma.provincia.findUnique({ where: { id }, include: { ubigeos: true } });
     if (!existente) throw new NotFoundError('Provincia no encontrada');
-    if ((existente.distritos && existente.distritos.length > 0) || (existente.ubigeos && existente.ubigeos.length > 0)) {
-      throw new ConflictError('No se puede eliminar la provincia porque tiene distritos o ubigeos asociados.');
+    if ((existente.ubigeos && existente.ubigeos.length > 0)) {
+      throw new ConflictError('No se puede eliminar la provincia porque tiene ubigeos asociados.');
     }
     await prisma.provincia.delete({ where: { id } });
     return true;
