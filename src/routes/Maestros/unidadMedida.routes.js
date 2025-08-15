@@ -5,6 +5,8 @@ const router = Router();
 
 // Rutas CRUD para UnidadMedida
 router.get('/', unidadMedidaController.listar);
+router.get('/metricas', unidadMedidaController.listarMetricas);
+router.get('/default-metrica', unidadMedidaController.obtenerDefaultMetrica);
 router.get('/:id', unidadMedidaController.obtenerPorId);
 router.post('/', unidadMedidaController.crear);
 router.put('/:id', unidadMedidaController.actualizar);

@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para VehiculoEntidad
 router.get('/', vehiculoEntidadController.listar);
+router.get('/entidad/:entidadComercialId', vehiculoEntidadController.obtenerPorEntidad);
 router.get('/:id', vehiculoEntidadController.obtenerPorId);
 router.post('/', vehiculoEntidadController.crear);
 router.put('/:id', vehiculoEntidadController.actualizar);

@@ -833,6 +833,7 @@ model Pais {
   id         BigInt   @id @default(autoincrement())
   codSUNAT   String   @unique
   nombre     String
+  gentilicio String?
   activo     Boolean  @default(true)
 
   departamentos Departamento[]
@@ -1082,44 +1083,57 @@ model SerieDoc {
 
 model Producto {
   id                      BigInt   @id @default(autoincrement())
-  codigo                  String   @unique @db.VarChar(40)
+  empresaId              BigInt
+  clienteId              BigInt
+  codigo                 String?   @unique @db.VarChar(40)
   descripcionBase        String   @db.VarChar(120)
-  descripcionExtendida   String?
-  descripcionArmada      String?
+  descripcionExtendida   String? @db.VarChar(120)
+  descripcionArmada      String
+  descripcionMedidaAdicional String? @db.VarChar(120)
   familiaId              BigInt
-  subfamiliaId           BigInt?
+  subfamiliaId           BigInt
+  tipoAlmacenamientoId  BigInt
+  procedenciaId          BigInt
   unidadMedidaId        BigInt
-  tipoAlmacenamientoId  BigInt?
-  procedenciaId          BigInt?
-  marcaId                BigInt?
-  estadoInicialId       BigInt?
-  exoneradoIgv           Boolean  @default(false)
-  porcentajeDetraccion   Decimal?
-  clienteId              BigInt?
-  fechaCreacion          DateTime @default(now())
-  fechaActualizacion     DateTime @updatedAt
-  tipoMaterialId        BigInt?
-  colorId                BigInt?
-  diametro                Decimal?
+  marcaId                BigInt
+  estadoInicialId       BigInt
+  tipoMaterialId        BigInt
+  colorId                BigInt
+  medidaDiametro      String? @db.VarChar(20)
+  medidaAncho      String? @db.VarChar(20)
+  medidaAlto      String? @db.VarChar(20)
+  medidaLargo      String? @db.VarChar(20)
+  medidaEspesor      String? @db.VarChar(20)
+  medidaAngulo      String? @db.VarChar(20)
   unidadDiametroId      BigInt?
-  ancho                   Decimal?
   unidadAnchoId         BigInt?
-  alto                    Decimal?
   unidadAltoId          BigInt?
-  largo                   Decimal?
   unidadLargoId         BigInt?
-  espesor                 Decimal?
   unidadEspesorId       BigInt?
-  angulo                  Decimal?
   unidadAnguloId        BigInt?
+  aplicaSubfamilia        Boolean  @default(false)
+  aplicaUnidadMedida      Boolean  @default(false)
+  aplicaTipoAlmacenamiento Boolean  @default(false)
+  aplicaProcedencia       Boolean  @default(false)
+  aplicaMarca             Boolean  @default(false)
+  aplicaTipoMaterial      Boolean  @default(false)
+  aplicaColor             Boolean  @default(false)
   exoneradoRetencion    Boolean  @default(false)
   sujetoDetraccion      Boolean  @default(false)
+  urlFichaTecnica          String? 
+  urlFotoProducto          String?
+  exoneradoIgv           Boolean  @default(false)
+  porcentajeDetraccion   Decimal?
+  fechaCreacion          DateTime @default(now())
+  fechaActualizacion     DateTime @updatedAt
 
   familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
   subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
   unidadMedida            UnidadMedida         @relation("UnidadMedidaToProducto", fields: [unidadMedidaId], references: [id])
   tipoMaterial            TipoMaterial?        @relation(fields: [tipoMaterialId], references: [id])
   color                   Color?               @relation(fields: [colorId], references: [id])
+  tipoAlmacenamiento      TipoAlmacenamiento   @relation(fields: [tipoAlmacenamientoId], references: [id])
+  marca                   Marca                @relation(fields: [marcaId], references: [id])
   detallesMovimiento      DetalleMovimientoAlmacen[]
   kardexAlmacenes   KardexAlmacen[]
   insumosTareaOT DetInsumosTareaOT[]
@@ -1133,55 +1147,50 @@ model Producto {
 
 model FamiliaProducto {
   id            BigInt   @id @default(autoincrement())
-  descripcionBase      String   @db.VarChar(120)
-  descripcionExtendida String?
-  descripcionArmada    String?
-  estado                String   @db.VarChar(20)
-
+  nombre      String   @db.VarChar(120)
   productos             Producto[]
 }
 
 model SubfamiliaProducto {
   id         BigInt   @id @default(autoincrement())
-  familiaId            BigInt   // Solo referencia simple, sin relación Prisma
-  descripcionBase      String   @db.VarChar(120)
-  descripcionExtendida String?
-  descripcionArmada    String?
-  estado                String   @db.VarChar(20)
+  familiaId  BigInt   // Solo referencia simple, sin relación Prisma
+  nombre     String   @db.VarChar(120)
+  productos  Producto[]
+}
 
-  productos             Producto[]
+model TipoAlmacenamiento {
+  id            BigInt   @id @default(autoincrement())
+  nombre      String   @db.VarChar(120)
+  productos  Producto[]
+}
+
+model Marca {
+  id            BigInt   @id @default(autoincrement())
+  nombre      String   @db.VarChar(120)
+  productos  Producto[]
 }
 
 model UnidadMedida {
   id    BigInt   @id @default(autoincrement())
   nombre              String   @db.VarChar(60)
   simbolo             String   @db.VarChar(20)
-  descripcion         String?
-  unidad_base_id      BigInt?
-  factor_conversion   Decimal?
+  factorConversion   Decimal?
+  esMedidaMetrica     Boolean  @default(false)
 
   productos           Producto[]      @relation("UnidadMedidaToProducto")
 }
 
 model TipoMaterial {
   id        BigInt   @id @default(autoincrement())
-  descripcionBase        String   @db.VarChar(80)
-  descripcionExtendida   String?
-  descripcionArmada      String?
-  fechaCreacion          DateTime @default(now())
-  fechaActualizacion     DateTime @updatedAt
+  codigo      String   @db.VarChar(10)  
+  nombre        String   @db.VarChar(80)
 
   productos               Producto[]
 }
 
 model Color {
   id                BigInt   @id @default(autoincrement())
-  descripcionBase        String   @db.VarChar(80)
-  descripcionExtendida   String?
-  descripcionArmada      String?
-  fechaCreacion          DateTime @default(now())
-  fechaActualizacion     DateTime @updatedAt
-
+  nombre        String   @db.VarChar(80)
   productos               Producto[]
 }
 

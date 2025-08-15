@@ -59,6 +59,26 @@ const obtenerPorId = async (id) => {
 };
 
 /**
+ * Obtiene todos los contactos de una entidad comercial específica.
+ */
+const obtenerPorEntidad = async (entidadComercialId) => {
+  try {
+    const resultado = await prisma.contactoEntidad.findMany({
+      where: { entidadComercialId },
+      include: {
+        entidadComercial: true
+      },
+      orderBy: { id: 'desc' }
+    });
+    return resultado;
+  } catch (err) {
+    console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
  * Crea un contacto validando referencias.
  */
 const crear = async (data) => {
@@ -107,6 +127,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorEntidad,
   crear,
   actualizar,
   eliminar

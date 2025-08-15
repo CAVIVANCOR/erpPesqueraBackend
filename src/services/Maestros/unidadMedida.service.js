@@ -32,6 +32,21 @@ const listar = async () => {
 };
 
 /**
+ * Lista solo las unidades de medida métricas (esMedidaMetrica=true).
+ */
+const listarMetricas = async () => {
+  try {
+    return await prisma.unidadMedida.findMany({ 
+      where: { esMedidaMetrica: true },
+      orderBy: { nombre: 'asc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
  * Obtiene una unidad de medida por ID (incluyendo productos asociados).
  */
 const obtenerPorId = async (id) => {
@@ -40,6 +55,26 @@ const obtenerPorId = async (id) => {
     if (!unidad) throw new NotFoundError('Unidad de medida no encontrada');
     return unidad;
   } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Obtiene la unidad de medida por defecto para métricas (nombre="S/UM" y esMedidaMetrica=true).
+ */
+const obtenerDefaultMetrica = async () => {
+  try {
+    const unidadDefault = await prisma.unidadMedida.findFirst({ 
+      where: { 
+        nombre: 'S/UM',
+        esMedidaMetrica: true 
+      }
+    });
+    if (!unidadDefault) throw new NotFoundError('Unidad de medida por defecto S/UM no encontrada');
+    return unidadDefault;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -96,7 +131,9 @@ const eliminar = async (id) => {
 
 export default {
   listar,
+  listarMetricas,
   obtenerPorId,
+  obtenerDefaultMetrica,
   crear,
   actualizar,
   eliminar

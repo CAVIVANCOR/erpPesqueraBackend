@@ -61,6 +61,26 @@ const obtenerPorId = async (id) => {
 };
 
 /**
+ * Obtiene todas las líneas de crédito de una entidad comercial específica.
+ */
+const obtenerPorEntidad = async (entidadComercialId) => {
+  try {
+    const resultado = await prisma.lineaCreditoEntidad.findMany({
+      where: { entidadComercialId },
+      include: {
+        entidadComercial: true
+      },
+      orderBy: { id: 'desc' }
+    });
+    return resultado;
+  } catch (err) {
+    console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
  * Crea una línea de crédito validando unicidad y referencias.
  */
 const crear = async (data) => {
@@ -109,6 +129,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorEntidad,
   crear,
   actualizar,
   eliminar

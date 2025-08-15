@@ -91,10 +91,32 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Lista estados multifunción específicamente para productos.
+ * Filtra por TipoProvieneDe con descripción "PRODUCTOS".
+ */
+const listarParaProductos = async () => {
+  try {
+    const estadosParaProductos = await prisma.estadoMultiFuncion.findMany({
+      include: { tipoProvieneDe: true },
+      where: {
+        tipoProvieneDe: {
+          descripcion: "PRODUCTOS"
+        }
+      }
+    });
+    return estadosParaProductos;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  listarParaProductos
 };

@@ -7,7 +7,18 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  */
 export async function listar(req, res, next) {
   try {
-    const personal = await personalService.listar();
+    const { empresaId, esVendedor } = req.query;
+    const filtros = {};
+    
+    if (empresaId) {
+      filtros.empresaId = Number(empresaId);
+    }
+    
+    if (esVendedor !== undefined) {
+      filtros.esVendedor = esVendedor === 'true';
+    }
+    
+    const personal = await personalService.listar(filtros);
     res.json(toJSONBigInt(personal));
   } catch (err) {
     next(err);

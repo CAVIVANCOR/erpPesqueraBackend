@@ -14,6 +14,16 @@ export async function listar(req, res, next) {
   }
 }
 
+export async function obtenerPorEntidad(req, res, next) {
+  try {
+    const entidadComercialId = Number(req.params.entidadComercialId);
+    const precios = await precioEntidadService.obtenerPorEntidad(entidadComercialId);
+    res.json(toJSONBigInt(precios));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

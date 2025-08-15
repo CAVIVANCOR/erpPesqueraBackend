@@ -52,3 +52,15 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Obtiene las agencias de envío (entidades comerciales del tipo "AGENCIA DE ENVIO")
+ */
+export async function obtenerAgenciasEnvio(req, res, next) {
+  try {
+    const agencias = await entidadComercialService.obtenerAgenciasEnvio();
+    res.json(toJSONBigInt(agencias));
+  } catch (err) {
+    next(err);
+  }
+}

@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para Producto
 router.get('/', productoController.listar);
+router.get('/entidad/:entidadComercialId/empresa/:empresaId', productoController.obtenerPorEntidadYEmpresa);
 router.get('/:id', productoController.obtenerPorId);
 router.post('/', productoController.crear);
 router.put('/:id', productoController.actualizar);

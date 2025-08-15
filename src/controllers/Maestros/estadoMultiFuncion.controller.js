@@ -14,6 +14,19 @@ export async function listar(req, res, next) {
   }
 }
 
+/**
+ * Lista estados multifunción específicamente para productos
+ * Filtra por TipoProvieneDe con descripción "PRODUCTOS"
+ */
+export async function listarParaProductos(req, res, next) {
+  try {
+    const estados = await estadoMultiFuncionService.listarParaProductos();
+    res.json(toJSONBigInt(estados));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

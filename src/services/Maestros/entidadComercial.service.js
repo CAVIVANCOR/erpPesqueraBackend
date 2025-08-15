@@ -177,10 +177,46 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Obtiene las agencias de envío (entidades comerciales del tipo "AGENCIA DE ENVIO")
+ */
+const obtenerAgenciasEnvio = async () => {
+  try {
+    // Primero buscar el ID del tipo de entidad "AGENCIA DE ENVIO"
+    const tipoAgencia = await prisma.tipoEntidad.findFirst({
+      where: { nombre: "AGENCIA DE ENVIO" }
+    });
+    
+    if (!tipoAgencia) {
+      return []; // Si no existe el tipo, retornar array vacío
+    }
+    
+    // Buscar todas las entidades comerciales de este tipo
+    return await prisma.entidadComercial.findMany({
+      where: { 
+        tipoEntidadId: tipoAgencia.id,
+        estado: true // Solo agencias activas
+      },
+      select: {
+        id: true,
+        razonSocial: true,
+        nombreComercial: true
+      },
+      orderBy: {
+        razonSocial: 'asc'
+      }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  obtenerAgenciasEnvio
 };

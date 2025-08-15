@@ -223,7 +223,6 @@ router.get('/archivo/*', autenticarJWT, (req, res) => {
           });
         }
       } else {
-        console.log('  - ✅ Archivo enviado correctamente');
       }
     });
 

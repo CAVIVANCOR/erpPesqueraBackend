@@ -30,13 +30,15 @@ async function validarDireccionEntidad(data) {
  */
 const listar = async () => {
   try {
-    return await prisma.direccionEntidad.findMany({
+    const resultado = await prisma.direccionEntidad.findMany({
       include: {
         entidadComercial: true,
         ubigeo: true
       }
     });
+    return resultado;
   } catch (err) {
+    console.error('❌ [SERVICIO] Error en listar:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -47,13 +49,59 @@ const listar = async () => {
  */
 const obtenerPorId = async (id) => {
   try {
-    const direccion = await prisma.direccionEntidad.findUnique({
+    const resultado = await prisma.direccionEntidad.findUnique({
       where: { id },
       include: { entidadComercial: true, ubigeo: true }
     });
-    if (!direccion) throw new NotFoundError('Dirección no encontrada');
-    return direccion;
+    if (!resultado) throw new NotFoundError('Dirección no encontrada');
+    return resultado;
   } catch (err) {
+    console.error('❌ [SERVICIO] Error en obtenerPorId:', err);
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Obtiene todas las direcciones de una entidad comercial específica.
+ */
+const obtenerPorEntidad = async (entidadComercialId) => {
+  try {
+    const resultado = await prisma.direccionEntidad.findMany({
+      where: { entidadComercialId },
+      include: {
+        entidadComercial: true,
+        ubigeo: true
+      },
+      orderBy: { id: 'desc' }
+    });
+    return resultado;
+  } catch (err) {
+    console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Obtiene la dirección fiscal de una entidad comercial específica.
+ */
+const obtenerDireccionFiscalPorEntidad = async (entidadComercialId) => {
+  try {
+    const whereClause = { 
+      entidadComercialId,
+      fiscal: true
+    };    
+    const resultado = await prisma.direccionEntidad.findFirst({
+      where: whereClause,
+      include: {
+        entidadComercial: true,
+        ubigeo: true
+      }
+    });
+    return resultado;
+  } catch (err) {
+    console.error('❌ [SERVICIO] Error en obtenerDireccionFiscalPorEntidad:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -65,8 +113,10 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarDireccionEntidad(data);
-    return await prisma.direccionEntidad.create({ data });
+    const resultado = await prisma.direccionEntidad.create({ data });
+    return resultado;
   } catch (err) {
+    console.error('❌ [SERVICIO] Error en crear:', err);
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -81,8 +131,10 @@ const actualizar = async (id, data) => {
     const existente = await prisma.direccionEntidad.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Dirección no encontrada');
     await validarDireccionEntidad(data);
-    return await prisma.direccionEntidad.update({ where: { id }, data });
+    const resultado = await prisma.direccionEntidad.update({ where: { id }, data });
+    return resultado;
   } catch (err) {
+    console.error('❌ [SERVICIO] Error en actualizar:', err);
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -99,6 +151,7 @@ const eliminar = async (id) => {
     await prisma.direccionEntidad.delete({ where: { id } });
     return true;
   } catch (err) {
+    console.error('❌ [SERVICIO] Error en eliminar:', err);
     if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -108,6 +161,8 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorEntidad,
+  obtenerDireccionFiscalPorEntidad,
   crear,
   actualizar,
   eliminar

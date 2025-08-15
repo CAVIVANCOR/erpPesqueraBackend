@@ -24,6 +24,17 @@ export async function obtenerPorId(req, res, next) {
   }
 }
 
+export async function obtenerPorEntidad(req, res, next) {
+  try {
+    const entidadComercialId = Number(req.params.entidadComercialId);
+    const lineas = await lineaCreditoEntidadService.obtenerPorEntidad(entidadComercialId);
+    res.json(toJSONBigInt(lineas));
+  } catch (err) {
+    console.error('❌ [CONTROLADOR] Error en obtenerPorEntidad:', err);
+    next(err);
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const nueva = await lineaCreditoEntidadService.crear(req.body);

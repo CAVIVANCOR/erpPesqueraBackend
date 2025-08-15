@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para ContactoEntidad
 router.get('/', contactoEntidadController.listar);
+router.get('/entidad/:entidadComercialId', contactoEntidadController.obtenerPorEntidad);
 router.get('/:id', contactoEntidadController.obtenerPorId);
 router.post('/', contactoEntidadController.crear);
 router.put('/:id', contactoEntidadController.actualizar);

@@ -54,10 +54,24 @@ async function validarPersonal(data, excluirId = null) {
 
 /**
  * Lista todo el personal, incluyendo relaciones principales.
+ * @param {Object} filtros - Filtros opcionales para la consulta
+ * @param {number} filtros.empresaId - ID de la empresa para filtrar
+ * @param {boolean} filtros.esVendedor - Si es vendedor o no
  */
-const listar = async () => {
+const listar = async (filtros = {}) => {
   try {
+    const where = {};
+    
+    if (filtros.empresaId) {
+      where.empresaId = filtros.empresaId;
+    }
+    
+    if (filtros.esVendedor !== undefined) {
+      where.esVendedor = filtros.esVendedor;
+    }
+    
     return await prisma.personal.findMany({
+      where,
       include: {
         usuario: true,
         cargo: true,

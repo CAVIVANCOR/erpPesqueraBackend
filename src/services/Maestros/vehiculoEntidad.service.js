@@ -70,6 +70,27 @@ const obtenerPorId = async (id) => {
 };
 
 /**
+ * Obtiene todos los vehículos de una entidad comercial específica.
+ */
+const obtenerPorEntidad = async (entidadComercialId) => {
+  try {
+    const resultado = await prisma.vehiculoEntidad.findMany({
+      where: { entidadComercialId },
+      include: {
+        entidadComercial: true,
+        tipoVehiculo: true
+      },
+      orderBy: { id: 'desc' }
+    });
+    return resultado;
+  } catch (err) {
+    console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
  * Crea un vehículo validando referencias y unicidad.
  */
 const crear = async (data) => {
@@ -118,6 +139,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorEntidad,
   crear,
   actualizar,
   eliminar

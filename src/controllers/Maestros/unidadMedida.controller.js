@@ -52,3 +52,21 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+export async function listarMetricas(req, res, next) {
+  try {
+    const unidadesMetricas = await unidadMedidaService.listarMetricas();
+    res.json(toJSONBigInt(unidadesMetricas));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function obtenerDefaultMetrica(req, res, next) {
+  try {
+    const unidadDefault = await unidadMedidaService.obtenerDefaultMetrica();
+    res.json(toJSONBigInt(unidadDefault));
+  } catch (err) {
+    next(err);
+  }
+}

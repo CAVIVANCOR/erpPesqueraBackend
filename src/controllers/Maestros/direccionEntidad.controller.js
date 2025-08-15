@@ -10,6 +10,7 @@ export async function listar(req, res, next) {
     const direcciones = await direccionEntidadService.listar();
     res.json(toJSONBigInt(direcciones));
   } catch (err) {
+    console.error('❌ [CONTROLADOR] Error en listar:', err);
     next(err);
   }
 }
@@ -20,6 +21,29 @@ export async function obtenerPorId(req, res, next) {
     const direccion = await direccionEntidadService.obtenerPorId(id);
     res.json(toJSONBigInt(direccion));
   } catch (err) {
+    console.error('❌ [CONTROLADOR] Error en obtenerPorId:', err);
+    next(err);
+  }
+}
+
+export async function obtenerPorEntidad(req, res, next) {
+  try {
+    const entidadComercialId = Number(req.params.entidadComercialId);
+    const direcciones = await direccionEntidadService.obtenerPorEntidad(entidadComercialId);
+    res.json(toJSONBigInt(direcciones));
+  } catch (err) {
+    console.error('❌ [CONTROLADOR] Error en obtenerPorEntidad:', err);
+    next(err);
+  }
+}
+
+export async function obtenerDireccionFiscalPorEntidad(req, res, next) {
+  try {
+    const entidadComercialId = Number(req.params.entidadComercialId);
+    const direccionFiscal = await direccionEntidadService.obtenerDireccionFiscalPorEntidad(entidadComercialId);
+    res.json(toJSONBigInt(direccionFiscal));
+  } catch (err) {
+    console.error('❌ [CONTROLADOR] Error en obtenerDireccionFiscalPorEntidad:', err);
     next(err);
   }
 }
@@ -29,6 +53,7 @@ export async function crear(req, res, next) {
     const nueva = await direccionEntidadService.crear(req.body);
     res.status(201).json(toJSONBigInt(nueva));
   } catch (err) {
+    console.error('❌ [CONTROLADOR] Error en crear:', err);
     next(err);
   }
 }
@@ -39,6 +64,7 @@ export async function actualizar(req, res, next) {
     const actualizada = await direccionEntidadService.actualizar(id, req.body);
     res.json(toJSONBigInt(actualizada));
   } catch (err) {
+    console.error('❌ [CONTROLADOR] Error en actualizar:', err);
     next(err);
   }
 }

@@ -29,15 +29,18 @@ import vehiculoEntidadRoutes from './Maestros/vehiculoEntidad.routes.js';
 import tipoVehiculoRoutes from './Maestros/tipoVehiculo.routes.js';
 import lineaCreditoEntidadRoutes from './Maestros/lineaCreditoEntidad.routes.js';
 import monedaRoutes from './Maestros/moneda.routes.js';
-import productoRoutes from './Maestros/producto.routes.js';
 import familiaProductoRoutes from './Maestros/familiaProducto.routes.js';
 import subfamiliaProductoRoutes from './Maestros/subfamiliaProducto.routes.js';
 import unidadMedidaRoutes from './Maestros/unidadMedida.routes.js';
 import tipoMaterialRoutes from './Maestros/tipoMaterial.routes.js';
 import colorRoutes from './Maestros/color.routes.js';
+import marcaRoutes from './Maestros/marca.routes.js';
+import tipoAlmacenamientoRoutes from './Maestros/tipoAlmacenamiento.routes.js';
 import empresaRoutes from './Maestros/empresa.routes.js';
 import empresaLogoRoutes from './Maestros/empresa.logo.routes.js';
 import personalFotoRoutes from './Usuarios/personal.foto.routes.js'; // Rutas de manejo de foto de personal
+import productoFotoRoutes from './Maestros/producto.foto.routes.js'; // Rutas de manejo de foto de producto
+import productoFichaTecnicaRoutes from './Maestros/producto.ficha-tecnica.routes.js';
 import empresaAdjuntosRoutes from './Maestros/empresa.adjunto.routes.js';
 import sedesEmpresaRoutes from './Maestros/sedesEmpresa.routes.js';
 import areaFisicaSedeRoutes from './Maestros/areaFisicaSede.routes.js';
@@ -151,6 +154,7 @@ import entregaARendirRoutes from '../routes/Pesca/entregaARendir.routes.js';
 import detMovsEntregaRendirRoutes from '../routes/Pesca/detMovsEntregaRendir.routes.js';
 import tipoMovEntregaRendirRoutes from '../routes/Pesca/tipoMovEntregaRendir.routes.js';
 import empresaReporteRoutes from '../routes/Maestros/empresa.reporte.routes.js';
+import productoRoutes from '../routes/Maestros/producto.routes.js';
 
 import { autenticarJWT } from '../middlewares/authMiddleware.js';
 import * as usuarioController from '../controllers/Usuarios/usuario.controller.js'
@@ -164,7 +168,9 @@ router.use('/auth', authRoutes);
 router.use('/empresas-logo', empresaLogoRoutes);
 // Ruta para manejo de fotos de personal (upload y serving)
 router.use('/personal-foto', personalFotoRoutes); // Permite subir y servir fotos de personal
-
+// Ruta para manejo de fotos de producto (upload y serving)
+router.use('/producto-foto', productoFotoRoutes); // Permite subir y servir fotos de producto
+router.use('/producto-ficha-tecnica', productoFichaTecnicaRoutes);
 // Ruta para manejo de adjuntos PDF de empresa (upload y serving)
 router.use('/empresas-adjuntos', empresaAdjuntosRoutes);
 
@@ -235,6 +241,10 @@ router.use('/unidades-medida', unidadMedidaRoutes);
 router.use('/tipos-material', tipoMaterialRoutes);
 // Rutas para Color
 router.use('/colores', colorRoutes);
+// Rutas para Marca
+router.use('/marcas', marcaRoutes);
+// Rutas para TipoAlmacenamiento
+router.use('/tipos-almacenamiento', tipoAlmacenamientoRoutes);
 // Rutas para Empresa
 router.use('/empresas', empresaRoutes);
 // Rutas para SedesEmpresa
