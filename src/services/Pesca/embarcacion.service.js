@@ -20,8 +20,8 @@ async function validarClavesForaneas(data) {
   const [activo, tipoEmbarcacion, estadoActivo, proveedorGps] = await Promise.all([
     prisma.activo.findUnique({ where: { id: data.activoId } }),
     prisma.tipoEmbarcacion.findUnique({ where: { id: data.tipoEmbarcacionId } }),
-    prisma.estadoActivo.findUnique({ where: { id: data.estadoActivoId } }),
-    data.proveedorGpsId ? prisma.proveedorGps.findUnique({ where: { id: data.proveedorGpsId } }) : Promise.resolve(true)
+    prisma.estadoMultiFuncion.findUnique({ where: { id: data.estadoActivoId } }),
+    data.proveedorGpsId ? prisma.entidadComercial.findUnique({ where: { id: data.proveedorGpsId } }) : Promise.resolve(true)
   ]);
   if (!activo) throw new ValidationError('El activoId no existe.');
   if (!tipoEmbarcacion) throw new ValidationError('El tipoEmbarcacionId no existe.');

@@ -27,6 +27,19 @@ export async function listarParaProductos(req, res, next) {
   }
 }
 
+/**
+ * Lista estados multifunción específicamente para embarcaciones
+ * Filtra por TipoProvieneDe con descripción "EMBARCACIONES"
+ */
+export async function listarParaEmbarcaciones(req, res, next) {
+  try {
+    const estados = await estadoMultiFuncionService.listarParaEmbarcaciones();
+    res.json(toJSONBigInt(estados));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

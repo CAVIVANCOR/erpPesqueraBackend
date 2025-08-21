@@ -18,8 +18,14 @@ app.use('/public/logos', express.static(path.join(process.cwd(), 'uploads/logos'
 app.use('/public/personal', express.static(path.join(process.cwd(), 'uploads/personal')));
 // Middleware para servir fotos de productos
 app.use('/public/productos', express.static(path.join(process.cwd(), 'uploads/productos')));
+// Middleware para servir fotos de embarcaciones
+app.use('/public/embarcaciones', express.static(path.join(process.cwd(), 'uploads/embarcaciones')));
 // Middleware para servir fichas técnicas de productos
 app.use('/public/fichas-tecnicas', express.static(path.join(process.cwd(), 'uploads/fichas-tecnicas')));
+// Middleware para servir fichas técnicas de boliches red
+app.use('/public/fichas-tecnicas-boliches', express.static(path.join(process.cwd(), 'uploads/fichas-tecnicas-boliches')));
+// Middleware para servir certificados de embarcaciones
+app.use('/public/certificados-embarcacion', express.static(path.join(process.cwd(), 'uploads/certificados-embarcacion')));
 // Middleware para servir documentos de visitantes (protegido con JWT)
 app.use('/uploads/documentos-visitantes', express.static(path.join(process.cwd(), 'uploads/documentos-visitantes')));
 

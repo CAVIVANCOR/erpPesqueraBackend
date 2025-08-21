@@ -24,6 +24,16 @@ export async function obtenerPorId(req, res, next) {
   }
 }
 
+export async function obtenerVehiculosPorRuc(req, res, next) {
+  try {
+    const { ruc } = req.params;
+    const vehiculos = await activoService.obtenerVehiculosPorRuc(ruc);
+    res.json(toJSONBigInt(vehiculos));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const nuevo = await activoService.crear(req.body);

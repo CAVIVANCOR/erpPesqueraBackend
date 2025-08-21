@@ -149,6 +149,25 @@ model Embarcacion {
   tabletMarca     String?
   tabletModelo    String?
   estadoActivoId  BigInt
+  urlFotoEmbarcacion String?
+  urlCertificadosDotacionMinimaSeguridad String?
+  urlCertificadoMatricula String?
+  urlPermisoPesca String?
+  urlCertificadoArqueo String?
+  urlCertificadoFrancoBordo String?
+  urlCertificadoCompas String?
+  urlCertificadoRadioBaliza String?
+  urlCertificadoSeguridad String?
+  urlCertificadoHidroCarburos String?
+  urlCertificadoAguasSucias String?
+  urlCertificadoBalsasSalvavidas String?
+  urlCertificadoPaqueteEmergencia String?
+  urlCertificadoExtinguidores String?
+  urlCertificadoFumigacion String?
+  urlConstanciaNoAdeudoFoncopes String?
+  urlCertificadoSimtrac String?
+  urlCertificadogeolocalizador String?
+  urlCertificadoSanitarioSanipes String?
   fechaCreacion   DateTime @default(now())
   fechaActualizacion DateTime @updatedAt
 
@@ -233,6 +252,13 @@ model BolicheRed {
   id           BigInt   @id @default(autoincrement())
   activoId     BigInt   @unique
   descripcion  String?
+  estadoActivoId  BigInt
+  largoContraido  Decimal?
+  largoExpandido Decimal?
+  altoM        Decimal?
+  nroFlotadores Int?
+  nroPlomos    Int?
+  urlBolicheRedPdf String?
   cesado       Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -911,7 +937,6 @@ model VehiculoEntidad {
 model TipoVehiculo {
   id          BigInt   @id @default(autoincrement())
   nombre      String   @db.VarChar(50)
-  descripcion String?
   activo      Boolean  @default(true)
 
   vehiculos   VehiculoEntidad[]

@@ -5,6 +5,37 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  * Controlador para VehiculoEntidad
  * Documentado en español.
  */
+
+/**
+ * Filtra solo los campos válidos según el schema de Prisma VehiculoEntidad
+ */
+function filtrarCamposValidos(data) {
+  const camposValidos = [
+    'entidadComercialId',
+    'placa',
+    'marca',
+    'modelo', 
+    'color',
+    'anio',
+    'tipoVehiculoId',
+    'capacidadTon',
+    'numeroSerie',
+    'numeroMotor',
+    'cesado',
+    'activoId',
+    'observaciones'
+  ];
+  
+  const datosFiltrados = {};
+  camposValidos.forEach(campo => {
+    if (data.hasOwnProperty(campo)) {
+      datosFiltrados[campo] = data[campo];
+    }
+  });
+  
+  return datosFiltrados;
+}
+
 export async function listar(req, res, next) {
   try {
     const vehiculos = await vehiculoEntidadService.listar();
@@ -37,7 +68,8 @@ export async function obtenerPorEntidad(req, res, next) {
 
 export async function crear(req, res, next) {
   try {
-    const nuevo = await vehiculoEntidadService.crear(req.body);
+    const datosFiltrados = filtrarCamposValidos(req.body);
+    const nuevo = await vehiculoEntidadService.crear(datosFiltrados);
     res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
     next(err);
@@ -47,7 +79,8 @@ export async function crear(req, res, next) {
 export async function actualizar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const actualizado = await vehiculoEntidadService.actualizar(id, req.body);
+    const datosFiltrados = filtrarCamposValidos(req.body);
+    const actualizado = await vehiculoEntidadService.actualizar(id, datosFiltrados);
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
     next(err);

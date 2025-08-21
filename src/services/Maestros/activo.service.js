@@ -50,6 +50,44 @@ const obtenerPorId = async (id) => {
 };
 
 /**
+ * Obtiene activos de tipo VEHICULO filtrados por RUC de empresa
+ * @param {string} rucEmpresa - RUC de la empresa para filtrar
+ */
+const obtenerVehiculosPorRuc = async (rucEmpresa) => {
+  try {
+    console.log('obtenerVehiculosPorRuc: rucEmpresa', rucEmpresa);
+    // Primero obtenemos la empresa por RUC
+    const empresa = await prisma.empresa.findFirst({
+      where: { ruc: rucEmpresa }
+    });
+    console.log('obtenerVehiculosPorRuc: empresa', empresa);
+    if (!empresa) {
+      return [];
+    }
+
+    // Luego obtenemos los activos de tipo VEHICULO para esa empresa
+    return await prisma.activo.findMany({
+      where: {
+        cesado: false,
+        empresaId: empresa.id,
+        tipo: {
+          codigo: "VEHICULO"
+        }
+      },
+      include: {
+        tipo: true
+      },
+      orderBy: {
+        nombre: 'asc'
+      }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
  * Crea un activo validando empresaId y tipoId.
  */
 const crear = async (data) => {
@@ -101,6 +139,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerVehiculosPorRuc,
   crear,
   actualizar,
   eliminar

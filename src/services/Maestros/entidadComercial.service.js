@@ -212,11 +212,47 @@ const obtenerAgenciasEnvio = async () => {
   }
 };
 
+/**
+ * Obtiene los proveedores GPS (entidades comerciales del tipo "PROVEEDOR EQUIPOS GEOLOCALIZACION")
+ */
+const obtenerProveedoresGps = async () => {
+  try {
+    // Primero buscar el ID del tipo de entidad "PROVEEDOR EQUIPOS GEOLOCALIZACION"
+    const tipoProveedorGps = await prisma.tipoEntidad.findFirst({
+      where: { nombre: "PROVEEDOR EQUIPOS GEOLOCALIZACION" }
+    });
+    
+    if (!tipoProveedorGps) {
+      return []; // Si no existe el tipo, retornar array vacío
+    }
+    
+    // Buscar todas las entidades comerciales de este tipo
+    return await prisma.entidadComercial.findMany({
+      where: { 
+        tipoEntidadId: tipoProveedorGps.id,
+        estado: true // Solo proveedores activos
+      },
+      select: {
+        id: true,
+        razonSocial: true,
+        nombreComercial: true
+      },
+      orderBy: {
+        razonSocial: 'asc'
+      }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
-  obtenerAgenciasEnvio
+  obtenerAgenciasEnvio,
+  obtenerProveedoresGps
 };

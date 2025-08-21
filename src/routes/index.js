@@ -41,6 +41,9 @@ import empresaLogoRoutes from './Maestros/empresa.logo.routes.js';
 import personalFotoRoutes from './Usuarios/personal.foto.routes.js'; // Rutas de manejo de foto de personal
 import productoFotoRoutes from './Maestros/producto.foto.routes.js'; // Rutas de manejo de foto de producto
 import productoFichaTecnicaRoutes from './Maestros/producto.ficha-tecnica.routes.js';
+import fichaTecnicaBolicheRoutes from './Maestros/ficha-tecnica-boliches.routes.js';
+import certificadosEmbarcacionRoutes from './Maestros/certificados-embarcacion.routes.js';
+import embarcacionFotoRoutes from './Maestros/embarcacion.foto.routes.js';
 import empresaAdjuntosRoutes from './Maestros/empresa.adjunto.routes.js';
 import sedesEmpresaRoutes from './Maestros/sedesEmpresa.routes.js';
 import areaFisicaSedeRoutes from './Maestros/areaFisicaSede.routes.js';
@@ -170,7 +173,11 @@ router.use('/empresas-logo', empresaLogoRoutes);
 router.use('/personal-foto', personalFotoRoutes); // Permite subir y servir fotos de personal
 // Ruta para manejo de fotos de producto (upload y serving)
 router.use('/producto-foto', productoFotoRoutes); // Permite subir y servir fotos de producto
+// Ruta para manejo de fotos de embarcación (upload y serving)
+router.use('/embarcacion-foto', embarcacionFotoRoutes); // Permite subir y servir fotos de embarcación
 router.use('/producto-ficha-tecnica', productoFichaTecnicaRoutes);
+router.use('/ficha-tecnica-boliches', fichaTecnicaBolicheRoutes);
+router.use('/certificados-embarcacion', certificadosEmbarcacionRoutes);
 // Ruta para manejo de adjuntos PDF de empresa (upload y serving)
 router.use('/empresas-adjuntos', empresaAdjuntosRoutes);
 
@@ -180,7 +187,6 @@ router.use('/empresas-reportes', empresaReporteRoutes);
 // Rutas públicas para usuarios (antes del middleware global)
 router.get('/usuarios/count', usuarioController.contarUsuarios);
 router.post('/usuarios/superusuario', usuarioController.crearSuperusuario);
-
 
 // Middleware global de autenticación (protege todas las rutas siguientes)
 router.use(autenticarJWT);
@@ -397,6 +403,7 @@ router.use('/pesca/documentaciones-embarcacion', documentacionEmbarcacionRoutes)
 router.use('/pesca/detalles-doc-embarcacion', detalleDocEmbarcacionRoutes);
 // Rutas para BolicheRed
 router.use('/pesca/boliches-red', bolicheRedRoutes);
+router.use('/pesca/ficha-tecnica-boliches', fichaTecnicaBolicheRoutes);
 // Rutas para FaenaPesca
 router.use('/pesca/faenas-pesca', faenaPescaRoutes);
 // Rutas para Cala

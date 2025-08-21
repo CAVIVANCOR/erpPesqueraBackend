@@ -64,3 +64,15 @@ export async function obtenerAgenciasEnvio(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Obtiene los proveedores GPS (entidades comerciales del tipo "PROVEEDOR EQUIPOS GEOLOCALIZACION")
+ */
+export async function obtenerProveedoresGps(req, res, next) {
+  try {
+    const proveedores = await entidadComercialService.obtenerProveedoresGps();
+    res.json(toJSONBigInt(proveedores));
+  } catch (err) {
+    next(err);
+  }
+}
