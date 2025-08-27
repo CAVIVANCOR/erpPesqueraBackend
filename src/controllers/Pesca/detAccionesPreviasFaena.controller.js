@@ -52,3 +52,13 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+export async function obtenerPorTemporada(req, res, next) {
+  try {
+    const temporadaId = Number(req.params.temporadaId);
+    const detalles = await detAccionesPreviasFaenaService.obtenerPorTemporada(temporadaId);
+    res.json(toJSONBigInt(detalles));
+  } catch (err) {
+    next(err);
+  }
+}

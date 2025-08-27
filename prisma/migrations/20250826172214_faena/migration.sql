@@ -1,0 +1,9 @@
+-- AlterTable
+ALTER TABLE "public"."FaenaPesca" ALTER COLUMN "fechaRetorno" DROP NOT NULL,
+ALTER COLUMN "fechaSalida" DROP NOT NULL,
+ALTER COLUMN "puertoDescargaId" DROP NOT NULL,
+ALTER COLUMN "puertoRetornoId" DROP NOT NULL,
+ALTER COLUMN "puertoSalidaId" DROP NOT NULL,
+ALTER COLUMN "bahiaId" DROP NOT NULL,
+ALTER COLUMN "motoristaId" DROP NOT NULL,
+ALTER COLUMN "patronId" DROP NOT NULL;

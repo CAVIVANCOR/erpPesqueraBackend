@@ -26,7 +26,16 @@ async function validarUnicidad(embarcacionId, documentoPescaId, id = null) {
 
 const listar = async () => {
   try {
-    return await prisma.documentacionEmbarcacion.findMany();
+    return await prisma.documentacionEmbarcacion.findMany({
+      include: {
+        embarcacion: {
+          include: {
+            tipoEmbarcacion: true
+          }
+        },
+        documentoPesca: true
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -35,7 +44,17 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const doc = await prisma.documentacionEmbarcacion.findUnique({ where: { id } });
+    const doc = await prisma.documentacionEmbarcacion.findUnique({ 
+      where: { id },
+      include: {
+        embarcacion: {
+          include: {
+            tipoEmbarcacion: true
+          }
+        },
+        documentoPesca: true
+      }
+    });
     if (!doc) throw new NotFoundError('DocumentacionEmbarcacion no encontrada');
     return doc;
   } catch (err) {

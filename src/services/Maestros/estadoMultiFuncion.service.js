@@ -133,6 +133,27 @@ const listarParaEmbarcaciones = async () => {
   }
 };
 
+/**
+ * Lista estados multifunción específicamente para temporadas de pesca.
+ * Filtra por TipoProvieneDe con descripción "TEMPORADA PESCA".
+ */
+const listarParaTemporadaPesca = async () => {
+  try {
+    const estadosParaTemporadaPesca = await prisma.estadoMultiFuncion.findMany({
+      include: { tipoProvieneDe: true },
+      where: {
+        tipoProvieneDe: {
+          descripcion: "TEMPORADA PESCA"
+        }
+      }
+    });
+    return estadosParaTemporadaPesca;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -140,5 +161,6 @@ export default {
   actualizar,
   eliminar,
   listarParaProductos,
-  listarParaEmbarcaciones
+  listarParaEmbarcaciones,
+  listarParaTemporadaPesca
 };

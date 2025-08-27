@@ -8,22 +8,20 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 
 async function validarClavesForaneas(data) {
-  const [empresa, bahia, especie] = await Promise.all([
+  const [empresa, personal] = await Promise.all([
     prisma.empresa.findUnique({ where: { id: data.empresaId } }),
-    prisma.bahia.findUnique({ where: { id: data.BahiaId } }),
-    prisma.especie.findUnique({ where: { id: data.especieId } })
+    prisma.personal.findUnique({ where: { id: data.BahiaId } })
   ]);
   if (!empresa) throw new ValidationError('El empresaId no existe.');
-  if (!bahia) throw new ValidationError('El BahiaId no existe.');
-  if (!especie) throw new ValidationError('El especieId no existe.');
+  if (!personal) throw new ValidationError('El BahiaId no existe o no corresponde a personal válido.');
 }
 
 async function validarSolapamiento(data, id = null) {
-  // No permitir temporadas con mismo nombre/empresa/especie y fechas que se solapen
+  // No permitir temporadas con mismo nombre/empresa/estadoTemporadaId y fechas que se solapen
   const where = {
     nombre: data.nombre,
     empresaId: data.empresaId,
-    especieId: data.especieId,
+    estadoTemporadaId: data.estadoTemporadaId,
     AND: [
       { fechaInicio: { lte: data.fechaFin } },
       { fechaFin: { gte: data.fechaInicio } }
@@ -31,7 +29,7 @@ async function validarSolapamiento(data, id = null) {
   };
   if (id) where['NOT'] = { id };
   const existe = await prisma.temporadaPesca.findFirst({ where });
-  if (existe) throw new ConflictError('Ya existe una temporada con el mismo nombre, empresa y especie en un rango de fechas solapado.');
+  if (existe) throw new ConflictError('Ya existe una temporada con el mismo nombre, empresa y estado en un rango de fechas solapado.');
 }
 
 const listar = async () => {
@@ -56,7 +54,7 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    if (!data.empresaId || !data.BahiaId || !data.nombre || !data.especieId || !data.fechaInicio || !data.fechaFin) {
+    if (!data.empresaId || !data.BahiaId || !data.nombre || !data.estadoTemporadaId || !data.fechaInicio || !data.fechaFin) {
       throw new ValidationError('Todos los campos obligatorios deben estar completos.');
     }
     await validarClavesForaneas(data);
@@ -74,12 +72,12 @@ const actualizar = async (id, data) => {
     const existente = await prisma.temporadaPesca.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('TemporadaPesca no encontrada');
     // Validar claves foráneas si cambian
-    const claves = ['empresaId','BahiaId','especieId'];
+    const claves = ['empresaId','BahiaId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    // Validar solapamiento si cambian nombre, fechas, empresa o especie
-    if (data.nombre || data.fechaInicio || data.fechaFin || data.empresaId || data.especieId) {
+    // Validar solapamiento si cambian nombre, fechas, empresa o estadoTemporadaId
+    if (data.nombre || data.fechaInicio || data.fechaFin || data.empresaId || data.estadoTemporadaId) {
       await validarSolapamiento({ ...existente, ...data }, id);
     }
     return await prisma.temporadaPesca.update({ where: { id }, data });
@@ -109,10 +107,84 @@ const eliminar = async (id) => {
   }
 };
 
+const iniciar = async (id) => {
+  try {
+    const temporada = await prisma.temporadaPesca.findUnique({ where: { id } });
+    if (!temporada) throw new NotFoundError('TemporadaPesca no encontrada');
+
+    // Obtener acciones previas activas para pesca industrial
+    const accionesPrevias = await prisma.accionesPreviasFaena.findMany({
+      where: {
+        paraPescaIndustrial: true,
+        activo: true
+      }
+    });
+
+    const resultado = await prisma.$transaction(async (tx) => {
+      // 1. Crear EntregaARendir
+      const entregaARendir = await tx.entregaARendir.create({
+        data: {
+          temporadaPescaId: Number(temporada.id),
+          respEntregaRendirId: Number(temporada.BahiaId),
+          centroCostoId: Number(temporada.empresaId),
+          fechaCreacion: new Date(),
+          entregaLiquidada: false
+        }
+      });
+
+      // 2. Crear FaenaPesca
+      const faenaPesca = await tx.faenaPesca.create({
+        data: {
+          temporadaId: Number(temporada.id),
+          bahiaId: Number(temporada.BahiaId),
+          motoristaId: Number(temporada.BahiaId), // Usar BahiaId como motorista por defecto
+          patronId: Number(temporada.BahiaId), // Usar BahiaId como patrón por defecto
+          descripcion: `Faena iniciada para temporada ${temporada.nombre}`,
+          fechaSalida: new Date(),
+          fechaRetorno: new Date(),
+          puertoSalidaId: Number(temporada.BahiaId), // Usar BahiaId como puerto por defecto
+          puertoRetornoId: Number(temporada.BahiaId), // Usar BahiaId como puerto por defecto
+          puertoDescargaId: Number(temporada.BahiaId), // Usar BahiaId como puerto por defecto
+          createdAt: new Date()
+        }
+      });
+
+      // 3. Crear DetAccionesPreviasFaena para cada acción previa
+      const detAcciones = [];
+      for (const accion of accionesPrevias) {
+        const detAccion = await tx.detAccionesPreviasFaena.create({
+          data: {
+            faenaPescaId: Number(faenaPesca.id),
+            accionPreviaId: Number(accion.id),
+            cumplida: false,
+            verificado: false,
+            createdAt: new Date()
+          }
+        });
+        detAcciones.push(detAccion);
+      }
+
+      return {
+        entregaARendir,
+        faenaPesca,
+        detAcciones,
+        mensaje: 'Temporada iniciada exitosamente'
+      };
+    });
+
+    return resultado;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  iniciar
 };

@@ -9,5 +9,6 @@ router.get('/:id', temporadaPescaController.obtenerPorId);
 router.post('/', temporadaPescaController.crear);
 router.put('/:id', temporadaPescaController.actualizar);
 router.delete('/:id', temporadaPescaController.eliminar);
+router.post('/:id/iniciar', temporadaPescaController.iniciar);
 
 export default router;

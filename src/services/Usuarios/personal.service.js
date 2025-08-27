@@ -151,10 +151,37 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Lista personal con cargo "BAHIA COMERCIAL" filtrado por empresa.
+ * @param {number} empresaId - ID de la empresa para filtrar
+ */
+const listarBahiasComerciales = async (empresaId) => {
+  try {
+    const where = {
+      empresaId: empresaId,
+      cargo: {
+        descripcion: "BAHIA COMERCIAL"
+      }
+    };
+    
+    return await prisma.personal.findMany({
+      where,
+      include: {
+        cargo: true,
+        ubigeo: true
+      }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  listarBahiasComerciales
 };

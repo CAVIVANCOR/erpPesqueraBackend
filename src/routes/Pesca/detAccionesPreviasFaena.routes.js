@@ -9,5 +9,6 @@ router.get('/:id', detAccionesPreviasFaenaController.obtenerPorId);
 router.post('/', detAccionesPreviasFaenaController.crear);
 router.put('/:id', detAccionesPreviasFaenaController.actualizar);
 router.delete('/:id', detAccionesPreviasFaenaController.eliminar);
+router.get('/temporada/:temporadaId', detAccionesPreviasFaenaController.obtenerPorTemporada);
 
 export default router;

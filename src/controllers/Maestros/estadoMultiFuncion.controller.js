@@ -40,6 +40,19 @@ export async function listarParaEmbarcaciones(req, res, next) {
   }
 }
 
+/**
+ * Lista estados multifunción específicamente para temporadas de pesca
+ * Filtra por TipoProvieneDe con descripción "TEMPORADA PESCA"
+ */
+export async function listarParaTemporadaPesca(req, res, next) {
+  try {
+    const estados = await estadoMultiFuncionService.listarParaTemporadaPesca();
+    res.json(toJSONBigInt(estados));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

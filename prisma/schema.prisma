@@ -7,115 +7,999 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Empresa {
-  id                     BigInt   @id @default(autoincrement())
-  razonSocial            String
-  nombreComercial        String?
-  ruc                    String
-  direccion              String?
-  telefono               String?
-  email                  String?
-  representantelegalId   BigInt?
-  cesado                 Boolean @default(false)
-  fechaCreacion          DateTime @default(now())
-  fechaActualizacion     DateTime @updatedAt
-  logo                   String?
-  porcentajeIgv          Decimal?
-  porcentajeRetencion    Decimal?
-  montoMinimoRetencion   Decimal?
-  cuentaDetraccion      String?
-  soyAgenteRetencion     Boolean @default(false)
-  soyAgentePercepcion    Boolean @default(false)
+model AccesoInstalacion {
+  id                          BigInt                     @id @default(autoincrement())
+  sedeId                      BigInt
+  areaDestinoVisitaId         BigInt?
+  empresaId                   BigInt?
+  tipoAccesoId                BigInt
+  tipoPersonaId               BigInt?
+  motivoId                    BigInt?
+  tipoEquipoId                BigInt?
+  fechaHora                   DateTime
+  nombrePersona               String?
+  tipoDocIdentidadId          BigInt?
+  numeroDocumento             String?
+  vehiculoNroPlaca            String?
+  vehiculoMarca               String?
+  equipoMarca                 String?
+  equipoSerie                 String?
+  personaFirmaDestinoVisitaId BigInt?
+  observaciones               String?
+  incidenteResaltante         Boolean                    @default(false)
+  descripcionIncidente        String?
+  imprimeTicketIng            Boolean                    @default(false)
+  urlImpresionTicket          String?
+  urlDocumentoVisitante       String?
+  createdAt                   DateTime                   @default(now())
+  vehiculoColor               String?
+  vehiculoModelo              String?
+  accesoSellado               Boolean                    @default(false)
+  fechaHoraSalidaDefinitiva   DateTime?
 
-  sedes SedesEmpresa[]
-  centrosCosto EmpresaCentroCosto[]
+  tipoAcceso         TipoAccesoInstalacion @relation(fields: [tipoAccesoId], references: [id])
+  tipoPersona        TipoPersona?          @relation(fields: [tipoPersonaId], references: [id])
+  motivoAcceso       MotivoAcceso?         @relation(fields: [motivoId], references: [id])
+  detalles   AccesoInstalacionDetalle[]
+  tipoEquipo        TipoEquipo?          @relation(fields: [tipoEquipoId], references: [id])
 }
 
-model SedesEmpresa {
-  id          BigInt   @id @default(autoincrement())
-  empresaId   BigInt
-  nombre      String
-  direccion   String?
-  telefono    String?
-  email       String?
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model AccesoInstalacionDetalle {
+  id                   BigInt               @id @default(autoincrement())
+  accesoInstalacionId  BigInt
+  fechaHora            DateTime
+  tipoMovimientoId     BigInt
+  areaDestinoVisitaId  BigInt?
+  observaciones        String?
+  createdAt            DateTime             @default(now())
 
-  empresa     Empresa  @relation(fields: [empresaId], references: [id])
-  areasFisicas AreaFisicaSede[]
+  accesoInstalacion    AccesoInstalacion @relation(fields: [accesoInstalacionId], references: [id])
+  tipoMovimiento       TipoMovimientoAcceso @relation(fields: [tipoMovimientoId], references: [id])
 }
 
-model AreaFisicaSede {
-  id          BigInt   @id @default(autoincrement())
-  sedeId      BigInt
-  nombre      String
-  descripcion String?
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model AccesosUsuario {
+  id                 BigInt           @id @default(autoincrement())
+  usuarioId          BigInt
+  submoduloId        BigInt
+  puedeVer           Boolean          @default(true)
+  puedeCrear         Boolean          @default(false)
+  puedeEditar        Boolean          @default(false)
+  puedeEliminar      Boolean          @default(false)
+  fechaOtorgado      DateTime         @default(now())
+  puedeReactivarDocs Boolean          @default(false)
+  puederAprobarDocs  Boolean          @default(false)
+  puederRechazarDocs Boolean          @default(false)
 
-  sede        SedesEmpresa @relation(fields: [sedeId], references: [id])
+  usuario        Usuario          @relation(fields: [usuarioId], references: [id])
+  submodulo      SubmoduloSistema @relation(fields: [submoduloId], references: [id])
 }
 
-model Especie {
-  id         BigInt   @id @default(autoincrement())
-  nombre     String
-}
+model AccionesPreviasFaena {
+  id                             BigInt                           @id @default(autoincrement())
+  nombre                         String                           @db.VarChar(100)
+  descripcion                    String?
+  activo                         Boolean                          @default(true)
+  paraPescaConsumo               Boolean                          @default(false)
+  paraPescaIndustrial            Boolean                          @default(false)
 
-
-model TemporadaPesca {
-  id                   BigInt   @id @default(autoincrement())
-  empresaId            BigInt
-  BahiaId              BigInt
-  nombre               String
-  especieId            BigInt
-  fechaInicio          DateTime
-  fechaFin             DateTime
-  numeroResolucion     String?
-  urlResolucionPdf     String?
-  cuotaPropiaTon       Decimal?
-  cuotaAlquiladaTon    Decimal?
-  fechaCreacion        DateTime @default(now())
-  fechaActualizacion   DateTime @updatedAt
-
-  faenas               FaenaPesca[] @relation("FaenaTemporadas")
-  entregasARendir      EntregaARendir[]
-  liquidacionTemporada LiquidacionTemporadaPesca?
+  detalles    DetAccionesPreviasFaena[]
+  detallesConsumo DetAccionesPreviasFaenaConsumo[]
 }
 
 model Activo {
-  id          BigInt   @id @default(autoincrement())
-  empresaId   BigInt
-  tipoId      BigInt
-  nombre      String
-  descripcion String?
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                   BigInt                 @id @default(autoincrement())
+  empresaId            BigInt
+  tipoId               BigInt
+  nombre               String
+  descripcion          String?
+  cesado               Boolean                @default(false)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime
 
   tipo        TipoActivo @relation(fields: [tipoId], references: [id])
   permisos    DetallePermisoActivo[]
 }
 
-model TipoActivo {
-  id          BigInt   @id @default(autoincrement())
-  codigo      String   @unique   
-  nombre      String           
-  descripcion String?
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model AgrupacionEntidad {
+  id               BigInt             @id @default(autoincrement())
+  nombre           String             @db.VarChar(100)
+  descripcion      String?
+  esCliente        Boolean            @default(false)
+  esProveedor      Boolean            @default(false)
 
-  activos     Activo[]
+  entidades   EntidadComercial[]
+}
+
+/// Modelo centralizado para almacenar archivos adjuntos PDF de cualquier submódulo del ERP Megui.
+/// Permite asociar cada archivo a un proceso origen (empresa, pesca, proveedor, etc.) mediante subModuloId.
+model ArchivoAdjunto {
+  id             BigInt   @id @default(autoincrement()) // Identificador único del archivo adjunto
+  nombreArchivo  String   // Nombre físico del archivo almacenado (ej: permiso-2025-1623456789.pdf)
+  rutaRelativa   String   // Ruta relativa de almacenamiento (ej: /uploads/adjuntos/empresa-23/permiso-2025-1623456789.pdf)
+  fechaSubida    DateTime @default(now()) // Fecha y hora de subida del archivo
+  empresaId      BigInt   // Identificador de la empresa a la que pertenece el archivo adjunto
+  subModuloId    BigInt   // Identificador del submódulo o proceso origen (ej: id de pesca, id de empresa, id de proveedor, etc.)
+  usuarioSubioId BigInt?  // Usuario que subió el archivo (opcional)
+}
+
+model AreaFisicaSede {
+  id           BigInt       @id @default(autoincrement())
+  sedeId       BigInt
+  nombre       String
+  descripcion  String?
+  cesado       Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime
+
+  sede        SedesEmpresa @relation(fields: [sedeId], references: [id])
+}
+
+model AsientoContableInterfaz {
+  id               BigInt         @id @default(autoincrement())
+  movimientoCajaId BigInt
+  fechaContable    DateTime
+  cuentaContable   String
+  descripcion      String?
+  debe             Decimal
+  haber            Decimal
+  monedaId         BigInt
+  empresaId        BigInt
+  referenciaExtId  String?
+  tipoReferenciaId BigInt?
+  estado           String
+  fechaEnvio       DateTime?
+
+  movimientoCaja      MovimientoCaja @relation(fields: [movimientoCajaId], references: [id])
+}
+
+model Banco {
+  id              BigInt            @id @default(autoincrement())
+  nombre          String
+  codigoSwift     String?
+  codigoBcrp      String?
+  paisId          BigInt?
+  activo          Boolean           @default(true)
+
+  cuentas     CuentaCorriente[]
+}
+
+model BolicheRed {
+  id                BigInt              @id @default(autoincrement())
+  activoId          BigInt              @unique
+  descripcion       String?
+  cesado            Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime
+  altoM             Decimal?
+  estadoActivoId    BigInt
+  largoContraido    Decimal?
+  largoExpandido    Decimal?
+  nroFlotadores     Int?
+  nroPlomos         Int?
+  urlBolicheRedPdf  String?
+
+  faenas FaenaPesca[] @relation("BolicheFaenas")
+  faenasConsumo FaenaPescaConsumo[] @relation("BolicheFaenasConsumo")
+}
+
+model Cala {
+  id                  BigInt               @id @default(autoincrement())
+  bahiaId             BigInt
+  motoristaId         BigInt
+  patronId            BigInt
+  embarcacionId       BigInt
+  faenaPescaId        BigInt
+  fechaHoraInicio     DateTime
+  fechaHoraFin        DateTime
+  latitud             Decimal?
+  longitud            Decimal?
+  profundidadM        Decimal?
+  toneladasCapturadas Decimal?
+  observaciones       String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime
+  temporadaPescaId    BigInt
+
+  faenaPesca            FaenaPesca @relation(fields: [faenaPescaId], references: [id])
+  especiesPescadas      DetalleCalaEspecie[]
+}
+
+model CalaFaenaConsumo {
+  id                  BigInt                @id @default(autoincrement())
+  bahiaId             BigInt
+  motoristaId         BigInt
+  patronId            BigInt
+  embarcacionId       BigInt
+  faenaPescaConsumoId BigInt
+  fechaHoraInicio     DateTime
+  fechaHoraFin        DateTime
+  latitud             Decimal?
+  longitud            Decimal?
+  profundidadM        Decimal?
+  toneladasCapturadas Decimal?
+  observaciones       String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime
+
+  faenaPescaConsumo     FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+  especiesPescadas DetCalaPescaConsumo[]
+}
+
+model CalaFaenaConsumoProduce {
+  id                         BigInt                       @id @default(autoincrement())
+  bahiaId                    BigInt
+  motoristaId                BigInt
+  patronId                   BigInt
+  embarcacionId              BigInt
+  faenaPescaConsumoId        BigInt
+  fechaHoraInicio            DateTime
+  fechaHoraFin               DateTime
+  latitud                    Decimal?
+  longitud                   Decimal?
+  profundidadM               Decimal?
+  toneladasCapturadas        Decimal?
+  observaciones              String?
+  urlInformeCalaProduce      String?
+  createdAt                  DateTime                     @default(now())
+  updatedAt                  DateTime
+
+  faenaPescaConsumo       FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+  especiesProcesadas      DetCalaFaenaConsumoProduce[]
+}
+
+model CalaProduce {
+  id                        BigInt                      @id @default(autoincrement())
+  bahiaId                   BigInt
+  motoristaId               BigInt
+  patronId                  BigInt
+  embarcacionId             BigInt
+  faenaPescaId              BigInt
+  fechaHoraInicio           DateTime
+  fechaHoraFin              DateTime
+  latitud                   Decimal?
+  longitud                  Decimal?
+  profundidadM              Decimal?
+  toneladasCapturadas       Decimal?
+  observaciones             String?
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime
+  temporadaPescaId          BigInt
+  urlInformeCalaProduce     String?
+
+  faenaPesca            FaenaPesca @relation(fields: [faenaPescaId], references: [id])
+  especiesProcesadas    DetalleCalaEspecieProduce[]
+}
+
+model CargosPersonal {
+  id          BigInt     @id @default(autoincrement())
+  descripcion String?
+  cesado      Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime
+
+  personal    Personal[]
+}
+
+model CategoriaCCosto {
+  id          BigInt        @id @default(autoincrement())
+  nombre      String        @db.VarChar(50)
+  descripcion String?
+  activo      Boolean       @default(true)
+
+  centros     CentroCosto[]
+}
+
+model CentroCosto {
+  Codigo             String               @db.VarChar(20)
+  Nombre             String               @db.VarChar(255)
+  Descripcion        String?
+  CategoriaID        BigInt
+  ParentCentroID     String?              @db.VarChar(20)
+  id                 BigInt               @id @default(autoincrement())
+
+  categoria       CategoriaCCosto @relation(fields: [CategoriaID], references: [id])
+  empresasCentro EmpresaCentroCosto[]
+}
+
+model Color {
+  id       BigInt     @id @default(autoincrement())
+  nombre   String     @db.VarChar(80)
+  productos               Producto[]
+}
+
+model ConceptoMovAlmacen {
+  id                    BigInt                @id @default(autoincrement())
+  descripcion           String                @db.VarChar(100)
+  almacenOrigenId       BigInt?
+  almacenDestinoId      BigInt?
+  kardexOrigen          Boolean               @default(false)
+  kardexDestino         Boolean               @default(false)
+  custodia              Boolean               @default(false)
+  tipoConceptoId        BigInt
+  tipoMovimientoId      BigInt
+  tipoAlmacenId         BigInt
+  activo                Boolean               @default(true)
+
+  movimientos      MovimientoAlmacen[]
+  tipoConcepto     TipoConcepto  @relation(fields: [tipoConceptoId], references: [id])
+  tipoMovimiento   TipoMovimientoAlmacen @relation(fields: [tipoMovimientoId], references: [id])
+  tipoAlmacen      TipoAlmacen   @relation(fields: [tipoAlmacenId], references: [id])
+}
+
+model ContactoEntidad {
+  id                 BigInt           @id @default(autoincrement())
+  entidadComercialId BigInt
+  nombres            String
+  cargoId            BigInt?
+  telefono           String?
+  correoCorportivo   String?
+  correoPersonal     String?
+  compras            Boolean          @default(false)
+  ventas             Boolean          @default(false)
+  finanzas           Boolean          @default(false)
+  logistica          Boolean          @default(false)
+  representanteLegal Boolean          @default(false)
+  observaciones      String?
+  activo             Boolean          @default(true)
+
+   entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
+}
+
+model CotizacionCompras {
+  id                                        BigInt                              @id @default(autoincrement())
+  empresaId                                 BigInt
+  fechaRegistro                             DateTime                            @default(now())
+  tipoProductoId                            BigInt
+  tipoEstadoProductoId                      BigInt
+  destinoProductoId                         BigInt
+  formaTransaccionId                        BigInt
+  modoDespachoRecepcionId                   BigInt
+  respComprasId                             BigInt
+  respProduccionId                          BigInt
+  fechaEntrega                              DateTime
+  autorizaCompraId                          BigInt
+  tipoCambio                                Decimal
+  contactoProveedorId                       BigInt
+  direccionProveedorId                      BigInt
+  bancoId                                   BigInt
+  formaPagoId                               BigInt
+  respAlmacenId                             BigInt
+  estadoCotizacionId                        BigInt
+  centroCostoId                             BigInt
+  reqCompraId                               BigInt?
+  usuarioGeneroReqCompraId                  BigInt?
+  fechaUsuarioGeneroReqCompraId             DateTime?
+  ordenCompraId                             BigInt?
+  usuarioGeneroOrdenCompraId                BigInt?
+  fechaUsuarioGeneroOrdenCompra             DateTime?
+  supervisorCompraCampoId                   BigInt?
+  observaciones                             String?
+  creadoEn                                  DateTime                            @default(now())
+  actualizadoEn                             DateTime
+  ProveedorPlantaProcesoId                  BigInt?
+  clienteCompraMateriaPrimaId               BigInt?
+  conceptoMovSalidaProcesarId               BigInt?
+  proveedorMateriaPrimaId                   BigInt
+  respCalidadClienteMateriaPrimaId          BigInt?
+  respCalidadPlantaProcesoId                BigInt?
+  respProduccionClienteMateriaPrimaId       BigInt?
+  respProduccionPlantaProcesoId             BigInt?
+  conceptoMovIngresoProdTerminadoId         BigInt?
+  fechaUsuarioGeneroMovIngresoProdTerminado DateTime?
+  movIngresoProdTerminadoId                 BigInt?
+  usuarioGeneroMovIngresoProdTerminadoId    BigInt?
+
+  tipoProducto              TipoProducto   @relation(fields: [tipoProductoId], references: [id])
+  tipoEstadoProducto        TipoEstadoProducto      @relation(fields: [tipoEstadoProductoId], references: [id])
+  destinoProducto           DestinoProducto   @relation(fields: [destinoProductoId], references: [id])
+  formaTransaccion          FormaTransaccion     @relation(fields: [formaTransaccionId], references: [id])
+  modoDespachoRecepcion     ModoDespachoRecepcion   @relation(fields: [modoDespachoRecepcionId], references: [id])
+  detalles                  DetCotizacionCompras[]
+  detDocsReqCotizaCompras   DetDocsReqCotizaCompras[]
+  entregasARendirPCompras   EntregaARendirPCompras[]
+  detallesProductoFinal     DetProductoFinalCotizacionCompras[]
+  gastosComprasProd         DetGastosComprasProd[]
+  liquidacionProcesoComprasProd LiquidacionProcesoComprasProd?
+}
+
+model CotizacionVentas {
+  id                             BigInt                   @id @default(autoincrement())
+  empresaId                      BigInt
+  fechaRegistro                  DateTime                 @default(now())
+  tipoProductoId                 BigInt
+  respVentasId                   BigInt
+  fechaEntrega                   DateTime
+  autorizaVentaId                BigInt
+  tipoCambio                     Decimal
+  contactoClienteId              BigInt
+  clienteId                      BigInt
+  bancoId                        BigInt
+  formaPagoId                    BigInt
+  respEmbarqueId                 BigInt
+  respProduccionId               BigInt
+  respAlmacenId                  BigInt
+  incotermsId                    BigInt
+  idPaisDestino                  BigInt
+  pesoMaximoContenedor           Decimal?
+  fechaZarpe                     DateTime?
+  fechaArribo                    DateTime?
+  agenteAduanasId                BigInt?
+  operadorLogisticoId            BigInt?
+  prefacturaVentaId              BigInt?
+  supervisorVentaCampoId         BigInt?
+  observaciones                  String?
+  creadoEn                       DateTime                 @default(now())
+  actualizadoEn                  DateTime
+  centroCostoId                  BigInt
+  estadoCotizacionId             BigInt
+  puertoCargaId                  BigInt?
+  puertoDescargaId               BigInt?
+  monedaClienteId                BigInt?
+  montoAdelantadoCliente         Decimal?
+  fechaUsuarioGeneroPreFactVenta DateTime?
+  fechaUsuarioGeneroReqCompraId  DateTime?
+  reqCompraId                    BigInt?
+  usuarioGeneroPreFactVentaId    BigInt?
+  usuarioGeneroReqCompraId       BigInt?
+  destinoProductoId              BigInt
+  formaTransaccionId             BigInt
+  modoDespachoRecepcionId        BigInt
+  tipoEstadoProductoId           BigInt
+  dirEntregaId                   BigInt
+  dirFiscalId                    BigInt
+
+// Relaciones
+  tipoProducto              TipoProducto   @relation(fields: [tipoProductoId], references: [id])
+  tipoEstadoProducto        TipoEstadoProducto      @relation(fields: [tipoEstadoProductoId], references: [id])
+  destinoProducto           DestinoProducto   @relation(fields: [destinoProductoId], references: [id])
+  formaTransaccion          FormaTransaccion     @relation(fields: [formaTransaccionId], references: [id])
+  modoDespachoRecepcion     ModoDespachoRecepcion   @relation(fields: [modoDespachoRecepcionId], references: [id])
+
+  detalles                  DetCotizacionVentas[]
+  detDocsReqCotizaVentas detDocsReqCotizaVentas[]
+  entregasARendirPVentas    EntregaARendirPVentas[]
+}
+
+model CuentaCorriente {
+  id                                                                      BigInt              @id @default(autoincrement())
+  empresaId                                                               BigInt
+  bancoId                                                                 BigInt
+  numeroCuenta                                                            String              @unique
+  tipoCuentaCorrienteId                                                   BigInt
+  monedaId                                                                BigInt
+  descripcion                                                             String?
+  activa                                                                  Boolean             @default(true)
+
+  banco                  Banco    @relation(fields: [bancoId], references: [id])
+  tipoCuentaCorriente    TipoCuentaCorriente @relation(fields: [tipoCuentaCorrienteId], references: [id])
+  movimientosOrigen      MovimientoCaja[] @relation("CuentaCorrienteOrigen")
+  movimientosDestino     MovimientoCaja[] @relation("CuentaCorrienteDestino")
+}
+
+model Departamento {
+  id        BigInt      @id @default(autoincrement())
+  codSUNAT  String      @unique
+  nombre    String
+  paisId    BigInt
+
+  pais       Pais     @relation(fields: [paisId], references: [id])
+  provincias Provincia[]
+  ubigeos    Ubigeo[]
+}
+
+model DescargaFaenaConsumo {
+  id                           BigInt                    @id @default(autoincrement())
+  faenaPescaConsumoId          BigInt                    @unique
+  puertoDescargaId             BigInt
+  fechaHoraArriboPuerto        DateTime
+  fechaHoraLlegadaPuerto       DateTime
+  clienteId                    BigInt
+  numPlataformaDescarga        String?                   @db.VarChar(20)
+  turnoPlataformaDescarga      String?                   @db.VarChar(20)
+  fechaHoraInicioDescarga      DateTime
+  fechaHoraFinDescarga         DateTime
+  numWinchaPesaje              String?                   @db.VarChar(20)
+  urlComprobanteWincha         String?
+  patroId                      BigInt
+  motoristaId                  BigInt
+  bahiaId                      BigInt
+  latitud                      Decimal?
+  longitud                     Decimal?
+  fechaDescarga                DateTime
+  combustibleAbastecidoGalones Decimal
+  urlValeAbastecimiento        String?
+  urlInformeDescargaProduce    String?
+  observaciones                String?
+  creadoEn                     DateTime                  @default(now())
+  actualizadoEn                DateTime
+  movIngresoAlmacenId          BigInt
+
+  faenaPescaConsumo            FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+  detalles                     DetDescargaFaenaConsumo[]
+
+  @@index([movIngresoAlmacenId])
+}
+
+model DescargaFaenaPesca {
+  id                           BigInt                 @id @default(autoincrement())
+  faenaPescaId                 BigInt                 @unique
+  puertoDescargaId             BigInt
+  fechaHoraArriboPuerto        DateTime
+  fechaHoraLlegadaPuerto       DateTime
+  numPlataformaDescarga        String?                @db.VarChar(20)
+  turnoPlataformaDescarga      String?                @db.VarChar(20)
+  fechaHoraInicioDescarga      DateTime
+  fechaHoraFinDescarga         DateTime
+  numWinchaPesaje              String?                @db.VarChar(20)
+  urlComprobanteWincha         String?
+  patroId                      BigInt
+  motoristaId                  BigInt
+  bahiaId                      BigInt
+  latitud                      Decimal?
+  longitud                     Decimal?
+  fechaDescarga                DateTime
+  combustibleAbastecidoGalones Decimal
+  urlValeAbastecimiento        String?
+  observaciones                String?
+  creadoEn                     DateTime               @default(now())
+  actualizadoEn                DateTime
+  clienteId                    BigInt
+  temporadaPescaId             BigInt
+  urlInformeDescargaProduce    String?
+  movIngresoAlmacenId          BigInt
+
+faenaPesca FaenaPesca @relation(fields: [faenaPescaId], references: [id])
+  detalles DetalleDescargaFaena[]
+
+  @@index([movIngresoAlmacenId])
+}
+
+model DestinoProducto {
+  id                BigInt              @id @default(autoincrement())
+  nombre            String              @unique
+  descripcion       String?
+  activo            Boolean             @default(true)
+  paraCompras       Boolean             @default(false)
+  paraVentas        Boolean             @default(false)
+
+  cotizaciones   CotizacionVentas[]
+  cotizacionesCompras  CotizacionCompras[]
+}
+
+model DetAccionesPreviasFaena {
+  id                   BigInt               @id @default(autoincrement())
+  faenaPescaId         BigInt
+  accionPreviaId       BigInt
+  responsableId        BigInt?
+  verificadorId        BigInt?
+  fechaVerificacion    DateTime?
+  cumplida             Boolean              @default(false)
+  fechaCumplida        DateTime?
+  observaciones        String?
+  verificado           Boolean              @default(false)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime
+  urlConfirmaAccionPdf String?
+
+  faenaPesca        FaenaPesca @relation(fields: [faenaPescaId], references: [id])
+  accionPrevia      AccionesPreviasFaena @relation(fields: [accionPreviaId], references: [id])
+}
+
+model DetAccionesPreviasFaenaConsumo {
+  id                   BigInt               @id @default(autoincrement())
+  faenaPescaConsumoId  BigInt
+  accionPreviaId       BigInt
+  responsableId        BigInt?
+  verificadorId        BigInt?
+  fechaVerificacion    DateTime?
+  cumplida             Boolean              @default(false)
+  fechaCumplida        DateTime?
+  urlConfirmaAccionPdf String?
+  observaciones        String?
+  verificado           Boolean              @default(false)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime
+
+  faenaPescaConsumo    FaenaPescaConsumo     @relation(fields: [faenaPescaConsumoId], references: [id])
+  accionPrevia         AccionesPreviasFaena  @relation(fields: [accionPreviaId], references: [id])
+}
+
+model DetCalaFaenaConsumoProduce {
+  id                        BigInt                  @id @default(autoincrement())
+  calaFaenaConsumoProduceId BigInt
+  especieId                 BigInt
+  toneladas                 Decimal?
+  porcentajeJuveniles       Decimal?
+  observaciones             String?
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime
+
+  calaFaenaConsumoProduce CalaFaenaConsumoProduce @relation(fields: [calaFaenaConsumoProduceId], references: [id])
+}
+
+model DetCalaPescaConsumo {
+  id                  BigInt           @id @default(autoincrement())
+  calaFaenaConsumoId  BigInt
+  especieId           BigInt
+  toneladas           Decimal?
+  porcentajeJuveniles Decimal?
+  observaciones       String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime
+
+  calaFaenaConsumo    CalaFaenaConsumo @relation(fields: [calaFaenaConsumoId], references: [id])
+}
+
+model DetCotizacionCompras {
+  id                  BigInt            @id @default(autoincrement())
+  empresaId           BigInt
+  cotizacionComprasId BigInt
+  productoId          BigInt
+  proveedorId         BigInt
+  cantidad            Decimal
+  precioUnitario      Decimal
+  monedaId            BigInt
+  movIngresoAlmacenId BigInt
+  ordenCompraId       BigInt?
+  observaciones       String?
+  creadoEn            DateTime          @default(now())
+  actualizadoEn       DateTime
+  centroCostoId       BigInt
+
+  cotizacionCompras     CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
+}
+
+model DetCotizacionVentas {
+  id                 BigInt           @id @default(autoincrement())
+  empresaId          BigInt
+  cotizacionVentasId BigInt
+  productoId         BigInt
+  clienteId          BigInt
+  cantidad           Decimal
+  precioUnitario     Decimal
+  monedaId           BigInt
+  movSalidaAlmacenId BigInt
+  prefacturaVentaId  BigInt?
+  observaciones      String?
+  creadoEn           DateTime         @default(now())
+  actualizadoEn      DateTime
+  centroCostoId      BigInt
+
+  cotizacionVentas    CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id])
+  producto            Producto         @relation(fields: [productoId], references: [id])
+}
+
+model DetDescargaFaenaConsumo {
+  id                     BigInt               @id @default(autoincrement())
+  descargaFaenaConsumoId BigInt
+  especieId              BigInt
+  toneladas              Decimal?
+  porcentajeJuveniles    Decimal?
+  observaciones          String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime
+
+  descargaFaenaConsumo DescargaFaenaConsumo @relation(fields: [descargaFaenaConsumoId], references: [id])
+}
+
+model DetDocEmbarcacionPescaConsumo {
+  id                  BigInt            @id @default(autoincrement())
+  faenaPescaConsumoId BigInt
+  documentoPescaId    BigInt
+  numeroDocumento     String?
+  fechaEmision        DateTime?
+  fechaVencimiento    DateTime?
+  urlDocEmbarcacio    String?
+  observaciones       String?
+  verificado          Boolean
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime
+
+  faenaPescaConsumo FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+}
+
+model DetDocTripulantesFaenaConsumo {
+  id                  BigInt            @id @default(autoincrement())
+  faenaPescaConsumoId BigInt
+  tripulanteId        BigInt?
+  documentoId         BigInt?
+  numeroDocumento     String?
+  fechaEmision        DateTime?
+  fechaVencimiento    DateTime?
+  urlDocTripulantePdf String?
+  observaciones       String?
+  verificado          Boolean
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime
+
+  faenaPescaConsumo    FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+}
+
+model DetDocsReqCotizaCompras {
+  id                        BigInt                    @id @default(autoincrement())
+  cotizacionComprasId       BigInt
+  docRequeridaComprasId     BigInt
+  numeroDocumento           String?
+  fechaEmision              DateTime?
+  fechaVencimiento          DateTime?
+  urlDocumento              String?
+  observaciones             String?
+  verificado                Boolean
+  creadoEn                  DateTime                  @default(now())
+  actualizadoEn             DateTime
+
+  cotizacionCompras         CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
+  docRequeridaCompras       DocRequeridaComprasVentas @relation(fields: [docRequeridaComprasId], references: [id])
+}
+
+model DetGastosComprasProd {
+  id                            BigInt            @id @default(autoincrement())
+  cotizacionComprasId           BigInt
+  entregaARendirPComprasId      BigInt
+  detMovEntregaRendirPComprasId BigInt
+  costoProduccionId             BigInt
+  monto                         Decimal
+  fechaRegistro                 DateTime          @default(now())
+  creadoEn                      DateTime          @default(now())
+  actualizadoEn                 DateTime
+
+  cotizacionCompras              CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
+}
+
+model DetInsumosTareaOT {
+  id                  BigInt      @id @default(autoincrement())
+  tareaId             BigInt
+  productoId          BigInt
+  cantidad            Decimal?
+  costoUnitario       Decimal?
+  observaciones       String?
+  aprobacionComprasId BigInt?
+  actualizadoEn       DateTime
+  proveedorId         BigInt?
+
+  tarea              DetTareasOT  @relation(fields: [tareaId], references: [id])
+  producto           Producto     @relation(fields: [productoId], references: [id])
+}
+
+model DetMovsEntRendirPescaConsumo {
+  id                           BigInt                     @id @default(autoincrement())
+  entregaARendirPescaConsumoId BigInt
+  responsableId                BigInt
+  fechaMovimiento              DateTime
+  tipoMovimientoId             BigInt
+  centroCostoId                BigInt
+  monto                        Decimal
+  descripcion                  String?
+  creadoEn                     DateTime                   @default(now())
+  actualizadoEn                DateTime
+
+  entregaARendirPescaConsumo EntregaARendirPescaConsumo @relation(fields: [entregaARendirPescaConsumoId], references: [id])
+  tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+}
+
+model DetMovsEntregaRendir {
+  id                   BigInt               @id @default(autoincrement())
+  entregaARendirId     BigInt
+  responsableId        BigInt
+  fechaMovimiento      DateTime
+  tipoMovimientoId     BigInt
+  monto                Decimal
+  descripcion          String?
+  creadoEn             DateTime             @default(now())
+  actualizadoEn        DateTime
+  centroCostoId        BigInt
+
+  entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
+  tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+}
+
+model DetMovsEntregaRendirPCompras {
+  id                       BigInt                 @id @default(autoincrement())
+  entregaARendirPComprasId BigInt
+  responsableId            BigInt
+  fechaMovimiento          DateTime
+  tipoMovimientoId         BigInt
+  centroCostoId            BigInt
+  monto                    Decimal
+  descripcion              String?
+  creadoEn                 DateTime               @default(now())
+  actualizadoEn            DateTime
+
+  entregaARendirPCompras      EntregaARendirPCompras @relation(fields: [entregaARendirPComprasId], references: [id])
+  tipoMovimiento              TipoMovEntregaRendir   @relation(fields: [tipoMovimientoId], references: [id])
+}
+
+model DetMovsEntregaRendirPVentas {
+  id                      BigInt                @id @default(autoincrement())
+  entregaARendirPVentasId BigInt
+  responsableId           BigInt
+  fechaMovimiento         DateTime
+  tipoMovimientoId        BigInt
+  centroCostoId           BigInt
+  monto                   Decimal
+  descripcion             String?
+  creadoEn                DateTime              @default(now())
+  actualizadoEn           DateTime
+
+  entregaARendirPVentas    EntregaARendirPVentas @relation(fields: [entregaARendirPVentasId], references: [id])
+  tipoMovimiento           TipoMovEntregaRendir  @relation(fields: [tipoMovimientoId], references: [id])
+}
+
+model DetPermisoGestionadoOT {
+  id                BigInt          @id @default(autoincrement())
+  otMantenimientoId BigInt
+  permisoId         BigInt
+  gestionado        Boolean         @default(false)
+  fechaGestion      DateTime?
+  observaciones     String?
+
+  otMantenimiento   OTMantenimiento     @relation(fields: [otMantenimientoId], references: [id])
+}
+
+model DetProductoFinalCotizacionCompras {
+  id                    BigInt            @id @default(autoincrement())
+  cotizacionComprasId   BigInt
+  productoFinalId       BigInt
+  cantidad              Decimal
+  peso                  Decimal
+  costoUnitMateriaPrima Decimal
+  costoUnitProceso      Decimal
+  costoUnitario         Decimal
+  creadoEn              DateTime          @default(now())
+  actualizadoEn         DateTime
+  
+  cotizacionCompras       CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
+  productoFinal           Producto          @relation(fields: [productoFinalId], references: [id])
+}
+
+model DetTareasOT {
+  id                      BigInt              @id @default(autoincrement())
+  otMantenimientoId       BigInt
+  descripcion             String
+  responsableId           BigInt?
+  fechaProgramada         DateTime?
+  fechaInicio             DateTime?
+  fechaFin                DateTime?
+  realizado               Boolean             @default(false)
+  observaciones           String?
+  urlFotosAntesPdf        String?
+  adjuntoCotizacionUno    Boolean             @default(false)
+  urlCotizacionUnoPdf     String?
+  adjuntoCotizacionDos    Boolean             @default(false)
+  urlCotizacionDosPdf     String?
+  actualizadoEn           DateTime
+  fechaValidaTerminoTarea DateTime?
+  validaTerminoTareaId    BigInt?
+
+  otMantenimiento   OTMantenimiento @relation(fields: [otMantenimientoId], references: [id])
+  insumos DetInsumosTareaOT[]
+}
+
+model DetalleCalaEspecie {
+  id                  BigInt   @id @default(autoincrement())
+  calaId              BigInt
+  especieId           BigInt
+  toneladas           Decimal?
+  porcentajeJuveniles Decimal?
+  observaciones       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime
+
+  cala                Cala   @relation(fields: [calaId], references: [id])
+}
+
+model DetalleCalaEspecieProduce {
+  id                  BigInt      @id @default(autoincrement())
+  calaProduceId       BigInt
+  especieId           BigInt
+  toneladas           Decimal?
+  porcentajeJuveniles Decimal?
+  observaciones       String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime
+
+  calaProduce         CalaProduce   @relation(fields: [calaProduceId], references: [id])
+}
+
+model DetalleDescargaFaena {
+  id                  BigInt             @id @default(autoincrement())
+  descargaFaenaId     BigInt
+  especieId           BigInt
+  toneladas           Decimal?
+  porcentajeJuveniles Decimal?
+  observaciones       String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime
+
+  descargaFaena       DescargaFaenaPesca @relation(fields: [descargaFaenaId], references: [id])
+}
+
+model DetalleDocEmbarcacion {
+  id               BigInt     @id @default(autoincrement())
+  faenaPescaId     BigInt
+  documentoPescaId BigInt
+  numeroDocumento  String?
+  fechaEmision     DateTime?
+  fechaVencimiento DateTime?
+  observaciones    String?
+  verificado       Boolean
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime
+  urlDocEmbarcacion String?
+
+  faenaPesca       FaenaPesca     @relation(fields: [faenaPescaId], references: [id])
+}
+
+model DetalleDocTripulantes {
+  id                  BigInt     @id @default(autoincrement())
+  faenaPescaId        BigInt
+  tripulanteId        BigInt?
+  documentoId         BigInt?
+  numeroDocumento     String?
+  fechaEmision        DateTime?
+  fechaVencimiento    DateTime?
+  observaciones       String?
+  verificado          Boolean
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime
+  urlDocTripulantePdf String?
+
+  faenaPesca     FaenaPesca @relation(fields: [faenaPescaId], references: [id])
+}
+
+model DetalleMovimientoAlmacen {
+  id                  BigInt            @id @default(autoincrement())
+  movimientoAlmacenId BigInt
+  productoId          BigInt
+  cantidad            Decimal
+  pesoNeto            Decimal?
+  lote                String?           @db.VarChar(40)
+  fechaProduccion     DateTime?
+  fechaVencimiento    DateTime?
+  fechaIngreso        DateTime?
+  nroSerie            String?           @db.VarChar(40)
+  nroContenedor       String?           @db.VarChar(40)
+  ubicacionOrigenId   BigInt?
+  ubicacionDestinoId  BigInt?
+  paletaAlmacenId     BigInt?
+  estadoMercaderiaId  BigInt?
+  estadoCalidadId     BigInt?
+  entidadComercialId  BigInt?
+  custodia            Boolean           @default(false)
+  empresaId           BigInt
+  observaciones       String?
+  creadoEn            DateTime          @default(now())
+  actualizadoEn       DateTime
+  creadoPor           BigInt?
+  actualizadoPor      BigInt?
+  detalleReqCompraId  BigInt?
+
+  movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
+  producto              Producto @relation(fields: [productoId], references: [id])
+  detalleReqCompra      DetalleReqCompra? @relation(fields: [detalleReqCompraId], references: [id])
+}
+
+model DetalleOrdenCompra {
+  id             BigInt      @id @default(autoincrement())
+  ordenCompraId  BigInt
+  productoId     BigInt
+  cantidad       Decimal
+  precioUnitario Decimal?
+  centroCostoId  BigInt?
+  observaciones  String?
+  actualizadoEn  DateTime
+
+  ordenCompra       OrdenCompra @relation(fields: [ordenCompraId], references: [id])
+  producto          Producto    @relation(fields: [productoId], references: [id])
 }
 
 model DetallePermisoActivo {
-  id             BigInt   @id @default(autoincrement())
-  activoId       BigInt
-  permisoId      BigInt
-  observaciones  String?
-  obligatorio    Boolean  @default(true) 
+  id                  BigInt              @id @default(autoincrement())
+  activoId            BigInt
+  permisoId           BigInt
+  observaciones       String?
+  obligatorio         Boolean             @default(true)
 
   activo         Activo              @relation(fields: [activoId], references: [id])
   permiso        PermisoAutorizacion @relation(fields: [permisoId], references: [id])
@@ -123,53 +1007,149 @@ model DetallePermisoActivo {
   @@unique([activoId, permisoId])
 }
 
-model PermisoAutorizacion {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(80)
-  descripcion String?
-  activo      Boolean  @default(true)
+model DetallePreFactura {
+  id             BigInt     @id @default(autoincrement())
+  preFacturaId   BigInt
+  productoId     BigInt
+  cantidad       Decimal
+  precioUnitario Decimal?
+  subtotal       Decimal?
+  porcentajeIgv  Decimal?
+  igv            Decimal?
+  total          Decimal?
+  observaciones  String?
+  actualizadoEn  DateTime
+  centroCostoId  BigInt?
 
-  activosPermiso DetallePermisoActivo[]
-  @@unique([nombre])
+  preFactura       PreFactura @relation(fields: [preFacturaId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
+}
+
+model DetalleReqCompra {
+  id                       BigInt                     @id @default(autoincrement())
+  requerimientoCompraId    BigInt
+  productoId               BigInt
+  cantidadSolicitada       Decimal
+  costoUnitario            Decimal?
+  centroCostoId            BigInt?
+  observaciones            String?
+  actualizadoEn            DateTime
+  ordenCompraDetalleId     BigInt?
+  cantidadAComprar         Decimal?
+  cantidadDesdeAlmacen     Decimal?
+
+  detalleMovimientos     DetalleMovimientoAlmacen[] // Relación inversa: todos los movimientos de almacén que atendieron este requerimiento
+  requerimientoCompra    RequerimientoCompra @relation(fields: [requerimientoCompraId], references: [id])
+  producto               Producto           @relation(fields: [productoId], references: [id])
+}
+
+model DireccionEntidad {
+  id                 BigInt           @id @default(autoincrement())
+  entidadComercialId BigInt
+  direccion          String
+  direccionArmada    String?
+  ubigeoId           BigInt
+  fiscal             Boolean          @default(false)
+  almacenPrincipal   Boolean          @default(false)
+  referencia         String?
+  telefono           String?
+  correo             String?
+  activo             Boolean          @default(true)
+
+  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
+  ubigeo             Ubigeo           @relation(fields: [ubigeoId], references: [id])
+}
+
+model DocRequeridaComprasVentas {
+  id                      BigInt                    @id @default(autoincrement())
+  nombre                  String                    @unique
+  descripcion             String?
+  obligatorio             Boolean                   @default(true)
+  activo                  Boolean                   @default(true)
+  tipoProductoId          BigInt
+  tipoEstadoProductoId    BigInt
+  destinoProductoId       BigInt
+  formaTransaccionId      BigInt
+  paraCompras             Boolean                   @default(false)
+  paraVentas              Boolean                   @default(false)
+
+  detallesDocCotizacion detDocsReqCotizaVentas[]
+  detallesDocCotizacionCompras DetDocsReqCotizaCompras[]
+}
+
+model DocumentacionEmbarcacion {
+  id               BigInt         @id @default(autoincrement())
+  embarcacionId    BigInt
+  documentoPescaId BigInt
+  observaciones    String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime
+
+  embarcacion     Embarcacion   @relation(fields: [embarcacionId], references: [id])
+}
+
+model DocumentacionPersonal {
+  id               BigInt         @id @default(autoincrement())
+  personalId       BigInt
+  documentoPescaId BigInt
+  observaciones    String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime
+
+  personal        Personal        @relation(fields: [personalId], references: [id])
+}
+
+model DocumentoPesca {
+  id                       BigInt                     @id @default(autoincrement())
+  nombre                   String
+  descripcion              String?
+  obligatorio              Boolean
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime
+  cesado                   Boolean                    @default(false)
+  paraEmbarcacion          Boolean                    @default(false)
+  paraOperacionFaena       Boolean                    @default(false)
+  paraTripulantes          Boolean                    @default(false)
+
 }
 
 model Embarcacion {
-  id           BigInt   @id @default(autoincrement())
-  activoId     BigInt   @unique
-  matricula    String   @unique
-  tipoEmbarcacionId BigInt
-  capacidadBodegaTon Decimal?
-  esloraM      Decimal?
-  mangaM       Decimal?
-  puntalM      Decimal?
-  motorMarca   String?
-  motorPotenciaHp Int?
-  anioFabricacion Int?
-  proveedorGpsId   BigInt?
-  tabletMarca     String?
-  tabletModelo    String?
-  estadoActivoId  BigInt
-  urlFotoEmbarcacion String?
+  id                                     BigInt                     @id @default(autoincrement())
+  matricula                              String                     @unique
+  capacidadBodegaTon                     Decimal?
+  esloraM                                Decimal?
+  mangaM                                 Decimal?
+  puntalM                                Decimal?
+  motorMarca                             String?
+  motorPotenciaHp                        Int?
+  anioFabricacion                        Int?
+  proveedorGpsId                         BigInt?
+  tabletMarca                            String?
+  tabletModelo                           String?
+  fechaCreacion                          DateTime                   @default(now())
+  fechaActualizacion                     DateTime
+  activoId                               BigInt                     @unique
+  tipoEmbarcacionId                      BigInt
+  estadoActivoId                         BigInt
+  urlCertificadoAguasSucias              String?
+  urlCertificadoArqueo                   String?
+  urlCertificadoBalsasSalvavidas         String?
+  urlCertificadoCompas                   String?
+  urlCertificadoExtinguidores            String?
+  urlCertificadoFrancoBordo              String?
+  urlCertificadoFumigacion               String?
+  urlCertificadoHidroCarburos            String?
+  urlCertificadoMatricula                String?
+  urlCertificadoPaqueteEmergencia        String?
+  urlCertificadoRadioBaliza              String?
+  urlCertificadoSanitarioSanipes         String?
+  urlCertificadoSeguridad                String?
+  urlCertificadoSimtrac                  String?
+  urlCertificadogeolocalizador           String?
   urlCertificadosDotacionMinimaSeguridad String?
-  urlCertificadoMatricula String?
-  urlPermisoPesca String?
-  urlCertificadoArqueo String?
-  urlCertificadoFrancoBordo String?
-  urlCertificadoCompas String?
-  urlCertificadoRadioBaliza String?
-  urlCertificadoSeguridad String?
-  urlCertificadoHidroCarburos String?
-  urlCertificadoAguasSucias String?
-  urlCertificadoBalsasSalvavidas String?
-  urlCertificadoPaqueteEmergencia String?
-  urlCertificadoExtinguidores String?
-  urlCertificadoFumigacion String?
-  urlConstanciaNoAdeudoFoncopes String?
-  urlCertificadoSimtrac String?
-  urlCertificadogeolocalizador String?
-  urlCertificadoSanitarioSanipes String?
-  fechaCreacion   DateTime @default(now())
-  fechaActualizacion DateTime @updatedAt
+  urlConstanciaNoAdeudoFoncopes          String?
+  urlFotoEmbarcacion                     String?
+  urlPermisoPesca                        String?
 
   tipoEmbarcacion   TipoEmbarcacion @relation(fields: [tipoEmbarcacionId], references: [id])
   documentaciones DocumentacionEmbarcacion[]
@@ -177,549 +1157,44 @@ model Embarcacion {
   faenasConsumo FaenaPescaConsumo[] @relation("EmbarcacionFaenasConsumo")
 }
 
-model EstadoMultiFuncion {
-  id          BigInt   @id @default(autoincrement())
-  tipoProvieneDeId BigInt?            
-  descripcion String?
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model Empresa {
+  id                   BigInt               @id @default(autoincrement())
+  razonSocial          String
+  nombreComercial      String?
+  ruc                  String
+  direccion            String?
+  telefono             String?
+  email                String?
+  fechaCreacion        DateTime             @default(now())
+  fechaActualizacion   DateTime
+  logo                 String?
+  porcentajeIgv        Decimal?
+  cesado               Boolean              @default(false)
+  representantelegalId BigInt?
+  cuentaDetraccion     String?
+  montoMinimoRetencion Decimal?
+  porcentajeRetencion  Decimal?
+  soyAgentePercepcion  Boolean              @default(false)
+  soyAgenteRetencion   Boolean              @default(false)
 
-  tipoProvieneDe    TipoProvieneDe? @relation(fields: [tipoProvieneDeId], references: [id])
-}
-
-model TipoProvieneDe {
-  id          BigInt   @id @default(autoincrement())
-  descripcion String?   
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  estados     EstadoMultiFuncion[]
-}
-
-model TipoEmbarcacion {
-  id          BigInt   @id @default(autoincrement())
-  codigo      String   @unique   
-  nombre      String           
-  descripcion String?
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  embarcaciones Embarcacion[]
-}
-
-model DocumentoPesca {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String
-  descripcion String?
-  obligatorio Boolean
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-}
-
-model DocumentacionEmbarcacion {
-  id              BigInt   @id @default(autoincrement())
-  embarcacionId   BigInt
-  documentoPescaId BigInt
-  observaciones   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  embarcacion     Embarcacion   @relation(fields: [embarcacionId], references: [id])
-}
-
-model DetalleDocEmbarcacion {
-  id               BigInt   @id @default(autoincrement())
-  faenaPescaId     BigInt
-  documentoPescaId BigInt
-  numeroDocumento  String?
-  fechaEmision     DateTime?
-  fechaVencimiento DateTime?
-  urlDocEmbarcacio String?
-  observaciones    String?
-  verificado       Boolean
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  faenaPesca       FaenaPesca     @relation(fields: [faenaPescaId], references: [id])
-}
-
-model BolicheRed {
-  id           BigInt   @id @default(autoincrement())
-  activoId     BigInt   @unique
-  descripcion  String?
-  estadoActivoId  BigInt
-  largoContraido  Decimal?
-  largoExpandido Decimal?
-  altoM        Decimal?
-  nroFlotadores Int?
-  nroPlomos    Int?
-  urlBolicheRedPdf String?
-  cesado       Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  faenas FaenaPesca[] @relation("BolicheFaenas")
-  faenasConsumo FaenaPescaConsumo[] @relation("BolicheFaenasConsumo")
-}
-
-model FaenaPesca {
-  id          BigInt   @id @default(autoincrement())
-  temporadaId BigInt
-  bahiaId     BigInt
-  motoristaId BigInt
-  patronId    BigInt
-  descripcion String?
-  fechaSalida DateTime
-  fechaRetorno DateTime
-  puertoSalidaId BigInt
-  puertoRetornoId BigInt
-  puertoDescargaId BigInt
-  embarcacionId BigInt?
-  bolicheRedId BigInt?
-  urlInformeFaena String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  temporada       TemporadaPesca @relation("FaenaTemporadas", fields: [temporadaId], references: [id])
-  embarcacion     Embarcacion?   @relation("EmbarcacionFaenas", fields: [embarcacionId], references: [id])
-  boliche         BolicheRed?    @relation("BolicheFaenas", fields: [bolicheRedId], references: [id])
-  detallesDoc DetalleDocEmbarcacion[]
-  tripulantes     TripulanteFaena[]
-  detalleDocsTripulantes DetalleDocTripulantes[]
-  calas Cala[]
-  calasProduce CalaProduce[]
-  descargaFaena DescargaFaenaPesca?
-  accionesPrevias DetAccionesPreviasFaena[]
-  liquidacionFaena LiquidacionFaenaPesca?
-
-}
-
-model Cala {
-  id                    BigInt   @id @default(autoincrement())
-  bahiaId               BigInt
-  motoristaId           BigInt
-  patronId              BigInt
-  embarcacionId         BigInt
-  faenaPescaId          BigInt
-  temporadaPescaId     BigInt
-  fechaHoraInicio       DateTime
-  fechaHoraFin          DateTime
-  latitud               Decimal?
-  longitud              Decimal?
-  profundidadM          Decimal?
-  toneladasCapturadas   Decimal?
-  observaciones         String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  faenaPesca            FaenaPesca @relation(fields: [faenaPescaId], references: [id])
-  especiesPescadas      DetalleCalaEspecie[]
-}
-
-model DetalleCalaEspecie {
-  id                  BigInt   @id @default(autoincrement())
-  calaId              BigInt
-  especieId           BigInt      
-  toneladas           Decimal?
-  porcentajeJuveniles Decimal?
-  observaciones       String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  cala                Cala   @relation(fields: [calaId], references: [id])
-}
-
-model CalaProduce {
-  id                    BigInt   @id @default(autoincrement())
-  bahiaId               BigInt
-  motoristaId           BigInt
-  patronId              BigInt
-  embarcacionId         BigInt
-  faenaPescaId          BigInt
-  temporadaPescaId     BigInt
-  fechaHoraInicio       DateTime
-  fechaHoraFin          DateTime
-  latitud               Decimal?
-  longitud              Decimal?
-  profundidadM          Decimal?
-  toneladasCapturadas   Decimal?
-  observaciones         String?
-  urlInformeCalaProduce String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  faenaPesca            FaenaPesca @relation(fields: [faenaPescaId], references: [id])
-  especiesProcesadas    DetalleCalaEspecieProduce[]
-}
-
-model DetalleCalaEspecieProduce {
-  id                  BigInt   @id @default(autoincrement())
-  calaProduceId       BigInt
-  especieId           BigInt    
-  toneladas           Decimal?
-  porcentajeJuveniles Decimal?
-  observaciones       String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  calaProduce         CalaProduce   @relation(fields: [calaProduceId], references: [id])
-}
-
-model DetalleDocTripulantes {
-  id             BigInt   @id @default(autoincrement())
-  faenaPescaId   BigInt
-  tripulanteId   BigInt?      
-  documentoId    BigInt?      
-  numeroDocumento String?
-  fechaEmision   DateTime?
-  fechaVencimiento DateTime?
-  urlDocTripulantePdf String?
-  observaciones  String?
-  verificado     Boolean      
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  faenaPesca     FaenaPesca @relation(fields: [faenaPescaId], references: [id])
-}
-
-model TripulanteFaena {
-  id           BigInt   @id @default(autoincrement())
-  faenaPescaId BigInt
-  personalId   BigInt?       
-  cargoId      BigInt?     
-  nombres      String?      
-  apellidos    String?
-  observaciones String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  faenaPesca   FaenaPesca @relation(fields: [faenaPescaId], references: [id])
-}
-
-model Personal {
-  id              BigInt   @id @default(autoincrement())
-  empresaId       BigInt
-  nombres         String
-  apellidos       String
-  tipoDocumentoId BigInt?
-  numeroDocumento String
-  fechaNacimiento DateTime
-  sexo            Boolean
-  direccion       String?
-  ubigeoId        BigInt?
-  telefono        String?
-  correo          String?
-  fechaIngreso    DateTime
-  fechaCese       DateTime?
-  tipoContratoId  BigInt?
-  cargoId         BigInt?
-  esVendedor      Boolean  @default(false)
-  cesado          Boolean  @default(false)
-  urlFotoPersona  String?
-  areaFisicaId    BigInt?
-  sedeEmpresaId   BigInt?
-  usuario       Usuario?
-  
-  documentaciones DocumentacionPersonal[]
-  cargo       CargosPersonal?    @relation(fields: [cargoId], references: [id])
-  ubigeo      Ubigeo?            @relation(fields: [ubigeoId], references: [id])
-  tipoContrato TipoContrato?      @relation(fields: [tipoContratoId], references: [id])
-  tipoDocIdentidad TiposDocIdentidad? @relation(fields: [tipoDocumentoId], references: [id])
-
-}
-
-model TipoContrato {
-  id          BigInt   @id @default(autoincrement())
-  codigo      String   @unique
-  nombre      String               
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  personal Personal[]
-}
-
-model TiposDocIdentidad {
-  id          BigInt   @id @default(autoincrement())
-  codigo      String   @unique
-  codSunat    String   
-  nombre      String               
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  entidadesComerciales EntidadComercial[]
-  personal Personal[]
-}
-
-model CargosPersonal {
-  id          BigInt   @id @default(autoincrement())
-  descripcion String?
-  cesado      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  personal    Personal[]
-}
-
-model Usuario {
-  id                BigInt   @id @default(autoincrement())
-  username          String   @unique
-  passwordHash      String
-  esSuperUsuario    Boolean  @default(false)
-  esAdmin           Boolean  @default(false)
-  esUsuario         Boolean  @default(true)
-  cesado            Boolean
-  fechaCreacion     DateTime @default(now())
-  fechaUltimoAcceso DateTime?
-  personalId        BigInt?  @unique
-  empresaId         BigInt
-
-  personal          Personal? @relation(fields: [personalId], references: [id])
-  accesosUsuario    AccesosUsuario[]
-  refreshTokens     RefreshToken[]
-}
-
-model AccesosUsuario {
-  id             BigInt   @id @default(autoincrement())
-  usuarioId      BigInt
-  submoduloId    BigInt
-  puedeVer       Boolean  @default(true)
-  puedeCrear     Boolean  @default(false)
-  puedeEditar    Boolean  @default(false)
-  puedeEliminar  Boolean  @default(false)
-  puederAprobarDocs Boolean  @default(false)
-  puederRechazarDocs Boolean  @default(false)
-  puedeReactivarDocs Boolean  @default(false)
-  fechaOtorgado  DateTime @default(now())
-
-  usuario        Usuario          @relation(fields: [usuarioId], references: [id])
-  submodulo      SubmoduloSistema @relation(fields: [submoduloId], references: [id])
-}
-
-model ModuloSistema {
-  id           BigInt   @id @default(autoincrement())
-  nombre       String   @unique
-  descripcion  String?
-  activo       Boolean  @default(true)
-
-  submodulos   SubmoduloSistema[]
-}
-
-model SubmoduloSistema {
-  id             BigInt   @id @default(autoincrement())
-  moduloId       BigInt
-  nombre         String
-  descripcion    String?
-  activo         Boolean  @default(true)
-
-  modulo         ModuloSistema @relation(fields: [moduloId], references: [id])
-  accesosUsuario AccesosUsuario[]
-}
-
-model DocumentacionPersonal {
-  id              BigInt   @id @default(autoincrement())
-  personalId      BigInt
-  documentoPescaId BigInt
-  observaciones   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  personal        Personal        @relation(fields: [personalId], references: [id])
-}
-
-model EntregaARendir {
-  id  BigInt   @id @default(autoincrement())
-  temporadaPescaId      BigInt
-  respEntregaRendirId   BigInt
-  entregaLiquidada      Boolean  @default(false)
-  fechaLiquidacion      DateTime?
-  fechaCreacion        DateTime @default(now())
-  fechaActualizacion   DateTime @updatedAt
-  centroCostoId       BigInt
-
-
-  temporadaPesca        TemporadaPesca @relation(fields: [temporadaPescaId], references: [id])
-  movimientos           DetMovsEntregaRendir[]
-}
-
-model DetMovsEntregaRendir {
-  id                    BigInt   @id @default(autoincrement())
-  entregaARendirId      BigInt
-  responsableId         BigInt
-  fechaMovimiento       DateTime
-  tipoMovimientoId      BigInt
-  centroCostoId         BigInt
-  monto                 Decimal
-  descripcion           String?
-  creadoEn              DateTime @default(now())
-  actualizadoEn         DateTime @updatedAt
-
-  entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
-  tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
-}
-
-model TipoMovEntregaRendir {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(50) // Ej: "INGRESO", "EGRESO", "AJUSTE"
-  descripcion String?
-  esIngreso   Boolean  // true=ingreso, false=egreso, puede haber ajustes especiales
-  activo      Boolean  @default(true)
-
-  detMovsEntregaRendir DetMovsEntregaRendir[]
-  movimientosConsumo DetMovsEntRendirPescaConsumo[]
-  movimientosVentas DetMovsEntregaRendirPVentas[]
-  movimientosCompras DetMovsEntregaRendirPCompras[]
-}
-
-model CentroCosto {
-  id        BigInt   @id @default(autoincrement())
-  Codigo          String   @db.VarChar(20)
-  Nombre          String   @db.VarChar(255)
-  Descripcion     String?
-  CategoriaID     BigInt
-  ParentCentroID  String?  @db.VarChar(20)
-
-  categoria       CategoriaCCosto @relation(fields: [CategoriaID], references: [id])
-  empresasCentro EmpresaCentroCosto[]
-}
-
-model CategoriaCCosto {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(50)
-  descripcion String?
-  activo      Boolean  @default(true)
-  centros     CentroCosto[]
+  sedes SedesEmpresa[]
+  centrosCosto EmpresaCentroCosto[]
 }
 
 model EmpresaCentroCosto {
-  id                 BigInt   @id @default(autoincrement())
   EmpresaID          BigInt
   CentroCostoID      BigInt
-  ResponsableID      BigInt   
-  ProveedorExternoID BigInt?     
-  Activo             Boolean  @default(true)
+  ResponsableID      BigInt
+  ProveedorExternoID BigInt?
+  Activo             Boolean     @default(true)
+  id                 BigInt      @id @default(autoincrement())
 
   empresa      Empresa     @relation(fields: [EmpresaID], references: [id])
   centroCosto  CentroCosto @relation(fields: [CentroCostoID], references: [id])
 }
 
-model DescargaFaenaPesca {
-  id                         BigInt   @id @default(autoincrement())
-  faenaPescaId               BigInt   @unique
-  temporadaPescaId           BigInt
-  puertoDescargaId           BigInt
-  fechaHoraArriboPuerto      DateTime
-  fechaHoraLlegadaPuerto     DateTime
-  clienteId                  BigInt
-  numPlataformaDescarga      String?  @db.VarChar(20)
-  turnoPlataformaDescarga    String?  @db.VarChar(20)
-  fechaHoraInicioDescarga    DateTime
-  fechaHoraFinDescarga       DateTime
-  numWinchaPesaje            String?  @db.VarChar(20)
-  urlComprobanteWincha       String?  
-  patroId                    BigInt
-  motoristaId                BigInt
-  bahiaId                    BigInt
-  latitud                    Decimal?
-  longitud                   Decimal?
-  fechaDescarga              DateTime
-  combustibleAbastecidoGalones Decimal
-  urlValeAbastecimiento      String?  
-  urlInformeDescargaProduce  String?
-  movIngresoAlmacenId        BigInt
-  observaciones              String?
-  creadoEn                   DateTime @default(now())
-  actualizadoEn              DateTime @updatedAt
-
-  faenaPesca FaenaPesca @relation(fields: [faenaPescaId], references: [id])
-  detalles DetalleDescargaFaena[]
-
-  @@index([movIngresoAlmacenId])
-}
-
-model DetalleDescargaFaena {
-  id                  BigInt   @id @default(autoincrement())
-  descargaFaenaId     BigInt
-  especieId           BigInt     
-  toneladas           Decimal?      
-  porcentajeJuveniles Decimal?
-  observaciones       String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  descargaFaena       DescargaFaenaPesca @relation(fields: [descargaFaenaId], references: [id])
-}
-
-model AccionesPreviasFaena {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(100) // Ej: "Adelanto a personal"
-  descripcion String?
-  activo      Boolean  @default(true)
-
-  detalles    DetAccionesPreviasFaena[]
-  detallesConsumo DetAccionesPreviasFaenaConsumo[]
-}
-
-model DetAccionesPreviasFaena {
-  id                BigInt   @id @default(autoincrement())
-  faenaPescaId      BigInt
-  accionPreviaId    BigInt       // Relación al catálogo AccionesPreviasFaena
-  responsableId     BigInt?
-  verificadorId     BigInt?      // Persona que verifica la acción
-  fechaVerificacion DateTime?    // Fecha y hora de la verificación
-  cumplida          Boolean  @default(false)
-  fechaCumplida     DateTime?
-  urlConfirmaAccionPdf String?
-  observaciones     String?
-  verificado        Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  faenaPesca        FaenaPesca @relation(fields: [faenaPescaId], references: [id])
-  accionPrevia      AccionesPreviasFaena @relation(fields: [accionPreviaId], references: [id])
-}
-
-model LiquidacionFaenaPesca {
-  id   BigInt   @id @default(autoincrement())
-  faena_pesca_id         BigInt   @unique
-  temporada_pesca_id     BigInt
-  fecha_liquidacion      DateTime
-  responsable_id         BigInt   
-  verificadorId          BigInt?  
-  fechaVerificacion      DateTime?
-  urlPdfLiquidacion      String?  
-  saldo_inicial          Decimal
-  saldo_final            Decimal
-  observaciones          String?
-  fecha_creacion         DateTime @default(now())
-  fecha_actualizacion    DateTime @updatedAt
-
-  faenaPesca             FaenaPesca @relation(fields: [faena_pesca_id], references: [id])
-  movimientosLiqFaenaPesca            MovLiquidacionFaenaPesca[]
-}
-
-model MovLiquidacionFaenaPesca {
-  id                        BigInt   @id @default(autoincrement())
-  liquidacionFaenaId        BigInt
-  refDetMovsEntregaRendirId BigInt
-  tipoMovimientoId          BigInt
-  monto                     Decimal
-  centroCostoId         BigInt?
-  observaciones           String?
-  fechaMovimiento          DateTime 
-  fechaRegistro          DateTime @default(now())
-
-  liquidacionFaena          LiquidacionFaenaPesca @relation(fields: [liquidacionFaenaId], references: [id])
-}
-
 model EntidadComercial {
-  id                   BigInt   @id @default(autoincrement())
+  id                   BigInt                @id @default(autoincrement())
   empresaId            BigInt
   tipoDocumentoId      BigInt
   tipoEntidadId        BigInt
@@ -727,31 +1202,31 @@ model EntidadComercial {
   vendedorId           BigInt?
   agenciaEnvioId       BigInt?
   agrupacionEntidadId  BigInt?
-  numeroDocumento      String   @db.VarChar(20)
-  razonSocial          String   @db.VarChar(255)
-  nombreComercial      String?  @db.VarChar(255)
-  esCliente            Boolean  @default(false)
-  esProveedor          Boolean  @default(false)
-  esCorporativo        Boolean  @default(false)
-  estado               Boolean  @default(true)
-  estadoActivoSUNAT    Boolean  @default(true)
-  condicionHabidoSUNAT Boolean  @default(true)
-  esAgenteRetencion    Boolean  @default(false)
+  numeroDocumento      String                @db.VarChar(20)
+  razonSocial          String                @db.VarChar(255)
+  nombreComercial      String?               @db.VarChar(255)
+  esCliente            Boolean               @default(false)
+  esProveedor          Boolean               @default(false)
+  esCorporativo        Boolean               @default(false)
+  estado               Boolean               @default(true)
   observaciones        String?
-  codigoErpFinanciero  String?  @db.VarChar(50)
-  custodiaStock        Boolean  @default(false)
-  controlLote          Boolean  @default(false)
-  controlFechaVenc     Boolean  @default(false)
-  controlFechaProd     Boolean  @default(false)
-  controlFechaIngreso  Boolean  @default(false)
-  controlSerie         Boolean  @default(false)
-  controlEnvase        Boolean  @default(false)
-  sujetoRetencion      Boolean  @default(false)
-  sujetoPercepcion     Boolean  @default(false)
-  creadoEn             DateTime @default(now())
-  actualizadoEn        DateTime @updatedAt
+  codigoErpFinanciero  String?               @db.VarChar(50)
+  custodiaStock        Boolean               @default(false)
+  controlLote          Boolean               @default(false)
+  controlFechaVenc     Boolean               @default(false)
+  controlFechaProd     Boolean               @default(false)
+  controlFechaIngreso  Boolean               @default(false)
+  controlSerie         Boolean               @default(false)
+  controlEnvase        Boolean               @default(false)
+  sujetoRetencion      Boolean               @default(false)
+  sujetoPercepcion     Boolean               @default(false)
+  creadoEn             DateTime              @default(now())
+  actualizadoEn        DateTime
   creadoPor            BigInt?
   actualizadoPor       BigInt?
+  condicionHabidoSUNAT Boolean               @default(true)
+  estadoActivoSUNAT    Boolean               @default(true)
+  esAgenteRetencion    Boolean               @default(false)
 
   tipoDocumento        TiposDocIdentidad   @relation(fields: [tipoDocumentoId], references: [id])
   tipoEntidad          TipoEntidad         @relation(fields: [tipoEntidadId], references: [id])
@@ -770,971 +1245,121 @@ model EntidadComercial {
   preFacturasCliente PreFactura[] @relation("EntidadComercialToPreFactura")
 }
 
-model ContactoEntidad {
-  id                 BigInt   @id @default(autoincrement())
-  entidadComercialId BigInt
-  nombres            String
-  cargoId            BigInt?
-  telefono           String?
-  correoCorportivo   String?
-  correoPersonal     String?
-  compras            Boolean  @default(false)
-  ventas             Boolean  @default(false)
-  finanzas           Boolean  @default(false)
-  logistica          Boolean  @default(false)
-  representanteLegal Boolean  @default(false)
-  observaciones      String?
-  activo             Boolean  @default(true)
-
-  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
-}
-
-model TipoEntidad {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(50)
-  descripcion String?
-  esCliente   Boolean  @default(false) // Aplica para clientes
-  esProveedor Boolean  @default(false) // Aplica para proveedores
-  activo      Boolean  @default(true)
+model EntregaARendir {
+  id                   BigInt                 @id @default(autoincrement())
+  temporadaPescaId     BigInt
+  entregaLiquidada     Boolean                @default(false)
+  fechaLiquidacion     DateTime?
+  fechaCreacion        DateTime               @default(now())
+  fechaActualizacion   DateTime
+  respEntregaRendirId  BigInt
+  centroCostoId        BigInt
   
-  entidades   EntidadComercial[]
+  temporadaPesca        TemporadaPesca @relation(fields: [temporadaPescaId], references: [id])
+  movimientos           DetMovsEntregaRendir[]
 }
 
-model FormaPago {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(50)
-  descripcion String?
-  esCliente   Boolean  @default(false)
-  esProveedor Boolean  @default(false)
-  activo      Boolean  @default(true)
+model EntregaARendirPCompras {
+  id                           BigInt                         @id @default(autoincrement())
+  cotizacionComprasId          BigInt
+  respEntregaRendirId          BigInt
+  entregaLiquidada             Boolean                        @default(false)
+  fechaLiquidacion             DateTime?
+  fechaCreacion                DateTime                       @default(now())
+  fechaActualizacion           DateTime
+  centroCostoId                BigInt
 
-  entidades   EntidadComercial[]
+  cotizacionCompras       CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
+  movimientos             DetMovsEntregaRendirPCompras[]
 }
 
-model AgrupacionEntidad {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(100)
-  descripcion String?
-  esCliente   Boolean  @default(false)
-  esProveedor Boolean  @default(false)
+model EntregaARendirPVentas {
+  id                          BigInt                        @id @default(autoincrement())
+  cotizacionVentasId          BigInt
+  respEntregaRendirId         BigInt
+  entregaLiquidada            Boolean                       @default(false)
+  fechaLiquidacion            DateTime?
+  fechaCreacion               DateTime                      @default(now())
+  fechaActualizacion          DateTime
+  centroCostoId               BigInt
 
-  entidades   EntidadComercial[]
+  cotizacionVentas    CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id])
+  movimientos         DetMovsEntregaRendirPVentas[]
 }
 
-model DireccionEntidad {
-  id                 BigInt   @id @default(autoincrement())
-  entidadComercialId BigInt
-  direccion          String
-  direccionArmada    String?  // Dirección completa y formateada para impresión o visualización
-  ubigeoId           BigInt
-  fiscal             Boolean  @default(false)
-  almacenPrincipal   Boolean  @default(false)
-  referencia         String?
-  telefono           String?
-  correo             String?
-  activo             Boolean  @default(true)
+model EntregaARendirPescaConsumo {
+  id                           BigInt                         @id @default(autoincrement())
+  novedadPescaConsumoId        BigInt
+  entregaLiquidada             Boolean                        @default(false)
+  fechaLiquidacion             DateTime?
+  fechaCreacion                DateTime                       @default(now())
+  fechaActualizacion           DateTime
+  respEntregaRendirId          BigInt
+  centroCostoId                BigInt
 
-  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
-  ubigeo             Ubigeo           @relation(fields: [ubigeoId], references: [id])
+  novedadPescaConsumo   NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
+  movimientos           DetMovsEntRendirPescaConsumo[]
 }
 
-model Ubigeo {
-  id           BigInt   @id @default(autoincrement())
-  paisId       BigInt
-  departamentoId BigInt
-  provinciaId  BigInt
-  codigo       String   @unique
-  activo       Boolean  @default(true)
-  nombreDistrito String?
+model EstadoMultiFuncion {
+  id               BigInt          @id @default(autoincrement())
+  descripcion      String?
+  cesado           Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime
+  tipoProvieneDeId BigInt?
 
-  pais         Pais         @relation(fields: [paisId], references: [id])
-  departamento Departamento @relation(fields: [departamentoId], references: [id])
-  provincia    Provincia    @relation(fields: [provinciaId], references: [id])
-
-  direcciones  DireccionEntidad[]
-  personas     Personal[]
+  tipoProvieneDe    TipoProvieneDe? @relation(fields: [tipoProvieneDeId], references: [id])
 }
 
-model Pais {
-  id         BigInt   @id @default(autoincrement())
-  codSUNAT   String   @unique
-  nombre     String
-  gentilicio String?
-  activo     Boolean  @default(true)
-
-  departamentos Departamento[]
-  ubigeos       Ubigeo[]
-}
-
-model Departamento {
-  id         BigInt   @id @default(autoincrement())
-  codSUNAT   String   @unique
-  nombre     String
-  paisId     BigInt
-  pais       Pais     @relation(fields: [paisId], references: [id])
-
-  provincias Provincia[]
-  ubigeos    Ubigeo[]
-}
-
-model Provincia {
-  id              BigInt   @id @default(autoincrement())
-  codSUNAT        String   @unique
-  nombre          String
-  departamentoId  BigInt
-  departamento    Departamento @relation(fields: [departamentoId], references: [id])
-
-  ubigeos         Ubigeo[]
-}
-
-model PrecioEntidad {
-  id                 BigInt   @id @default(autoincrement())
-  entidadComercialId BigInt
-  productoId         BigInt
-  monedaId           BigInt
-  precioUnitario     Decimal
-  vigenteDesde       DateTime
-  vigenteHasta       DateTime?
-  observaciones      String?
-  activo             Boolean  @default(true)
-
-  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
-  moneda             Moneda           @relation(fields: [monedaId], references: [id])
-}
-
-model Moneda {
-  id         BigInt   @id @default(autoincrement())
-  codigoSunat String   @unique
-  nombreLargo String?
-  simbolo    String?
-  activo     Boolean  @default(true)
-
-  precios    PrecioEntidad[]
-}
-
-model VehiculoEntidad {
-  id                 BigInt   @id @default(autoincrement())
-  entidadComercialId BigInt
-  placa              String   @db.VarChar(20)
-  marca              String?
-  modelo             String?
-  color              String?
-  anio               Int?
-  tipoVehiculoId     BigInt   
-  capacidadTon       Decimal?
-  numeroSerie        String?  
-  numeroMotor        String?
-  cesado             Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  activoId           BigInt?  
-  observaciones      String?
-
-  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
-  tipoVehiculo       TipoVehiculo     @relation(fields: [tipoVehiculoId], references: [id])
-}
-
-model TipoVehiculo {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(50)
-  activo      Boolean  @default(true)
-
-  vehiculos   VehiculoEntidad[]
-}
-
-model LineaCreditoEntidad {
-  id                 BigInt   @id @default(autoincrement())
-  entidadComercialId BigInt
-  montoMaximo        Decimal
-  monedaId           BigInt   
-  diasCredito        Int
-  vigenteDesde       DateTime
-  vigenteHasta       DateTime?
-  condiciones        String?
-  observaciones      String?
-  activo             Boolean  @default(true)
-
-  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
-}
-
-
-model MovimientoAlmacen {
-  id                  BigInt   @id @default(autoincrement())
-  empresaId           BigInt
-  tipoDocumentoId     BigInt
-  conceptoMovAlmacenId BigInt
-  serieDocId          BigInt?
-  numSerieDoc         String?  @db.VarChar(40)
-  numCorreDoc         String?  @db.VarChar(40)
-  numeroDocumento     String?
-  fechaDocumento      DateTime
-  entidadComercialId  BigInt?
-  liquidacionViajeId  BigInt?
-  faenaPescaId        BigInt?
-  embarcacionId       BigInt?
-  ordenTrabajoId      BigInt?
-  dirOrigenId         BigInt?
-  dirDestinoId        BigInt?
-  numGuiaSunat        String?  @db.VarChar(40)
-  fechaGuiaSunat      DateTime?
-  transportistaId     BigInt?
-  vehiculoId          BigInt?
-  choferId            BigInt?
-  agenciaEnvioId      BigInt?
-  dirAgenciaEnvioId   BigInt?
-  personalRespAlmacen BigInt?
-  ordenCompraId       BigInt?
-  pedidoVentaId       BigInt?
-  estadoDocAlmacenId  BigInt?
-  refEmbarcacionMatricula String?  @db.VarChar(40)
-  refEmbarcacionNombre    String?  @db.VarChar(100)
-  refEmbarcacionNroPlaca  String?  @db.VarChar(40)
-  custodia           Boolean  @default(false)
-  observaciones       String?
-  creadoEn            DateTime @default(now())
-  actualizadoEn       DateTime @updatedAt
-  creadoPor           BigInt?
-  actualizadoPor      BigInt?
-
-  tipoDocumento       TipoDocumento         @relation(fields: [tipoDocumentoId], references: [id])
-  conceptoMovAlmacen  ConceptoMovAlmacen    @relation(fields: [conceptoMovAlmacenId], references: [id])
-  serieDoc            SerieDoc?             @relation(fields: [serieDocId], references: [id])
-  entidadComercial    EntidadComercial?     @relation(fields: [entidadComercialId], references: [id])
-  detalles            DetalleMovimientoAlmacen[]
-  preFacturasSalida PreFactura[] @relation("MovimientoAlmacenToPreFactura")
-}
-
-model DetalleMovimientoAlmacen {
-  id                    BigInt   @id @default(autoincrement())
-  movimientoAlmacenId   BigInt
-  productoId            BigInt
-  cantidad              Decimal
-  pesoNeto              Decimal?
-  lote                  String?   @db.VarChar(40)
-  fechaProduccion       DateTime?
-  fechaVencimiento      DateTime?
-  fechaIngreso          DateTime?
-  nroSerie              String?   @db.VarChar(40)
-  nroContenedor         String?   @db.VarChar(40)
-  ubicacionOrigenId     BigInt?
-  ubicacionDestinoId    BigInt?
-  paletaAlmacenId       BigInt?
-  estadoMercaderiaId    BigInt?
-  estadoCalidadId       BigInt?
-  entidadComercialId    BigInt?
-  custodia              Boolean   @default(false)
-  empresaId             BigInt
-  observaciones         String?
-  creadoEn              DateTime @default(now())
-  actualizadoEn         DateTime @updatedAt
-  creadoPor             BigInt?
-  actualizadoPor        BigInt?
-  detalleReqCompraId BigInt?
-
-  movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
-  producto              Producto @relation(fields: [productoId], references: [id])
-  detalleReqCompra      DetalleReqCompra? @relation(fields: [detalleReqCompraId], references: [id])
-}
-
-model TipoDocumento {
-  id          BigInt   @id @default(autoincrement())
-  codigo      String   @unique @db.VarChar(10)
-  codigoSunat String?  @db.VarChar(10)           
-  descripcion String?
-  activo      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  movimientosAlmacen MovimientoAlmacen[]
-}
-
-model ConceptoMovAlmacen {
-  id               BigInt   @id @default(autoincrement())
-  descripcion      String   @db.VarChar(100)
-  almacenOrigenId  BigInt?
-  almacenDestinoId BigInt?
-  kardexOrigen     Boolean  @default(false)
-  kardexDestino    Boolean  @default(false)
-  custodia         Boolean  @default(false)
-  tipoConceptoId   BigInt
-  tipoMovimientoId BigInt
-  tipoAlmacenId    BigInt                   
-  activo           Boolean  @default(true)
-
-  movimientos      MovimientoAlmacen[]
-  tipoConcepto     TipoConcepto  @relation(fields: [tipoConceptoId], references: [id])
-  tipoMovimiento   TipoMovimientoAlmacen @relation(fields: [tipoMovimientoId], references: [id])
-  tipoAlmacen      TipoAlmacen   @relation(fields: [tipoAlmacenId], references: [id])
-}
-
-model TipoConcepto {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(50)    
-  descripcion String?
-  activo      Boolean  @default(true)
-  conceptos   ConceptoMovAlmacen[]
-}
-
-model TipoMovimientoAlmacen {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(30)
-  descripcion String?
-  activo      Boolean  @default(true)
-  conceptos   ConceptoMovAlmacen[]
-}
-
-model TipoAlmacen {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(50)
-  descripcion String?
-  activo      Boolean  @default(true)
-  conceptos   ConceptoMovAlmacen[]
-}
-
-
-model SerieDoc {
-  id                BigInt   @id @default(autoincrement())
-  tipoDocumentoId   BigInt
-  tipoAlmacenId     BigInt
-  serie             String   @db.VarChar(20)
-  correlativo       BigInt   @default(0)
-  numCerosIzqCorre  Int      @default(0)   
-  numCerosIzqSerie  Int      @default(0)   
-  activo            Boolean  @default(true)
-
-  movimientos       MovimientoAlmacen[]
-}
-
-
-model Producto {
-  id                      BigInt   @id @default(autoincrement())
-  empresaId              BigInt
-  clienteId              BigInt
-  codigo                 String?   @unique @db.VarChar(40)
-  descripcionBase        String   @db.VarChar(120)
-  descripcionExtendida   String? @db.VarChar(120)
-  descripcionArmada      String
-  descripcionMedidaAdicional String? @db.VarChar(120)
-  familiaId              BigInt
-  subfamiliaId           BigInt
-  tipoAlmacenamientoId  BigInt
-  procedenciaId          BigInt
-  unidadMedidaId        BigInt
-  marcaId                BigInt
-  estadoInicialId       BigInt
-  tipoMaterialId        BigInt
-  colorId                BigInt
-  medidaDiametro      String? @db.VarChar(20)
-  medidaAncho      String? @db.VarChar(20)
-  medidaAlto      String? @db.VarChar(20)
-  medidaLargo      String? @db.VarChar(20)
-  medidaEspesor      String? @db.VarChar(20)
-  medidaAngulo      String? @db.VarChar(20)
-  unidadDiametroId      BigInt?
-  unidadAnchoId         BigInt?
-  unidadAltoId          BigInt?
-  unidadLargoId         BigInt?
-  unidadEspesorId       BigInt?
-  unidadAnguloId        BigInt?
-  aplicaSubfamilia        Boolean  @default(false)
-  aplicaUnidadMedida      Boolean  @default(false)
-  aplicaTipoAlmacenamiento Boolean  @default(false)
-  aplicaProcedencia       Boolean  @default(false)
-  aplicaMarca             Boolean  @default(false)
-  aplicaTipoMaterial      Boolean  @default(false)
-  aplicaColor             Boolean  @default(false)
-  exoneradoRetencion    Boolean  @default(false)
-  sujetoDetraccion      Boolean  @default(false)
-  urlFichaTecnica          String? 
-  urlFotoProducto          String?
-  exoneradoIgv           Boolean  @default(false)
-  porcentajeDetraccion   Decimal?
-  fechaCreacion          DateTime @default(now())
-  fechaActualizacion     DateTime @updatedAt
-
-  familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
-  subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
-  unidadMedida            UnidadMedida         @relation("UnidadMedidaToProducto", fields: [unidadMedidaId], references: [id])
-  tipoMaterial            TipoMaterial?        @relation(fields: [tipoMaterialId], references: [id])
-  color                   Color?               @relation(fields: [colorId], references: [id])
-  tipoAlmacenamiento      TipoAlmacenamiento   @relation(fields: [tipoAlmacenamientoId], references: [id])
-  marca                   Marca                @relation(fields: [marcaId], references: [id])
-  detallesMovimiento      DetalleMovimientoAlmacen[]
-  kardexAlmacenes   KardexAlmacen[]
-  insumosTareaOT DetInsumosTareaOT[]
-  detallesRequerimientosCompra DetalleReqCompra[]
-  detallesOrdenCompra     DetalleOrdenCompra[]
-  detallesPreFactura DetallePreFactura[]
-  detallesCotizacionCompras DetCotizacionCompras[]
-  detallesProductoFinalCotizacionCompras DetProductoFinalCotizacionCompras[]
-  detallesCotizacionVentas DetCotizacionVentas[]
-}
-
-model FamiliaProducto {
-  id            BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(120)
-  productos             Producto[]
-}
-
-model SubfamiliaProducto {
-  id         BigInt   @id @default(autoincrement())
-  familiaId  BigInt   // Solo referencia simple, sin relación Prisma
-  nombre     String   @db.VarChar(120)
-  productos  Producto[]
-}
-
-model TipoAlmacenamiento {
-  id            BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(120)
-  productos  Producto[]
-}
-
-model Marca {
-  id            BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(120)
-  productos  Producto[]
-}
-
-model UnidadMedida {
-  id    BigInt   @id @default(autoincrement())
-  nombre              String   @db.VarChar(60)
-  simbolo             String   @db.VarChar(20)
-  factorConversion   Decimal?
-  esMedidaMetrica     Boolean  @default(false)
-
-  productos           Producto[]      @relation("UnidadMedidaToProducto")
-}
-
-model TipoMaterial {
-  id        BigInt   @id @default(autoincrement())
-  codigo      String   @db.VarChar(10)  
-  nombre        String   @db.VarChar(80)
-
-  productos               Producto[]
-}
-
-model Color {
-  id                BigInt   @id @default(autoincrement())
-  nombre        String   @db.VarChar(80)
-  productos               Producto[]
-}
-
-model PuertoPesca {
-  id      BigInt   @id @default(autoincrement())
-  zona                 String   @db.VarChar(20)
-  nombre               String   @db.VarChar(100)
-  provincia            String?
-  departamento         String?
-  latitud              Decimal?
-  longitud             Decimal?
-  activo               Boolean  @default(true)
-  fecha_creacion       DateTime @default(now())
-  fecha_actualizacion  DateTime @updatedAt
-}
-
-model ParametroAprobador {
-  id                  BigInt   @id @default(autoincrement())
-  personalRespId      BigInt
-  moduloSistemaId     BigInt    
-  empresaId           BigInt  
-  embarcacionId       BigInt?   
-  sedeId              BigInt?  
-  vigenteDesde        DateTime
-  vigenteHasta        DateTime?
-  cesado              Boolean   @default(false)
-}
-
-model LiquidacionTemporadaPesca {
-  id                  BigInt   @id @default(autoincrement())
-  temporadaPescaId    BigInt   @unique
-  empresaId           BigInt
-  fechaLiquidacion    DateTime
-  responsableId       BigInt
-  verificadorId       BigInt?
-  fechaVerificacion   DateTime?
-  urlPdfLiquidacion   String?
-  saldoFinal          Decimal
-  observaciones       String?
-  fechaCreacion       DateTime @default(now())
-  fechaActualizacion  DateTime @updatedAt
-
-  temporadaPesca      TemporadaPesca @relation(fields: [temporadaPescaId], references: [id])
-  movimientos         MovLiquidacionTemporadaPesca[]
-}
-
-model MovLiquidacionTemporadaPesca {
-  id                        BigInt   @id @default(autoincrement())
-  liquidacionTemporadaId    BigInt
-  tipoMovimientoId          BigInt
-  monto                     Decimal
-  centroCostoId             BigInt?
-  fechaMovimiento           DateTime 
-  fechaRegistro             DateTime @default(now())
-
-  liquidacionTemporada      LiquidacionTemporadaPesca @relation(fields: [liquidacionTemporadaId], references: [id])
-}
-
-model KardexAlmacen {
-  id                      BigInt   @id @default(autoincrement())
-  empresaId               BigInt
-  almacenId               BigInt
-  productoId              BigInt
-  clienteId               BigInt?
-  custodia                Boolean  @default(false)
-  fechaMovimiento         DateTime
-  ingreso                 Boolean
-  tipoMovimientoId        BigInt
-  conceptoMovAlmacenId    BigInt
-  documentoId             BigInt?
-  detalleId               BigInt?
-  cantidad                Decimal
-  peso                    Decimal?
-  lote                    String?   @db.VarChar(40)
-  fechaVencimiento        DateTime?
-  fechaProduccion         DateTime?
-  fechaIngreso            DateTime?
-  numContenedor           String?   @db.VarChar(40)
-  nroSerie                String?   @db.VarChar(40)
-  paletaAlmacenId         BigInt?
-  ubicacionId             BigInt?
-  estadoId                BigInt?
-
-  // Saldos globales (por producto)
-  saldoCantidad           Decimal         // saldo total de cantidad del producto después del movimiento
-  saldoPeso               Decimal?        // saldo total de peso del producto después del movimiento
-  costoUnitarioPromedio   Decimal?        // costo promedio del producto después del movimiento (CPP/AVCO)
-  costoSaldoPromedio      Decimal?        // saldo valorizado total del producto después del movimiento (CPP/AVCO)
-
-  // Saldos detallados (por combinación de atributos)
-  saldoDetCantidad        Decimal?        // saldo de cantidad por lote/ubicación/etc. después del movimiento
-  saldoDetPeso            Decimal?        // saldo de peso por lote/ubicación/etc. después del movimiento
-
-  // Otros datos
-  costoUnitario           Decimal?        // costo unitario del movimiento (solo para ingresos)
-  observaciones           String?
-  creadoEn                DateTime @default(now())
-
-  // Relaciones explícitas
-  producto                Producto           @relation(fields: [productoId], references: [id])
-  cliente                 EntidadComercial?  @relation(fields: [clienteId], references: [id])
-
-  // Índices compuestos para rendimiento y trazabilidad
-  @@index([empresaId, clienteId, productoId, custodia])
-  @@index([empresaId, clienteId, productoId, custodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, paletaAlmacenId, ubicacionId, estadoId, numContenedor, nroSerie])
-  // Índices simples para búsquedas rápidas
-  @@index([productoId])
-  @@index([clienteId])
-}
-
-model SaldosProductoCliente {
-  id                     BigInt   @id @default(autoincrement())
-  empresaId              BigInt
-  almacenId              BigInt
-  productoId             BigInt
-  clienteId              BigInt?
-  custodia               Boolean  @default(false)
-  saldoCantidad          Decimal
-  saldoPeso              Decimal?
-  costoUnitarioPromedio  Decimal?
-  actualizadoEn          DateTime @updatedAt
-
-  @@unique([empresaId, almacenId, productoId, clienteId, custodia])
-}
-
-model SaldosDetProductoCliente {
-  id                BigInt   @id @default(autoincrement())
-  empresaId         BigInt
-  almacenId         BigInt
-  productoId        BigInt
-  clienteId         BigInt?
-  custodia          Boolean  @default(false)
-  lote              String?   @db.VarChar(40)
-  fechaVencimiento  DateTime?
-  fechaProduccion   DateTime?
-  fechaIngreso      DateTime?
-  numContenedor     String?   @db.VarChar(40)
-  nroSerie          String?   @db.VarChar(40)
-  paletaAlmacenId   BigInt?
-  ubicacionId       BigInt?
-  estadoId          BigInt?
-  saldoCantidad     Decimal
-  saldoPeso         Decimal?
-  actualizadoEn     DateTime @updatedAt
-
-  @@unique([empresaId, almacenId, productoId, clienteId, custodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, paletaAlmacenId, ubicacionId, estadoId, numContenedor, nroSerie])
-}
-
-
-model OTMantenimiento {
-  id                  BigInt   @id @default(autoincrement())
-  codigo              String   @unique @db.VarChar(30)
-  empresaId           BigInt
-  sedeId              BigInt?
-  activoId            BigInt?
-  tipoProvieneDeId    BigInt?
-  docOrigenProvieneId BigInt?
-  tipoMantenimientoId BigInt
-  motivoOriginoId     BigInt
-  prioridadAlta       Boolean   @default(false)
-  estadoId            BigInt
-  fechaCreacion       DateTime  @default(now())
-  fechaProgramada     DateTime?
-  fechaInicio         DateTime?
-  fechaFin            DateTime?
-  solicitanteId       BigInt?
-  responsableId       BigInt?
-  autorizadoPorId     BigInt?
-  descripcion         String?
-  causa               String?
-  solucion            String?
-  observaciones       String?
-  actualizadoEn       DateTime @updatedAt
-  urlOrdenTrabajoPdf String?
-  urlFotosAntesDeOTPdf String?
-  urlFotosDespuesDeOTPdf String?
-
-  // Relaciones
-  tipoMantenimiento   TipoMantenimiento   @relation(fields: [tipoMantenimientoId], references: [id])
-  motivoOrigino       MotivoOriginoOT     @relation(fields: [motivoOriginoId], references: [id])
-  permisosGestionados DetPermisoGestionadoOT[]
-  tareas DetTareasOT[]
-}
-
-model TipoMantenimiento {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(40)
-  descripcion String?  @db.VarChar(200)
-  activo      Boolean  @default(true)
-
-  ordenesTrabajo OTMantenimiento[]
-}
-
-model MotivoOriginoOT {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @db.VarChar(40)
-  descripcion String?  @db.VarChar(200)
-  activo      Boolean  @default(true)
-
-  ordenesTrabajo OTMantenimiento[]
-}
-
-model DetPermisoGestionadoOT {
-  id                BigInt   @id @default(autoincrement())
-  otMantenimientoId BigInt
-  permisoId         BigInt
-  gestionado        Boolean  @default(false)
-  fechaGestion      DateTime?
-  observaciones     String?
-
-  otMantenimiento   OTMantenimiento     @relation(fields: [otMantenimientoId], references: [id])
-}
-
-model DetTareasOT {
-  id                BigInt   @id @default(autoincrement())
-  otMantenimientoId BigInt
-  descripcion       String
-  responsableId     BigInt?
-  fechaProgramada   DateTime?
-  fechaInicio       DateTime?
-  fechaFin          DateTime?
-  realizado         Boolean  @default(false)
-  observaciones     String?
-  urlFotosAntesPdf  String?
-  adjuntoCotizacionUno Boolean @default(false)
-  urlCotizacionUnoPdf String?
-  adjuntoCotizacionDos Boolean @default(false)
-  urlCotizacionDosPdf String?
-  actualizadoEn     DateTime @updatedAt
-  validaTerminoTareaId BigInt?
-  fechaValidaTerminoTarea DateTime?
-
-  otMantenimiento   OTMantenimiento @relation(fields: [otMantenimientoId], references: [id])
-  insumos DetInsumosTareaOT[]
-}
-
-model DetInsumosTareaOT {
-  id                 BigInt   @id @default(autoincrement())
-  tareaId            BigInt
-  productoId         BigInt   // Insumo, repuesto o servicio, según el tipo en Producto
-  cantidad           Decimal?
-  costoUnitario      Decimal?
-  proveedorId BigInt?
-  observaciones      String?
-  aprobacionComprasId BigInt?
-  actualizadoEn      DateTime @updatedAt
-
-  tarea              DetTareasOT  @relation(fields: [tareaId], references: [id])
-  producto           Producto     @relation(fields: [productoId], references: [id])
-}
-
-model RequerimientoCompra {
-  id                BigInt   @id @default(autoincrement())
-  codigo            String   @unique @db.VarChar(30)
-  empresaId         BigInt
-  ordenTrabajoId    BigInt?
-  proveedorId       BigInt?
-  formaPagoId       BigInt?
-  centroCostoId     BigInt?
-  fechaCreacion     DateTime  @default(now())
-  fechaAprobacion   DateTime?
-  estadoId          BigInt
-  solicitanteId     BigInt?
-  aprobadoPorId     BigInt?
-  observaciones     String?
-  actualizadoEn     DateTime @updatedAt
-  urlReqCompraPdf String?
-
-  detalles          DetalleReqCompra[]
-  proveedor         EntidadComercial? @relation(fields: [proveedorId], references: [id])
-}
-
-model DetalleReqCompra {
-  id                     BigInt   @id @default(autoincrement())
-  requerimientoCompraId  BigInt
-  productoId             BigInt
-  cantidadSolicitada     Decimal
-  costoUnitario          Decimal?
-  centroCostoId          BigInt?
-  observaciones          String?
-  actualizadoEn          DateTime @updatedAt
-  ordenCompraDetalleId   BigInt?   // Relación al detalle de OC si fue enviado a compra
-  cantidadDesdeAlmacen   Decimal?  // Cantidad atendida desde almacén (stock propio)
-  cantidadAComprar       Decimal?  // Cantidad enviada a OC
-
-  detalleMovimientos     DetalleMovimientoAlmacen[] // Relación inversa: todos los movimientos de almacén que atendieron este requerimiento
-  requerimientoCompra    RequerimientoCompra @relation(fields: [requerimientoCompraId], references: [id])
-  producto               Producto           @relation(fields: [productoId], references: [id])
-}
-
-model OrdenCompra {
-  id                BigInt   @id @default(autoincrement())
-  codigo            String   @unique @db.VarChar(30)
-  empresaId         BigInt
-  proveedorId       BigInt
-  formaPagoId       BigInt?
-  centroCostoId     BigInt?
-  fechaEmision      DateTime  @default(now())
-  fechaEntrega      DateTime?
-  estadoId          BigInt
-  solicitanteId     BigInt?
-  aprobadoPorId     BigInt?
-  observaciones     String?
-  actualizadoEn     DateTime @updatedAt
-  urlOrdenCompraPdf String?
-  movIngresoAlmacenId BigInt?
-  aplicaRetencion     Boolean  @default(false)
-  porcentajeRetencion Decimal?
-  montoRetencion      Decimal?
-  AplicaDetraccion    Boolean  @default(false)
-  porcentajeDetraccion Decimal?
-  montoDetraccion     Decimal?
-  cuentaDetraccion    String?
-
-  detalles          DetalleOrdenCompra[]
-  proveedor         EntidadComercial   @relation(fields: [proveedorId], references: [id])
-}
-
-model DetalleOrdenCompra {
-  id                BigInt   @id @default(autoincrement())
-  ordenCompraId     BigInt
-  productoId        BigInt
-  cantidad          Decimal
-  precioUnitario    Decimal?
-  centroCostoId     BigInt?
-  observaciones     String?
-  actualizadoEn     DateTime @updatedAt
-
-  ordenCompra       OrdenCompra @relation(fields: [ordenCompraId], references: [id])
-  producto          Producto    @relation(fields: [productoId], references: [id])
-}
-
-model PreFactura {
-  id                  BigInt   @id @default(autoincrement())
-  codigo              String   @unique @db.VarChar(30)
-  empresaId           BigInt
-  clienteId           BigInt
-  dirFiscalId         BigInt
-  dirEntregaId        BigInt
-  ordenCompraCliente  String?
-  movSalidaAlmacenId  BigInt?
-  esExportacion       Boolean  @default(false)
-  paisDestinoId       BigInt?
-  puertoCargaId       BigInt?
-  puertoDescargaId    BigInt?
-  incotermId          BigInt?
-  agenteAduanaId      BigInt?
-  bancoId             BigInt?
-  centroCostoId       BigInt?
-  numeroBuque         String?
-  numeroBL            String?
-  numContenedor       String?
-  exoneradoIgv        Boolean  @default(false)
-  porcentajeIgv       Decimal?
-  fechaEmision        DateTime  @default(now())
-  fechaVencimiento    DateTime?
-  estadoId            BigInt
-  monedaId            BigInt?
-  tipoCambio          Decimal?
-  valorVentaTotal     Decimal?  
-  totalIGV            Decimal?
-  precioVentaTotal    Decimal?
-  observaciones       String?
-  urlPreFacturaPdf    String?
-  actualizadoEn       DateTime @updatedAt 
-  numIdTransfErpContable String?
-  fechaTransfErpContable DateTime?
-  personaRespTransfErpContable BigInt?
-
-  cliente EntidadComercial @relation("EntidadComercialToPreFactura", fields: [clienteId], references: [id])
-  detalles            DetallePreFactura[]
-  movSalidaAlmacen MovimientoAlmacen? @relation("MovimientoAlmacenToPreFactura", fields: [movSalidaAlmacenId], references: [id])
-  incoterm            Incoterm?          @relation(fields: [incotermId], references: [id])
-}
-
-model Banco {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String
-  codigoSwift String?      // Código SWIFT/BIC para bancos internacionales
-  codigoBcrp  String?      // Código BCRP para bancos peruanos (opcional)
-  paisId      BigInt?      // Relación opcional a tabla de países
-  activo      Boolean  @default(true)
-
-  cuentas     CuentaCorriente[]
-}
-
-model Incoterm {
-  id          BigInt   @id @default(autoincrement())
-  codigo      String   @unique @db.VarChar(10)   // Ej: 'FOB', 'CIF', 'EXW'
-  descripcion String
-  activo      Boolean  @default(true)
-
-  preFacturas PreFactura[]   // Relación inversa: todas las pre-facturas que usan este incoterm
-}
-
-model DetallePreFactura {
-  id               BigInt   @id @default(autoincrement())
-  preFacturaId     BigInt
-  productoId       BigInt
-  centroCostoId    BigInt?
-  cantidad         Decimal
-  precioUnitario   Decimal?
-  subtotal         Decimal?
-  porcentajeIgv    Decimal?        // Porcentaje IGV específico si aplica (opcional)
-  igv              Decimal?        // IGV calculado para este ítem
-  total            Decimal?        // Total por ítem (incluye IGV si aplica)
-  observaciones    String?
-  actualizadoEn    DateTime @updatedAt
-
-  preFactura       PreFactura @relation(fields: [preFacturaId], references: [id])
-  producto Producto @relation(fields: [productoId], references: [id])
-}
-
-model MovimientoCaja {
-  id                        BigInt   @id @default(autoincrement())
-  empresaOrigenId           BigInt
-  cuentaCorrienteOrigenId   BigInt
-  empresaDestinoId          BigInt
-  cuentaCorrienteDestinoId  BigInt
-  fecha                     DateTime @default(now())
-  tipoMovimientoId          BigInt
-  monto                     Decimal
-  monedaId                  BigInt
-  descripcion               String?
-  referenciaExtId           String?
-  tipoReferenciaId          BigInt?
-  usuarioId                 BigInt?
-  estadoId                  BigInt
-
-  cuentaCorrienteOrigen     CuentaCorriente @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
-  cuentaCorrienteDestino    CuentaCorriente @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
-  tipoReferencia            TipoReferenciaMovimientoCaja? @relation(fields: [tipoReferenciaId], references: [id])
-  asientosContables         AsientoContableInterfaz[]
-}
-
-model CuentaCorriente {
-  id                     BigInt   @id @default(autoincrement())
-  empresaId              BigInt
-  bancoId                BigInt   // Obligatorio, usa "S/B" para cuentas virtuales
-  numeroCuenta           String   @unique
-  tipoCuentaCorrienteId  BigInt
-  monedaId               BigInt
-  descripcion            String?
-  activa                 Boolean  @default(true)
-
-  banco                  Banco    @relation(fields: [bancoId], references: [id])
-  tipoCuentaCorriente    TipoCuentaCorriente @relation(fields: [tipoCuentaCorrienteId], references: [id])
-  movimientosOrigen      MovimientoCaja[] @relation("CuentaCorrienteOrigen")
-  movimientosDestino     MovimientoCaja[] @relation("CuentaCorrienteDestino")
-}
-
-model TipoCuentaCorriente {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @unique
-  descripcion String?
-  activo      Boolean  @default(true)
-
-  cuentas     CuentaCorriente[]
-}
-
-model TipoReferenciaMovimientoCaja {
-  id          BigInt   @id @default(autoincrement())
-  codigo      String   @unique @db.VarChar(30)
-  descripcion String?
-  activo      Boolean  @default(true)
-
-  movimientos MovimientoCaja[]
-}
-
-model AsientoContableInterfaz {
-  id                  BigInt   @id @default(autoincrement())
-  movimientoCajaId    BigInt
-  fechaContable       DateTime
-  cuentaContable      String
-  descripcion         String?
-  debe                Decimal
-  haber               Decimal
-  monedaId            BigInt
-  empresaId           BigInt
-  referenciaExtId     String?
-  tipoReferenciaId    BigInt?
-  estado              String
-  fechaEnvio          DateTime?
-
-  movimientoCaja      MovimientoCaja @relation(fields: [movimientoCajaId], references: [id])
-}
-
-model NovedadPescaConsumo {
-  id                    BigInt   @id @default(autoincrement())
-  empresaId             BigInt
-  BahiaId               BigInt
-  nombre                String
-  fechaInicio           DateTime
-  fechaFin              DateTime
-  fechaCreacion         DateTime @default(now())
-  fechaActualizacion    DateTime @updatedAt
-
-  faenas                FaenaPescaConsumo[]
-  entregasARendir       EntregaARendirPescaConsumo[]
-  liqNovedad            LiqNovedadPescaConsumo?
+model FaenaPesca {
+  id                      BigInt                    @id @default(autoincrement())
+  temporadaId             BigInt
+  descripcion             String?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime
+  bolicheRedId            BigInt?
+  embarcacionId           BigInt?
+  fechaRetorno            DateTime?
+  fechaSalida             DateTime?
+  puertoDescargaId        BigInt?
+  puertoRetornoId         BigInt?
+  puertoSalidaId          BigInt?
+  bahiaId                 BigInt?
+  motoristaId             BigInt?
+  patronId                BigInt?
+  urlInformeFaena         String?
+
+  temporada       TemporadaPesca @relation("FaenaTemporadas", fields: [temporadaId], references: [id])
+  embarcacion     Embarcacion?   @relation("EmbarcacionFaenas", fields: [embarcacionId], references: [id])
+  boliche         BolicheRed?    @relation("BolicheFaenas", fields: [bolicheRedId], references: [id])
+  detallesDoc DetalleDocEmbarcacion[]
+  tripulantes     TripulanteFaena[]
+  detalleDocsTripulantes DetalleDocTripulantes[]
+  calas Cala[]
+  calasProduce CalaProduce[]
+  descargaFaena DescargaFaenaPesca?
+  accionesPrevias DetAccionesPreviasFaena[]
+  liquidacionFaena LiquidacionFaenaPesca?
 }
 
 model FaenaPescaConsumo {
-  id                    BigInt   @id @default(autoincrement())
-  novedadPescaConsumoId BigInt
-  bahiaId               BigInt
-  motoristaId           BigInt
-  patronId              BigInt
-  descripcion           String?
-  fechaSalida           DateTime
-  fechaRetorno          DateTime
-  puertoSalidaId        BigInt
-  puertoRetornoId       BigInt
-  puertoDescargaId      BigInt
-  embarcacionId         BigInt?
-  bolicheRedId          BigInt?
-  urlInformeFaena       String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                             BigInt                           @id @default(autoincrement())
+  novedadPescaConsumoId          BigInt
+  bahiaId                        BigInt
+  motoristaId                    BigInt
+  patronId                       BigInt
+  descripcion                    String?
+  fechaSalida                    DateTime
+  fechaRetorno                   DateTime
+  puertoSalidaId                 BigInt
+  puertoRetornoId                BigInt
+  puertoDescargaId               BigInt
+  embarcacionId                  BigInt?
+  bolicheRedId                   BigInt?
+  urlInformeFaena                String?
+  createdAt                      DateTime                         @default(now())
+  updatedAt                      DateTime
 
   // Relaciones principales
   novedadPescaConsumo   NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
@@ -1752,795 +1377,676 @@ model FaenaPescaConsumo {
   liquidacionFaenaConsumo   LiquidacionFaenaConsumo?
 }
 
-model DetAccionesPreviasFaenaConsumo {
-  id                   BigInt   @id @default(autoincrement())
-  faenaPescaConsumoId  BigInt
-  accionPreviaId       BigInt       // Relación al catálogo AccionesPreviasFaena
-  responsableId        BigInt?
-  verificadorId        BigInt?      // Persona que verifica la acción
-  fechaVerificacion    DateTime?    // Fecha y hora de la verificación
-  cumplida             Boolean  @default(false)
-  fechaCumplida        DateTime?
-  urlConfirmaAccionPdf String?
-  observaciones        String?
-  verificado           Boolean  @default(false)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  faenaPescaConsumo    FaenaPescaConsumo     @relation(fields: [faenaPescaConsumoId], references: [id])
-  accionPrevia         AccionesPreviasFaena  @relation(fields: [accionPreviaId], references: [id])
+model FamiliaProducto {
+  id       BigInt     @id @default(autoincrement())
+  nombre   String     @db.VarChar(120)
+  productos             Producto[]
 }
 
-model DetDocTripulantesFaenaConsumo {
-  id                   BigInt   @id @default(autoincrement())
-  faenaPescaConsumoId  BigInt
-  tripulanteId         BigInt?
-  documentoId          BigInt?
-  numeroDocumento      String?
-  fechaEmision         DateTime?
-  fechaVencimiento     DateTime?
-  urlDocTripulantePdf  String?
-  observaciones        String?
-  verificado           Boolean
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+model FormaPago {
+  id               BigInt             @id @default(autoincrement())
+  nombre           String             @db.VarChar(50)
+  descripcion      String?
+  esCliente        Boolean            @default(false)
+  esProveedor      Boolean            @default(false)
+  activo           Boolean            @default(true)
 
-  faenaPescaConsumo    FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+  entidades   EntidadComercial[]
 }
 
-model TripulanteFaenaConsumo {
-  id                   BigInt   @id @default(autoincrement())
-  faenaPescaConsumoId  BigInt
-  personalId           BigInt?
-  cargoId              BigInt?
-  nombres              String?
-  apellidos            String?
-  observaciones        String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+model FormaTransaccion {
+  id                BigInt              @id @default(autoincrement())
+  nombre            String              @unique
+  descripcion       String?
+  activo            Boolean             @default(true)
 
-  faenaPescaConsumo    FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+  cotizaciones   CotizacionVentas[]
+  cotizacionesCompras  CotizacionCompras[]
 }
 
-model DetDocEmbarcacionPescaConsumo {
-  id                BigInt   @id @default(autoincrement())
-  faenaPescaConsumoId BigInt
-  documentoPescaId  BigInt
-  numeroDocumento   String?
-  fechaEmision      DateTime?
-  fechaVencimiento  DateTime?
-  urlDocEmbarcacio  String?
-  observaciones     String?
-  verificado        Boolean
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+model Incoterm {
+  id          BigInt       @id @default(autoincrement())
+  codigo      String       @unique @db.VarChar(10)
+  descripcion String
+  activo      Boolean      @default(true)
 
-  faenaPescaConsumo FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+  preFacturas PreFactura[]   // Relación inversa: todas las pre-facturas que usan este incoterm
 }
 
-model EntregaARendirPescaConsumo {
-  id                    BigInt   @id @default(autoincrement())
-  novedadPescaConsumoId BigInt
-  respEntregaRendirId   BigInt
-  entregaLiquidada      Boolean  @default(false)
-  fechaLiquidacion      DateTime?
-  fechaCreacion         DateTime @default(now())
-  fechaActualizacion    DateTime @updatedAt
-  centroCostoId       BigInt
+model KardexAlmacen {
+  id                    BigInt            @id @default(autoincrement())
+  empresaId             BigInt
+  almacenId             BigInt
+  productoId            BigInt
+  clienteId             BigInt?
+  custodia              Boolean           @default(false)
+  fechaMovimiento       DateTime
+  ingreso               Boolean
+  tipoMovimientoId      BigInt
+  conceptoMovAlmacenId  BigInt
+  documentoId           BigInt?
+  detalleId             BigInt?
+  cantidad              Decimal
+  peso                  Decimal?
+  lote                  String?           @db.VarChar(40)
+  fechaVencimiento      DateTime?
+  fechaProduccion       DateTime?
+  fechaIngreso          DateTime?
+  numContenedor         String?           @db.VarChar(40)
+  nroSerie              String?           @db.VarChar(40)
+  paletaAlmacenId       BigInt?
+  ubicacionId           BigInt?
+  estadoId              BigInt?
+  saldoCantidad         Decimal
+  saldoPeso             Decimal?
+  costoUnitarioPromedio Decimal?
+  costoSaldoPromedio    Decimal?
+  saldoDetCantidad      Decimal?
+  saldoDetPeso          Decimal?
+  costoUnitario         Decimal?
+  observaciones         String?
+  creadoEn              DateTime          @default(now())
+
+  producto                Producto           @relation(fields: [productoId], references: [id])
+  cliente                 EntidadComercial?  @relation(fields: [clienteId], references: [id])
+
+  // Índices compuestos para rendimiento y trazabilidad
+  @@index([empresaId, clienteId, productoId, custodia])
+  @@index([empresaId, clienteId, productoId, custodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, paletaAlmacenId, ubicacionId, estadoId, numContenedor, nroSerie])
+  // Índices simples para búsquedas rápidas
+  @@index([productoId])
+  @@index([clienteId])
+}
+
+model LineaCreditoEntidad {
+  id                 BigInt           @id @default(autoincrement())
+  entidadComercialId BigInt
+  montoMaximo        Decimal
+  monedaId           BigInt
+  diasCredito        Int
+  vigenteDesde       DateTime
+  vigenteHasta       DateTime?
+  condiciones        String?
+  observaciones      String?
+  activo             Boolean          @default(true)
+
+  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
+}
+
+model LiqNovedadPescaConsumo {
+  id                        BigInt                      @id @default(autoincrement())
+  novedadPescaConsumoId     BigInt                      @unique
+  empresaId                 BigInt
+  fechaLiquidacion          DateTime
+  responsableId             BigInt
+  verificadorId             BigInt?
+  fechaVerificacion         DateTime?
+  urlPdfLiquidacion         String?
+  saldoFinal                Decimal
+  observaciones             String?
+  fechaCreacion             DateTime                    @default(now())
+  fechaActualizacion        DateTime
 
   novedadPescaConsumo   NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
-  movimientos           DetMovsEntRendirPescaConsumo[]
-}
-
-model DetMovsEntRendirPescaConsumo {
-  id                    BigInt   @id @default(autoincrement())
-  entregaARendirPescaConsumoId BigInt
-  responsableId         BigInt
-  fechaMovimiento       DateTime
-  tipoMovimientoId      BigInt
-  centroCostoId         BigInt
-  monto                 Decimal
-  descripcion           String?
-  creadoEn              DateTime @default(now())
-  actualizadoEn         DateTime @updatedAt
-
-  entregaARendirPescaConsumo EntregaARendirPescaConsumo @relation(fields: [entregaARendirPescaConsumoId], references: [id])
-  tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
-}
-
-model CalaFaenaConsumo {
-  id                    BigInt   @id @default(autoincrement())
-  bahiaId               BigInt
-  motoristaId           BigInt
-  patronId              BigInt
-  embarcacionId         BigInt
-  faenaPescaConsumoId   BigInt
-  fechaHoraInicio       DateTime
-  fechaHoraFin          DateTime
-  latitud               Decimal?
-  longitud              Decimal?
-  profundidadM          Decimal?
-  toneladasCapturadas   Decimal?
-  observaciones         String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  faenaPescaConsumo     FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
-  especiesPescadas DetCalaPescaConsumo[]
-}
-
-model DetCalaPescaConsumo {
-  id                  BigInt   @id @default(autoincrement())
-  calaFaenaConsumoId  BigInt
-  especieId           BigInt      
-  toneladas           Decimal?
-  porcentajeJuveniles Decimal?
-  observaciones       String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  calaFaenaConsumo    CalaFaenaConsumo @relation(fields: [calaFaenaConsumoId], references: [id])
-}
-
-model CalaFaenaConsumoProduce {
-  id                      BigInt   @id @default(autoincrement())
-  bahiaId                 BigInt
-  motoristaId             BigInt
-  patronId                BigInt
-  embarcacionId           BigInt
-  faenaPescaConsumoId     BigInt
-  fechaHoraInicio         DateTime
-  fechaHoraFin            DateTime
-  latitud                 Decimal?
-  longitud                Decimal?
-  profundidadM            Decimal?
-  toneladasCapturadas     Decimal?
-  observaciones           String?
-  urlInformeCalaProduce   String?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-
-  faenaPescaConsumo       FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
-  especiesProcesadas      DetCalaFaenaConsumoProduce[]
-}
-
-model DetCalaFaenaConsumoProduce {
-  id                  BigInt   @id @default(autoincrement())
-  calaFaenaConsumoProduceId BigInt
-  especieId           BigInt    
-  toneladas           Decimal?
-  porcentajeJuveniles Decimal?
-  observaciones       String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  calaFaenaConsumoProduce CalaFaenaConsumoProduce @relation(fields: [calaFaenaConsumoProduceId], references: [id])
-}
-
-model DescargaFaenaConsumo {
-  id                           BigInt   @id @default(autoincrement())
-  faenaPescaConsumoId          BigInt   @unique
-  puertoDescargaId             BigInt
-  fechaHoraArriboPuerto        DateTime
-  fechaHoraLlegadaPuerto       DateTime
-  clienteId                    BigInt
-  numPlataformaDescarga        String?  @db.VarChar(20)
-  turnoPlataformaDescarga      String?  @db.VarChar(20)
-  fechaHoraInicioDescarga      DateTime
-  fechaHoraFinDescarga         DateTime
-  numWinchaPesaje              String?  @db.VarChar(20)
-  urlComprobanteWincha         String?  
-  patroId                      BigInt
-  motoristaId                  BigInt
-  bahiaId                      BigInt
-  latitud                      Decimal?
-  longitud                     Decimal?
-  fechaDescarga                DateTime
-  combustibleAbastecidoGalones Decimal
-  urlValeAbastecimiento        String?  
-  urlInformeDescargaProduce    String?  
-  movIngresoAlmacenId          BigInt
-  observaciones                String?
-  creadoEn                     DateTime @default(now())
-  actualizadoEn                DateTime @updatedAt
-
-  faenaPescaConsumo            FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
-  detalles                     DetDescargaFaenaConsumo[]
-
-  @@index([movIngresoAlmacenId])
-}
-
-model DetDescargaFaenaConsumo {
-  id                  BigInt   @id @default(autoincrement())
-  descargaFaenaConsumoId BigInt
-  especieId           BigInt     
-  toneladas           Decimal?      
-  porcentajeJuveniles Decimal?
-  observaciones       String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  descargaFaenaConsumo DescargaFaenaConsumo @relation(fields: [descargaFaenaConsumoId], references: [id])
+  movimientos           MovLiqNovedadPescaConsumo[]
 }
 
 model LiquidacionFaenaConsumo {
-  id                           BigInt   @id @default(autoincrement())
-  faena_pesca_consumo_id       BigInt   @unique
-  fecha_liquidacion            DateTime
-  responsable_id               BigInt   
-  verificadorId                BigInt?  
-  fechaVerificacion            DateTime?
-  urlPdfLiquidacion            String?  
-  saldo_inicial                Decimal
-  saldo_final                  Decimal
-  observaciones                String?
-  fecha_creacion               DateTime @default(now())
-  fecha_actualizacion          DateTime @updatedAt
+  id                         BigInt                       @id @default(autoincrement())
+  faena_pesca_consumo_id     BigInt                       @unique
+  fecha_liquidacion          DateTime
+  responsable_id             BigInt
+  verificadorId              BigInt?
+  fechaVerificacion          DateTime?
+  urlPdfLiquidacion          String?
+  saldo_inicial              Decimal
+  saldo_final                Decimal
+  observaciones              String?
+  fecha_creacion             DateTime                     @default(now())
+  fecha_actualizacion        DateTime
 
   faenaPescaConsumo            FaenaPescaConsumo @relation(fields: [faena_pesca_consumo_id], references: [id])
   movimientosLiqFaenaConsumo   MovLiquidacionFaenaConsumo[]
 }
 
+model LiquidacionFaenaPesca {
+  faena_pesca_id           BigInt                     @unique
+  fecha_liquidacion        DateTime
+  responsable_id           BigInt
+  verificadorId            BigInt?
+  fechaVerificacion        DateTime?
+  urlPdfLiquidacion        String?
+  saldo_inicial            Decimal
+  saldo_final              Decimal
+  observaciones            String?
+  fecha_creacion           DateTime                   @default(now())
+  fecha_actualizacion      DateTime
+  temporada_pesca_id       BigInt
+  id                       BigInt                     @id @default(autoincrement())
+
+  faenaPesca             FaenaPesca @relation(fields: [faena_pesca_id], references: [id])
+  movimientosLiqFaenaPesca            MovLiquidacionFaenaPesca[]
+}
+
+model LiquidacionProcesoComprasProd {
+  id                               BigInt                             @id @default(autoincrement())
+  cotizacionComprasId              BigInt                             @unique
+  empresaId                        BigInt
+  fechaLiquidacion                 DateTime
+  responsableId                    BigInt
+  verificadorId                    BigInt?
+  fechaVerificacion                DateTime?
+  urlPdfLiquidacion                String?
+  saldoFinal                       Decimal
+  observaciones                    String?
+  fechaCreacion                    DateTime                           @default(now())
+  fechaActualizacion               DateTime
+
+  cotizacionCompras        CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
+  movimientos              MovLiquidacionProcesoComprasProd[]
+}
+
+model LiquidacionTemporadaPesca {
+  id                           BigInt                         @id @default(autoincrement())
+  temporadaPescaId             BigInt                         @unique
+  empresaId                    BigInt
+  fechaLiquidacion             DateTime
+  responsableId                BigInt
+  verificadorId                BigInt?
+  fechaVerificacion            DateTime?
+  urlPdfLiquidacion            String?
+  saldoFinal                   Decimal
+  observaciones                String?
+  fechaCreacion                DateTime                       @default(now())
+  fechaActualizacion           DateTime
+
+  temporadaPesca      TemporadaPesca @relation(fields: [temporadaPescaId], references: [id])
+  movimientos         MovLiquidacionTemporadaPesca[]
+}
+
+model Marca {
+  id       BigInt     @id @default(autoincrement())
+  nombre   String     @db.VarChar(120)
+  productos  Producto[]
+}
+
+model ModoDespachoRecepcion {
+  id                BigInt              @id @default(autoincrement())
+  nombre            String              @unique
+  descripcion       String?
+  activo            Boolean             @default(true)
+
+  cotizaciones   CotizacionVentas[]
+  cotizacionesCompras  CotizacionCompras[]
+}
+
+model ModuloSistema {
+  id               BigInt             @id @default(autoincrement())
+  nombre           String             @unique
+  descripcion      String?
+  activo           Boolean            @default(true)
+
+  submodulos   SubmoduloSistema[]
+}
+
+model Moneda {
+  id            BigInt          @id @default(autoincrement())
+  codigoSunat   String          @unique
+  nombreLargo   String?
+  simbolo       String?
+  activo        Boolean         @default(true)
+
+  precios    PrecioEntidad[]
+}
+
+model MotivoAcceso {
+  id                BigInt              @id @default(autoincrement())
+  nombre            String              @unique
+  descripcion       String?
+  activo            Boolean             @default(true)
+
+  accesos     AccesoInstalacion[]
+}
+
+model MotivoOriginoOT {
+  id              BigInt            @id @default(autoincrement())
+  nombre          String            @db.VarChar(40)
+  descripcion     String?           @db.VarChar(200)
+  activo          Boolean           @default(true)
+
+  ordenesTrabajo OTMantenimiento[]
+}
+
+model MovLiqNovedadPescaConsumo {
+  id                       BigInt                 @id @default(autoincrement())
+  liqNovedadPescaConsumoId BigInt
+  tipoMovimientoId         BigInt
+  monto                    Decimal
+  centroCostoId            BigInt?
+  fechaMovimiento          DateTime
+  fechaRegistro            DateTime               @default(now())
+
+  liqNovedadPescaConsumo    LiqNovedadPescaConsumo @relation(fields: [liqNovedadPescaConsumoId], references: [id])
+}
+
 model MovLiquidacionFaenaConsumo {
-  id                        BigInt   @id @default(autoincrement())
+  id                        BigInt                  @id @default(autoincrement())
   liquidacionFaenaConsumoId BigInt
   refDetMovsEntregaRendirId BigInt
   tipoMovimientoId          BigInt
   monto                     Decimal
   centroCostoId             BigInt?
   observaciones             String?
-  fechaMovimiento           DateTime 
-  fechaRegistro             DateTime @default(now())
+  fechaMovimiento           DateTime
+  fechaRegistro             DateTime                @default(now())
 
   liquidacionFaenaConsumo   LiquidacionFaenaConsumo @relation(fields: [liquidacionFaenaConsumoId], references: [id])
 }
 
-model LiqNovedadPescaConsumo {
-  id                    BigInt   @id @default(autoincrement())
-  novedadPescaConsumoId BigInt   @unique
-  empresaId             BigInt
-  fechaLiquidacion      DateTime
-  responsableId         BigInt
-  verificadorId         BigInt?
-  fechaVerificacion     DateTime?
-  urlPdfLiquidacion     String?
-  saldoFinal            Decimal
-  observaciones         String?
-  fechaCreacion         DateTime @default(now())
-  fechaActualizacion    DateTime @updatedAt
-
-  novedadPescaConsumo   NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
-  movimientos           MovLiqNovedadPescaConsumo[]
-}
-
-model MovLiqNovedadPescaConsumo {
-  id                        BigInt   @id @default(autoincrement())
-  liqNovedadPescaConsumoId  BigInt
+model MovLiquidacionFaenaPesca {
   tipoMovimientoId          BigInt
   monto                     Decimal
+  observaciones             String?
+  id                        BigInt                @id @default(autoincrement())
+  liquidacionFaenaId        BigInt
+  refDetMovsEntregaRendirId BigInt
   centroCostoId             BigInt?
-  fechaMovimiento           DateTime 
-  fechaRegistro             DateTime @default(now())
+  fechaRegistro             DateTime              @default(now())
+  fechaMovimiento           DateTime
 
-  liqNovedadPescaConsumo    LiqNovedadPescaConsumo @relation(fields: [liqNovedadPescaConsumoId], references: [id])
-}
-
-model CotizacionVentas {
-  id                        BigInt   @id @default(autoincrement())
-  empresaId                 BigInt
-  fechaRegistro             DateTime @default(now())
-  tipoProductoId            BigInt
-  tipoEstadoProductoId      BigInt
-  destinoProductoId         BigInt
-  formaTransaccionId        BigInt
-  modoDespachoRecepcionId   BigInt
-
-  respVentasId              BigInt
-  fechaEntrega              DateTime
-  autorizaVentaId           BigInt
-  tipoCambio                Decimal
-  contactoClienteId         BigInt
-  clienteId                 BigInt
-  dirFiscalId               BigInt
-  dirEntregaId              BigInt
-  bancoId                   BigInt
-  formaPagoId               BigInt
-  respEmbarqueId            BigInt
-  respProduccionId          BigInt
-  respAlmacenId             BigInt
-  incotermsId               BigInt
-  idPaisDestino             BigInt
-  estadoCotizacionId        BigInt
-  centroCostoId             BigInt
-
-  pesoMaximoContenedor      Decimal?
-  fechaZarpe                DateTime?
-  fechaArribo               DateTime?
-  agenteAduanasId           BigInt?
-  operadorLogisticoId       BigInt?
-
-  reqCompraId       BigInt?
-  usuarioGeneroReqCompraId    BigInt?
-  fechaUsuarioGeneroReqCompraId  DateTime?
-
-  prefacturaVentaId         BigInt?
-  usuarioGeneroPreFactVentaId   BigInt?
-  fechaUsuarioGeneroPreFactVenta DateTime?
-
-  supervisorVentaCampoId    BigInt?
-  puertoCargaId       BigInt?
-  puertoDescargaId      BigInt?
-  montoAdelantadoCliente Decimal?
-  monedaClienteId BigInt?
-
-  observaciones             String?
-  creadoEn                  DateTime @default(now())
-  actualizadoEn             DateTime @updatedAt
-
-  // Relaciones
-  tipoProducto              TipoProducto   @relation(fields: [tipoProductoId], references: [id])
-  tipoEstadoProducto        TipoEstadoProducto      @relation(fields: [tipoEstadoProductoId], references: [id])
-  destinoProducto           DestinoProducto   @relation(fields: [destinoProductoId], references: [id])
-  formaTransaccion          FormaTransaccion     @relation(fields: [formaTransaccionId], references: [id])
-  modoDespachoRecepcion     ModoDespachoRecepcion   @relation(fields: [modoDespachoRecepcionId], references: [id])
-
-  detalles                  DetCotizacionVentas[]
-  detDocsReqCotizaVentas detDocsReqCotizaVentas[]
-  entregasARendirPVentas    EntregaARendirPVentas[]
-
-}
-
-model DetCotizacionVentas {
-  id                  BigInt   @id @default(autoincrement())
-  empresaId           BigInt
-  cotizacionVentasId  BigInt
-  productoId          BigInt
-  clienteId           BigInt
-  cantidad            Decimal
-  precioUnitario      Decimal
-  monedaId            BigInt
-  movSalidaAlmacenId  BigInt
-  prefacturaVentaId   BigInt?
-  observaciones       String?
-  creadoEn            DateTime @default(now())
-  actualizadoEn       DateTime @updatedAt
-  centroCostoId       BigInt
-
-  cotizacionVentas    CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id])
-  producto            Producto         @relation(fields: [productoId], references: [id])
-}
-
-model TipoProducto {
-  id             BigInt   @id @default(autoincrement())
-  nombre         String   @unique
-  descripcion    String?
-  activo         Boolean  @default(true)
-  paraCompras     Boolean  @default(false)
-  paraVentas      Boolean  @default(false)
-
-  cotizaciones   CotizacionVentas[]
-  cotizacionesCompras  CotizacionCompras[]
-}
-
-model TipoEstadoProducto {
-  id             BigInt   @id @default(autoincrement())
-  nombre         String   @unique
-  descripcion    String?
-  activo         Boolean  @default(true)
-  paraCompras     Boolean  @default(false)
-  paraVentas      Boolean  @default(false)
-
-  cotizaciones   CotizacionVentas[]
-  cotizacionesCompras  CotizacionCompras[]
-}
-
-model DestinoProducto {
-  id             BigInt   @id @default(autoincrement())
-  nombre         String   @unique
-  descripcion    String?
-  activo         Boolean  @default(true)
-  paraCompras     Boolean  @default(false)
-  paraVentas      Boolean  @default(false)
-
-  cotizaciones   CotizacionVentas[]
-  cotizacionesCompras  CotizacionCompras[]
-}
-
-model FormaTransaccion {
-  id             BigInt   @id @default(autoincrement())
-  nombre         String   @unique
-  descripcion    String?
-  activo         Boolean  @default(true)
-
-  cotizaciones   CotizacionVentas[]
-  cotizacionesCompras  CotizacionCompras[]
-}
-
-model ModoDespachoRecepcion {
-  id             BigInt   @id @default(autoincrement())
-  nombre         String   @unique
-  descripcion    String?
-  activo         Boolean  @default(true)
-
-  cotizaciones   CotizacionVentas[]
-  cotizacionesCompras  CotizacionCompras[]
-}
-
-model DocRequeridaComprasVentas {
-  id             BigInt   @id @default(autoincrement())
-  nombre         String   @unique
-  descripcion    String?
-  obligatorio    Boolean  @default(true)
-  activo         Boolean  @default(true)
-
-  tipoProductoId            BigInt
-  tipoEstadoProductoId      BigInt
-  destinoProductoId         BigInt
-  formaTransaccionId        BigInt
-  paraCompras               Boolean  @default(false)
-  paraVentas                Boolean  @default(false)
-
-  detallesDocCotizacion detDocsReqCotizaVentas[]
-  detallesDocCotizacionCompras DetDocsReqCotizaCompras[]
-}
-
-model detDocsReqCotizaVentas {
-  id                   BigInt   @id @default(autoincrement())
-  cotizacionVentasId   BigInt
-  docRequeridaVentasId BigInt
-  numeroDocumento      String?
-  fechaEmision         DateTime?
-  fechaVencimiento     DateTime?
-  urlDocumento         String?
-  observaciones        String?
-  verificado           Boolean
-  creadoEn             DateTime @default(now())
-  actualizadoEn        DateTime @updatedAt
-
-  cotizacionVentas     CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id])
-  docRequeridaVentas      DocRequeridaComprasVentas @relation(fields: [docRequeridaVentasId], references: [id])
-}
-
-model EntregaARendirPVentas {
-  id                  BigInt   @id @default(autoincrement())
-  cotizacionVentasId  BigInt
-  respEntregaRendirId BigInt
-  entregaLiquidada    Boolean  @default(false)
-  fechaLiquidacion    DateTime?
-  fechaCreacion       DateTime @default(now())
-  fechaActualizacion  DateTime @updatedAt
-  centroCostoId       BigInt
-
-
-  cotizacionVentas    CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id])
-  movimientos         DetMovsEntregaRendirPVentas[]
-}
-
-model DetMovsEntregaRendirPVentas {
-  id                       BigInt   @id @default(autoincrement())
-  entregaARendirPVentasId  BigInt
-  responsableId            BigInt
-  fechaMovimiento          DateTime
-  tipoMovimientoId         BigInt
-  centroCostoId            BigInt
-  monto                    Decimal
-  descripcion              String?
-  creadoEn                 DateTime @default(now())
-  actualizadoEn            DateTime @updatedAt
-
-  entregaARendirPVentas    EntregaARendirPVentas @relation(fields: [entregaARendirPVentasId], references: [id])
-  tipoMovimiento           TipoMovEntregaRendir  @relation(fields: [tipoMovimientoId], references: [id])
-}
-
-model AccesoInstalacion {
-  id                         BigInt   @id @default(autoincrement())
-  sedeId                     BigInt
-  areaDestinoVisitaId        BigInt?
-  empresaId                  BigInt?
-  tipoAccesoId               BigInt
-  tipoPersonaId              BigInt?
-  motivoId                   BigInt?
-  tipoEquipoId               BigInt?      // Nuevo campo para el tipo de equipo/maquinaria
-  fechaHora                  DateTime
-  fechaHoraSalidaDefinitiva  DateTime?
-  accesoSellado              Boolean @default(false)
-
-
-  // Datos de la persona o entidad que ingresa/retira
-  nombrePersona              String?
-  tipoDocIdentidadId         BigInt?
-  numeroDocumento            String?
-
-  // Datos de vehículo y equipo/maquinaria de clientes
-  vehiculoNroPlaca           String?
-  vehiculoMarca              String?
-  vehiculoModelo             String?
-  vehiculoColor              String?
-  equipoMarca                String?
-  equipoSerie                String?
-
-  // Persona destino de la visita
-  personaFirmaDestinoVisitaId   BigInt?
-
-  observaciones                String?
-  incidenteResaltante          Boolean  @default(false)
-  descripcionIncidente         String?
-  imprimeTicketIng             Boolean  @default(false)
-  urlImpresionTicket           String?
-  urlDocumentoVisitante        String?
-  createdAt                    DateTime @default(now())
-
-  tipoAcceso         TipoAccesoInstalacion @relation(fields: [tipoAccesoId], references: [id])
-  tipoPersona        TipoPersona?          @relation(fields: [tipoPersonaId], references: [id])
-  motivoAcceso       MotivoAcceso?         @relation(fields: [motivoId], references: [id])
-  detalles   AccesoInstalacionDetalle[]
-  tipoEquipo        TipoEquipo?          @relation(fields: [tipoEquipoId], references: [id])
-}
-
-model TipoEquipo {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @unique
-  descripcion String?
-  activo      Boolean  @default(true)
-
-  accesos     AccesoInstalacion[]
-}
-
-model AccesoInstalacionDetalle {
-  id                   BigInt   @id @default(autoincrement())
-  accesoInstalacionId  BigInt
-  fechaHora            DateTime
-  tipoMovimientoId     BigInt     // Entrada o Salida (relacionado a un catálogo)
-  areaDestinoVisitaId  BigInt?    // Área física donde ocurre el movimiento
-  observaciones        String?
-  createdAt            DateTime @default(now())
-
-  accesoInstalacion    AccesoInstalacion @relation(fields: [accesoInstalacionId], references: [id])
-  tipoMovimiento       TipoMovimientoAcceso @relation(fields: [tipoMovimientoId], references: [id])
-}
-
-model TipoMovimientoAcceso {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @unique  // Entrada, Salida
-  descripcion String?
-  activo      Boolean  @default(true)
-
-  detalles    AccesoInstalacionDetalle[]
-}
-
-model TipoAccesoInstalacion {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @unique   // Ej: Entrada, Salida
-  descripcion String?
-  activo      Boolean  @default(true)
-
-  accesos     AccesoInstalacion[]
-}
-
-model TipoPersona {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @unique   // Ej: Empleado, Visitante, Cliente, Proveedor, Fiscalizador, etc.
-  descripcion String?
-  imprimeTicketIng Boolean @default(true)
-  activo      Boolean  @default(true)
-
-  accesos     AccesoInstalacion[]
-}
-
-model MotivoAcceso {
-  id          BigInt   @id @default(autoincrement())
-  nombre      String   @unique   // Ej: Visita, Inspección, Entrega, Retiro, Mantenimiento, etc.
-  descripcion String?
-  activo      Boolean  @default(true)
-
-  accesos     AccesoInstalacion[]
-}
-
-model CotizacionCompras {
-  id                        BigInt   @id @default(autoincrement())
-  empresaId                 BigInt
-  fechaRegistro             DateTime @default(now())
-  tipoProductoId            BigInt
-  tipoEstadoProductoId      BigInt
-  destinoProductoId         BigInt
-  formaTransaccionId        BigInt
-  modoDespachoRecepcionId   BigInt
-  respComprasId             BigInt
-  respProduccionId          BigInt
-  fechaEntrega              DateTime
-  autorizaCompraId          BigInt
-  tipoCambio                Decimal
-  contactoProveedorId       BigInt
-  direccionProveedorId      BigInt
-  proveedorMateriaPrimaId   BigInt
-  bancoId                   BigInt
-  formaPagoId               BigInt
-  respAlmacenId             BigInt
-  estadoCotizacionId        BigInt
-  centroCostoId             BigInt
-  reqCompraId               BigInt?
-  usuarioGeneroReqCompraId  BigInt?
-  fechaUsuarioGeneroReqCompraId DateTime?
-  ordenCompraId             BigInt?
-  usuarioGeneroOrdenCompraId   BigInt?
-  fechaUsuarioGeneroOrdenCompra DateTime?
-  clienteCompraMateriaPrimaId BigInt?
-  ProveedorPlantaProcesoId  BigInt?
-  conceptoMovSalidaProcesarId BigInt?
-  respProduccionPlantaProcesoId BigInt?
-  respProduccionClienteMateriaPrimaId BigInt?
-  respCalidadPlantaProcesoId BigInt?
-  respCalidadClienteMateriaPrimaId BigInt?
-  supervisorCompraCampoId   BigInt?
-  movIngresoProdTerminadoId BigInt?
-  usuarioGeneroMovIngresoProdTerminadoId BigInt?
-  fechaUsuarioGeneroMovIngresoProdTerminado DateTime?
-  conceptoMovIngresoProdTerminadoId BigInt?
-  observaciones             String?
-  creadoEn                  DateTime @default(now())
-  actualizadoEn             DateTime @updatedAt
-
-  tipoProducto              TipoProducto   @relation(fields: [tipoProductoId], references: [id])
-  tipoEstadoProducto        TipoEstadoProducto      @relation(fields: [tipoEstadoProductoId], references: [id])
-  destinoProducto           DestinoProducto   @relation(fields: [destinoProductoId], references: [id])
-  formaTransaccion          FormaTransaccion     @relation(fields: [formaTransaccionId], references: [id])
-  modoDespachoRecepcion     ModoDespachoRecepcion   @relation(fields: [modoDespachoRecepcionId], references: [id])
-  detalles                  DetCotizacionCompras[]
-  detDocsReqCotizaCompras   DetDocsReqCotizaCompras[]
-  entregasARendirPCompras   EntregaARendirPCompras[]
-  detallesProductoFinal     DetProductoFinalCotizacionCompras[]
-  gastosComprasProd         DetGastosComprasProd[]
-  liquidacionProcesoComprasProd LiquidacionProcesoComprasProd?
-}
-
-model DetGastosComprasProd {
-  id                             BigInt   @id @default(autoincrement())
-  cotizacionComprasId            BigInt
-  entregaARendirPComprasId       BigInt
-  detMovEntregaRendirPComprasId  BigInt
-  costoProduccionId              BigInt
-  monto                          Decimal
-  fechaRegistro                  DateTime @default(now())
-  creadoEn                       DateTime @default(now())
-  actualizadoEn                  DateTime @updatedAt
-
-  cotizacionCompras              CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
-}
-
-model DetCotizacionCompras {
-  id                    BigInt   @id @default(autoincrement())
-  empresaId             BigInt
-  cotizacionComprasId   BigInt
-  productoId            BigInt
-  proveedorId           BigInt
-  cantidad              Decimal
-  precioUnitario        Decimal
-  monedaId              BigInt
-  movIngresoAlmacenId   BigInt
-  ordenCompraId         BigInt?
-  observaciones         String?
-  creadoEn              DateTime @default(now())
-  actualizadoEn         DateTime @updatedAt
-  centroCostoId         BigInt
-
-  cotizacionCompras     CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
-  producto Producto @relation(fields: [productoId], references: [id])
-}
-
-model DetProductoFinalCotizacionCompras {
-  id                      BigInt   @id @default(autoincrement())
-  cotizacionComprasId     BigInt
-  productoFinalId         BigInt
-  cantidad                Decimal
-  peso                    Decimal
-  costoUnitMateriaPrima   Decimal
-  costoUnitProceso        Decimal
-  costoUnitario           Decimal
-  creadoEn                DateTime @default(now())
-  actualizadoEn           DateTime @updatedAt
-
-  cotizacionCompras       CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
-  productoFinal           Producto          @relation(fields: [productoFinalId], references: [id])
-}
-
-model DetDocsReqCotizaCompras {
-  id                        BigInt   @id @default(autoincrement())
-  cotizacionComprasId       BigInt
-  docRequeridaComprasId     BigInt
-  numeroDocumento           String?
-  fechaEmision              DateTime?
-  fechaVencimiento          DateTime?
-  urlDocumento              String?
-  observaciones             String?
-  verificado                Boolean
-  creadoEn                  DateTime @default(now())
-  actualizadoEn             DateTime @updatedAt
-
-  cotizacionCompras         CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
-  docRequeridaCompras       DocRequeridaComprasVentas @relation(fields: [docRequeridaComprasId], references: [id])
-}
-
-model EntregaARendirPCompras {
-  id                      BigInt   @id @default(autoincrement())
-  cotizacionComprasId     BigInt
-  respEntregaRendirId     BigInt
-  entregaLiquidada        Boolean  @default(false)
-  fechaLiquidacion        DateTime?
-  fechaCreacion           DateTime @default(now())
-  fechaActualizacion      DateTime @updatedAt
-  centroCostoId           BigInt
-
-  cotizacionCompras       CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
-  movimientos             DetMovsEntregaRendirPCompras[]
-}
-
-model DetMovsEntregaRendirPCompras {
-  id                          BigInt   @id @default(autoincrement())
-  entregaARendirPComprasId    BigInt
-  responsableId               BigInt
-  fechaMovimiento             DateTime
-  tipoMovimientoId            BigInt
-  centroCostoId               BigInt
-  monto                       Decimal
-  descripcion                 String?
-  creadoEn                    DateTime @default(now())
-  actualizadoEn               DateTime @updatedAt
-
-  entregaARendirPCompras      EntregaARendirPCompras @relation(fields: [entregaARendirPComprasId], references: [id])
-  tipoMovimiento              TipoMovEntregaRendir   @relation(fields: [tipoMovimientoId], references: [id])
-}
-
-model LiquidacionProcesoComprasProd {
-  id                       BigInt   @id @default(autoincrement())
-  cotizacionComprasId      BigInt   @unique
-  empresaId                BigInt
-  fechaLiquidacion         DateTime
-  responsableId            BigInt
-  verificadorId            BigInt?
-  fechaVerificacion        DateTime?
-  urlPdfLiquidacion        String?
-  saldoFinal               Decimal
-  observaciones            String?
-  fechaCreacion            DateTime @default(now())
-  fechaActualizacion       DateTime @updatedAt
-
-  cotizacionCompras        CotizacionCompras @relation(fields: [cotizacionComprasId], references: [id])
-  movimientos              MovLiquidacionProcesoComprasProd[]
+  liquidacionFaena          LiquidacionFaenaPesca @relation(fields: [liquidacionFaenaId], references: [id])
 }
 
 model MovLiquidacionProcesoComprasProd {
-  id                              BigInt   @id @default(autoincrement())
+  id                              BigInt                        @id @default(autoincrement())
   liquidacionProcesoComprasProdId BigInt
   tipoMovimientoId                BigInt
   monto                           Decimal
   centroCostoId                   BigInt?
   fechaMovimiento                 DateTime
-  fechaRegistro                   DateTime @default(now())
+  fechaRegistro                   DateTime                      @default(now())
 
   liquidacionProcesoComprasProd   LiquidacionProcesoComprasProd @relation(fields: [liquidacionProcesoComprasProdId], references: [id])
 }
 
-model RefreshToken {
-  id          BigInt   @id @default(autoincrement())
-  token       String   @unique
-  usuarioId   BigInt
-  expiracion  DateTime
-  creadoEn    DateTime @default(now())
-  revocado    Boolean  @default(false)
+model MovLiquidacionTemporadaPesca {
+  id                        BigInt                    @id @default(autoincrement())
+  liquidacionTemporadaId    BigInt
+  tipoMovimientoId          BigInt
+  monto                     Decimal
+  centroCostoId             BigInt?
+  fechaMovimiento           DateTime
+  fechaRegistro             DateTime                  @default(now())
 
-  usuario     Usuario  @relation(fields: [usuarioId], references: [id])
+  liquidacionTemporada      LiquidacionTemporadaPesca @relation(fields: [liquidacionTemporadaId], references: [id])
 }
 
-/// Modelo centralizado para almacenar archivos adjuntos PDF de cualquier submódulo del ERP Megui.
-/// Permite asociar cada archivo a un proceso origen (empresa, pesca, proveedor, etc.) mediante subModuloId.
-model ArchivoAdjunto {
-  id             BigInt   @id @default(autoincrement()) // Identificador único del archivo adjunto
-  nombreArchivo  String   // Nombre físico del archivo almacenado (ej: permiso-2025-1623456789.pdf)
-  rutaRelativa   String   // Ruta relativa de almacenamiento (ej: /uploads/adjuntos/empresa-23/permiso-2025-1623456789.pdf)
-  fechaSubida    DateTime @default(now()) // Fecha y hora de subida del archivo
-  empresaId      BigInt   // Identificador de la empresa a la que pertenece el archivo adjunto
-  subModuloId    BigInt   // Identificador del submódulo o proceso origen (ej: id de pesca, id de empresa, id de proveedor, etc.)
-  usuarioSubioId BigInt?  // Usuario que subió el archivo (opcional)
+model MovimientoAlmacen {
+  id                       BigInt                     @id @default(autoincrement())
+  empresaId                BigInt
+  tipoDocumentoId          BigInt
+  conceptoMovAlmacenId     BigInt
+  serieDocId               BigInt?
+  numSerieDoc              String?                    @db.VarChar(40)
+  numCorreDoc              String?                    @db.VarChar(40)
+  numeroDocumento          String?
+  fechaDocumento           DateTime
+  entidadComercialId       BigInt?
+  liquidacionViajeId       BigInt?
+  faenaPescaId             BigInt?
+  embarcacionId            BigInt?
+  ordenTrabajoId           BigInt?
+  dirOrigenId              BigInt?
+  dirDestinoId             BigInt?
+  numGuiaSunat             String?                    @db.VarChar(40)
+  fechaGuiaSunat           DateTime?
+  transportistaId          BigInt?
+  vehiculoId               BigInt?
+  choferId                 BigInt?
+  agenciaEnvioId           BigInt?
+  dirAgenciaEnvioId        BigInt?
+  personalRespAlmacen      BigInt?
+  ordenCompraId            BigInt?
+  pedidoVentaId            BigInt?
+  estadoDocAlmacenId       BigInt?
+  refEmbarcacionMatricula  String?                    @db.VarChar(40)
+  refEmbarcacionNombre     String?                    @db.VarChar(100)
+  refEmbarcacionNroPlaca   String?                    @db.VarChar(40)
+  custodia                 Boolean                    @default(false)
+  observaciones            String?
+  creadoEn                 DateTime                   @default(now())
+  actualizadoEn            DateTime
+  creadoPor                BigInt?
+  actualizadoPor           BigInt?
+
+  tipoDocumento       TipoDocumento         @relation(fields: [tipoDocumentoId], references: [id])
+  conceptoMovAlmacen  ConceptoMovAlmacen    @relation(fields: [conceptoMovAlmacenId], references: [id])
+  serieDoc            SerieDoc?             @relation(fields: [serieDocId], references: [id])
+  entidadComercial    EntidadComercial?     @relation(fields: [entidadComercialId], references: [id])
+  detalles            DetalleMovimientoAlmacen[]
+  preFacturasSalida PreFactura[] @relation("MovimientoAlmacenToPreFactura")
+}
+
+model MovimientoCaja {
+  id                                                                       BigInt                        @id @default(autoincrement())
+  empresaOrigenId                                                          BigInt
+  empresaDestinoId                                                         BigInt
+  tipoMovimientoId                                                         BigInt
+  monto                                                                    Decimal
+  monedaId                                                                 BigInt
+  descripcion                                                              String?
+  referenciaExtId                                                          String?
+  tipoReferenciaId                                                         BigInt?
+  usuarioId                                                                BigInt?
+  estadoId                                                                 BigInt
+  cuentaCorrienteDestinoId                                                 BigInt
+  cuentaCorrienteOrigenId                                                  BigInt
+  fecha                                                                    DateTime                      @default(now())
+
+  cuentaCorrienteOrigen     CuentaCorriente @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
+  cuentaCorrienteDestino    CuentaCorriente @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
+  tipoReferencia            TipoReferenciaMovimientoCaja? @relation(fields: [tipoReferenciaId], references: [id])
+  asientosContables         AsientoContableInterfaz[]
+}
+
+model NovedadPescaConsumo {
+  id                         BigInt                       @id @default(autoincrement())
+  empresaId                  BigInt
+  BahiaId                    BigInt
+  nombre                     String
+  fechaInicio                DateTime
+  fechaFin                   DateTime
+  fechaCreacion              DateTime                     @default(now())
+  fechaActualizacion         DateTime
+
+  faenas                FaenaPescaConsumo[]
+  entregasARendir       EntregaARendirPescaConsumo[]
+  liqNovedad            LiqNovedadPescaConsumo?
+}
+
+model OTMantenimiento {
+  id                     BigInt                   @id @default(autoincrement())
+  codigo                 String                   @unique @db.VarChar(30)
+  empresaId              BigInt
+  sedeId                 BigInt?
+  activoId               BigInt?
+  tipoMantenimientoId    BigInt
+  motivoOriginoId        BigInt
+  prioridadAlta          Boolean                  @default(false)
+  estadoId               BigInt
+  fechaCreacion          DateTime                 @default(now())
+  fechaProgramada        DateTime?
+  fechaInicio            DateTime?
+  fechaFin               DateTime?
+  solicitanteId          BigInt?
+  responsableId          BigInt?
+  autorizadoPorId        BigInt?
+  descripcion            String?
+  causa                  String?
+  solucion               String?
+  observaciones          String?
+  actualizadoEn          DateTime
+  urlFotosAntesDeOTPdf   String?
+  urlFotosDespuesDeOTPdf String?
+  urlOrdenTrabajoPdf     String?
+  docOrigenProvieneId    BigInt?
+  tipoProvieneDeId       BigInt?
+
+  // Relaciones
+  tipoMantenimiento   TipoMantenimiento   @relation(fields: [tipoMantenimientoId], references: [id])
+  motivoOrigino       MotivoOriginoOT     @relation(fields: [motivoOriginoId], references: [id])
+  permisosGestionados DetPermisoGestionadoOT[]
+  tareas DetTareasOT[]
+
+}
+
+model OrdenCompra {
+  id                   BigInt               @id @default(autoincrement())
+  codigo               String               @unique @db.VarChar(30)
+  empresaId            BigInt
+  proveedorId          BigInt
+  formaPagoId          BigInt?
+  centroCostoId        BigInt?
+  fechaEmision         DateTime             @default(now())
+  fechaEntrega         DateTime?
+  estadoId             BigInt
+  solicitanteId        BigInt?
+  aprobadoPorId        BigInt?
+  observaciones        String?
+  actualizadoEn        DateTime
+  movIngresoAlmacenId  BigInt?
+  urlOrdenCompraPdf    String?
+  AplicaDetraccion     Boolean              @default(false)
+  aplicaRetencion      Boolean              @default(false)
+  cuentaDetraccion     String?
+  montoDetraccion      Decimal?
+  montoRetencion       Decimal?
+  porcentajeDetraccion Decimal?
+  porcentajeRetencion  Decimal?
+
+  detalles          DetalleOrdenCompra[]
+  proveedor         EntidadComercial   @relation(fields: [proveedorId], references: [id])
+}
+
+model Pais {
+  id           BigInt         @id @default(autoincrement())
+  codSUNAT     String         @unique
+  nombre       String
+  activo       Boolean        @default(true)
+  gentilicio   String?
+
+  departamentos Departamento[]
+  ubigeos       Ubigeo[]
+}
+
+model ParametroAprobador {
+  id              BigInt    @id @default(autoincrement())
+  personalRespId  BigInt
+  moduloSistemaId BigInt
+  empresaId       BigInt
+  embarcacionId   BigInt?
+  sedeId          BigInt?
+  vigenteDesde    DateTime
+  vigenteHasta    DateTime?
+  cesado          Boolean   @default(false)
+}
+
+model PermisoAutorizacion {
+  id                   BigInt                 @id @default(autoincrement())
+  nombre               String                 @unique @db.VarChar(80)
+  descripcion          String?
+  activo               Boolean                @default(true)
+
+  activosPermiso DetallePermisoActivo[]
+}
+
+model Personal {
+  id                    BigInt                  @id @default(autoincrement())
+  empresaId             BigInt
+  nombres               String
+  apellidos             String
+  tipoDocumentoId       BigInt?
+  numeroDocumento       String
+  fechaNacimiento       DateTime
+  sexo                  Boolean                 @default(false)
+  direccion             String?
+  telefono              String?
+  correo                String?
+  fechaIngreso          DateTime?
+  fechaCese             DateTime?
+  tipoContratoId        BigInt?
+  cargoId               BigInt?
+  cesado                Boolean                 @default(false)
+  areaFisicaId          BigInt?
+  sedeEmpresaId         BigInt?
+  urlFotoPersona        String?
+  ubigeoId              BigInt?
+  esVendedor            Boolean                 @default(false)
+  paraPescaConsumo      Boolean                 @default(false)
+  paraTemporadaPesca    Boolean                 @default(false)
+  usuario       Usuario?
+  
+  documentaciones DocumentacionPersonal[]
+  cargo       CargosPersonal?    @relation(fields: [cargoId], references: [id])
+  ubigeo      Ubigeo?            @relation(fields: [ubigeoId], references: [id])
+  tipoContrato TipoContrato?      @relation(fields: [tipoContratoId], references: [id])
+  tipoDocIdentidad TiposDocIdentidad? @relation(fields: [tipoDocumentoId], references: [id])
+}
+
+model PreFactura {
+  id                           BigInt              @id @default(autoincrement())
+  codigo                       String              @unique @db.VarChar(30)
+  empresaId                    BigInt
+  clienteId                    BigInt
+  ordenCompraCliente           String?
+  movSalidaAlmacenId           BigInt?
+  esExportacion                Boolean             @default(false)
+  paisDestinoId                BigInt?
+  puertoCargaId                BigInt?
+  puertoDescargaId             BigInt?
+  incotermId                   BigInt?
+  agenteAduanaId               BigInt?
+  bancoId                      BigInt?
+  numeroBuque                  String?
+  numeroBL                     String?
+  numContenedor                String?
+  exoneradoIgv                 Boolean             @default(false)
+  porcentajeIgv                Decimal?
+  fechaEmision                 DateTime            @default(now())
+  fechaVencimiento             DateTime?
+  estadoId                     BigInt
+  monedaId                     BigInt?
+  tipoCambio                   Decimal?
+  observaciones                String?
+  urlPreFacturaPdf             String?
+  actualizadoEn                DateTime
+  fechaTransfErpContable       DateTime?
+  numIdTransfErpContable       String?
+  personaRespTransfErpContable BigInt?
+  centroCostoId                BigInt?
+  precioVentaTotal             Decimal?
+  totalIGV                     Decimal?
+  valorVentaTotal              Decimal?
+  dirEntregaId                 BigInt
+  dirFiscalId                  BigInt
+
+  cliente EntidadComercial @relation("EntidadComercialToPreFactura", fields: [clienteId], references: [id])
+  detalles            DetallePreFactura[]
+  movSalidaAlmacen MovimientoAlmacen? @relation("MovimientoAlmacenToPreFactura", fields: [movSalidaAlmacenId], references: [id])
+  incoterm            Incoterm?          @relation(fields: [incotermId], references: [id])
+}
+
+model PrecioEntidad {
+  id                 BigInt           @id @default(autoincrement())
+  entidadComercialId BigInt
+  productoId         BigInt
+  monedaId           BigInt
+  precioUnitario     Decimal
+  vigenteDesde       DateTime
+  vigenteHasta       DateTime?
+  observaciones      String?
+  activo             Boolean          @default(true)
+
+  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
+  moneda             Moneda           @relation(fields: [monedaId], references: [id])
+}
+
+model Producto {
+  codigo                            String?                             @unique @db.VarChar(40)
+  id                                BigInt                              @id @default(autoincrement())
+  clienteId                         BigInt
+  colorId                           BigInt
+  descripcionArmada                 String
+  descripcionBase                   String                              @db.VarChar(120)
+  descripcionExtendida              String?                             @db.VarChar(120)
+  estadoInicialId                   BigInt
+  exoneradoIgv                      Boolean                             @default(false)
+  familiaId                         BigInt
+  fechaActualizacion                DateTime
+  fechaCreacion                     DateTime                            @default(now())
+  marcaId                           BigInt
+  porcentajeDetraccion              Decimal?
+  procedenciaId                     BigInt
+  subfamiliaId                      BigInt
+  tipoAlmacenamientoId              BigInt
+  tipoMaterialId                    BigInt
+  unidadAltoId                      BigInt?
+  unidadAnchoId                     BigInt?
+  unidadAnguloId                    BigInt?
+  unidadDiametroId                  BigInt?
+  unidadEspesorId                   BigInt?
+  unidadLargoId                     BigInt?
+  unidadMedidaId                    BigInt
+  exoneradoRetencion                Boolean                             @default(false)
+  sujetoDetraccion                  Boolean                             @default(false)
+  empresaId                         BigInt
+  aplicaColor                       Boolean                             @default(false)
+  aplicaMarca                       Boolean                             @default(false)
+  aplicaProcedencia                 Boolean                             @default(false)
+  aplicaSubfamilia                  Boolean                             @default(false)
+  aplicaTipoAlmacenamiento          Boolean                             @default(false)
+  aplicaTipoMaterial                Boolean                             @default(false)
+  aplicaUnidadMedida                Boolean                             @default(false)
+  medidaAlto                        String?                             @db.VarChar(20)
+  medidaAncho                       String?                             @db.VarChar(20)
+  medidaAngulo                      String?                             @db.VarChar(20)
+  medidaDiametro                    String?                             @db.VarChar(20)
+  medidaEspesor                     String?                             @db.VarChar(20)
+  medidaLargo                       String?                             @db.VarChar(20)
+  urlFichaTecnica                   String?
+  urlFotoProducto                   String?
+  descripcionMedidaAdicional        String?                             @db.VarChar(120)
+
+familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
+  subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
+  unidadMedida            UnidadMedida         @relation("UnidadMedidaToProducto", fields: [unidadMedidaId], references: [id])
+  tipoMaterial            TipoMaterial?        @relation(fields: [tipoMaterialId], references: [id])
+  color                   Color?               @relation(fields: [colorId], references: [id])
+  tipoAlmacenamiento      TipoAlmacenamiento   @relation(fields: [tipoAlmacenamientoId], references: [id])
+  marca                   Marca                @relation(fields: [marcaId], references: [id])
+  detallesMovimiento      DetalleMovimientoAlmacen[]
+  kardexAlmacenes   KardexAlmacen[]
+  insumosTareaOT DetInsumosTareaOT[]
+  detallesRequerimientosCompra DetalleReqCompra[]
+  detallesOrdenCompra     DetalleOrdenCompra[]
+  detallesPreFactura DetallePreFactura[]
+  detallesCotizacionCompras DetCotizacionCompras[]
+  detallesProductoFinalCotizacionCompras DetProductoFinalCotizacionCompras[]
+  detallesCotizacionVentas DetCotizacionVentas[]
+}
+
+model Provincia {
+  id             BigInt       @id @default(autoincrement())
+  codSUNAT       String       @unique
+  nombre         String
+  departamentoId BigInt
+
+  departamento    Departamento @relation(fields: [departamentoId], references: [id])
+  ubigeos         Ubigeo[]
+}
+
+model PuertoPesca {
+  id                  BigInt   @id @default(autoincrement())
+  zona                String   @db.VarChar(20)
+  nombre              String   @db.VarChar(100)
+  provincia           String?
+  departamento        String?
+  latitud             Decimal?
+  longitud            Decimal?
+  activo              Boolean  @default(true)
+  fecha_creacion      DateTime @default(now())
+  fecha_actualizacion DateTime
+}
+
+model RefreshToken {
+  id         BigInt   @id @default(autoincrement())
+  token      String   @unique
+  usuarioId  BigInt
+  expiracion DateTime
+  creadoEn   DateTime @default(now())
+  revocado   Boolean  @default(false)
+
+  usuario     Usuario  @relation(fields: [usuarioId], references: [id])
 }
 
 /// Modelo profesional para almacenar los metadatos de los archivos de reportes generados por el sistema.
@@ -2558,4 +2064,473 @@ model ReporteGenerado {
 
   @@index([empresaId])
   @@index([subModuloId])
+}
+
+model RequerimientoCompra {
+  id               BigInt             @id @default(autoincrement())
+  codigo           String             @unique @db.VarChar(30)
+  empresaId        BigInt
+  ordenTrabajoId   BigInt?
+  proveedorId      BigInt?
+  formaPagoId      BigInt?
+  centroCostoId    BigInt?
+  fechaCreacion    DateTime           @default(now())
+  fechaAprobacion  DateTime?
+  estadoId         BigInt
+  solicitanteId    BigInt?
+  aprobadoPorId    BigInt?
+  observaciones    String?
+  actualizadoEn    DateTime
+  urlReqCompraPdf  String?
+
+  detalles          DetalleReqCompra[]
+  proveedor         EntidadComercial? @relation(fields: [proveedorId], references: [id])
+}
+
+model SaldosDetProductoCliente {
+  id               BigInt    @id @default(autoincrement())
+  empresaId        BigInt
+  almacenId        BigInt
+  productoId       BigInt
+  clienteId        BigInt?
+  custodia         Boolean   @default(false)
+  lote             String?   @db.VarChar(40)
+  fechaVencimiento DateTime?
+  fechaProduccion  DateTime?
+  fechaIngreso     DateTime?
+  numContenedor    String?   @db.VarChar(40)
+  nroSerie         String?   @db.VarChar(40)
+  paletaAlmacenId  BigInt?
+  ubicacionId      BigInt?
+  estadoId         BigInt?
+  saldoCantidad    Decimal
+  saldoPeso        Decimal?
+  actualizadoEn    DateTime
+
+  @@unique([empresaId, almacenId, productoId, clienteId, custodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, paletaAlmacenId, ubicacionId, estadoId, numContenedor, nroSerie])
+}
+
+model SaldosProductoCliente {
+  id                    BigInt   @id @default(autoincrement())
+  empresaId             BigInt
+  almacenId             BigInt
+  productoId            BigInt
+  clienteId             BigInt?
+  custodia              Boolean  @default(false)
+  saldoCantidad         Decimal
+  saldoPeso             Decimal?
+  costoUnitarioPromedio Decimal?
+  actualizadoEn         DateTime
+
+  @@unique([empresaId, almacenId, productoId, clienteId, custodia])
+}
+
+model SedesEmpresa {
+  id             BigInt           @id @default(autoincrement())
+  empresaId      BigInt
+  nombre         String
+  direccion      String?
+  telefono       String?
+  email          String?
+  cesado         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime
+
+ empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  areasFisicas AreaFisicaSede[]
+}
+
+model SerieDoc {
+  id                BigInt              @id @default(autoincrement())
+  tipoDocumentoId   BigInt
+  tipoAlmacenId     BigInt
+  serie             String              @db.VarChar(20)
+  correlativo       BigInt              @default(0)
+  numCerosIzqCorre  Int                 @default(0)
+  numCerosIzqSerie  Int                 @default(0)
+  activo            Boolean             @default(true)
+
+  movimientos       MovimientoAlmacen[]
+}
+
+model SubfamiliaProducto {
+  familiaId BigInt
+  id        BigInt     @id @default(autoincrement())
+  nombre    String     @db.VarChar(120)
+  productos  Producto[]
+}
+
+model SubmoduloSistema {
+  id             BigInt           @id @default(autoincrement())
+  moduloId       BigInt
+  nombre         String
+  descripcion    String?
+  activo         Boolean          @default(true)
+
+  modulo         ModuloSistema @relation(fields: [moduloId], references: [id])
+  accesosUsuario AccesosUsuario[]
+}
+
+model TemporadaPesca {
+  id                        BigInt                     @id @default(autoincrement())
+  nombre                    String
+  fechaInicio               DateTime
+  fechaFin                  DateTime
+  cuotaAlquiladaTon         Decimal?
+  cuotaPropiaTon            Decimal?
+  empresaId                 BigInt
+  fechaActualizacion        DateTime
+  fechaCreacion             DateTime                   @default(now())
+  numeroResolucion          String?
+  urlResolucionPdf          String?
+  BahiaId                   BigInt
+  estadoTemporadaId         BigInt
+
+
+  faenas               FaenaPesca[] @relation("FaenaTemporadas")
+  entregasARendir      EntregaARendir[]
+  liquidacionTemporada LiquidacionTemporadaPesca?
+}
+
+model TipoAccesoInstalacion {
+  id                BigInt              @id @default(autoincrement())
+  nombre            String              @unique
+  descripcion       String?
+  activo            Boolean             @default(true)
+
+  accesos     AccesoInstalacion[]
+}
+
+model TipoActivo {
+  id          BigInt   @id @default(autoincrement())
+  codigo      String   @unique
+  nombre      String
+  descripcion String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  cesado      Boolean  @default(false)
+
+  activos     Activo[]
+}
+
+model TipoAlmacen {
+  id                 BigInt               @id @default(autoincrement())
+  nombre             String               @db.VarChar(50)
+  descripcion        String?
+  activo             Boolean              @default(true)
+
+  conceptos   ConceptoMovAlmacen[]
+}
+
+model TipoAlmacenamiento {
+  id       BigInt     @id @default(autoincrement())
+  nombre   String     @db.VarChar(120)
+  productos  Producto[]
+}
+
+model TipoConcepto {
+  id                 BigInt               @id @default(autoincrement())
+  nombre             String               @db.VarChar(50)
+  descripcion        String?
+  activo             Boolean              @default(true)
+
+  conceptos   ConceptoMovAlmacen[]
+}
+
+model TipoContrato {
+  id        BigInt     @id @default(autoincrement())
+  codigo    String     @unique
+  nombre    String
+  cesado    Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime
+
+  personal Personal[]
+}
+
+model TipoCuentaCorriente {
+  id              BigInt            @id @default(autoincrement())
+  nombre          String            @unique
+  descripcion     String?
+  activo          Boolean           @default(true)
+
+  cuentas     CuentaCorriente[]
+}
+
+model TipoDocumento {
+  id                BigInt              @id @default(autoincrement())
+  codigo            String              @unique @db.VarChar(10)
+  codigoSunat       String?             @db.VarChar(10)
+  descripcion       String?
+  activo            Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime
+
+  movimientosAlmacen MovimientoAlmacen[]
+}
+
+model TipoEmbarcacion {
+  id          BigInt        @id @default(autoincrement())
+  codigo      String        @unique
+  nombre      String
+  descripcion String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  cesado      Boolean       @default(false)
+
+  embarcaciones Embarcacion[]
+}
+
+model TipoEntidad {
+  id               BigInt             @id @default(autoincrement())
+  descripcion      String?
+  activo           Boolean            @default(true)
+  esCliente        Boolean            @default(false)
+  esProveedor      Boolean            @default(false)
+  nombre           String             @db.VarChar(50)
+
+  entidades   EntidadComercial[]
+}
+
+model TipoEquipo {
+  id                BigInt              @id @default(autoincrement())
+  nombre            String              @unique
+  descripcion       String?
+  activo            Boolean             @default(true)
+
+  accesos     AccesoInstalacion[]
+}
+
+model TipoEstadoProducto {
+  id                BigInt              @id @default(autoincrement())
+  nombre            String              @unique
+  descripcion       String?
+  activo            Boolean             @default(true)
+  paraCompras       Boolean             @default(false)
+  paraVentas        Boolean             @default(false)
+
+  cotizaciones   CotizacionVentas[]
+  cotizacionesCompras  CotizacionCompras[]
+}
+
+model TipoMantenimiento {
+  id              BigInt            @id @default(autoincrement())
+  nombre          String            @db.VarChar(40)
+  descripcion     String?           @db.VarChar(200)
+  activo          Boolean           @default(true)
+
+  ordenesTrabajo OTMantenimiento[]
+}
+
+model TipoMaterial {
+  id       BigInt     @id @default(autoincrement())
+  nombre   String     @db.VarChar(80)
+  codigo   String     @db.VarChar(10)
+
+  productos               Producto[]
+}
+
+model TipoMovEntregaRendir {
+  id                           BigInt                         @id @default(autoincrement())
+  nombre                       String                         @db.VarChar(50)
+  descripcion                  String?
+  esIngreso                    Boolean
+  activo                       Boolean                        @default(true)
+
+  detMovsEntregaRendir DetMovsEntregaRendir[]
+  movimientosConsumo DetMovsEntRendirPescaConsumo[]
+  movimientosVentas DetMovsEntregaRendirPVentas[]
+  movimientosCompras DetMovsEntregaRendirPCompras[]
+}
+
+model TipoMovimientoAcceso {
+  id                       BigInt                     @id @default(autoincrement())
+  nombre                   String                     @unique
+  descripcion              String?
+  activo                   Boolean                    @default(true)
+
+  detalles    AccesoInstalacionDetalle[]
+}
+
+model TipoMovimientoAlmacen {
+  id                 BigInt               @id @default(autoincrement())
+  nombre             String               @db.VarChar(30)
+  descripcion        String?
+  activo             Boolean              @default(true)
+
+  conceptos   ConceptoMovAlmacen[]
+}
+
+model TipoPersona {
+  id                BigInt              @id @default(autoincrement())
+  nombre            String              @unique
+  descripcion       String?
+  activo            Boolean             @default(true)
+  imprimeTicketIng  Boolean             @default(true)
+
+  accesos     AccesoInstalacion[]
+}
+
+model TipoProducto {
+  id                BigInt              @id @default(autoincrement())
+  nombre            String              @unique
+  descripcion       String?
+  activo            Boolean             @default(true)
+  paraCompras       Boolean             @default(false)
+  paraVentas        Boolean             @default(false)
+
+  cotizaciones   CotizacionVentas[]
+  cotizacionesCompras  CotizacionCompras[]
+}
+
+model TipoProvieneDe {
+  id                 BigInt               @id @default(autoincrement())
+  descripcion        String?
+  cesado             Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime
+
+  estados     EstadoMultiFuncion[]
+}
+
+model TipoReferenciaMovimientoCaja {
+  id             BigInt           @id @default(autoincrement())
+  codigo         String           @unique @db.VarChar(30)
+  descripcion    String?
+  activo         Boolean          @default(true)
+
+  movimientos MovimientoCaja[]
+}
+
+model TipoVehiculo {
+  id              BigInt            @id @default(autoincrement())
+  nombre          String            @db.VarChar(50)
+  activo          Boolean           @default(true)
+
+  vehiculos   VehiculoEntidad[]
+}
+
+model TiposDocIdentidad {
+  id               BigInt             @id @default(autoincrement())
+  codigo           String             @unique
+  nombre           String
+  cesado           Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  codSunat         String
+
+  entidadesComerciales EntidadComercial[]
+  personal Personal[]
+}
+
+model TripulanteFaena {
+  id            BigInt     @id @default(autoincrement())
+  faenaPescaId  BigInt
+  personalId    BigInt?
+  cargoId       BigInt?
+  nombres       String?
+  apellidos     String?
+  observaciones String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime
+
+  faenaPesca   FaenaPesca @relation(fields: [faenaPescaId], references: [id])
+}
+
+model TripulanteFaenaConsumo {
+  id                  BigInt            @id @default(autoincrement())
+  faenaPescaConsumoId BigInt
+  personalId          BigInt?
+  cargoId             BigInt?
+  nombres             String?
+  apellidos           String?
+  observaciones       String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime
+
+faenaPescaConsumo    FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+}
+
+model Ubigeo {
+  id               BigInt             @id @default(autoincrement())
+  codigo           String             @unique
+  activo           Boolean            @default(true)
+  departamentoId   BigInt
+  paisId           BigInt
+  provinciaId      BigInt
+  nombreDistrito   String?
+
+  pais         Pais         @relation(fields: [paisId], references: [id])
+  departamento Departamento @relation(fields: [departamentoId], references: [id])
+  provincia    Provincia    @relation(fields: [provinciaId], references: [id])
+
+  direcciones  DireccionEntidad[]
+  personas     Personal[]
+}
+
+model UnidadMedida {
+  nombre           String     @db.VarChar(60)
+  simbolo          String     @db.VarChar(20)
+  id               BigInt     @id @default(autoincrement())
+  esMedidaMetrica  Boolean    @default(false)
+  factorConversion Decimal?
+
+  productos           Producto[]      @relation("UnidadMedidaToProducto")
+}
+
+model Usuario {
+  id                BigInt           @id @default(autoincrement())
+  username          String           @unique
+  passwordHash      String
+  cesado            Boolean
+  fechaCreacion     DateTime         @default(now())
+  fechaUltimoAcceso DateTime?
+  personalId        BigInt?          @unique
+  empresaId         BigInt
+  esAdmin           Boolean          @default(false)
+  esSuperUsuario    Boolean          @default(false)
+  esUsuario         Boolean          @default(true)
+
+  personal          Personal? @relation(fields: [personalId], references: [id])
+  accesosUsuario    AccesosUsuario[]
+  refreshTokens     RefreshToken[]
+}
+
+model VehiculoEntidad {
+  id                 BigInt           @id @default(autoincrement())
+  entidadComercialId BigInt
+  placa              String           @db.VarChar(20)
+  marca              String?
+  modelo             String?
+  color              String?
+  anio               Int?
+  tipoVehiculoId     BigInt
+  capacidadTon       Decimal?
+  numeroSerie        String?
+  numeroMotor        String?
+  cesado             Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime
+  activoId           BigInt?
+  observaciones      String?
+
+  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
+  tipoVehiculo       TipoVehiculo     @relation(fields: [tipoVehiculoId], references: [id])
+}
+
+model detDocsReqCotizaVentas {
+  id                        BigInt                    @id @default(autoincrement())
+  cotizacionVentasId        BigInt
+  docRequeridaVentasId      BigInt
+  numeroDocumento           String?
+  fechaEmision              DateTime?
+  fechaVencimiento          DateTime?
+  urlDocumento              String?
+  observaciones             String?
+  verificado                Boolean
+  creadoEn                  DateTime                  @default(now())
+  actualizadoEn             DateTime
+
+  cotizacionVentas     CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id])
+  docRequeridaVentas      DocRequeridaComprasVentas @relation(fields: [docRequeridaVentasId], references: [id])
 }

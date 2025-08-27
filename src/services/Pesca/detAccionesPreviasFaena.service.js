@@ -87,10 +87,40 @@ const eliminar = async (id) => {
   }
 };
 
+const obtenerPorTemporada = async (temporadaId) => {
+  try {
+    const resultado = await prisma.detAccionesPreviasFaena.findMany({
+      where: {
+        faenaPesca: {
+          temporadaId: temporadaId
+        }
+      },
+      include: {
+        accionPrevia: true,
+        faenaPesca: {
+          include: {
+            embarcacion: {
+              include: {
+                activo: true
+              }
+            }
+          }
+        }
+      }
+    });
+    return resultado;
+  } catch (err) {
+    console.error("❌ [DEBUG] Error en obtenerPorTemporada:", err);
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  obtenerPorTemporada
 };
