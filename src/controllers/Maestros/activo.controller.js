@@ -34,6 +34,17 @@ export async function obtenerVehiculosPorRuc(req, res, next) {
   }
 }
 
+export async function obtenerPorEmpresaYTipo(req, res, next) {
+  try {
+    const empresaId = Number(req.params.empresaId);
+    const tipoId = Number(req.params.tipoId);
+    const activos = await activoService.obtenerPorEmpresaYTipo(empresaId, tipoId);
+    res.json(toJSONBigInt(activos));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const nuevo = await activoService.crear(req.body);

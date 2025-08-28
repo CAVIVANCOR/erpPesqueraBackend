@@ -98,6 +98,7 @@ model Activo {
 
   tipo        TipoActivo @relation(fields: [tipoId], references: [id])
   permisos    DetallePermisoActivo[]
+  embarcacion Embarcacion?
 }
 
 model AgrupacionEntidad {
@@ -1155,6 +1156,7 @@ model Embarcacion {
   documentaciones DocumentacionEmbarcacion[]
   faenas FaenaPesca[] @relation("EmbarcacionFaenas")
   faenasConsumo FaenaPescaConsumo[] @relation("EmbarcacionFaenasConsumo")
+  activo            Activo          @relation(fields: [activoId], references: [id])
 }
 
 model Empresa {

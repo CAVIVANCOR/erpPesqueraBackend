@@ -128,6 +128,7 @@ const iniciar = async (id) => {
           respEntregaRendirId: Number(temporada.BahiaId),
           centroCostoId: Number(temporada.empresaId),
           fechaCreacion: new Date(),
+          fechaActualizacion: new Date(),
           entregaLiquidada: false
         }
       });
@@ -145,7 +146,8 @@ const iniciar = async (id) => {
           puertoSalidaId: Number(temporada.BahiaId), // Usar BahiaId como puerto por defecto
           puertoRetornoId: Number(temporada.BahiaId), // Usar BahiaId como puerto por defecto
           puertoDescargaId: Number(temporada.BahiaId), // Usar BahiaId como puerto por defecto
-          createdAt: new Date()
+          createdAt: new Date(),
+          updatedAt: new Date()
         }
       });
 
@@ -158,7 +160,8 @@ const iniciar = async (id) => {
             accionPreviaId: Number(accion.id),
             cumplida: false,
             verificado: false,
-            createdAt: new Date()
+            createdAt: new Date(),
+            updatedAt: new Date()
           }
         });
         detAcciones.push(detAccion);

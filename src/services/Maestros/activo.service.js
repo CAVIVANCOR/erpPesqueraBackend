@@ -88,6 +88,33 @@ const obtenerVehiculosPorRuc = async (rucEmpresa) => {
 };
 
 /**
+ * Obtiene activos filtrados por empresa y tipo para embarcaciones pesqueras industriales
+ * @param {number} empresaId - ID de la empresa
+ * @param {number} tipoId - ID del tipo de activo (1 = Embarcacion pesquera Industrial)
+ */
+const obtenerPorEmpresaYTipo = async (empresaId, tipoId) => {
+  try {
+    return await prisma.activo.findMany({
+      where: {
+        empresaId: empresaId,
+        tipoId: tipoId,
+        cesado: false
+      },
+      include: {
+        tipo: true,
+        embarcacion: true
+      },
+      orderBy: {
+        nombre: 'asc'
+      }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
  * Crea un activo validando empresaId y tipoId.
  */
 const crear = async (data) => {
@@ -140,6 +167,7 @@ export default {
   listar,
   obtenerPorId,
   obtenerVehiculosPorRuc,
+  obtenerPorEmpresaYTipo,
   crear,
   actualizar,
   eliminar

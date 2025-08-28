@@ -114,7 +114,12 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarEntidadComercial(data);
-    return await prisma.entidadComercial.create({ data });
+    // Agregar actualizadoEn con timestamp actual
+    const dataConFechas = {
+      ...data,
+      actualizadoEn: new Date()
+    };
+    return await prisma.entidadComercial.create({ data: dataConFechas });
   } catch (err) {
     if (err instanceof ConflictError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
