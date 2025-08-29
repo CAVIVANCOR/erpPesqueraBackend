@@ -112,6 +112,19 @@ const iniciar = async (id) => {
     const temporada = await prisma.temporadaPesca.findUnique({ where: { id } });
     if (!temporada) throw new NotFoundError('TemporadaPesca no encontrada');
 
+    // Buscar el estado "EN PROCESO" para temporadas de pesca
+    const estadoEnProceso = await prisma.estadoMultiFuncion.findFirst({
+      where: {
+        tipoProvieneDeId: 4, // Temporada Pesca
+        descripcion: "EN PROCESO",
+        cesado: false
+      }
+    });
+
+    if (!estadoEnProceso) {
+      throw new ValidationError('No se encontró el estado "EN PROCESO" para temporadas de pesca');
+    }
+
     // Obtener acciones previas activas para pesca industrial
     const accionesPrevias = await prisma.accionesPreviasFaena.findMany({
       where: {
@@ -159,7 +172,16 @@ const iniciar = async (id) => {
     const bahiaId = bahias.length === 1 ? bahias[0].id : null;
 
     const resultado = await prisma.$transaction(async (tx) => {
-      // 1. Crear EntregaARendir
+      // 1. Actualizar el estado de la temporada a "EN PROCESO"
+      const temporadaActualizada = await tx.temporadaPesca.update({
+        where: { id: Number(temporada.id) },
+        data: {
+          estadoTemporadaId: Number(estadoEnProceso.id),
+          fechaActualizacion: new Date()
+        }
+      });
+
+      // 2. Crear EntregaARendir
       const entregaARendir = await tx.entregaARendir.create({
         data: {
           temporadaPescaId: Number(temporada.id),
@@ -171,7 +193,7 @@ const iniciar = async (id) => {
         }
       });
 
-      // 2. Crear FaenaPesca con lógica de autocompletado específica
+      // 3. Crear FaenaPesca con lógica de autocompletado específica
       const faenaPesca = await tx.faenaPesca.create({
         data: {
           temporadaId: Number(temporada.id),
@@ -193,7 +215,7 @@ const iniciar = async (id) => {
         }
       });
 
-      // 3. Crear DetAccionesPreviasFaena para cada acción previa
+      // 4. Crear DetAccionesPreviasFaena para cada acción previa
       const detAcciones = [];
       for (const accion of accionesPrevias) {
         const detAccion = await tx.detAccionesPreviasFaena.create({
@@ -210,16 +232,17 @@ const iniciar = async (id) => {
       }
 
       return {
+        temporadaActualizada,
         entregaARendir,
         faenaPesca,
         detAcciones,
-        mensaje: 'Temporada iniciada exitosamente'
+        mensaje: 'Temporada iniciada exitosamente y estado cambiado a EN PROCESO'
       };
     });
 
     return resultado;
   } catch (err) {
-    if (err instanceof NotFoundError) throw err;
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
