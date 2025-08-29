@@ -5,7 +5,7 @@ const router = Router();
 
 // Rutas CRUD para Personal
 router.get('/', personalController.listar);
-router.get('/bahias-comerciales/:empresaId', personalController.listarBahiasComerciales);
+router.get('/personalxdescripcioncargo/:empresaId/:descripcionCargo', personalController.listarPersonalxDescripCargo);
 router.get('/:id', personalController.obtenerPorId);
 router.post('/', personalController.crear);
 router.put('/:id', personalController.actualizar);

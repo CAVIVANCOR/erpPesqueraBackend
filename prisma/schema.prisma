@@ -178,6 +178,8 @@ model BolicheRed {
   nroFlotadores     Int?
   nroPlomos         Int?
   urlBolicheRedPdf  String?
+  paraPescaConsumo  Boolean @default(false)
+  paraPescaIndustrial Boolean @default(false)
 
   faenas FaenaPesca[] @relation("BolicheFaenas")
   faenasConsumo FaenaPescaConsumo[] @relation("BolicheFaenasConsumo")

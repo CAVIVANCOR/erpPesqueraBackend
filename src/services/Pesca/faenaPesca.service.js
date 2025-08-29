@@ -10,22 +10,22 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 async function validarClavesForaneas(data) {
   const [temporada, bahia, motorista, patron, puertoSalida, puertoRetorno, puertoDescarga, embarcacion, boliche] = await Promise.all([
     prisma.temporadaPesca.findUnique({ where: { id: data.temporadaId } }),
-    prisma.bahia.findUnique({ where: { id: data.bahiaId } }),
-    prisma.tripulante.findUnique({ where: { id: data.motoristaId } }),
-    prisma.tripulante.findUnique({ where: { id: data.patronId } }),
-    prisma.puerto.findUnique({ where: { id: data.puertoSalidaId } }),
-    prisma.puerto.findUnique({ where: { id: data.puertoRetornoId } }),
-    prisma.puerto.findUnique({ where: { id: data.puertoDescargaId } }),
+    data.bahiaId ? prisma.personal.findUnique({ where: { id: data.bahiaId } }) : Promise.resolve(true),
+    data.motoristaId ? prisma.personal.findUnique({ where: { id: data.motoristaId } }) : Promise.resolve(true),
+    data.patronId ? prisma.personal.findUnique({ where: { id: data.patronId } }) : Promise.resolve(true),
+    data.puertoSalidaId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoSalidaId } }) : Promise.resolve(true),
+    data.puertoRetornoId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoRetornoId } }) : Promise.resolve(true),
+    data.puertoDescargaId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoDescargaId } }) : Promise.resolve(true),
     data.embarcacionId ? prisma.embarcacion.findUnique({ where: { id: data.embarcacionId } }) : Promise.resolve(true),
     data.bolicheRedId ? prisma.bolicheRed.findUnique({ where: { id: data.bolicheRedId } }) : Promise.resolve(true)
   ]);
   if (!temporada) throw new ValidationError('El temporadaId no existe.');
-  if (!bahia) throw new ValidationError('El bahiaId no existe.');
-  if (!motorista) throw new ValidationError('El motoristaId no existe.');
-  if (!patron) throw new ValidationError('El patronId no existe.');
-  if (!puertoSalida) throw new ValidationError('El puertoSalidaId no existe.');
-  if (!puertoRetorno) throw new ValidationError('El puertoRetornoId no existe.');
-  if (!puertoDescarga) throw new ValidationError('El puertoDescargaId no existe.');
+  if (data.bahiaId && !bahia) throw new ValidationError('El bahiaId no existe.');
+  if (data.motoristaId && !motorista) throw new ValidationError('El motoristaId no existe.');
+  if (data.patronId && !patron) throw new ValidationError('El patronId no existe.');
+  if (data.puertoSalidaId && !puertoSalida) throw new ValidationError('El puertoSalidaId no existe.');
+  if (data.puertoRetornoId && !puertoRetorno) throw new ValidationError('El puertoRetornoId no existe.');
+  if (data.puertoDescargaId && !puertoDescarga) throw new ValidationError('El puertoDescargaId no existe.');
   if (data.embarcacionId && !embarcacion) throw new ValidationError('El embarcacionId no existe.');
   if (data.bolicheRedId && !boliche) throw new ValidationError('El bolicheRedId no existe.');
 }
@@ -52,7 +52,8 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    const obligatorios = ['temporadaId','bahiaId','motoristaId','patronId','fechaSalida','fechaRetorno','puertoSalidaId','puertoRetornoId','puertoDescargaId'];
+    // Solo temporadaId es realmente obligatorio
+    const obligatorios = ['temporadaId'];
     for (const campo of obligatorios) {
       if (typeof data[campo] === 'undefined' || data[campo] === null) {
         throw new ValidationError(`El campo ${campo} es obligatorio.`);

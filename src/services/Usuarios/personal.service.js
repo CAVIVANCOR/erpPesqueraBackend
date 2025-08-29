@@ -155,12 +155,12 @@ const eliminar = async (id) => {
  * Lista personal con cargo "BAHIA COMERCIAL" filtrado por empresa.
  * @param {number} empresaId - ID de la empresa para filtrar
  */
-const listarBahiasComerciales = async (empresaId) => {
+const listarPersonalxDescripCargo = async (empresaId,descripcionCargo) => {
   try {
     const where = {
       empresaId: empresaId,
       cargo: {
-        descripcion: "BAHIA COMERCIAL"
+        descripcion: descripcionCargo
       }
     };
     
@@ -183,5 +183,5 @@ export default {
   crear,
   actualizar,
   eliminar,
-  listarBahiasComerciales
+  listarPersonalxDescripCargo
 };

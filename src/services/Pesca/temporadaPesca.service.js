@@ -120,6 +120,44 @@ const iniciar = async (id) => {
       }
     });
 
+    // Implementar lógica de autocompletado según especificaciones
+    const [embarcaciones, motoristas, patrones, bahias] = await Promise.all([
+      // 1. Filtrar embarcaciones por tipoEmbarcacionId=1
+      prisma.embarcacion.findMany({
+        where: { tipoEmbarcacionId: 1 }
+      }),
+      // 2. Filtrar motoristas por empresaId y cargoId=14 (MOTORISTA EMBARCACION)
+      prisma.personal.findMany({
+        where: {
+          empresaId: temporada.empresaId,
+          cargoId: 14,
+          cesado: false
+        }
+      }),
+      // 3. Filtrar patrones por empresaId y cargoId=22 (PATRON EMBARCACION)
+      prisma.personal.findMany({
+        where: {
+          empresaId: temporada.empresaId,
+          cargoId: 22,
+          cesado: false
+        }
+      }),
+      // 4. Filtrar bahías por empresaId y cargoId=10 (BAHIA COMERCIAL)
+      prisma.personal.findMany({
+        where: {
+          empresaId: temporada.empresaId,
+          cargoId: 10,
+          cesado: false
+        }
+      })
+    ]);
+
+    // Autocompletar solo si hay exactamente 1 registro
+    const embarcacionId = embarcaciones.length === 1 ? embarcaciones[0].id : null;
+    const motoristaId = motoristas.length === 1 ? motoristas[0].id : null;
+    const patronId = patrones.length === 1 ? patrones[0].id : null;
+    const bahiaId = bahias.length === 1 ? bahias[0].id : null;
+
     const resultado = await prisma.$transaction(async (tx) => {
       // 1. Crear EntregaARendir
       const entregaARendir = await tx.entregaARendir.create({
@@ -133,19 +171,23 @@ const iniciar = async (id) => {
         }
       });
 
-      // 2. Crear FaenaPesca
+      // 2. Crear FaenaPesca con lógica de autocompletado específica
       const faenaPesca = await tx.faenaPesca.create({
         data: {
           temporadaId: Number(temporada.id),
-          bahiaId: Number(temporada.BahiaId),
-          motoristaId: Number(temporada.BahiaId), // Usar BahiaId como motorista por defecto
-          patronId: Number(temporada.BahiaId), // Usar BahiaId como patrón por defecto
           descripcion: `Faena iniciada para temporada ${temporada.nombre}`,
-          fechaSalida: new Date(),
-          fechaRetorno: new Date(),
-          puertoSalidaId: Number(temporada.BahiaId), // Usar BahiaId como puerto por defecto
-          puertoRetornoId: Number(temporada.BahiaId), // Usar BahiaId como puerto por defecto
-          puertoDescargaId: Number(temporada.BahiaId), // Usar BahiaId como puerto por defecto
+          // Campos autocompletados (solo si hay exactamente 1 registro)
+          embarcacionId: embarcacionId,
+          motoristaId: motoristaId,
+          patronId: patronId,
+          bahiaId: bahiaId,
+          // Campos que quedan null deliberadamente
+          fechaSalida: null,
+          fechaRetorno: null,
+          puertoSalidaId: null,
+          puertoRetornoId: null,
+          puertoDescargaId: null,
+          bolicheRedId: null,
           createdAt: new Date(),
           updatedAt: new Date()
         }

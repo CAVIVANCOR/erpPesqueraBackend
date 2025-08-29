@@ -67,10 +67,11 @@ export async function eliminar(req, res, next) {
 /**
  * Lista personal con cargo "BAHIA COMERCIAL" filtrado por empresa
  */
-export async function listarBahiasComerciales(req, res, next) {
+export async function listarPersonalxDescripCargo(req, res, next) {
   try {
     const empresaId = Number(req.params.empresaId);
-    const personal = await personalService.listarBahiasComerciales(empresaId);
+    const descripcionCargo = req.params.descripcionCargo;
+    const personal = await personalService.listarPersonalxDescripCargo(empresaId,descripcionCargo);
     res.json(toJSONBigInt(personal));
   } catch (err) {
     next(err);

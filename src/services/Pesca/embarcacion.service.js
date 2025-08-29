@@ -34,7 +34,7 @@ const listar = async () => {
     return await prisma.embarcacion.findMany({
       include: {
         tipoEmbarcacion: true,
-        
+        activo: true
       }
     });
   } catch (err) {

@@ -52,3 +52,14 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+export async function listarActivos(req, res, next) {
+  try {
+    const puertos = await puertoPescaService.listar();
+    // Filtrar solo puertos activos (asumiendo que activo = true o no tiene campo activo)
+    const puertosActivos = puertos.filter(puerto => puerto.activo !== false);
+    res.json(toJSONBigInt(puertosActivos));
+  } catch (err) {
+    next(err);
+  }
+}
