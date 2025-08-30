@@ -194,10 +194,17 @@ const iniciar = async (id) => {
       });
 
       // 3. Crear FaenaPesca con lógica de autocompletado específica
+      // Contar faenas existentes para generar descripción automática
+      const faenasExistentes = await tx.faenaPesca.count({
+        where: { temporadaId: Number(temporada.id) }
+      });
+      const numeroFaena = faenasExistentes + 1;
+      const descripcionFaena = `Faena ${numeroFaena} Temporada ${temporada.numeroResolucion || 'S/N'}`;
+      
       const faenaPesca = await tx.faenaPesca.create({
         data: {
           temporadaId: Number(temporada.id),
-          descripcion: `Faena iniciada para temporada ${temporada.nombre}`,
+          descripcion: descripcionFaena,
           // Campos autocompletados (solo si hay exactamente 1 registro)
           embarcacionId: embarcacionId,
           motoristaId: motoristaId,

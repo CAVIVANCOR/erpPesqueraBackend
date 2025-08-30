@@ -24,7 +24,12 @@ async function validarUnicidad(calaId, especieId, id = null) {
 
 const listar = async () => {
   try {
-    return await prisma.detalleCalaEspecie.findMany();
+    return await prisma.detalleCalaEspecie.findMany({
+      include: {
+        cala: true,
+        especie: true
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -33,9 +38,30 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const detalle = await prisma.detalleCalaEspecie.findUnique({ where: { id } });
+    const detalle = await prisma.detalleCalaEspecie.findUnique({ 
+      where: { id },
+      include: {
+        cala: true,
+        especie: true
+      }
+    });
     if (!detalle) throw new NotFoundError('DetalleCalaEspecie no encontrado');
     return detalle;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const obtenerPorCala = async (calaId) => {
+  try {
+    return await prisma.detalleCalaEspecie.findMany({
+      where: { calaId },
+      include: {
+        cala: true,
+        especie: true
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -95,6 +121,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorCala,
   crear,
   actualizar,
   eliminar

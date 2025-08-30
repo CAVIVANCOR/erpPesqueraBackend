@@ -60,6 +60,24 @@ const crear = async (data) => {
       }
     }
     await validarClavesForaneas(data);
+    
+    // Generar descripción automáticamente si no se proporciona
+    if (!data.descripcion) {
+      // Obtener la temporada para acceder al numeroResolucion
+      const temporada = await prisma.temporadaPesca.findUnique({
+        where: { id: data.temporadaId }
+      });
+      
+      // Contar las faenas existentes para esta temporada
+      const faenasExistentes = await prisma.faenaPesca.count({
+        where: { temporadaId: data.temporadaId }
+      });
+      
+      // Generar la descripción automática
+      const numeroFaena = faenasExistentes + 1;
+      data.descripcion = `Faena ${numeroFaena} Temporada ${temporada.numeroResolucion}`;
+    }
+    
     return await prisma.faenaPesca.create({ data });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
@@ -78,6 +96,7 @@ const actualizar = async (id, data) => {
       'descripcion',
       'fechaSalida',
       'fechaRetorno', 
+      'fechaDescarga',
       'bahiaId',
       'motoristaId',
       'patronId',

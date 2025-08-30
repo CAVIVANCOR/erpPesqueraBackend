@@ -52,3 +52,13 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+export async function obtenerPorCala(req, res, next) {
+  try {
+    const calaId = Number(req.params.calaId);
+    const detalles = await detalleCalaEspecieService.obtenerPorCala(calaId);
+    res.json(toJSONBigInt(detalles));
+  } catch (err) {
+    next(err);
+  }
+}

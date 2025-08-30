@@ -1,9 +1,9 @@
 import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import { NotFoundError, DatabaseError, ConflictError, ValidationError } from '../../utils/errors.js';
 
 /**
  * Servicio CRUD para Especie
- * Aplica validaciones y manejo de errores personalizado.
+ * Aplica validaciones de relaciones y manejo de errores personalizado.
  * Documentado en español.
  */
 
@@ -12,7 +12,7 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
  */
 const listar = async () => {
   try {
-    return await prisma.especie.findMany();
+    return await prisma.especie.findMany({ include: { calaEspecie: true } });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -20,11 +20,11 @@ const listar = async () => {
 };
 
 /**
- * Obtiene una especie por ID.
+ * Obtiene una especie por ID (incluyendo calas asociadas).
  */
 const obtenerPorId = async (id) => {
   try {
-    const especie = await prisma.especie.findUnique({ where: { id } });
+    const especie = await prisma.especie.findUnique({ where: { id }, include: { calaEspecie: true } });
     if (!especie) throw new NotFoundError('Especie no encontrada');
     return especie;
   } catch (err) {
@@ -38,10 +38,22 @@ const obtenerPorId = async (id) => {
  */
 const crear = async (data) => {
   try {
+    // Validar campos requeridos
     if (!data.nombre || data.nombre.trim() === '') {
       throw new ValidationError('El campo nombre es obligatorio.');
     }
-    return await prisma.especie.create({ data });
+    if (!data.nombreCientifico || data.nombreCientifico.trim() === '') {
+      throw new ValidationError('El campo nombre científico es obligatorio.');
+    }
+    
+    // Convertir a mayúsculas
+    const dataToSave = {
+      ...data,
+      nombre: data.nombre.toUpperCase(),
+      nombreCientifico: data.nombreCientifico.toUpperCase()
+    };
+    
+    return await prisma.especie.create({ data: dataToSave });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -56,10 +68,23 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.especie.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Especie no encontrada');
+    
+    // Validar campos si se están actualizando
     if (data.nombre !== undefined && (!data.nombre || data.nombre.trim() === '')) {
       throw new ValidationError('El campo nombre es obligatorio.');
     }
-    return await prisma.especie.update({ where: { id }, data });
+    if (data.nombreCientifico !== undefined && (!data.nombreCientifico || data.nombreCientifico.trim() === '')) {
+      throw new ValidationError('El campo nombre científico es obligatorio.');
+    }
+    
+    // Convertir a mayúsculas
+    const dataToSave = {
+      ...data,
+      nombre: data.nombre ? data.nombre.toUpperCase() : existente.nombre,
+      nombreCientifico: data.nombreCientifico ? data.nombreCientifico.toUpperCase() : existente.nombreCientifico
+    };
+    
+    return await prisma.especie.update({ where: { id }, data: dataToSave });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -68,16 +93,19 @@ const actualizar = async (id, data) => {
 };
 
 /**
- * Elimina una especie por ID, validando existencia.
+ * Elimina una especie por ID, validando existencia y que no tenga calas asociadas.
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.especie.findUnique({ where: { id } });
+    const existente = await prisma.especie.findUnique({ where: { id }, include: { calaEspecie: true } });
     if (!existente) throw new NotFoundError('Especie no encontrada');
+    if (existente.calaEspecie && existente.calaEspecie.length > 0) {
+      throw new ConflictError('No se puede eliminar la especie porque tiene calas asociadas.');
+    }
     await prisma.especie.delete({ where: { id } });
     return true;
   } catch (err) {
-    if (err instanceof NotFoundError) throw err;
+    if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

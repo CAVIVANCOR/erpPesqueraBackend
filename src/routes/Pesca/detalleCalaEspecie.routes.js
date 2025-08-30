@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para DetalleCalaEspecie
 router.get('/', detalleCalaEspecieController.listar);
+router.get('/por-cala/:calaId', detalleCalaEspecieController.obtenerPorCala);
 router.get('/:id', detalleCalaEspecieController.obtenerPorId);
 router.post('/', detalleCalaEspecieController.crear);
 router.put('/:id', detalleCalaEspecieController.actualizar);

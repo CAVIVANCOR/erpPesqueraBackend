@@ -55,12 +55,10 @@ const obtenerPorId = async (id) => {
  */
 const obtenerVehiculosPorRuc = async (rucEmpresa) => {
   try {
-    console.log('obtenerVehiculosPorRuc: rucEmpresa', rucEmpresa);
     // Primero obtenemos la empresa por RUC
     const empresa = await prisma.empresa.findFirst({
       where: { ruc: rucEmpresa }
     });
-    console.log('obtenerVehiculosPorRuc: empresa', empresa);
     if (!empresa) {
       return [];
     }

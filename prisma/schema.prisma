@@ -192,8 +192,8 @@ model Cala {
   patronId            BigInt
   embarcacionId       BigInt
   faenaPescaId        BigInt
-  fechaHoraInicio     DateTime
-  fechaHoraFin        DateTime
+  fechaHoraInicio     DateTime?
+  fechaHoraFin        DateTime?
   latitud             Decimal?
   longitud            Decimal?
   profundidadM        Decimal?
@@ -890,6 +890,15 @@ model DetalleCalaEspecie {
   updatedAt           DateTime
 
   cala                Cala   @relation(fields: [calaId], references: [id])
+  especie             Especie @relation(fields: [especieId], references: [id])
+}
+
+model Especie {
+  id BigInt @id @default(autoincrement())
+  nombre String @db.VarChar(100)
+  nombreCientifico String @db.VarChar(100)
+
+  calaEspecie DetalleCalaEspecie[]
 }
 
 model DetalleCalaEspecieProduce {
@@ -1326,6 +1335,7 @@ model FaenaPesca {
   embarcacionId           BigInt?
   fechaRetorno            DateTime?
   fechaSalida             DateTime?
+  fechaDescarga           DateTime?
   puertoDescargaId        BigInt?
   puertoRetornoId         BigInt?
   puertoSalidaId          BigInt?
