@@ -53,6 +53,19 @@ export async function listarParaTemporadaPesca(req, res, next) {
   }
 }
 
+/**
+ * Lista estados multifunción específicamente para faenas de pesca
+ * Filtra por TipoProvieneDe con descripción "FAENA PESCA"
+ */
+export async function listarParaFaenaPesca(req, res, next) {
+  try {
+    const estados = await estadoMultiFuncionService.listarParaFaenaPesca();
+    res.json(toJSONBigInt(estados));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);
@@ -65,7 +78,12 @@ export async function obtenerPorId(req, res, next) {
 
 export async function crear(req, res, next) {
   try {
-    const nuevo = await estadoMultiFuncionService.crear(req.body);
+    // Agregar updatedAt automáticamente
+    const dataConFecha = {
+      ...req.body,
+      updatedAt: new Date()
+    };
+    const nuevo = await estadoMultiFuncionService.crear(dataConFecha);
     res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
     next(err);

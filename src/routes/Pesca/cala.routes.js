@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para Cala
 router.get('/', calaController.listar);
+router.get('/faena/:faenaPescaId', calaController.obtenerPorFaena);
 router.get('/:id', calaController.obtenerPorId);
 router.post('/', calaController.crear);
 router.put('/:id', calaController.actualizar);

@@ -8,6 +8,7 @@ router.get('/', estadoMultiFuncionController.listar);
 router.get('/productos', estadoMultiFuncionController.listarParaProductos);
 router.get('/embarcaciones', estadoMultiFuncionController.listarParaEmbarcaciones);
 router.get('/temporada-pesca', estadoMultiFuncionController.listarParaTemporadaPesca);
+router.get('/faena-pesca', estadoMultiFuncionController.listarParaFaenaPesca);
 router.get('/:id', estadoMultiFuncionController.obtenerPorId);
 router.post('/', estadoMultiFuncionController.crear);
 router.put('/:id', estadoMultiFuncionController.actualizar);

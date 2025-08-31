@@ -26,7 +26,12 @@ export async function obtenerPorId(req, res, next) {
 
 export async function crear(req, res, next) {
   try {
-    const nuevo = await tipoProvieneDeService.crear(req.body);
+    // Agregar updatedAt requerido por Prisma
+    const dataConUpdatedAt = {
+      ...req.body,
+      updatedAt: new Date()
+    };
+    const nuevo = await tipoProvieneDeService.crear(dataConUpdatedAt);
     res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
     next(err);
@@ -36,7 +41,12 @@ export async function crear(req, res, next) {
 export async function actualizar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const actualizado = await tipoProvieneDeService.actualizar(id, req.body);
+    // Agregar updatedAt para actualizaciones
+    const dataConUpdatedAt = {
+      ...req.body,
+      updatedAt: new Date()
+    };
+    const actualizado = await tipoProvieneDeService.actualizar(id, dataConUpdatedAt);
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
     next(err);

@@ -1343,6 +1343,9 @@ model FaenaPesca {
   motoristaId             BigInt?
   patronId                BigInt?
   urlInformeFaena         String?
+  urlReporteFaenaCalas    String?
+  urlDeclaracionDesembarqueArmador String?
+  estadoFaenaId           BigInt?
 
   temporada       TemporadaPesca @relation("FaenaTemporadas", fields: [temporadaId], references: [id])
   embarcacion     Embarcacion?   @relation("EmbarcacionFaenas", fields: [embarcacionId], references: [id])

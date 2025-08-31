@@ -105,7 +105,10 @@ const actualizar = async (id, data) => {
       'puertoDescargaId',
       'embarcacionId',
       'bolicheRedId',
-      'urlInformeFaena'
+      'urlInformeFaena',
+      'urlReporteFaenaCalas',
+      'urlDeclaracionDesembarqueArmador',
+      'estadoFaenaId'
     ];
     
     const dataFiltrada = {};

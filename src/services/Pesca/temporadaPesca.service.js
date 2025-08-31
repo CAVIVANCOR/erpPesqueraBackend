@@ -120,11 +120,19 @@ const iniciar = async (id) => {
         cesado: false
       }
     });
-
+    const estadoFaenaIniciada = await prisma.estadoMultiFuncion.findFirst({
+      where: {
+        tipoProvieneDeId: 5, // Faena Pesca
+        descripcion: "INICIADA",
+        cesado: false
+      }
+    });
     if (!estadoEnProceso) {
       throw new ValidationError('No se encontró el estado "EN PROCESO" para temporadas de pesca');
     }
-
+    if (!estadoFaenaIniciada) {
+      throw new ValidationError('No se encontró el estado "INICIADA" para faenas de pesca');
+    }
     // Obtener acciones previas activas para pesca industrial
     const accionesPrevias = await prisma.accionesPreviasFaena.findMany({
       where: {
@@ -132,7 +140,6 @@ const iniciar = async (id) => {
         activo: true
       }
     });
-
     // Implementar lógica de autocompletado según especificaciones
     const [embarcaciones, motoristas, patrones, bahias] = await Promise.all([
       // 1. Filtrar embarcaciones por tipoEmbarcacionId=1
@@ -162,7 +169,7 @@ const iniciar = async (id) => {
           cargoId: 10,
           cesado: false
         }
-      })
+      }),
     ]);
 
     // Autocompletar solo si hay exactamente 1 registro
@@ -172,6 +179,7 @@ const iniciar = async (id) => {
     const bahiaId = bahias.length === 1 ? bahias[0].id : null;
 
     const resultado = await prisma.$transaction(async (tx) => {
+
       // 1. Actualizar el estado de la temporada a "EN PROCESO"
       const temporadaActualizada = await tx.temporadaPesca.update({
         where: { id: Number(temporada.id) },
@@ -180,7 +188,6 @@ const iniciar = async (id) => {
           fechaActualizacion: new Date()
         }
       });
-
       // 2. Crear EntregaARendir
       const entregaARendir = await tx.entregaARendir.create({
         data: {
@@ -204,12 +211,13 @@ const iniciar = async (id) => {
       const faenaPesca = await tx.faenaPesca.create({
         data: {
           temporadaId: Number(temporada.id),
+          estadoFaenaId: Number(estadoFaenaIniciada.id),
           descripcion: descripcionFaena,
           // Campos autocompletados (solo si hay exactamente 1 registro)
-          embarcacionId: embarcacionId,
-          motoristaId: motoristaId,
-          patronId: patronId,
-          bahiaId: bahiaId,
+          embarcacionId: Number(embarcacionId),
+          motoristaId: Number(motoristaId),
+          patronId: Number(patronId),
+          bahiaId: Number(bahiaId),
           // Campos que quedan null deliberadamente
           fechaSalida: null,
           fechaRetorno: null,

@@ -21,6 +21,19 @@ const obtenerPorId = async (id) => {
   }
 };
 
+const obtenerPorFaena = async (faenaPescaId) => {
+  try {
+    const calas = await prisma.cala.findMany({ 
+      where: { faenaPescaId },
+      orderBy: { fechaHoraInicio: 'desc' }
+    });
+    return calas;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 const crear = async (data) => {
   try {
     const faenaPesca = await prisma.faenaPesca.findUnique({ 
@@ -30,12 +43,12 @@ const crear = async (data) => {
     if (!faenaPesca) throw new ValidationError('FaenaPesca no encontrada');
 
     const calaData = {
-      bahiaId: faenaPesca.bahiaId,
-      motoristaId: faenaPesca.motoristaId,
-      patronId: faenaPesca.patronId,
-      embarcacionId: faenaPesca.embarcacionId,
-      faenaPescaId: faenaPesca.id,
-      temporadaPescaId: faenaPesca.temporadaId,
+      bahiaId: data.bahiaId || faenaPesca.bahiaId,
+      motoristaId: data.motoristaId || faenaPesca.motoristaId,
+      patronId: data.patronId || faenaPesca.patronId,
+      embarcacionId: data.embarcacionId || faenaPesca.embarcacionId,
+      faenaPescaId: data.faenaPescaId,
+      temporadaPescaId: data.temporadaPescaId || faenaPesca.temporadaId,
       fechaHoraInicio: data.fechaHoraInicio || null,
       fechaHoraFin: data.fechaHoraFin || null,
       latitud: data.latitud || null,
@@ -43,6 +56,7 @@ const crear = async (data) => {
       profundidadM: data.profundidadM || null,
       toneladasCapturadas: data.toneladasCapturadas || null,
       observaciones: data.observaciones || null,
+      updatedAt: data.updatedAt || new Date(),
     };
 
     return await prisma.cala.create({ data: calaData });
@@ -87,6 +101,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorFaena,
   crear,
   actualizar,
   eliminar

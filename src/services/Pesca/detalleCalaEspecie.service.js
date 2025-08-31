@@ -75,7 +75,14 @@ const crear = async (data) => {
     }
     await validarClavesForaneas(data);
     await validarUnicidad(data.calaId, data.especieId);
-    return await prisma.detalleCalaEspecie.create({ data });
+    
+    // Agregar updatedAt requerido por Prisma
+    const dataConUpdatedAt = {
+      ...data,
+      updatedAt: new Date()
+    };
+    
+    return await prisma.detalleCalaEspecie.create({ data: dataConUpdatedAt });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
