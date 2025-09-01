@@ -34,7 +34,19 @@ async function validarSolapamiento(data, id = null) {
 
 const listar = async () => {
   try {
-    return await prisma.temporadaPesca.findMany();
+    const temporadas = await prisma.temporadaPesca.findMany({
+      include: {
+        faenas: true
+      }
+    });
+
+    // Calcular toneladas capturadas dinámicamente
+    return temporadas.map(temporada => ({
+      ...temporada,
+      toneladasCapturadasTemporada: temporada.faenas.reduce((total, faena) => 
+        total + (parseFloat(faena.toneladasCapturadasFaena) || 0), 0
+      )
+    }));
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -43,9 +55,21 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const temp = await prisma.temporadaPesca.findUnique({ where: { id } });
+    const temp = await prisma.temporadaPesca.findUnique({ 
+      where: { id },
+      include: {
+        faenas: true
+      }
+    });
     if (!temp) throw new NotFoundError('TemporadaPesca no encontrada');
-    return temp;
+
+    // Calcular toneladas capturadas dinámicamente
+    return {
+      ...temp,
+      toneladasCapturadasTemporada: temp.faenas.reduce((total, faena) => 
+        total + (parseFloat(faena.toneladasCapturadasFaena) || 0), 0
+      )
+    };
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

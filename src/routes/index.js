@@ -157,6 +157,8 @@ import movLiqNovedadPescaConsumoRoutes from '../routes/Pesca/movLiqNovedadPescaC
 import entregaARendirRoutes from '../routes/Pesca/entregaARendir.routes.js';
 import detMovsEntregaRendirRoutes from '../routes/Pesca/detMovsEntregaRendir.routes.js';
 import tipoMovEntregaRendirRoutes from '../routes/Pesca/tipoMovEntregaRendir.routes.js';
+import recalcularToneladasRoutes from '../routes/Pesca/recalcularToneladas.routes.js';
+import testRecalculoRoutes from '../routes/Pesca/testRecalculo.routes.js';
 import empresaReporteRoutes from '../routes/Maestros/empresa.reporte.routes.js';
 import productoRoutes from '../routes/Maestros/producto.routes.js';
 
@@ -483,6 +485,8 @@ router.use('/entregas-a-rendir', entregaARendirRoutes);
 router.use('/det-movs-entrega-rendir', detMovsEntregaRendirRoutes);
 // Rutas para TipoMovEntregaRendir
 router.use('/tipos-mov-entrega-rendir', tipoMovEntregaRendirRoutes);
+router.use('/recalcular-toneladas', recalcularToneladasRoutes);
+router.use('/test-recalculo', testRecalculoRoutes);
 router.use('/movimientos-caja', movimientoCajaRoutes);
 router.use('/cuentas-corrientes', cuentaCorrienteRoutes);
 router.use('/asientos-contables-interfaz', asientoContableInterfazRoutes);

@@ -1346,6 +1346,7 @@ model FaenaPesca {
   urlReporteFaenaCalas    String?
   urlDeclaracionDesembarqueArmador String?
   estadoFaenaId           BigInt?
+  toneladasCapturadasFaena     Decimal?
 
   temporada       TemporadaPesca @relation("FaenaTemporadas", fields: [temporadaId], references: [id])
   embarcacion     Embarcacion?   @relation("EmbarcacionFaenas", fields: [embarcacionId], references: [id])
@@ -2202,7 +2203,7 @@ model TemporadaPesca {
   urlResolucionPdf          String?
   BahiaId                   BigInt
   estadoTemporadaId         BigInt
-
+  toneladasCapturadasTemporada     Decimal?
 
   faenas               FaenaPesca[] @relation("FaenaTemporadas")
   entregasARendir      EntregaARendir[]

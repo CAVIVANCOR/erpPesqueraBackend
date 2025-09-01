@@ -22,6 +22,84 @@ async function validarUnicidad(calaId, especieId, id = null) {
   if (existe) throw new ConflictError('Ya existe un registro para esa cala y especie.');
 }
 
+/**
+ * Actualiza el campo toneladasCapturadas de una Cala
+ * sumando todas las toneladas de sus DetalleCalaEspecie
+ */
+async function actualizarToneladasCala(calaId) {
+  try {
+    const totalToneladas = await prisma.detalleCalaEspecie.aggregate({
+      where: { calaId },
+      _sum: { toneladas: true }
+    });
+
+    const calaActualizada = await prisma.cala.update({
+      where: { id: calaId },
+      data: {
+        toneladasCapturadas: totalToneladas._sum.toneladas || 0,
+        updatedAt: new Date()
+      }
+    });
+
+    // Actualizar también las toneladas de la faena
+    await actualizarToneladasFaena(calaActualizada.faenaPescaId);
+  } catch (error) {
+    console.error('Error actualizando toneladas de cala:', error);
+    // No lanzar error para no interrumpir la operación principal
+  }
+}
+
+/**
+ * Actualiza el campo toneladasCapturadasFaena de una FaenaPesca
+ * sumando todas las toneladasCapturadas de sus Calas
+ */
+async function actualizarToneladasFaena(faenaPescaId) {
+  try {
+    const totalToneladas = await prisma.cala.aggregate({
+      where: { faenaPescaId },
+      _sum: { toneladasCapturadas: true }
+    });
+
+    const faenaActualizada = await prisma.faenaPesca.update({
+      where: { id: faenaPescaId },
+      data: {
+        toneladasCapturadasFaena: totalToneladas._sum.toneladasCapturadas || 0,
+        updatedAt: new Date()
+      }
+    });
+
+    // Actualizar también las toneladas de la temporada
+    await actualizarToneladasTemporada(faenaActualizada.temporadaId);
+  } catch (error) {
+    console.error('Error actualizando toneladas de faena:', error);
+    // No lanzar error para no interrumpir la operación principal
+  }
+}
+
+/**
+ * Actualiza el campo toneladasCapturadasTemporada de una TemporadaPesca
+ * sumando todas las toneladasCapturadasFaena de sus FaenasPesca
+ */
+async function actualizarToneladasTemporada(temporadaId) {
+  try {
+    const totalToneladas = await prisma.faenaPesca.aggregate({
+      where: { temporadaId },
+      _sum: { toneladasCapturadasFaena: true }
+    });
+
+    await prisma.temporadaPesca.update({
+      where: { id: temporadaId },
+      data: {
+        toneladasCapturadasTemporada: totalToneladas._sum.toneladasCapturadasFaena || 0,
+        fechaActualizacion: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Error actualizando toneladas de temporada:', error);
+    // No lanzar error para no interrumpir la operación principal
+  }
+}
+
 const listar = async () => {
   try {
     return await prisma.detalleCalaEspecie.findMany({
@@ -82,7 +160,9 @@ const crear = async (data) => {
       updatedAt: new Date()
     };
     
-    return await prisma.detalleCalaEspecie.create({ data: dataConUpdatedAt });
+    const creado = await prisma.detalleCalaEspecie.create({ data: dataConUpdatedAt });
+    await actualizarToneladasCala(data.calaId);
+    return creado;
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -104,7 +184,9 @@ const actualizar = async (id, data) => {
         id
       );
     }
-    return await prisma.detalleCalaEspecie.update({ where: { id }, data });
+    const actualizado = await prisma.detalleCalaEspecie.update({ where: { id }, data });
+    await actualizarToneladasCala(actualizado.calaId);
+    return actualizado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -117,6 +199,7 @@ const eliminar = async (id) => {
     const existente = await prisma.detalleCalaEspecie.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('DetalleCalaEspecie no encontrado');
     await prisma.detalleCalaEspecie.delete({ where: { id } });
+    await actualizarToneladasCala(existente.calaId);
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;

@@ -2,7 +2,7 @@ import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 
 /**
- * Servicio CRUD para FaenaPesca
+ * Servicio CRUD para FaenaPesca con cálculo dinámico de toneladas capturadas
  * Valida existencia de claves foráneas y previene borrado si tiene dependencias asociadas.
  * Documentado en español.
  */
@@ -78,7 +78,9 @@ const crear = async (data) => {
       data.descripcion = `Faena ${numeroFaena} Temporada ${temporada.numeroResolucion}`;
     }
     
-    return await prisma.faenaPesca.create({ data });
+    const faena = await prisma.faenaPesca.create({ data });
+    await actualizarToneladasTemporada(data.temporadaId);
+    return faena;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -108,7 +110,8 @@ const actualizar = async (id, data) => {
       'urlInformeFaena',
       'urlReporteFaenaCalas',
       'urlDeclaracionDesembarqueArmador',
-      'estadoFaenaId'
+      'estadoFaenaId',
+      'toneladasCapturadasFaena'
     ];
     
     const dataFiltrada = {};
@@ -124,7 +127,9 @@ const actualizar = async (id, data) => {
       await validarClavesForaneas({ ...existente, ...dataFiltrada });
     }
     
-    return await prisma.faenaPesca.update({ where: { id }, data: dataFiltrada });
+    const faena = await prisma.faenaPesca.update({ where: { id }, data: dataFiltrada });
+    await actualizarToneladasTemporada(existente.temporadaId);
+    return faena;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -161,6 +166,7 @@ const eliminar = async (id) => {
       throw new ConflictError('No se puede eliminar porque tiene dependencias asociadas.');
     }
     await prisma.faenaPesca.delete({ where: { id } });
+    await actualizarToneladasTemporada(existente.temporadaId);
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
@@ -168,6 +174,34 @@ const eliminar = async (id) => {
     throw err;
   }
 };
+
+/**
+ * Actualiza el campo toneladasCapturadasTemporada de una TemporadaPesca
+ * sumando todas las toneladasCapturadasFaena de sus FaenasPesca
+ */
+async function actualizarToneladasTemporada(temporadaId) {
+  try {
+    
+    const totalToneladas = await prisma.faenaPesca.aggregate({
+      where: { temporadaId },
+      _sum: { toneladasCapturadasFaena: true }
+    });
+
+    const toneladasCalculadas = totalToneladas._sum.toneladasCapturadasFaena || 0;
+
+    await prisma.temporadaPesca.update({
+      where: { id: temporadaId },
+      data: {
+        toneladasCapturadasTemporada: toneladasCalculadas,
+        fechaActualizacion: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error(`❌ Error actualizando toneladas de temporada ${temporadaId}:`, error);
+    // No lanzar error para no interrumpir la operación principal
+  }
+}
 
 export default {
   listar,

@@ -1,9 +1,30 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 
+/**
+ * Servicio CRUD para Cala con cálculo dinámico de toneladas capturadas
+ */
+
 const listar = async () => {
   try {
-    return await prisma.cala.findMany();
+    const calas = await prisma.cala.findMany({
+      include: {
+        faenaPesca: true,
+        especiesPescadas: {
+          include: {
+            especie: true
+          }
+        }
+      }
+    });
+
+    // Calcular toneladas capturadas dinámicamente
+    return calas.map(cala => ({
+      ...cala,
+      toneladasCapturadas: cala.especiesPescadas.reduce((total, detalle) => 
+        total + (parseFloat(detalle.toneladas) || 0), 0
+      )
+    }));
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -12,9 +33,27 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const cala = await prisma.cala.findUnique({ where: { id } });
+    const cala = await prisma.cala.findUnique({
+      where: { id },
+      include: {
+        faenaPesca: true,
+        especiesPescadas: {
+          include: {
+            especie: true
+          }
+        }
+      }
+    });
+
     if (!cala) throw new NotFoundError('Cala no encontrada');
-    return cala;
+
+    // Calcular toneladas capturadas dinámicamente
+    return {
+      ...cala,
+      toneladasCapturadas: cala.especiesPescadas.reduce((total, detalle) => 
+        total + (parseFloat(detalle.toneladas) || 0), 0
+      )
+    };
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -23,11 +62,26 @@ const obtenerPorId = async (id) => {
 
 const obtenerPorFaena = async (faenaPescaId) => {
   try {
-    const calas = await prisma.cala.findMany({ 
+    const calas = await prisma.cala.findMany({
       where: { faenaPescaId },
+      include: {
+        faenaPesca: true,
+        especiesPescadas: {
+          include: {
+            especie: true
+          }
+        }
+      },
       orderBy: { fechaHoraInicio: 'desc' }
     });
-    return calas;
+
+    // Calcular toneladas capturadas dinámicamente para cada cala
+    return calas.map(cala => ({
+      ...cala,
+      toneladasCapturadas: cala.especiesPescadas.reduce((total, detalle) => 
+        total + (parseFloat(detalle.toneladas) || 0), 0
+      )
+    }));
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -36,13 +90,16 @@ const obtenerPorFaena = async (faenaPescaId) => {
 
 const crear = async (data) => {
   try {
+    // Remover toneladasCapturadas del input ya que se calcula dinámicamente
+    const { toneladasCapturadas, ...calaData } = data;
+    
     const faenaPesca = await prisma.faenaPesca.findUnique({ 
       where: { id: data.faenaPescaId }
     });
     
     if (!faenaPesca) throw new ValidationError('FaenaPesca no encontrada');
 
-    const calaData = {
+    const calaDataConFaena = {
       bahiaId: data.bahiaId || faenaPesca.bahiaId,
       motoristaId: data.motoristaId || faenaPesca.motoristaId,
       patronId: data.patronId || faenaPesca.patronId,
@@ -54,12 +111,47 @@ const crear = async (data) => {
       latitud: data.latitud || null,
       longitud: data.longitud || null,
       profundidadM: data.profundidadM || null,
-      toneladasCapturadas: data.toneladasCapturadas || null,
       observaciones: data.observaciones || null,
       updatedAt: data.updatedAt || new Date(),
     };
 
-    return await prisma.cala.create({ data: calaData });
+    const dataConUpdatedAt = {
+      ...calaDataConFaena,
+      updatedAt: new Date()
+    };
+
+    const nuevaCala = await prisma.cala.create({ 
+      data: dataConUpdatedAt,
+      include: {
+        faenaPesca: true,
+        especiesPescadas: {
+          include: {
+            especie: true
+          }
+        }
+      }
+    });
+
+    // Calcular toneladas capturadas dinámicamente
+    const toneladasCapturadasCrear = nuevaCala.especiesPescadas.reduce((total, especie) => {
+      return total + (parseFloat(especie.toneladas) || 0);
+    }, 0);
+
+    // Actualizar las toneladas capturadas de la cala
+    await prisma.cala.update({
+      where: { id: nuevaCala.id },
+      data: { 
+        toneladasCapturadas: toneladasCapturadasCrear,
+        updatedAt: new Date()
+      }
+    });
+
+    await actualizarToneladasFaena(nuevaCala.faenaPescaId);
+
+    return {
+      ...nuevaCala,
+      toneladasCapturadas: toneladasCapturadasCrear
+    };
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -71,7 +163,37 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.cala.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Cala no encontrada');
-    return await prisma.cala.update({ where: { id }, data });
+
+    // Remover toneladasCapturadas del input ya que se calcula dinámicamente
+    const { toneladasCapturadas, ...calaData } = data;
+
+    const calaActualizada = await prisma.cala.update({ 
+      where: { id }, 
+      data: {
+        ...calaData,
+        updatedAt: new Date()
+      },
+      include: {
+        faenaPesca: true,
+        especiesPescadas: {
+          include: {
+            especie: true
+          }
+        }
+      }
+    });
+
+    // Calcular toneladas capturadas dinámicamente
+    const toneladasCalculadas = calaActualizada.especiesPescadas.reduce((total, detalle) => 
+      total + (parseFloat(detalle.toneladas) || 0), 0
+    );
+
+    await actualizarToneladasFaena(calaActualizada.faenaPescaId);
+
+    return {
+      ...calaActualizada,
+      toneladasCapturadas: toneladasCalculadas
+    };
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -90,6 +212,7 @@ const eliminar = async (id) => {
       throw new ConflictError('No se puede eliminar porque tiene especies pescadas asociadas.');
     }
     await prisma.cala.delete({ where: { id } });
+    await actualizarToneladasFaena(existente.faenaPescaId);
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
@@ -97,6 +220,34 @@ const eliminar = async (id) => {
     throw err;
   }
 };
+
+/**
+ * Actualiza el campo toneladasCapturadasFaena de una FaenaPesca
+ * sumando todas las toneladasCapturadas de sus Calas
+ */
+async function actualizarToneladasFaena(faenaPescaId) {
+  try {
+    
+    const totalToneladas = await prisma.cala.aggregate({
+      where: { faenaPescaId },
+      _sum: { toneladasCapturadas: true }
+    });
+
+    const toneladasCalculadas = totalToneladas._sum.toneladasCapturadas || 0;
+
+    await prisma.faenaPesca.update({
+      where: { id: faenaPescaId },
+      data: {
+        toneladasCapturadasFaena: toneladasCalculadas,
+        updatedAt: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error(`❌ Error actualizando toneladas de faena ${faenaPescaId}:`, error);
+    // No lanzar error para no interrumpir la operación principal
+  }
+}
 
 export default {
   listar,
