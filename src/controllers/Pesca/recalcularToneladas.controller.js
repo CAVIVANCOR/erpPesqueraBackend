@@ -11,7 +11,8 @@ import recalcularToneladasService from '../../services/Pesca/recalcularToneladas
 const recalcularCala = async (req, res) => {
   try {
     const { id } = req.params;
-    const toneladas = await recalcularToneladasService.recalcularToneladasCala(id);
+    const { faenaPescaId, TemporadaPescaId } = req.body;
+    const toneladas = await recalcularToneladasService.recalcularToneladasCala(id, faenaPescaId, TemporadaPescaId);
     
     res.status(200).json({
       message: `Toneladas de Cala ${id} recalculadas exitosamente`,

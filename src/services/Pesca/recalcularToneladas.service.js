@@ -9,8 +9,10 @@ import prisma from '../../config/prismaClient.js';
  * SUMATORIA 1: Recalcula Cala.toneladasCapturadas para una cala específica
  * Suma DetalleCalaEspecie.toneladas WHERE calaId = calaId específico
  * @param {BigInt} calaId - ID de la cala a recalcular
+ * @param {BigInt} faenaPescaId - ID de la faena para recalcular en cascada
+ * @param {BigInt} TemporadaPescaId - ID de la temporada para recalcular en cascada
  */
-async function recalcularToneladasCala(calaId) {
+async function recalcularToneladasCala(calaId, faenaPescaId, TemporadaPescaId) {
   // Obtener todos los detalles de especies de esta cala específica
   const especiesCala = await prisma.detalleCalaEspecie.findMany({
     where: {
@@ -31,6 +33,10 @@ async function recalcularToneladasCala(calaId) {
       updatedAt: new Date()
     }
   });
+
+  await recalcularToneladasFaena(faenaPescaId);
+  await recalcularToneladasTemporada(TemporadaPescaId);
+
   return toneladasCalculadas;
 }
 
@@ -60,6 +66,7 @@ async function recalcularToneladasFaena(faenaId) {
       updatedAt: new Date()
     }
   });
+
   return toneladasCalculadas;
 }
 
