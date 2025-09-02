@@ -2204,6 +2204,7 @@ model TemporadaPesca {
   BahiaId                   BigInt
   estadoTemporadaId         BigInt
   toneladasCapturadasTemporada     Decimal?
+  temporadaPescaIniciada   Boolean @default(false)
 
   faenas               FaenaPesca[] @relation("FaenaTemporadas")
   entregasARendir      EntregaARendir[]

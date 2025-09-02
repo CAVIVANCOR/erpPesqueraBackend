@@ -29,7 +29,7 @@ async function validarSolapamiento(data, id = null) {
   };
   if (id) where['NOT'] = { id };
   const existe = await prisma.temporadaPesca.findFirst({ where });
-  if (existe) throw new ConflictError('Ya existe una temporada con el mismo nombre, empresa y estado en un rango de fechas solapado.');
+  if (existe) throw new ConflictError('Ya existe una temporada con el mismo nombre, empresa y estado en fechas que se superponen. Por favor, verifique las fechas o cambie el nombre.');
 }
 
 const listar = async () => {
@@ -120,7 +120,7 @@ const eliminar = async (id) => {
     });
     if (!existente) throw new NotFoundError('TemporadaPesca no encontrada');
     if ((existente.faenas && existente.faenas.length > 0) || (existente.entregasARendir && existente.entregasARendir.length > 0) || existente.liquidacionTemporada) {
-      throw new ConflictError('No se puede eliminar porque tiene faenas, entregas o liquidación asociada.');
+      throw new ConflictError('No se puede eliminar porque tiene faenas, entregas o liquidación asociada. Por favor, elimine o desasocie estos registros antes de intentar eliminar la temporada.');
     }
     await prisma.temporadaPesca.delete({ where: { id } });
     return true;
@@ -209,6 +209,7 @@ const iniciar = async (id) => {
         where: { id: Number(temporada.id) },
         data: {
           estadoTemporadaId: Number(estadoEnProceso.id),
+          temporadaPescaIniciada: true,
           fechaActualizacion: new Date()
         }
       });
