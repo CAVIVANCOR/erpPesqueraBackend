@@ -90,7 +90,12 @@ const crear = async (data) => {
 
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.faenaPesca.findUnique({ where: { id } });
+    const existente = await prisma.faenaPesca.findUnique({ 
+      where: { id },
+      include: {
+        temporada: true
+      }
+    });
     if (!existente) throw new NotFoundError('FaenaPesca no encontrada');
     
     // Filtrar solo los campos que se pueden actualizar directamente
@@ -119,6 +124,11 @@ const actualizar = async (id, data) => {
       if (data.hasOwnProperty(campo)) {
         dataFiltrada[campo] = data[campo];
       }
+    }
+    
+    // Regenerar descripción automáticamente
+    if (existente.temporada) {
+      dataFiltrada.descripcion = `Faena ${id} Temporada ${existente.temporada.numeroResolucion || 'S/N'}`;
     }
     
     // Validar claves foráneas si cambian

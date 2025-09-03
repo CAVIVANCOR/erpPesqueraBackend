@@ -226,18 +226,11 @@ const iniciar = async (id) => {
       });
 
       // 3. Crear FaenaPesca con lógica de autocompletado específica
-      // Contar faenas existentes para generar descripción automática
-      const faenasExistentes = await tx.faenaPesca.count({
-        where: { temporadaId: Number(temporada.id) }
-      });
-      const numeroFaena = faenasExistentes + 1;
-      const descripcionFaena = `Faena ${numeroFaena} Temporada ${temporada.numeroResolucion || 'S/N'}`;
-      
       const faenaPesca = await tx.faenaPesca.create({
         data: {
           temporadaId: Number(temporada.id),
           estadoFaenaId: Number(estadoFaenaIniciada.id),
-          descripcion: descripcionFaena,
+          descripcion: "Temporal", // Descripción temporal que se actualizará
           // Campos autocompletados (solo si hay exactamente 1 registro)
           embarcacionId: Number(embarcacionId),
           motoristaId: Number(motoristaId),
@@ -255,13 +248,58 @@ const iniciar = async (id) => {
         }
       });
 
+      // Actualizar la descripción con el ID real de la faena
+      const descripcionFaena = `Faena ${faenaPesca.id} Temporada ${temporada.numeroResolucion || 'S/N'}`;
+      await tx.faenaPesca.update({
+        where: { id: faenaPesca.id },
+        data: { descripcion: descripcionFaena }
+      });
+
       // 4. Crear DetAccionesPreviasFaena para cada acción previa
       const detAcciones = [];
       for (const accion of accionesPrevias) {
+        // Buscar responsable para PESCA INDUSTRIAL (moduloSistemaId=2)
+        const responsable = await tx.parametroAprobador.findFirst({
+          where: {
+            empresaId: Number(temporada.empresaId),
+            embarcacionId: Number(faenaPesca.embarcacionId),
+            moduloSistemaId: 2, // PESCA INDUSTRIAL
+            cesado: false,
+            vigenteDesde: { lte: new Date() },
+            OR: [
+              { vigenteHasta: null },
+              { vigenteHasta: { gte: new Date() } }
+            ]
+          }
+        });
+
+        if (!responsable) {
+          throw new ValidationError('No se encontró al responsable PESCA INDUSTRIAL');
+        }
+
+        // Buscar verificador para VERIFICADOR PESCA INDUSTRIAL (moduloSistemaId=11)
+        const verificador = await tx.parametroAprobador.findFirst({
+          where: {
+            moduloSistemaId: 11, // VERIFICADOR PESCA INDUSTRIAL
+            cesado: false,
+            vigenteDesde: { lte: new Date() },
+            OR: [
+              { vigenteHasta: null },
+              { vigenteHasta: { gte: new Date() } }
+            ]
+          }
+        });
+
+        if (!verificador) {
+          throw new ValidationError('No se encontró al Verificador Responsable para PESCA INDUSTRIAL');
+        }
+
         const detAccion = await tx.detAccionesPreviasFaena.create({
           data: {
             faenaPescaId: Number(faenaPesca.id),
             accionPreviaId: Number(accion.id),
+            responsableId: Number(responsable.personalRespId),
+            verificadorId: Number(verificador.personalRespId),
             cumplida: false,
             verificado: false,
             createdAt: new Date(),
