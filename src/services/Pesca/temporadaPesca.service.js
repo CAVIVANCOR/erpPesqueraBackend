@@ -309,13 +309,64 @@ const iniciar = async (id) => {
         detAcciones.push(detAccion);
       }
 
+      // 5. Crear DetalleDocTripulantes para cada tripulante y sus documentos requeridos
+      const detalleDocTripulantes = [];
+      
+      // Filtrar tripulantes por empresaId y cargos específicos (21, 22, 14) y no cesados
+      const tripulantes = await tx.personal.findMany({
+        where: {
+          empresaId: Number(temporada.empresaId),
+          cargoId: {
+            in: [21, 22, 14] // TRIPULANTE EMBARCACION, PATRON EMBARCACION, MOTORISTA EMBARCACION
+          },
+          cesado: false
+        }
+      });
+
+      // Para cada tripulante, obtener sus documentos requeridos
+      for (const tripulante of tripulantes) {
+        const documentosPersonal = await tx.documentacionPersonal.findMany({
+          where: {
+            personalId: Number(tripulante.id)
+          }
+        });
+
+        // Crear un registro DetalleDocTripulantes por cada documento del tripulante
+        for (const docPersonal of documentosPersonal) {
+          // Determinar si el documento está vencido
+          const fechaActual = new Date();
+          const docVencido = docPersonal.fechaVencimiento ? 
+            new Date(docPersonal.fechaVencimiento) < fechaActual : false;
+
+          const detalleDoc = await tx.detalleDocTripulantes.create({
+            data: {
+              faenaPescaId: Number(faenaPesca.id),
+              tripulanteId: Number(docPersonal.personalId),
+              documentoId: Number(docPersonal.documentoPescaId),
+              numeroDocumento: docPersonal.numeroDocumento,
+              fechaEmision: docPersonal.fechaEmision,
+              fechaVencimiento: docPersonal.fechaVencimiento,
+              urlDocTripulantePdf: docPersonal.urlDocPdf,
+              docVencido: docVencido,
+              verificado: false, // Por defecto no verificado
+              observaciones: docPersonal.observaciones,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }
+          });
+          detalleDocTripulantes.push(detalleDoc);
+        }
+      }
+
       return {
         temporadaActualizada,
         entregaARendir,
         faenaPesca,
         detAcciones,
+        detalleDocTripulantes,
         mensaje: 'Temporada iniciada exitosamente y estado cambiado a EN PROCESO'
       };
+
     });
 
     return resultado;

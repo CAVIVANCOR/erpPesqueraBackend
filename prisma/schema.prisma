@@ -956,6 +956,7 @@ model DetalleDocTripulantes {
   createdAt           DateTime   @default(now())
   updatedAt           DateTime
   urlDocTripulantePdf String?
+  docVencido Boolean @default(false)
 
   faenaPesca     FaenaPesca @relation(fields: [faenaPescaId], references: [id])
 }
@@ -1093,6 +1094,11 @@ model DocumentacionEmbarcacion {
   id               BigInt         @id @default(autoincrement())
   embarcacionId    BigInt
   documentoPescaId BigInt
+  numeroDocumento  String?
+  fechaEmision     DateTime?
+  fechaVencimiento DateTime?
+  urlDocPdf String?
+  docVencido Boolean @default(false)
   observaciones    String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime
@@ -1104,6 +1110,11 @@ model DocumentacionPersonal {
   id               BigInt         @id @default(autoincrement())
   personalId       BigInt
   documentoPescaId BigInt
+  numeroDocumento  String?
+  fechaEmision     DateTime?
+  fechaVencimiento DateTime?
+  urlDocPdf String?
+  docVencido Boolean @default(false)
   observaciones    String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime

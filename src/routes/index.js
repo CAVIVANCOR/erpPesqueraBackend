@@ -13,7 +13,7 @@ import tipoContratoRoutes from './Usuarios/tipoContrato.routes.js'; // CRUD prof
 import accesosUsuarioRoutes from './Usuarios/accesosUsuario.routes.js';
 import moduloSistemaRoutes from './Usuarios/moduloSistema.routes.js';
 import submoduloSistemaRoutes from './Usuarios/submoduloSistema.routes.js';
-import documentacionPersonalRoutes from './Usuarios/documentacionPersonal.routes.js';
+import documentacionPersonalRoutes from './AccesoInstalaciones/documentacion.personal.routes.js';
 import ubigeoRoutes from './Usuarios/ubigeo.routes.js';
 import paisRoutes from './Usuarios/pais.routes.js';
 import departamentoRoutes from './Usuarios/departamento.routes.js';
