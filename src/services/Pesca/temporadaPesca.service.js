@@ -327,7 +327,8 @@ const iniciar = async (id) => {
       for (const tripulante of tripulantes) {
         const documentosPersonal = await tx.documentacionPersonal.findMany({
           where: {
-            personalId: Number(tripulante.id)
+            personalId: Number(tripulante.id),
+            cesado: false
           }
         });
 
@@ -358,12 +359,49 @@ const iniciar = async (id) => {
         }
       }
 
+      // 6. Crear DetalleDocEmbarcacion para cada documento de la embarcación
+      const detalleDocEmbarcacion = [];
+      
+      // Filtrar documentos de la embarcación por embarcacionId y no cesados
+      const documentosEmbarcacion = await tx.documentacionEmbarcacion.findMany({
+        where: {
+          embarcacionId: Number(faenaPesca.embarcacionId),
+          cesado: false
+        }
+      });
+
+      // Crear un registro DetalleDocEmbarcacion por cada documento de la embarcación
+      for (const docEmbarcacion of documentosEmbarcacion) {
+        // Determinar si el documento está vencido
+        const fechaActual = new Date();
+        const docVencido = docEmbarcacion.fechaVencimiento ? 
+          new Date(docEmbarcacion.fechaVencimiento) < fechaActual : false;
+
+        const detalleDocEmb = await tx.detalleDocEmbarcacion.create({
+          data: {
+            faenaPescaId: Number(faenaPesca.id),
+            documentoPescaId: Number(docEmbarcacion.documentoPescaId),
+            numeroDocumento: docEmbarcacion.numeroDocumento,
+            fechaEmision: docEmbarcacion.fechaEmision,
+            fechaVencimiento: docEmbarcacion.fechaVencimiento,
+            observaciones: docEmbarcacion.observaciones,
+            urlDocEmbarcacion: docEmbarcacion.urlDocPdf,
+            docVencido: docVencido,
+            verificado: false, // Por defecto no verificado
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }
+        });
+        detalleDocEmbarcacion.push(detalleDocEmb);
+      }
+
       return {
         temporadaActualizada,
         entregaARendir,
         faenaPesca,
         detAcciones,
         detalleDocTripulantes,
+        detalleDocEmbarcacion,
         mensaje: 'Temporada iniciada exitosamente y estado cambiado a EN PROCESO'
       };
 

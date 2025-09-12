@@ -228,51 +228,6 @@ model CalaFaenaConsumo {
   especiesPescadas DetCalaPescaConsumo[]
 }
 
-model CalaFaenaConsumoProduce {
-  id                         BigInt                       @id @default(autoincrement())
-  bahiaId                    BigInt
-  motoristaId                BigInt
-  patronId                   BigInt
-  embarcacionId              BigInt
-  faenaPescaConsumoId        BigInt
-  fechaHoraInicio            DateTime
-  fechaHoraFin               DateTime
-  latitud                    Decimal?
-  longitud                   Decimal?
-  profundidadM               Decimal?
-  toneladasCapturadas        Decimal?
-  observaciones              String?
-  urlInformeCalaProduce      String?
-  createdAt                  DateTime                     @default(now())
-  updatedAt                  DateTime
-
-  faenaPescaConsumo       FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
-  especiesProcesadas      DetCalaFaenaConsumoProduce[]
-}
-
-model CalaProduce {
-  id                        BigInt                      @id @default(autoincrement())
-  bahiaId                   BigInt
-  motoristaId               BigInt
-  patronId                  BigInt
-  embarcacionId             BigInt
-  faenaPescaId              BigInt
-  fechaHoraInicio           DateTime
-  fechaHoraFin              DateTime
-  latitud                   Decimal?
-  longitud                  Decimal?
-  profundidadM              Decimal?
-  toneladasCapturadas       Decimal?
-  observaciones             String?
-  createdAt                 DateTime                    @default(now())
-  updatedAt                 DateTime
-  temporadaPescaId          BigInt
-  urlInformeCalaProduce     String?
-
-  faenaPesca            FaenaPesca @relation(fields: [faenaPescaId], references: [id])
-  especiesProcesadas    DetalleCalaEspecieProduce[]
-}
-
 model CargosPersonal {
   id          BigInt     @id @default(autoincrement())
   descripcion String?
@@ -516,12 +471,16 @@ model DescargaFaenaConsumo {
   creadoEn                     DateTime                  @default(now())
   actualizadoEn                DateTime
   movIngresoAlmacenId          BigInt
+  especieId              BigInt?
+  toneladas              Decimal?
+  porcentajeJuveniles    Decimal?
 
   faenaPescaConsumo            FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
-  detalles                     DetDescargaFaenaConsumo[]
 
   @@index([movIngresoAlmacenId])
 }
+
+
 
 model DescargaFaenaPesca {
   id                           BigInt                 @id @default(autoincrement())
@@ -550,12 +509,15 @@ model DescargaFaenaPesca {
   temporadaPescaId             BigInt
   urlInformeDescargaProduce    String?
   movIngresoAlmacenId          BigInt
+  especieId           BigInt?
+  toneladas           Decimal?
+  porcentajeJuveniles Decimal?
 
 faenaPesca FaenaPesca @relation(fields: [faenaPescaId], references: [id])
-  detalles DetalleDescargaFaena[]
 
   @@index([movIngresoAlmacenId])
 }
+
 
 model DestinoProducto {
   id                BigInt              @id @default(autoincrement())
@@ -605,19 +567,6 @@ model DetAccionesPreviasFaenaConsumo {
 
   faenaPescaConsumo    FaenaPescaConsumo     @relation(fields: [faenaPescaConsumoId], references: [id])
   accionPrevia         AccionesPreviasFaena  @relation(fields: [accionPreviaId], references: [id])
-}
-
-model DetCalaFaenaConsumoProduce {
-  id                        BigInt                  @id @default(autoincrement())
-  calaFaenaConsumoProduceId BigInt
-  especieId                 BigInt
-  toneladas                 Decimal?
-  porcentajeJuveniles       Decimal?
-  observaciones             String?
-  createdAt                 DateTime                @default(now())
-  updatedAt                 DateTime
-
-  calaFaenaConsumoProduce CalaFaenaConsumoProduce @relation(fields: [calaFaenaConsumoProduceId], references: [id])
 }
 
 model DetCalaPescaConsumo {
@@ -673,18 +622,7 @@ model DetCotizacionVentas {
   producto            Producto         @relation(fields: [productoId], references: [id])
 }
 
-model DetDescargaFaenaConsumo {
-  id                     BigInt               @id @default(autoincrement())
-  descargaFaenaConsumoId BigInt
-  especieId              BigInt
-  toneladas              Decimal?
-  porcentajeJuveniles    Decimal?
-  observaciones          String?
-  createdAt              DateTime             @default(now())
-  updatedAt              DateTime
 
-  descargaFaenaConsumo DescargaFaenaConsumo @relation(fields: [descargaFaenaConsumoId], references: [id])
-}
 
 model DetDocEmbarcacionPescaConsumo {
   id                  BigInt            @id @default(autoincrement())
@@ -901,31 +839,8 @@ model Especie {
   calaEspecie DetalleCalaEspecie[]
 }
 
-model DetalleCalaEspecieProduce {
-  id                  BigInt      @id @default(autoincrement())
-  calaProduceId       BigInt
-  especieId           BigInt
-  toneladas           Decimal?
-  porcentajeJuveniles Decimal?
-  observaciones       String?
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime
 
-  calaProduce         CalaProduce   @relation(fields: [calaProduceId], references: [id])
-}
 
-model DetalleDescargaFaena {
-  id                  BigInt             @id @default(autoincrement())
-  descargaFaenaId     BigInt
-  especieId           BigInt
-  toneladas           Decimal?
-  porcentajeJuveniles Decimal?
-  observaciones       String?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime
-
-  descargaFaena       DescargaFaenaPesca @relation(fields: [descargaFaenaId], references: [id])
-}
 
 model DetalleDocEmbarcacion {
   id               BigInt     @id @default(autoincrement())
@@ -939,6 +854,7 @@ model DetalleDocEmbarcacion {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime
   urlDocEmbarcacion String?
+  docVencido  Boolean @default(false)
 
   faenaPesca       FaenaPesca     @relation(fields: [faenaPescaId], references: [id])
 }
@@ -1102,6 +1018,7 @@ model DocumentacionEmbarcacion {
   observaciones    String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime
+  cesado Boolean @default(false)
 
   embarcacion     Embarcacion   @relation(fields: [embarcacionId], references: [id])
 }
@@ -1118,6 +1035,7 @@ model DocumentacionPersonal {
   observaciones    String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime
+  cesado Boolean @default(false)
 
   personal        Personal        @relation(fields: [personalId], references: [id])
 }
@@ -1366,7 +1284,6 @@ model FaenaPesca {
   tripulantes     TripulanteFaena[]
   detalleDocsTripulantes DetalleDocTripulantes[]
   calas Cala[]
-  calasProduce CalaProduce[]
   descargaFaena DescargaFaenaPesca?
   accionesPrevias DetAccionesPreviasFaena[]
   liquidacionFaena LiquidacionFaenaPesca?
@@ -1401,7 +1318,6 @@ model FaenaPescaConsumo {
   detalleDocsTripulantes    DetDocTripulantesFaenaConsumo[]
   accionesPrevias           DetAccionesPreviasFaenaConsumo[]
   calas                     CalaFaenaConsumo[]
-  calasProduce              CalaFaenaConsumoProduce[]
   descargaFaenaConsumo      DescargaFaenaConsumo?
   liquidacionFaenaConsumo   LiquidacionFaenaConsumo?
 }
