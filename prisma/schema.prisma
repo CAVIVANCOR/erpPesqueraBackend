@@ -448,29 +448,28 @@ model Departamento {
 model DescargaFaenaConsumo {
   id                           BigInt                    @id @default(autoincrement())
   faenaPescaConsumoId          BigInt                    @unique
-  puertoDescargaId             BigInt
-  fechaHoraArriboPuerto        DateTime
-  fechaHoraLlegadaPuerto       DateTime
-  clienteId                    BigInt
+  puertoDescargaId             BigInt?
+  fechaHoraArriboPuerto        DateTime?
+  fechaHoraLlegadaPuerto       DateTime?
+  clienteId                    BigInt?
   numPlataformaDescarga        String?                   @db.VarChar(20)
   turnoPlataformaDescarga      String?                   @db.VarChar(20)
-  fechaHoraInicioDescarga      DateTime
-  fechaHoraFinDescarga         DateTime
+  fechaHoraInicioDescarga      DateTime?
+  fechaHoraFinDescarga         DateTime?
   numWinchaPesaje              String?                   @db.VarChar(20)
   urlComprobanteWincha         String?
-  patroId                      BigInt
+  patronId                      BigInt
   motoristaId                  BigInt
   bahiaId                      BigInt
   latitud                      Decimal?
   longitud                     Decimal?
-  fechaDescarga                DateTime
-  combustibleAbastecidoGalones Decimal
+  combustibleAbastecidoGalones Decimal?
   urlValeAbastecimiento        String?
   urlInformeDescargaProduce    String?
   observaciones                String?
   creadoEn                     DateTime                  @default(now())
   actualizadoEn                DateTime
-  movIngresoAlmacenId          BigInt
+  movIngresoAlmacenId          BigInt?
   especieId              BigInt?
   toneladas              Decimal?
   porcentajeJuveniles    Decimal?
@@ -485,30 +484,29 @@ model DescargaFaenaConsumo {
 model DescargaFaenaPesca {
   id                           BigInt                 @id @default(autoincrement())
   faenaPescaId                 BigInt                 @unique
-  puertoDescargaId             BigInt
-  fechaHoraArriboPuerto        DateTime
-  fechaHoraLlegadaPuerto       DateTime
+  puertoDescargaId             BigInt?
+  fechaHoraArriboPuerto        DateTime?
+  fechaHoraLlegadaPuerto       DateTime?
   numPlataformaDescarga        String?                @db.VarChar(20)
   turnoPlataformaDescarga      String?                @db.VarChar(20)
-  fechaHoraInicioDescarga      DateTime
-  fechaHoraFinDescarga         DateTime
+  fechaHoraInicioDescarga      DateTime?
+  fechaHoraFinDescarga         DateTime?
   numWinchaPesaje              String?                @db.VarChar(20)
   urlComprobanteWincha         String?
-  patroId                      BigInt
+  patronId                      BigInt
   motoristaId                  BigInt
   bahiaId                      BigInt
   latitud                      Decimal?
   longitud                     Decimal?
-  fechaDescarga                DateTime
-  combustibleAbastecidoGalones Decimal
+  combustibleAbastecidoGalones Decimal?
   urlValeAbastecimiento        String?
   observaciones                String?
   creadoEn                     DateTime               @default(now())
   actualizadoEn                DateTime
-  clienteId                    BigInt
+  clienteId                    BigInt?
   temporadaPescaId             BigInt
   urlInformeDescargaProduce    String?
-  movIngresoAlmacenId          BigInt
+  movIngresoAlmacenId          BigInt?
   especieId           BigInt?
   toneladas           Decimal?
   porcentajeJuveniles Decimal?

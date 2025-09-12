@@ -8,12 +8,12 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 
 async function validarClavesForaneas(data) {
-  const [faenaPesca, temporada, puerto, cliente, patro, motorista, bahia, movIngresoAlmacen] = await Promise.all([
+  const [faenaPesca, temporada, puerto, cliente, patron, motorista, bahia, movIngresoAlmacen] = await Promise.all([
     prisma.faenaPesca.findUnique({ where: { id: data.faenaPescaId } }),
     prisma.temporadaPesca.findUnique({ where: { id: data.temporadaPescaId } }),
     prisma.puerto.findUnique({ where: { id: data.puertoDescargaId } }),
     prisma.cliente.findUnique({ where: { id: data.clienteId } }),
-    prisma.tripulante.findUnique({ where: { id: data.patroId } }),
+    prisma.tripulante.findUnique({ where: { id: data.patronId } }),
     prisma.tripulante.findUnique({ where: { id: data.motoristaId } }),
     prisma.bahia.findUnique({ where: { id: data.bahiaId } }),
     prisma.movimientoAlmacen.findUnique({ where: { id: data.movIngresoAlmacenId } })
@@ -22,7 +22,7 @@ async function validarClavesForaneas(data) {
   if (!temporada) throw new ValidationError('El temporadaPescaId no existe.');
   if (!puerto) throw new ValidationError('El puertoDescargaId no existe.');
   if (!cliente) throw new ValidationError('El clienteId no existe.');
-  if (!patro) throw new ValidationError('El patroId no existe.');
+  if (!patron) throw new ValidationError('El patronId no existe.');
   if (!motorista) throw new ValidationError('El motoristaId no existe.');
   if (!bahia) throw new ValidationError('El bahiaId no existe.');
   if (!movIngresoAlmacen) throw new ValidationError('El movIngresoAlmacenId no existe.');
@@ -57,7 +57,7 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     const obligatorios = [
-      'faenaPescaId','temporadaPescaId','puertoDescargaId','fechaHoraArriboPuerto','fechaHoraLlegadaPuerto','clienteId','fechaHoraInicioDescarga','fechaHoraFinDescarga','patroId','motoristaId','bahiaId','fechaDescarga','combustibleAbastecidoGalones','movIngresoAlmacenId'
+      'faenaPescaId','temporadaPescaId','puertoDescargaId','fechaHoraArriboPuerto','fechaHoraLlegadaPuerto','clienteId','fechaHoraInicioDescarga','fechaHoraFinDescarga','patronId','motoristaId','bahiaId','combustibleAbastecidoGalones','movIngresoAlmacenId'
     ];
     for (const campo of obligatorios) {
       if (typeof data[campo] === 'undefined' || data[campo] === null) {
@@ -80,7 +80,7 @@ const actualizar = async (id, data) => {
     if (!existente) throw new NotFoundError('DescargaFaenaPesca no encontrada');
     // Validar claves foráneas si cambian
     const claves = [
-      'faenaPescaId','temporadaPescaId','puertoDescargaId','clienteId','patroId','motoristaId','bahiaId','movIngresoAlmacenId'
+      'faenaPescaId','temporadaPescaId','puertoDescargaId','clienteId','patronId','motoristaId','bahiaId','movIngresoAlmacenId'
     ];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
