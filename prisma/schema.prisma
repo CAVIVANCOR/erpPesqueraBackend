@@ -510,6 +510,7 @@ model DescargaFaenaPesca {
   especieId           BigInt?
   toneladas           Decimal?
   porcentajeJuveniles Decimal?
+  numReporteRecepcion String? @db.VarChar(20)
 
 faenaPesca FaenaPesca @relation(fields: [faenaPescaId], references: [id])
 
