@@ -473,6 +473,10 @@ model DescargaFaenaConsumo {
   especieId              BigInt?
   toneladas              Decimal?
   porcentajeJuveniles    Decimal?
+  fechaHoraFondeo     DateTime?
+  latitudFondeo       Decimal?
+  longitudFondeo      Decimal?
+  puertoFondeoId      BigInt?
 
   faenaPescaConsumo            FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
 
@@ -511,6 +515,10 @@ model DescargaFaenaPesca {
   toneladas           Decimal?
   porcentajeJuveniles Decimal?
   numReporteRecepcion String? @db.VarChar(20)
+  fechaHoraFondeo     DateTime?
+  latitudFondeo       Decimal?
+  longitudFondeo      Decimal?
+  puertoFondeoId      BigInt?
 
 faenaPesca FaenaPesca @relation(fields: [faenaPescaId], references: [id])
 
@@ -1261,11 +1269,9 @@ model FaenaPesca {
   updatedAt               DateTime
   bolicheRedId            BigInt?
   embarcacionId           BigInt?
-  fechaRetorno            DateTime?
   fechaSalida             DateTime?
   fechaDescarga           DateTime?
   puertoDescargaId        BigInt?
-  puertoRetornoId         BigInt?
   puertoSalidaId          BigInt?
   bahiaId                 BigInt?
   motoristaId             BigInt?
@@ -1275,6 +1281,8 @@ model FaenaPesca {
   urlDeclaracionDesembarqueArmador String?
   estadoFaenaId           BigInt?
   toneladasCapturadasFaena     Decimal?
+  fechaHoraFondeo     DateTime?
+  puertoFondeoId      BigInt?
 
   temporada       TemporadaPesca @relation("FaenaTemporadas", fields: [temporadaId], references: [id])
   embarcacion     Embarcacion?   @relation("EmbarcacionFaenas", fields: [embarcacionId], references: [id])

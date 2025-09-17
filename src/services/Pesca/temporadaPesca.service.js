@@ -238,10 +238,11 @@ const iniciar = async (id) => {
           bahiaId: Number(bahiaId),
           // Campos que quedan null deliberadamente
           fechaSalida: null,
-          fechaRetorno: null,
+          fechaDescarga: null,
+          fechaHoraFondeo: null,
           puertoSalidaId: null,
-          puertoRetornoId: null,
           puertoDescargaId: null,
+          puertoFondeoId: null,
           bolicheRedId: null,
           createdAt: new Date(),
           updatedAt: new Date()

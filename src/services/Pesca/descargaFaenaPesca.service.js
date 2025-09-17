@@ -24,6 +24,12 @@ async function validarClavesForaneas(data) {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
   
+  if (data.puertoFondeoId) {
+    validaciones.push(prisma.puertoPesca.findUnique({ where: { id: data.puertoFondeoId } }));
+  } else {
+    validaciones.push(Promise.resolve(true)); // placeholder
+  }
+  
   if (data.clienteId) {
     validaciones.push(prisma.entidadComercial.findUnique({ where: { id: data.clienteId } }));
   } else {
@@ -42,17 +48,18 @@ async function validarClavesForaneas(data) {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
   
-  const [faenaPesca, temporada, patron, motorista, bahia, puerto, cliente, movIngresoAlmacen, especie] = await Promise.all(validaciones);
+  const [faenaPesca, temporada, patron, motorista, bahia, puerto, puertoFondeo, cliente, movIngresoAlmacen, especie] = await Promise.all(validaciones);
   
   // Validar campos obligatorios
   if (!faenaPesca) throw new ValidationError('El faenaPescaId no existe.');
   if (!temporada) throw new ValidationError('El temporadaPescaId no existe.');
   if (!patron) throw new ValidationError('El patronId no existe.');
   if (!motorista) throw new ValidationError('El motoristaId no existe.');
-  if (!bahia) throw new ValidationError('El bahiaId no existe.');
+  if (!bahia) throw new ValidationError('El bahiaId no existe en la tabla personal.');
   
   // Validar campos opcionales solo si se proporcionaron
   if (data.puertoDescargaId && !puerto) throw new ValidationError('El puertoDescargaId no existe.');
+  if (data.puertoFondeoId && !puertoFondeo) throw new ValidationError('El puertoFondeoId no existe.');
   if (data.clienteId && !cliente) throw new ValidationError('El clienteId no existe.');
   if (data.movIngresoAlmacenId && !movIngresoAlmacen) throw new ValidationError('El movIngresoAlmacenId no existe.');
   if (data.especieId && !especie) throw new ValidationError('El especieId no existe.');
@@ -62,6 +69,39 @@ async function validarUnicidadFaenaPescaId(faenaPescaId, id = null) {
   const where = id ? { faenaPescaId, NOT: { id } } : { faenaPescaId };
   const existe = await prisma.descargaFaenaPesca.findFirst({ where });
   if (existe) throw new ConflictError('Ya existe una descarga para esa faenaPescaId.');
+}
+
+/**
+ * Sincroniza los campos de FaenaPesca con la última DescargaFaenaPesca asociada
+ * @param {number} faenaPescaId - ID de la faena de pesca a sincronizar
+ */
+async function sincronizarFaenaConUltimaDescarga(faenaPescaId) {
+  try {
+    if (!faenaPescaId) return;
+    
+    // Buscar la última descarga asociada a esta faena, ordenada por ID descendente
+    const ultimaDescarga = await prisma.descargaFaenaPesca.findFirst({
+      where: { faenaPescaId },
+      orderBy: { id: 'desc' }
+    });
+    
+    if (!ultimaDescarga) return;
+    
+    // Actualizar los campos de FaenaPesca con los datos de la última descarga
+    await prisma.faenaPesca.update({
+      where: { id: faenaPescaId },
+      data: {
+        fechaDescarga: ultimaDescarga.fechaHoraInicioDescarga,
+        puertoDescargaId: ultimaDescarga.puertoDescargaId,
+        fechaHoraFondeo: ultimaDescarga.fechaHoraFondeo,
+        puertoFondeoId: ultimaDescarga.puertoFondeoId
+      }
+    });
+  } catch (err) {
+    // Propagar el error manteniendo el patrón del servicio
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos al sincronizar faena', err.message);
+    throw err;
+  }
 }
 
 const listar = async () => {
@@ -113,7 +153,12 @@ const crear = async (data) => {
       actualizadoEn: new Date()
     };
     
-    return await prisma.descargaFaenaPesca.create({ data: dataConTimestamp });
+    const descargaCreada = await prisma.descargaFaenaPesca.create({ data: dataConTimestamp });
+    
+    // Sincronizar FaenaPesca con la última descarga asociada
+    await sincronizarFaenaConUltimaDescarga(data.faenaPescaId);
+    
+    return descargaCreada;
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -128,7 +173,7 @@ const actualizar = async (id, data) => {
     
     // Validar claves foráneas si cambian (incluyendo campos opcionales)
     const claves = [
-      'faenaPescaId', 'temporadaPescaId', 'puertoDescargaId', 'clienteId', 
+      'faenaPescaId', 'temporadaPescaId', 'puertoDescargaId', 'puertoFondeoId', 'clienteId', 
       'patronId', 'motoristaId', 'bahiaId', 'movIngresoAlmacenId', 'especieId'
     ];
     if (claves.some(k => data[k] !== undefined && data[k] !== existente[k])) {
@@ -144,7 +189,14 @@ const actualizar = async (id, data) => {
       actualizadoEn: new Date()
     };
     
-    return await prisma.descargaFaenaPesca.update({ where: { id }, data: dataConTimestamp });
+    const descargaActualizada = await prisma.descargaFaenaPesca.update({ where: { id }, data: dataConTimestamp });
+    
+    // Sincronizar FaenaPesca con la última descarga asociada
+    // Usar el faenaPescaId actualizado o el existente
+    const faenaPescaIdParaSincronizar = data.faenaPescaId || existente.faenaPescaId;
+    await sincronizarFaenaConUltimaDescarga(faenaPescaIdParaSincronizar);
+    
+    return descargaActualizada;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -176,5 +228,6 @@ export default {
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  sincronizarFaenaConUltimaDescarga
 };
