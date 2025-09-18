@@ -43,8 +43,7 @@ async function tieneDependencias(id) {
       accionesPrevias: true,
       calas: true,
       calasProduce: true,
-      descargaFaenaConsumo: true,
-      liquidacionFaenaConsumo: true
+      descargaFaenaConsumo: true
     }
   });
   if (!faena) throw new NotFoundError('FaenaPescaConsumo no encontrada');
@@ -55,8 +54,7 @@ async function tieneDependencias(id) {
     (faena.accionesPrevias && faena.accionesPrevias.length > 0) ||
     (faena.calas && faena.calas.length > 0) ||
     (faena.calasProduce && faena.calasProduce.length > 0) ||
-    !!faena.descargaFaenaConsumo ||
-    !!faena.liquidacionFaenaConsumo
+    !!faena.descargaFaenaConsumo
   );
 }
 

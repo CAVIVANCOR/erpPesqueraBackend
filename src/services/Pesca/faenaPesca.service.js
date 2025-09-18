@@ -165,7 +165,6 @@ const eliminar = async (id) => {
         calas: true,
         calasProduce: true,
         accionesPrevias: true,
-        liquidacionFaena: true,
         descargaFaena: true
       }
     });
@@ -177,7 +176,6 @@ const eliminar = async (id) => {
       (existente.calas && existente.calas.length > 0) ||
       (existente.calasProduce && existente.calasProduce.length > 0) ||
       (existente.accionesPrevias && existente.accionesPrevias.length > 0) ||
-      existente.liquidacionFaena ||
       existente.descargaFaena
     ) {
       throw new ConflictError('No se puede eliminar porque tiene dependencias asociadas.');

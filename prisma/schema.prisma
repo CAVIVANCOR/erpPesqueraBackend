@@ -1293,7 +1293,6 @@ model FaenaPesca {
   calas Cala[]
   descargaFaena DescargaFaenaPesca?
   accionesPrevias DetAccionesPreviasFaena[]
-  liquidacionFaena LiquidacionFaenaPesca?
 }
 
 model FaenaPescaConsumo {
@@ -1326,7 +1325,6 @@ model FaenaPescaConsumo {
   accionesPrevias           DetAccionesPreviasFaenaConsumo[]
   calas                     CalaFaenaConsumo[]
   descargaFaenaConsumo      DescargaFaenaConsumo?
-  liquidacionFaenaConsumo   LiquidacionFaenaConsumo?
 }
 
 model FamiliaProducto {
@@ -1443,43 +1441,6 @@ model LiqNovedadPescaConsumo {
   movimientos           MovLiqNovedadPescaConsumo[]
 }
 
-model LiquidacionFaenaConsumo {
-  id                         BigInt                       @id @default(autoincrement())
-  faena_pesca_consumo_id     BigInt                       @unique
-  fecha_liquidacion          DateTime
-  responsable_id             BigInt
-  verificadorId              BigInt?
-  fechaVerificacion          DateTime?
-  urlPdfLiquidacion          String?
-  saldo_inicial              Decimal
-  saldo_final                Decimal
-  observaciones              String?
-  fecha_creacion             DateTime                     @default(now())
-  fecha_actualizacion        DateTime
-
-  faenaPescaConsumo            FaenaPescaConsumo @relation(fields: [faena_pesca_consumo_id], references: [id])
-  movimientosLiqFaenaConsumo   MovLiquidacionFaenaConsumo[]
-}
-
-model LiquidacionFaenaPesca {
-  faena_pesca_id           BigInt                     @unique
-  fecha_liquidacion        DateTime
-  responsable_id           BigInt
-  verificadorId            BigInt?
-  fechaVerificacion        DateTime?
-  urlPdfLiquidacion        String?
-  saldo_inicial            Decimal
-  saldo_final              Decimal
-  observaciones            String?
-  fecha_creacion           DateTime                   @default(now())
-  fecha_actualizacion      DateTime
-  temporada_pesca_id       BigInt
-  id                       BigInt                     @id @default(autoincrement())
-
-  faenaPesca             FaenaPesca @relation(fields: [faena_pesca_id], references: [id])
-  movimientosLiqFaenaPesca            MovLiquidacionFaenaPesca[]
-}
-
 model LiquidacionProcesoComprasProd {
   id                               BigInt                             @id @default(autoincrement())
   cotizacionComprasId              BigInt                             @unique
@@ -1577,37 +1538,11 @@ model MovLiqNovedadPescaConsumo {
   centroCostoId            BigInt?
   fechaMovimiento          DateTime
   fechaRegistro            DateTime               @default(now())
+  urlComprobanteMovimiento String?
 
   liqNovedadPescaConsumo    LiqNovedadPescaConsumo @relation(fields: [liqNovedadPescaConsumoId], references: [id])
 }
 
-model MovLiquidacionFaenaConsumo {
-  id                        BigInt                  @id @default(autoincrement())
-  liquidacionFaenaConsumoId BigInt
-  refDetMovsEntregaRendirId BigInt
-  tipoMovimientoId          BigInt
-  monto                     Decimal
-  centroCostoId             BigInt?
-  observaciones             String?
-  fechaMovimiento           DateTime
-  fechaRegistro             DateTime                @default(now())
-
-  liquidacionFaenaConsumo   LiquidacionFaenaConsumo @relation(fields: [liquidacionFaenaConsumoId], references: [id])
-}
-
-model MovLiquidacionFaenaPesca {
-  tipoMovimientoId          BigInt
-  monto                     Decimal
-  observaciones             String?
-  id                        BigInt                @id @default(autoincrement())
-  liquidacionFaenaId        BigInt
-  refDetMovsEntregaRendirId BigInt
-  centroCostoId             BigInt?
-  fechaRegistro             DateTime              @default(now())
-  fechaMovimiento           DateTime
-
-  liquidacionFaena          LiquidacionFaenaPesca @relation(fields: [liquidacionFaenaId], references: [id])
-}
 
 model MovLiquidacionProcesoComprasProd {
   id                              BigInt                        @id @default(autoincrement())
@@ -1617,6 +1552,7 @@ model MovLiquidacionProcesoComprasProd {
   centroCostoId                   BigInt?
   fechaMovimiento                 DateTime
   fechaRegistro                   DateTime                      @default(now())
+  urlComprobanteMovimiento        String?
 
   liquidacionProcesoComprasProd   LiquidacionProcesoComprasProd @relation(fields: [liquidacionProcesoComprasProdId], references: [id])
 }
@@ -1629,6 +1565,7 @@ model MovLiquidacionTemporadaPesca {
   centroCostoId             BigInt?
   fechaMovimiento           DateTime
   fechaRegistro             DateTime                  @default(now())
+  urlComprobanteMovimiento  String?
 
   liquidacionTemporada      LiquidacionTemporadaPesca @relation(fields: [liquidacionTemporadaId], references: [id])
 }
