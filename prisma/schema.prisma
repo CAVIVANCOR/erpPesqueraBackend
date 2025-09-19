@@ -737,6 +737,9 @@ model DetMovsEntregaRendir {
   creadoEn             DateTime             @default(now())
   actualizadoEn        DateTime
   centroCostoId        BigInt
+  urlComprobanteMovimiento String?
+  validadoTesoreria    Boolean @default(false)
+  fechaValidacionTesoreria DateTime?
 
   entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1423,23 +1426,6 @@ model LineaCreditoEntidad {
   entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
 }
 
-model LiqNovedadPescaConsumo {
-  id                        BigInt                      @id @default(autoincrement())
-  novedadPescaConsumoId     BigInt                      @unique
-  empresaId                 BigInt
-  fechaLiquidacion          DateTime
-  responsableId             BigInt
-  verificadorId             BigInt?
-  fechaVerificacion         DateTime?
-  urlPdfLiquidacion         String?
-  saldoFinal                Decimal
-  observaciones             String?
-  fechaCreacion             DateTime                    @default(now())
-  fechaActualizacion        DateTime
-
-  novedadPescaConsumo   NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
-  movimientos           MovLiqNovedadPescaConsumo[]
-}
 
 model LiquidacionProcesoComprasProd {
   id                               BigInt                             @id @default(autoincrement())
@@ -1459,23 +1445,6 @@ model LiquidacionProcesoComprasProd {
   movimientos              MovLiquidacionProcesoComprasProd[]
 }
 
-model LiquidacionTemporadaPesca {
-  id                           BigInt                         @id @default(autoincrement())
-  temporadaPescaId             BigInt                         @unique
-  empresaId                    BigInt
-  fechaLiquidacion             DateTime
-  responsableId                BigInt
-  verificadorId                BigInt?
-  fechaVerificacion            DateTime?
-  urlPdfLiquidacion            String?
-  saldoFinal                   Decimal
-  observaciones                String?
-  fechaCreacion                DateTime                       @default(now())
-  fechaActualizacion           DateTime
-
-  temporadaPesca      TemporadaPesca @relation(fields: [temporadaPescaId], references: [id])
-  movimientos         MovLiquidacionTemporadaPesca[]
-}
 
 model Marca {
   id       BigInt     @id @default(autoincrement())
@@ -1530,20 +1499,6 @@ model MotivoOriginoOT {
   ordenesTrabajo OTMantenimiento[]
 }
 
-model MovLiqNovedadPescaConsumo {
-  id                       BigInt                 @id @default(autoincrement())
-  liqNovedadPescaConsumoId BigInt
-  tipoMovimientoId         BigInt
-  monto                    Decimal
-  centroCostoId            BigInt?
-  fechaMovimiento          DateTime
-  fechaRegistro            DateTime               @default(now())
-  urlComprobanteMovimiento String?
-
-  liqNovedadPescaConsumo    LiqNovedadPescaConsumo @relation(fields: [liqNovedadPescaConsumoId], references: [id])
-}
-
-
 model MovLiquidacionProcesoComprasProd {
   id                              BigInt                        @id @default(autoincrement())
   liquidacionProcesoComprasProdId BigInt
@@ -1555,19 +1510,6 @@ model MovLiquidacionProcesoComprasProd {
   urlComprobanteMovimiento        String?
 
   liquidacionProcesoComprasProd   LiquidacionProcesoComprasProd @relation(fields: [liquidacionProcesoComprasProdId], references: [id])
-}
-
-model MovLiquidacionTemporadaPesca {
-  id                        BigInt                    @id @default(autoincrement())
-  liquidacionTemporadaId    BigInt
-  tipoMovimientoId          BigInt
-  monto                     Decimal
-  centroCostoId             BigInt?
-  fechaMovimiento           DateTime
-  fechaRegistro             DateTime                  @default(now())
-  urlComprobanteMovimiento  String?
-
-  liquidacionTemporada      LiquidacionTemporadaPesca @relation(fields: [liquidacionTemporadaId], references: [id])
 }
 
 model MovimientoAlmacen {
@@ -1650,7 +1592,6 @@ model NovedadPescaConsumo {
 
   faenas                FaenaPescaConsumo[]
   entregasARendir       EntregaARendirPescaConsumo[]
-  liqNovedad            LiqNovedadPescaConsumo?
 }
 
 model OTMantenimiento {
@@ -2079,7 +2020,6 @@ model TemporadaPesca {
 
   faenas               FaenaPesca[] @relation("FaenaTemporadas")
   entregasARendir      EntregaARendir[]
-  liquidacionTemporada LiquidacionTemporadaPesca?
 }
 
 model TipoAccesoInstalacion {

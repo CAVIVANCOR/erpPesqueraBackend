@@ -84,9 +84,62 @@ const eliminar = async (id) => {
   }
 };
 
+const obtenerPorFaena = async (faenaPescaId) => {
+  try {
+    // Obtener tripulantes de la faena
+    const tripulantes = await prisma.tripulanteFaena.findMany({
+      where: { faenaPescaId: faenaPescaId },
+      orderBy: [
+        { cargoId: 'asc' },
+        { apellidos: 'asc' },
+        { nombres: 'asc' }
+      ]
+    });
+
+    // Si no hay tripulantes, retornar array vacío
+    if (!tripulantes || tripulantes.length === 0) {
+      return [];
+    }
+
+    // Obtener los IDs de personal que no son null
+    const personalIds = tripulantes
+      .filter(t => t.personalId !== null)
+      .map(t => t.personalId);
+
+    // Obtener datos de personal si hay IDs
+    let personalData = [];
+    if (personalIds.length > 0) {
+      personalData = await prisma.personal.findMany({
+        where: {
+          id: { in: personalIds }
+        },
+        include: {
+          tipoDocIdentidad: true
+        }
+      });
+    }
+
+    // Combinar los datos
+    const tripulantesConPersonal = tripulantes.map(tripulante => {
+      const personal = personalData.find(p => p.id === tripulante.personalId);
+      
+      return {
+        ...tripulante,
+        personal: personal || null
+      };
+    });
+
+    return tripulantesConPersonal;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
+  obtenerPorFaena,
   crear,
   actualizar,
   eliminar

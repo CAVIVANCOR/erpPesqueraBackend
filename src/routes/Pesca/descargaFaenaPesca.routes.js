@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para DescargaFaenaPesca
 router.get('/', descargaFaenaPescaController.listar);
+router.get('/faena/:faenaPescaId', descargaFaenaPescaController.obtenerPorFaena);
 router.get('/:id', descargaFaenaPescaController.obtenerPorId);
 router.post('/', descargaFaenaPescaController.crear);
 router.put('/:id', descargaFaenaPescaController.actualizar);

@@ -133,6 +133,32 @@ const obtenerPorId = async (id) => {
   }
 };
 
+const obtenerPorFaena = async (faenaPescaId) => {
+  try {
+    console.log('obtenerPorFaena service - faenaPescaId recibido:', faenaPescaId, typeof faenaPescaId);
+    
+    if (!faenaPescaId) {
+      console.log('obtenerPorFaena service - faenaPescaId es null o undefined');
+      return [];
+    }
+
+    const result = await prisma.descargaFaenaPesca.findMany({
+      where: { faenaPescaId },
+      include: {
+        faenaPesca: true
+      },
+      orderBy: { id: 'desc' }
+    });
+    
+    console.log('obtenerPorFaena service - descargas encontradas:', result?.length || 0);
+    return result;
+  } catch (err) {
+    console.error('obtenerPorFaena service - Error:', err);
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 const crear = async (data) => {
   try {
     // Solo campos obligatorios según el nuevo modelo
@@ -226,6 +252,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorFaena,
   crear,
   actualizar,
   eliminar,

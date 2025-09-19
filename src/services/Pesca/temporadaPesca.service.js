@@ -256,6 +256,41 @@ const iniciar = async (id) => {
         data: { descripcion: descripcionFaena }
       });
 
+      // 3.1. Crear TripulanteFaena para cada tripulante elegible
+      const tripulantesElegibles = await tx.personal.findMany({
+        where: {
+          empresaId: Number(temporada.empresaId),
+          cesado: false,
+          paraTemporadaPesca: true,
+          cargoId: {
+            in: [21, 22, 14] // 21: Tripulante, 22: Patrón, 14: Motorista
+          }
+        }
+      });
+
+      const tripulantesFaenaData = tripulantesElegibles.map(personal => ({
+        faenaPescaId: Number(faenaPesca.id),
+        personalId: Number(personal.id),
+        cargoId: Number(personal.cargoId),
+        nombres: personal.nombres,
+        apellidos: personal.apellidos,
+        observaciones: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }));
+
+      let tripulantesFaena = [];
+      if (tripulantesFaenaData.length > 0) {
+        await tx.tripulanteFaena.createMany({
+          data: tripulantesFaenaData
+        });
+        
+        // Obtener los registros creados para incluir en el resultado
+        tripulantesFaena = await tx.tripulanteFaena.findMany({
+          where: { faenaPescaId: Number(faenaPesca.id) }
+        });
+      }
+
       // 4. Crear DetAccionesPreviasFaena para cada acción previa
       const detAcciones = [];
       for (const accion of accionesPrevias) {
@@ -400,6 +435,7 @@ const iniciar = async (id) => {
         temporadaActualizada,
         entregaARendir,
         faenaPesca,
+        tripulantesFaena,
         detAcciones,
         detalleDocTripulantes,
         detalleDocEmbarcacion,

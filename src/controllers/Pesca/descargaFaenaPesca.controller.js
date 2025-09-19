@@ -24,6 +24,26 @@ export async function obtenerPorId(req, res, next) {
   }
 }
 
+export async function obtenerPorFaena(req, res, next) {
+  try {
+    const faenaPescaId = req.params.faenaPescaId;
+    
+    // Validar que el parámetro existe y es un número válido
+    if (!faenaPescaId || isNaN(faenaPescaId)) {
+      return res.status(400).json({ 
+        error: 'faenaPescaId es requerido y debe ser un número válido' 
+      });
+    }
+    
+    const faenaPescaIdBigInt = BigInt(faenaPescaId);
+    const descargas = await descargaFaenaPescaService.obtenerPorFaena(faenaPescaIdBigInt);
+    res.json(toJSONBigInt(descargas));
+  } catch (err) {
+    console.error('Error en obtenerPorFaena controller:', err);
+    next(err);
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const nuevo = await descargaFaenaPescaService.crear(req.body);
