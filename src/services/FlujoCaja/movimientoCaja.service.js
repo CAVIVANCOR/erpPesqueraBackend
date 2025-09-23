@@ -5,7 +5,8 @@ const incluirRelaciones = {
   cuentaCorrienteOrigen: true,
   cuentaCorrienteDestino: true,
   tipoReferencia: true,
-  asientosContables: true
+  asientosContables: true,
+  entidadComercial: true
 };
 
 /**
@@ -25,7 +26,8 @@ async function validarReferenciasMovimientoCaja(data) {
     tipoReferenciaId,
     centroCostoId,
     moduloOrigenMotivoOperacionId,
-    usuarioMotivoOperacionId
+    usuarioMotivoOperacionId,
+    entidadComercialId
   } = data;
 
   // Valida existencia de cuenta corriente origen
@@ -45,6 +47,10 @@ async function validarReferenciasMovimientoCaja(data) {
   // Valida existencia de tipo de movimiento
   const tipoMov = await prisma.tipoMovimientoCaja.findUnique({ where: { id: tipoMovimientoId } });
   if (!tipoMov) throw new ValidationError('Tipo de movimiento no existente');
+
+  // Valida existencia de entidad comercial
+  const entidadComercial = await prisma.entidadComercial.findUnique({ where: { id: entidadComercialId } });
+  if (!entidadComercial) throw new ValidationError('Entidad comercial no existente');
 
   // Valida existencia de moneda
   const moneda = await prisma.moneda.findUnique({ where: { id: monedaId } });

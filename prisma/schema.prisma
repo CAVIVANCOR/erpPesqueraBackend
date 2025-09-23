@@ -1200,6 +1200,7 @@ model EntidadComercial {
   kardexAlmacenes   KardexAlmacen[]
   requerimientosCompra RequerimientoCompra[]
   ordenesCompra OrdenCompra[]
+  movimientosCaja MovimientoCaja[]
   preFacturasCliente PreFactura[] @relation("EntidadComercialToPreFactura")
 }
 
@@ -1569,6 +1570,7 @@ model MovimientoCaja {
   empresaOrigenId                                                          BigInt
   empresaDestinoId                                                         BigInt
   tipoMovimientoId                                                         BigInt
+  entidadComercialId                                                       BigInt
   monto                                                                    Decimal
   monedaId                                                                 BigInt
   descripcion                                                              String?
@@ -1592,6 +1594,7 @@ model MovimientoCaja {
   cuentaCorrienteDestino    CuentaCorriente @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
   tipoReferencia            TipoReferenciaMovimientoCaja? @relation(fields: [tipoReferenciaId], references: [id])
   asientosContables         AsientoContableInterfaz[]
+  entidadComercial          EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
 }
 
 model NovedadPescaConsumo {
