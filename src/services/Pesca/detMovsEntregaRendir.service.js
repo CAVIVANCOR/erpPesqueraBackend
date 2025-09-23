@@ -8,16 +8,25 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
  */
 
 async function validarClavesForaneas(data) {
-  const [entrega, responsable, tipoMovimiento, centroCosto] = await Promise.all([
+  const validaciones = [
     prisma.entregaARendir.findUnique({ where: { id: data.entregaARendirId } }),
     prisma.personal.findUnique({ where: { id: data.responsableId } }),
     prisma.tipoMovEntregaRendir.findUnique({ where: { id: data.tipoMovimientoId } }),
     prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } })
-  ]);
+  ];
+
+  // Agregar validación de ModuloSistema si se proporciona moduloOrigenMovCajaId
+  if (data.moduloOrigenMovCajaId) {
+    validaciones.push(prisma.moduloSistema.findUnique({ where: { id: data.moduloOrigenMovCajaId } }));
+  }
+
+  const [entrega, responsable, tipoMovimiento, centroCosto, moduloSistema] = await Promise.all(validaciones);
+  
   if (!entrega) throw new ValidationError('El entregaARendirId no existe.');
   if (!responsable) throw new ValidationError('El responsableId no existe.');
   if (!tipoMovimiento) throw new ValidationError('El tipoMovimientoId no existe.');
   if (!centroCosto) throw new ValidationError('El centroCostoId no existe.');
+  if (data.moduloOrigenMovCajaId && !moduloSistema) throw new ValidationError('El moduloOrigenMovCajaId no existe.');
 }
 
 const listar = async () => {
@@ -62,7 +71,7 @@ const actualizar = async (id, data) => {
     const existente = await prisma.detMovsEntregaRendir.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('DetMovsEntregaRendir no encontrado');
     // Validar claves foráneas si cambian
-    const claves = ['entregaARendirId','responsableId','tipoMovimientoId','centroCostoId'];
+    const claves = ['entregaARendirId','responsableId','tipoMovimientoId','centroCostoId', 'moduloOrigenMovCajaId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }

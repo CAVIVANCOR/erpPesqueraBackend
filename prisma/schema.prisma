@@ -427,6 +427,8 @@ model CuentaCorriente {
   monedaId                                                                BigInt
   descripcion                                                             String?
   activa                                                                  Boolean             @default(true)
+  codigoSwift                                                             String?
+  numeroCuentaCCI                                                         String?
 
   banco                  Banco    @relation(fields: [bancoId], references: [id])
   tipoCuentaCorriente    TipoCuentaCorriente @relation(fields: [tipoCuentaCorrienteId], references: [id])
@@ -740,6 +742,10 @@ model DetMovsEntregaRendir {
   urlComprobanteMovimiento String?
   validadoTesoreria    Boolean @default(false)
   fechaValidacionTesoreria DateTime?
+  operacionSinFactura  Boolean @default(false)
+  fechaOperacionMovCaja DateTime?
+  operacionMovCajaId BigInt?
+  moduloOrigenMovCajaId BigInt?
 
   entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1572,7 +1578,15 @@ model MovimientoCaja {
   estadoId                                                                 BigInt
   cuentaCorrienteDestinoId                                                 BigInt
   cuentaCorrienteOrigenId                                                  BigInt
-  fecha                                                                    DateTime                      @default(now())
+  fechaCreacion                                                            DateTime?                      @default(now())
+  fechaActualizacion                                                       DateTime?                      @default(now())
+  centroCostoId                                                            BigInt?
+  moduloOrigenMotivoOperacionId                                            BigInt?
+  origenMotivoOperacionId                                                  BigInt?
+  fechaMotivoOperacion                                                     DateTime?
+  usuarioMotivoOperacionId                                                 BigInt?
+  fechaOperacionMovCaja                                                  DateTime? @default(now())
+  operacionSinFactura                                                  Boolean @default(false)
 
   cuentaCorrienteOrigen     CuentaCorriente @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
   cuentaCorrienteDestino    CuentaCorriente @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])

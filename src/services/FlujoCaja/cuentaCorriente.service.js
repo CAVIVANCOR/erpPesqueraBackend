@@ -31,9 +31,9 @@ async function validarReferencias({ bancoId, tipoCuentaCorrienteId }) {
  * @param {Object} param0 - Objeto con los campos a validar
  * @param {number|null} excluirId - Si se actualiza, excluir el propio ID de la búsqueda
  */
-async function validarDuplicado({ numero, bancoId, empresaId }, excluirId = null) {
+async function validarDuplicado({ numeroCuenta, bancoId, empresaId }, excluirId = null) {
   const where = {
-    numero,
+    numeroCuenta,
     bancoId,
     empresaId
   };

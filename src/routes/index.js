@@ -133,8 +133,6 @@ import detalleDescargaFaenaRoutes from '../routes/Pesca/detalleDescargaFaena.rou
 import accionesPreviasFaenaRoutes from '../routes/Pesca/accionesPreviasFaena.routes.js';
 import detAccionesPreviasFaenaRoutes from '../routes/Pesca/detAccionesPreviasFaena.routes.js';
 import puertoPescaRoutes from '../routes/Pesca/puertoPesca.routes.js';
-import liquidacionTemporadaPescaRoutes from '../routes/Pesca/liquidacionTemporadaPesca.routes.js';
-import movLiquidacionTemporadaPescaRoutes from '../routes/Pesca/movLiquidacionTemporadaPesca.routes.js';
 import novedadPescaConsumoRoutes from '../routes/Pesca/novedadPescaConsumo.routes.js';
 import faenaPescaConsumoRoutes from '../routes/Pesca/faenaPescaConsumo.routes.js';
 import detAccionesPreviasFaenaConsumoRoutes from '../routes/Pesca/detAccionesPreviasFaenaConsumo.routes.js';
@@ -149,8 +147,6 @@ import calaFaenaConsumoProduceRoutes from '../routes/Pesca/calaFaenaConsumoProdu
 import detCalaFaenaConsumoProduceRoutes from '../routes/Pesca/detCalaFaenaConsumoProduce.routes.js';
 import descargaFaenaConsumoRoutes from '../routes/Pesca/descargaFaenaConsumo.routes.js';
 import detDescargaFaenaConsumoRoutes from '../routes/Pesca/detDescargaFaenaConsumo.routes.js';
-import liqNovedadPescaConsumoRoutes from '../routes/Pesca/liqNovedadPescaConsumo.routes.js';
-import movLiqNovedadPescaConsumoRoutes from '../routes/Pesca/movLiqNovedadPescaConsumo.routes.js';
 import entregaARendirRoutes from '../routes/Pesca/entregaARendir.routes.js';
 import detMovsEntregaRendirRoutes from '../routes/Pesca/detMovsEntregaRendir.routes.js';
 import tipoMovEntregaRendirRoutes from '../routes/Pesca/tipoMovEntregaRendir.routes.js';
@@ -434,10 +430,6 @@ router.use('/pesca/acciones-previas-faena', accionesPreviasFaenaRoutes);
 router.use('/pesca/detalles-acciones-previas-faena', detAccionesPreviasFaenaRoutes);
 // Rutas para PuertoPesca
 router.use('/pesca/puertos-pesca', puertoPescaRoutes);
-// Rutas para LiquidacionTemporadaPesca
-router.use('/pesca/liquidaciones-temporada', liquidacionTemporadaPescaRoutes);
-// Rutas para MovLiquidacionTemporadaPesca
-router.use('/pesca/movs-liquidacion-temporada', movLiquidacionTemporadaPescaRoutes);
 // Rutas para NovedadPescaConsumo
 router.use('/pesca/novedades-pesca-consumo', novedadPescaConsumoRoutes);
 // Rutas para FaenaPescaConsumo
@@ -466,10 +458,6 @@ router.use('/pesca/det-cala-faena-consumo-produce', detCalaFaenaConsumoProduceRo
 router.use('/pesca/descargas-faena-consumo', descargaFaenaConsumoRoutes);
 // Rutas para DetDescargaFaenaConsumo
 router.use('/pesca/det-descarga-faena-consumo', detDescargaFaenaConsumoRoutes);
-// Rutas para LiqNovedadPescaConsumo
-router.use('/pesca/liq-novedad-pesca-consumo', liqNovedadPescaConsumoRoutes);
-// Rutas para MovLiqNovedadPescaConsumo
-router.use('/pesca/movs-liq-novedad-pesca-consumo', movLiqNovedadPescaConsumoRoutes);
 // Rutas para EntregaARendir
 router.use('/entregas-a-rendir', entregaARendirRoutes);
 // Rutas para DetMovsEntregaRendir

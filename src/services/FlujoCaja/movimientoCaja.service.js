@@ -22,7 +22,10 @@ async function validarReferenciasMovimientoCaja(data) {
     tipoMovimientoId,
     monedaId,
     usuarioId,
-    tipoReferenciaId
+    tipoReferenciaId,
+    centroCostoId,
+    moduloOrigenMotivoOperacionId,
+    usuarioMotivoOperacionId
   } = data;
 
   // Valida existencia de cuenta corriente origen
@@ -58,14 +61,39 @@ async function validarReferenciasMovimientoCaja(data) {
     const tipoRef = await prisma.tipoReferenciaMovimientoCaja.findUnique({ where: { id: tipoReferenciaId } });
     if (!tipoRef) throw new ValidationError('Tipo de referencia no existente');
   }
+
+  // Valida existencia de centro de costo si se provee
+  if (centroCostoId) {
+    const centroCosto = await prisma.centroCosto.findUnique({ where: { id: centroCostoId } });
+    if (!centroCosto) throw new ValidationError('Centro de costo no existente');
+  }
+
+  // Valida existencia de módulo origen si se provee
+  if (moduloOrigenMotivoOperacionId) {
+    const moduloOrigen = await prisma.moduloSistema.findUnique({ where: { id: moduloOrigenMotivoOperacionId } });
+    if (!moduloOrigen) throw new ValidationError('Módulo origen no existente');
+  }
+
+  // Valida existencia de usuario motivo operación si se provee
+  if (usuarioMotivoOperacionId) {
+    const usuarioMotivo = await prisma.personal.findUnique({ where: { id: usuarioMotivoOperacionId } });
+    if (!usuarioMotivo) throw new ValidationError('Usuario motivo operación no existente');
+  }
 }
 
-
+/**
+ * Lista todos los movimientos de caja.
+ * @returns {Promise<Array<Object>>} - Lista de movimientos de caja
+ */
 const listar = async () => {
   return prisma.movimientoCaja.findMany({ include: incluirRelaciones });
 };
 
-
+/**
+ * Obtiene un movimiento de caja por ID.
+ * @param {BigInt|number} id - ID del movimiento de caja
+ * @returns {Promise<Object>} - Movimiento de caja
+ */
 const obtenerPorId = async (id) => {
   try {
     const movimiento = await prisma.movimientoCaja.findUnique({ where: { id }, include: incluirRelaciones });
@@ -77,6 +105,11 @@ const obtenerPorId = async (id) => {
   }
 };
 
+/**
+ * Crea un nuevo movimiento de caja.
+ * @param {Object} data - Datos del movimiento de caja
+ * @returns {Promise<Object>} - Movimiento de caja creado
+ */
 const crear = async (data) => {
   try {
     await validarReferenciasMovimientoCaja(data);
@@ -113,6 +146,11 @@ const actualizar = async (id, data) => {
   }
 };
 
+/**
+ * Elimina un movimiento de caja por ID.
+ * @param {BigInt|number} id - ID del movimiento de caja
+ * @returns {Promise<boolean>} - True si se eliminó correctamente
+ */
 const eliminar = async (id) => {
   try {
     await prisma.movimientoCaja.delete({ where: { id } });
