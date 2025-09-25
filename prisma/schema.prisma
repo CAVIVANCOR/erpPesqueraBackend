@@ -746,9 +746,11 @@ model DetMovsEntregaRendir {
   fechaOperacionMovCaja DateTime?
   operacionMovCajaId BigInt?
   moduloOrigenMovCajaId BigInt?
+  entidadComercialId BigInt?
 
   entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+  entidadComercial EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
 }
 
 model DetMovsEntregaRendirPCompras {
@@ -1088,25 +1090,7 @@ model Embarcacion {
   activoId                               BigInt                     @unique
   tipoEmbarcacionId                      BigInt
   estadoActivoId                         BigInt
-  urlCertificadoAguasSucias              String?
-  urlCertificadoArqueo                   String?
-  urlCertificadoBalsasSalvavidas         String?
-  urlCertificadoCompas                   String?
-  urlCertificadoExtinguidores            String?
-  urlCertificadoFrancoBordo              String?
-  urlCertificadoFumigacion               String?
-  urlCertificadoHidroCarburos            String?
-  urlCertificadoMatricula                String?
-  urlCertificadoPaqueteEmergencia        String?
-  urlCertificadoRadioBaliza              String?
-  urlCertificadoSanitarioSanipes         String?
-  urlCertificadoSeguridad                String?
-  urlCertificadoSimtrac                  String?
-  urlCertificadogeolocalizador           String?
-  urlCertificadosDotacionMinimaSeguridad String?
-  urlConstanciaNoAdeudoFoncopes          String?
   urlFotoEmbarcacion                     String?
-  urlPermisoPesca                        String?
 
   tipoEmbarcacion   TipoEmbarcacion @relation(fields: [tipoEmbarcacionId], references: [id])
   documentaciones DocumentacionEmbarcacion[]
@@ -1201,6 +1185,7 @@ model EntidadComercial {
   requerimientosCompra RequerimientoCompra[]
   ordenesCompra OrdenCompra[]
   movimientosCaja MovimientoCaja[]
+  detalleMovsEntregaRendir DetMovsEntregaRendir[]
   preFacturasCliente PreFactura[] @relation("EntidadComercialToPreFactura")
 }
 
