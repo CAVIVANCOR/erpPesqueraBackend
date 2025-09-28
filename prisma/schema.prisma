@@ -422,7 +422,7 @@ model CuentaCorriente {
   id                                                                      BigInt              @id @default(autoincrement())
   empresaId                                                               BigInt
   bancoId                                                                 BigInt
-  numeroCuenta                                                            String              @unique
+  numeroCuenta                                                            String
   tipoCuentaCorrienteId                                                   BigInt
   monedaId                                                                BigInt
   descripcion                                                             String?
@@ -432,8 +432,12 @@ model CuentaCorriente {
 
   banco                  Banco    @relation(fields: [bancoId], references: [id])
   tipoCuentaCorriente    TipoCuentaCorriente @relation(fields: [tipoCuentaCorrienteId], references: [id])
+  moneda                 Moneda   @relation(fields: [monedaId], references: [id])
   movimientosOrigen      MovimientoCaja[] @relation("CuentaCorrienteOrigen")
   movimientosDestino     MovimientoCaja[] @relation("CuentaCorrienteDestino")
+
+    @@unique([numeroCuenta, bancoId, empresaId], name: "unique_cuenta_banco_empresa")
+
 }
 
 model Departamento {
@@ -1471,6 +1475,7 @@ model Moneda {
   activo        Boolean         @default(true)
 
   precios    PrecioEntidad[]
+  ctacte     CuentaCorriente[]
 }
 
 model MotivoAcceso {
