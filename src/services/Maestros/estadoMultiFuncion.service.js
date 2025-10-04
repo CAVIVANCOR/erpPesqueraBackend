@@ -175,6 +175,27 @@ const listarParaFaenaPesca = async () => {
   }
 };
 
+/**
+ * Lista estados multifunción específicamente para faenas de pesca consumo.
+ * Filtra por TipoProvieneDe con descripción "FAENA PESCA CONSUMO".
+ */
+const listarParaFaenaPescaConsumo = async () => {
+  try {
+    const estadosParaFaenaPescaConsumo = await prisma.estadoMultiFuncion.findMany({
+      include: { tipoProvieneDe: true },
+      where: {
+        tipoProvieneDe: {
+          descripcion: "FAENA PESCA CONSUMO"
+        }
+      }
+    });
+    return estadosParaFaenaPescaConsumo;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -184,5 +205,6 @@ export default {
   listarParaProductos,
   listarParaEmbarcaciones,
   listarParaTemporadaPesca,
-  listarParaFaenaPesca
+  listarParaFaenaPesca,
+  listarParaFaenaPescaConsumo
 };

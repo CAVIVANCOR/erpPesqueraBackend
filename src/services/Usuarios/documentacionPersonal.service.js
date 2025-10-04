@@ -1,5 +1,9 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio CRUD para DocumentacionPersonal
@@ -15,13 +19,17 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
 async function validarReferencias(data) {
   // Validar existencia de Personal
   if (data.personalId) {
-    const personal = await prisma.personal.findUnique({ where: { id: data.personalId } });
-    if (!personal) throw new ValidationError('Personal no existente.');
+    const personal = await prisma.personal.findUnique({
+      where: { id: data.personalId },
+    });
+    if (!personal) throw new ValidationError("Personal no existente.");
   }
   // Validar existencia de DocumentoPesca
   if (data.documentoPescaId) {
-    const doc = await prisma.documentoPesca.findUnique({ where: { id: data.documentoPescaId } });
-    if (!doc) throw new ValidationError('Documento de pesca no existente.');
+    const doc = await prisma.documentoPesca.findUnique({
+      where: { id: data.documentoPescaId },
+    });
+    if (!doc) throw new ValidationError("Documento de pesca no existente.");
   }
 }
 
@@ -30,9 +38,12 @@ async function validarReferencias(data) {
  */
 const listar = async () => {
   try {
-    return await prisma.documentacionPersonal.findMany({ include: { personal: true } });
+    return await prisma.documentacionPersonal.findMany({
+      include: { personal: true },
+    });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -42,11 +53,15 @@ const listar = async () => {
  */
 const obtenerPorId = async (id) => {
   try {
-    const doc = await prisma.documentacionPersonal.findUnique({ where: { id }, include: { personal: true } });
-    if (!doc) throw new NotFoundError('Documentación personal no encontrada');
+    const doc = await prisma.documentacionPersonal.findUnique({
+      where: { id },
+      include: { personal: true },
+    });
+    if (!doc) throw new NotFoundError("Documentación personal no encontrada");
     return doc;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -57,10 +72,17 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarReferencias(data);
-    return await prisma.documentacionPersonal.create({ data });
+    // Agregar updatedAt requerido por el modelo
+    const dataConFecha = {
+      ...data,
+      updatedAt: new Date(),
+    };
+
+    return await prisma.documentacionPersonal.create({ data: dataConFecha });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -70,13 +92,27 @@ const crear = async (data) => {
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.documentacionPersonal.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Documentación personal no encontrada');
+    const existente = await prisma.documentacionPersonal.findUnique({
+      where: { id },
+    });
+    if (!existente)
+      throw new NotFoundError("Documentación personal no encontrada");
     await validarReferencias(data);
-    return await prisma.documentacionPersonal.update({ where: { id }, data });
+    // Agregar updatedAt requerido por el modelo
+    const dataConFecha = {
+      ...data,
+      updatedAt: new Date(),
+    };
+
+    return await prisma.documentacionPersonal.update({
+      where: { id },
+      data: dataConFecha,
+    });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -86,13 +122,17 @@ const actualizar = async (id, data) => {
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.documentacionPersonal.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Documentación personal no encontrada');
+    const existente = await prisma.documentacionPersonal.findUnique({
+      where: { id },
+    });
+    if (!existente)
+      throw new NotFoundError("Documentación personal no encontrada");
     await prisma.documentacionPersonal.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -102,5 +142,5 @@ export default {
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
 };

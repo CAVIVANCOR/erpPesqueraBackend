@@ -126,7 +126,6 @@ const crear = async (data) => {
       !data.numeroCuenta ||
       !data.monedaId
     ) {
-      console.log("Error: Campos obligatorios faltantes");
       throw new ValidationError(
         "Empresa, Banco, Número de Cuenta y Moneda son obligatorios"
       );

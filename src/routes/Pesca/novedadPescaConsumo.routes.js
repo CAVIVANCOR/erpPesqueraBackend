@@ -10,4 +10,6 @@ router.post('/', novedadPescaConsumoController.crear);
 router.put('/:id', novedadPescaConsumoController.actualizar);
 router.delete('/:id', novedadPescaConsumoController.eliminar);
 
+router.post('/:id/iniciar', novedadPescaConsumoController.iniciar);
+
 export default router;

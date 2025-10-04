@@ -24,6 +24,16 @@ export async function obtenerPorId(req, res, next) {
   }
 }
 
+export async function obtenerPorFaena(req, res, next) {
+  try {
+    const faenaId = Number(req.params.faenaId);
+    const calas = await calaFaenaConsumoService.obtenerPorFaena(faenaId);
+    res.json(toJSONBigInt(calas));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const nuevo = await calaFaenaConsumoService.crear(req.body);

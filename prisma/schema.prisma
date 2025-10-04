@@ -86,6 +86,7 @@ model AccionesPreviasFaena {
   detallesConsumo DetAccionesPreviasFaenaConsumo[]
 }
 
+
 model Activo {
   id                   BigInt                 @id @default(autoincrement())
   empresaId            BigInt
@@ -214,8 +215,8 @@ model CalaFaenaConsumo {
   patronId            BigInt
   embarcacionId       BigInt
   faenaPescaConsumoId BigInt
-  fechaHoraInicio     DateTime
-  fechaHoraFin        DateTime
+  fechaHoraInicio     DateTime?
+  fechaHoraFin        DateTime?
   latitud             Decimal?
   longitud            Decimal?
   profundidadM        Decimal?
@@ -223,6 +224,7 @@ model CalaFaenaConsumo {
   observaciones       String?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime
+  novedadPescaConsumoId          BigInt
 
   faenaPescaConsumo     FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
   especiesPescadas DetCalaPescaConsumo[]
@@ -593,6 +595,7 @@ model DetCalaPescaConsumo {
   updatedAt           DateTime
 
   calaFaenaConsumo    CalaFaenaConsumo @relation(fields: [calaFaenaConsumoId], references: [id])
+  especie             Especie @relation(fields: [especieId], references: [id])
 }
 
 model DetCotizacionCompras {
@@ -644,11 +647,12 @@ model DetDocEmbarcacionPescaConsumo {
   numeroDocumento     String?
   fechaEmision        DateTime?
   fechaVencimiento    DateTime?
-  urlDocEmbarcacio    String?
+  urlDocEmbarcacion    String?
   observaciones       String?
   verificado          Boolean
   createdAt           DateTime          @default(now())
   updatedAt           DateTime
+  docVencido  Boolean @default(false)
 
   faenaPescaConsumo FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
 }
@@ -666,6 +670,7 @@ model DetDocTripulantesFaenaConsumo {
   verificado          Boolean
   createdAt           DateTime          @default(now())
   updatedAt           DateTime
+  docVencido          Boolean             @default(false)
 
   faenaPescaConsumo    FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
 }
@@ -859,6 +864,7 @@ model Especie {
   nombreCientifico String @db.VarChar(100)
 
   calaEspecie DetalleCalaEspecie[]
+  calaFaenaConsumo DetCalaPescaConsumo[]
 }
 
 
@@ -1297,20 +1303,24 @@ model FaenaPesca {
 model FaenaPescaConsumo {
   id                             BigInt                           @id @default(autoincrement())
   novedadPescaConsumoId          BigInt
-  bahiaId                        BigInt
-  motoristaId                    BigInt
-  patronId                       BigInt
+  bahiaId                        BigInt?
+  motoristaId                    BigInt?
+  patronId                       BigInt?
   descripcion                    String?
-  fechaSalida                    DateTime
-  fechaRetorno                   DateTime
-  puertoSalidaId                 BigInt
-  puertoRetornoId                BigInt
-  puertoDescargaId               BigInt
+  fechaSalida                    DateTime?
+  fechaDescarga                  DateTime?
+  puertoSalidaId                 BigInt?
+  puertoDescargaId               BigInt?
   embarcacionId                  BigInt?
   bolicheRedId                   BigInt?
   urlInformeFaena                String?
   createdAt                      DateTime                         @default(now())
   updatedAt                      DateTime
+  estadoFaenaId           BigInt?
+  toneladasCapturadasFaena     Decimal?
+  fechaHoraFondeo     DateTime?
+  puertoFondeoId      BigInt?
+
 
   // Relaciones principales
   novedadPescaConsumo   NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
@@ -1596,6 +1606,9 @@ model NovedadPescaConsumo {
   fechaFin                   DateTime
   fechaCreacion              DateTime                     @default(now())
   fechaActualizacion         DateTime
+  estadoNovedadPescaConsumoId         BigInt
+  toneladasCapturadas     Decimal?
+  novedadPescaConsumoIniciada   Boolean @default(false)
 
   faenas                FaenaPescaConsumo[]
   entregasARendir       EntregaARendirPescaConsumo[]

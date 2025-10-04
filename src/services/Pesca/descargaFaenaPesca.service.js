@@ -135,10 +135,8 @@ const obtenerPorId = async (id) => {
 
 const obtenerPorFaena = async (faenaPescaId) => {
   try {
-    console.log('obtenerPorFaena service - faenaPescaId recibido:', faenaPescaId, typeof faenaPescaId);
     
     if (!faenaPescaId) {
-      console.log('obtenerPorFaena service - faenaPescaId es null o undefined');
       return [];
     }
 
@@ -150,7 +148,6 @@ const obtenerPorFaena = async (faenaPescaId) => {
       orderBy: { id: 'desc' }
     });
     
-    console.log('obtenerPorFaena service - descargas encontradas:', result?.length || 0);
     return result;
   } catch (err) {
     console.error('obtenerPorFaena service - Error:', err);

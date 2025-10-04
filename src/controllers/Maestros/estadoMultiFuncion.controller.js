@@ -66,6 +66,19 @@ export async function listarParaFaenaPesca(req, res, next) {
   }
 }
 
+/**
+ * Lista estados multifunción específicamente para faenas de pesca consumo
+ * Filtra por TipoProvieneDe con descripción "FAENA PESCA CONSUMO"
+ */
+export async function listarParaFaenaPescaConsumo(req, res, next) {
+  try {
+    const estados = await estadoMultiFuncionService.listarParaFaenaPescaConsumo();
+    res.json(toJSONBigInt(estados));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

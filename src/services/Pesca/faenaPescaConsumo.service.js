@@ -5,6 +5,7 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  * Servicio CRUD para FaenaPescaConsumo
  * Valida existencia de claves foráneas y previene borrado si tiene detalles asociados.
  * Documentado en español.
+ * Sigue el patrón de faenaPesca.service.js
  */
 
 async function validarClavesForaneas(data) {
@@ -12,22 +13,22 @@ async function validarClavesForaneas(data) {
     novedad, bahia, motorista, patron, puertoSalida, puertoDescarga, puertoFondeo, embarcacion, boliche
   ] = await Promise.all([
     prisma.novedadPescaConsumo.findUnique({ where: { id: data.novedadPescaConsumoId } }),
-    prisma.bahiaComercial.findUnique({ where: { id: data.bahiaId } }),
-    prisma.personal.findUnique({ where: { id: data.motoristaId } }),
-    prisma.personal.findUnique({ where: { id: data.patronId } }),
-    prisma.puertoPesca.findUnique({ where: { id: data.puertoSalidaId } }),
-    prisma.puertoPesca.findUnique({ where: { id: data.puertoDescargaId } }),
+    data.bahiaId ? prisma.personal.findUnique({ where: { id: data.bahiaId } }) : Promise.resolve(true),
+    data.motoristaId ? prisma.personal.findUnique({ where: { id: data.motoristaId } }) : Promise.resolve(true),
+    data.patronId ? prisma.personal.findUnique({ where: { id: data.patronId } }) : Promise.resolve(true),
+    data.puertoSalidaId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoSalidaId } }) : Promise.resolve(true),
+    data.puertoDescargaId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoDescargaId } }) : Promise.resolve(true),
     data.puertoFondeoId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoFondeoId } }) : Promise.resolve(true),
-    data.embarcacionId ? prisma.embarcacion.findUnique({ where: { id: data.embarcacionId } }) : true,
-    data.bolicheRedId ? prisma.bolicheRed.findUnique({ where: { id: data.bolicheRedId } }) : true
+    data.embarcacionId ? prisma.embarcacion.findUnique({ where: { id: data.embarcacionId } }) : Promise.resolve(true),
+    data.bolicheRedId ? prisma.bolicheRed.findUnique({ where: { id: data.bolicheRedId } }) : Promise.resolve(true)
   ]);
 
   if (!novedad) throw new ValidationError('El novedadPescaConsumoId no existe.');
-  if (!bahia) throw new ValidationError('El bahiaId no existe.');
-  if (!motorista) throw new ValidationError('El motoristaId no existe.');
-  if (!patron) throw new ValidationError('El patronId no existe.');
-  if (!puertoSalida) throw new ValidationError('El puertoSalidaId no existe.');
-  if (!puertoDescarga) throw new ValidationError('El puertoDescargaId no existe.');
+  if (data.bahiaId && !bahia) throw new ValidationError('El bahiaId no existe en la tabla personal.');
+  if (data.motoristaId && !motorista) throw new ValidationError('El motoristaId no existe.');
+  if (data.patronId && !patron) throw new ValidationError('El patronId no existe.');
+  if (data.puertoSalidaId && !puertoSalida) throw new ValidationError('El puertoSalidaId no existe.');
+  if (data.puertoDescargaId && !puertoDescarga) throw new ValidationError('El puertoDescargaId no existe.');
   if (data.puertoFondeoId && !puertoFondeo) throw new ValidationError('El puertoFondeoId no existe.');
   if (data.embarcacionId && !embarcacion) throw new ValidationError('El embarcacionId no existe.');
   if (data.bolicheRedId && !boliche) throw new ValidationError('El bolicheRedId no existe.');
@@ -42,7 +43,6 @@ async function tieneDependencias(id) {
       detalleDocsTripulantes: true,
       accionesPrevias: true,
       calas: true,
-      calasProduce: true,
       descargaFaenaConsumo: true
     }
   });
@@ -53,7 +53,6 @@ async function tieneDependencias(id) {
     (faena.detalleDocsTripulantes && faena.detalleDocsTripulantes.length > 0) ||
     (faena.accionesPrevias && faena.accionesPrevias.length > 0) ||
     (faena.calas && faena.calas.length > 0) ||
-    (faena.calasProduce && faena.calasProduce.length > 0) ||
     !!faena.descargaFaenaConsumo
   );
 }
@@ -80,14 +79,23 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    const obligatorios = ['novedadPescaConsumoId','bahiaId','motoristaId','patronId','fechaSalida','fechaRetorno','puertoSalidaId','puertoDescargaId'];
+    // Solo novedadPescaConsumoId es realmente obligatorio (siguiendo patrón de faenaPesca)
+    const obligatorios = ['novedadPescaConsumoId'];
     for (const campo of obligatorios) {
       if (typeof data[campo] === 'undefined' || data[campo] === null) {
         throw new ValidationError(`El campo ${campo} es obligatorio.`);
       }
     }
+    
     await validarClavesForaneas(data);
-    return await prisma.faenaPescaConsumo.create({ data });
+    
+    // Agregar updatedAt requerido por el modelo
+    const dataConFecha = {
+      ...data,
+      updatedAt: new Date()
+    };
+    
+    return await prisma.faenaPescaConsumo.create({ data: dataConFecha });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -99,12 +107,20 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.faenaPescaConsumo.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('FaenaPescaConsumo no encontrada');
+    
     // Validar claves foráneas si cambian
     const claves = ['novedadPescaConsumoId','bahiaId','motoristaId','patronId','puertoSalidaId','puertoDescargaId','embarcacionId','bolicheRedId', 'puertoFondeoId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.faenaPescaConsumo.update({ where: { id }, data });
+    
+    // Agregar updatedAt requerido por el modelo
+    const dataConFecha = {
+      ...data,
+      updatedAt: new Date()
+    };
+    
+    return await prisma.faenaPescaConsumo.update({ where: { id }, data: dataConFecha });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

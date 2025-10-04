@@ -9,7 +9,7 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 async function validarClavesForaneas(data) {
   const [bahia, motorista, patron, embarcacion, faena] = await Promise.all([
-    prisma.bahia.findUnique({ where: { id: data.bahiaId } }),
+    prisma.personal.findUnique({ where: { id: data.bahiaId } }),
     prisma.personal.findUnique({ where: { id: data.motoristaId } }),
     prisma.personal.findUnique({ where: { id: data.patronId } }),
     prisma.embarcacion.findUnique({ where: { id: data.embarcacionId } }),

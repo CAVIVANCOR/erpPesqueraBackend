@@ -52,3 +52,13 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+export async function iniciar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await novedadPescaConsumoService.iniciar(id);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

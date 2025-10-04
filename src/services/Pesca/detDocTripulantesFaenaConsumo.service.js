@@ -8,13 +8,13 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
  */
 
 async function validarClavesForaneas(data) {
-  const [faena, tripulante, documento] = await Promise.all([
+  const [faena, personal, documento] = await Promise.all([
     prisma.faenaPescaConsumo.findUnique({ where: { id: data.faenaPescaConsumoId } }),
-    data.tripulanteId ? prisma.tripulanteFaenaConsumo.findUnique({ where: { id: data.tripulanteId } }) : true,
-    data.documentoId ? prisma.documento.findUnique({ where: { id: data.documentoId } }) : true
+    data.tripulanteId ? prisma.personal.findUnique({ where: { id: data.tripulanteId } }) : true, // ← CAMBIAR a personal
+    data.documentoId ? prisma.documentoPesca.findUnique({ where: { id: data.documentoId } }) : true
   ]);
   if (!faena) throw new ValidationError('El faenaPescaConsumoId no existe.');
-  if (data.tripulanteId && !tripulante) throw new ValidationError('El tripulanteId no existe.');
+  if (data.tripulanteId && !personal) throw new ValidationError('El tripulanteId no existe.');
   if (data.documentoId && !documento) throw new ValidationError('El documentoId no existe.');
 }
 
