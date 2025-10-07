@@ -44,7 +44,14 @@ const crear = async (data) => {
       throw new ValidationError('El campo faenaPescaConsumoId es obligatorio.');
     }
     await validarClavesForaneas(data);
-    return await prisma.detDocTripulantesFaenaConsumo.create({ data });
+    
+    // Agregar updatedAt automáticamente
+    const dataConFecha = {
+      ...data,
+      updatedAt: new Date()
+    };
+    
+    return await prisma.detDocTripulantesFaenaConsumo.create({ data: dataConFecha });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -61,7 +68,14 @@ const actualizar = async (id, data) => {
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.detDocTripulantesFaenaConsumo.update({ where: { id }, data });
+    
+    // Agregar updatedAt automáticamente
+    const dataConFecha = {
+      ...data,
+      updatedAt: new Date()
+    };
+    
+    return await prisma.detDocTripulantesFaenaConsumo.update({ where: { id }, data: dataConFecha });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

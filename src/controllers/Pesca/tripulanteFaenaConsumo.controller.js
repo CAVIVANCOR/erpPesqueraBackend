@@ -24,6 +24,16 @@ export async function obtenerPorId(req, res, next) {
   }
 }
 
+export async function obtenerPorFaena(req, res, next) {
+  try {
+    const faenaPescaConsumoId = Number(req.params.faenaPescaConsumoId);
+    const tripulantes = await tripulanteFaenaConsumoService.obtenerPorFaena(faenaPescaConsumoId);
+    res.json(toJSONBigInt(tripulantes));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const nuevo = await tripulanteFaenaConsumoService.crear(req.body);
@@ -48,6 +58,16 @@ export async function eliminar(req, res, next) {
     const id = Number(req.params.id);
     await tripulanteFaenaConsumoService.eliminar(id);
     res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function regenerarTripulantes(req, res, next) {
+  try {
+    const faenaPescaConsumoId = Number(req.params.faenaPescaConsumoId);
+    const resultado = await tripulanteFaenaConsumoService.regenerarTripulantes(faenaPescaConsumoId);
+    res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }

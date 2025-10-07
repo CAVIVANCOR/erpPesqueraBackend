@@ -12,7 +12,7 @@ async function validarClavesForaneas(data) {
   const [
     novedad, bahia, motorista, patron, puertoSalida, puertoDescarga, puertoFondeo, embarcacion, boliche
   ] = await Promise.all([
-    prisma.novedadPescaConsumo.findUnique({ where: { id: data.novedadPescaConsumoId } }),
+    data.novedadPescaConsumoId ? prisma.novedadPescaConsumo.findUnique({ where: { id: data.novedadPescaConsumoId } }) : Promise.resolve(true),
     data.bahiaId ? prisma.personal.findUnique({ where: { id: data.bahiaId } }) : Promise.resolve(true),
     data.motoristaId ? prisma.personal.findUnique({ where: { id: data.motoristaId } }) : Promise.resolve(true),
     data.patronId ? prisma.personal.findUnique({ where: { id: data.patronId } }) : Promise.resolve(true),
@@ -23,7 +23,7 @@ async function validarClavesForaneas(data) {
     data.bolicheRedId ? prisma.bolicheRed.findUnique({ where: { id: data.bolicheRedId } }) : Promise.resolve(true)
   ]);
 
-  if (!novedad) throw new ValidationError('El novedadPescaConsumoId no existe.');
+  if (data.novedadPescaConsumoId && !novedad) throw new ValidationError('El novedadPescaConsumoId no existe.');
   if (data.bahiaId && !bahia) throw new ValidationError('El bahiaId no existe en la tabla personal.');
   if (data.motoristaId && !motorista) throw new ValidationError('El motoristaId no existe.');
   if (data.patronId && !patron) throw new ValidationError('El patronId no existe.');
@@ -105,22 +105,51 @@ const crear = async (data) => {
 
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.faenaPescaConsumo.findUnique({ where: { id } });
+    const existente = await prisma.faenaPescaConsumo.findUnique({ 
+      where: { id },
+      include: {
+        novedadPescaConsumo: true
+      }
+    });
     if (!existente) throw new NotFoundError('FaenaPescaConsumo no encontrada');
     
+    // ✅ PATRÓN DE faenaPesca.service.js: Filtrar solo los campos que se pueden actualizar directamente
+    const camposPermitidos = [
+      'descripcion',
+      'fechaSalida',
+      'fechaDescarga',
+      'bahiaId',
+      'motoristaId',
+      'patronId',
+      'puertoSalidaId',
+      'puertoDescargaId',
+      'puertoFondeoId',
+      'embarcacionId',
+      'bolicheRedId',
+      'urlInformeFaena',
+      'estadoFaenaId',
+      'toneladasCapturadasFaena',
+      'fechaHoraFondeo',
+      'bolicheId'
+    ];
+    
+    const dataFiltrada = {};
+    for (const campo of camposPermitidos) {
+      if (data.hasOwnProperty(campo)) {
+        dataFiltrada[campo] = data[campo];
+      }
+    }
+    
     // Validar claves foráneas si cambian
-    const claves = ['novedadPescaConsumoId','bahiaId','motoristaId','patronId','puertoSalidaId','puertoDescargaId','embarcacionId','bolicheRedId', 'puertoFondeoId'];
-    if (claves.some(k => data[k] && data[k] !== existente[k])) {
-      await validarClavesForaneas({ ...existente, ...data });
+    const claves = ['bahiaId','motoristaId','patronId','puertoSalidaId','puertoDescargaId','puertoFondeoId','embarcacionId','bolicheRedId'];
+    if (claves.some(k => dataFiltrada[k] && dataFiltrada[k] !== existente[k])) {
+      await validarClavesForaneas({ ...existente, ...dataFiltrada });
     }
     
     // Agregar updatedAt requerido por el modelo
-    const dataConFecha = {
-      ...data,
-      updatedAt: new Date()
-    };
+    dataFiltrada.updatedAt = new Date();
     
-    return await prisma.faenaPescaConsumo.update({ where: { id }, data: dataConFecha });
+    return await prisma.faenaPescaConsumo.update({ where: { id }, data: dataFiltrada });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

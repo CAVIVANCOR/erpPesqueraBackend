@@ -45,7 +45,13 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    return await prisma.documentacionEmbarcacion.create({ data });
+    // Agregar updatedAt automáticamente
+    const dataConFecha = {
+      ...data,
+      updatedAt: new Date()
+    };
+    
+    return await prisma.documentacionEmbarcacion.create({ data: dataConFecha });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

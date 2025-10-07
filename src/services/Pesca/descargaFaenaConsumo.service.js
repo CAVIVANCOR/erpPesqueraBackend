@@ -14,7 +14,8 @@ async function validarClavesForaneas(data) {
   validaciones.push(prisma.faenaPescaConsumo.findUnique({ where: { id: data.faenaPescaConsumoId } }));
   validaciones.push(prisma.personal.findUnique({ where: { id: data.patronId } }));
   validaciones.push(prisma.personal.findUnique({ where: { id: data.motoristaId } }));
-  validaciones.push(prisma.bahiaComercial.findUnique({ where: { id: data.bahiaId } }));
+  // ❌ ELIMINADO: validaciones.push(prisma.bahiaComercial.findUnique({ where: { id: data.bahiaId } }));
+  // bahiaId es solo un campo numérico sin relación definida en el schema
   
   // Validaciones opcionales (solo si el campo tiene valor)
   if (data.puertoDescargaId) {
@@ -47,13 +48,13 @@ async function validarClavesForaneas(data) {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
   
-  const [faena, patron, motorista, bahia, puerto, puertoFondeo, cliente, movIngreso, especie] = await Promise.all(validaciones);
+  const [faena, patron, motorista, puerto, puertoFondeo, cliente, movIngreso, especie] = await Promise.all(validaciones);
   
   // Validar campos obligatorios
   if (!faena) throw new ValidationError('El faenaPescaConsumoId no existe.');
   if (!patron) throw new ValidationError('El patronId no existe.');
   if (!motorista) throw new ValidationError('El motoristaId no existe.');
-  if (!bahia) throw new ValidationError('El bahiaId no existe.');
+  // ❌ ELIMINADO: if (!bahia) throw new ValidationError('El bahiaId no existe.');
   
   // Validar campos opcionales solo si se proporcionaron
   if (data.puertoDescargaId && !puerto) throw new ValidationError('El puertoDescargaId no existe.');
@@ -118,16 +119,20 @@ const crear = async (data) => {
 
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.descargaFaenaConsumo.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('DescargaFaenaConsumo no encontrada');
-    // Validar claves foráneas si cambian
-    const claves = ['faenaPescaConsumoId','puertoDescargaId','clienteId','patronId','motoristaId','bahiaId','movIngresoAlmacenId'];
-    if (claves.some(k => data[k] && data[k] !== existente[k])) {
-      await validarClavesForaneas({ ...existente, ...data });
-    }
-    return await prisma.descargaFaenaConsumo.update({ where: { id }, data });
+    const descargaExistente = await prisma.descargaFaenaConsumo.findUnique({ where: { id } });
+    if (!descargaExistente) throw new NotFoundError('DescargaFaenaConsumo no encontrada');
+    
+    await validarClavesForaneas(data);
+    
+    // Agregar timestamp automático para actualizadoEn
+    const dataConTimestamp = {
+      ...data,
+      actualizadoEn: new Date()
+    };
+    
+    return await prisma.descargaFaenaConsumo.update({ where: { id }, data: dataConTimestamp });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err instanceof ValidationError || err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -135,13 +140,27 @@ const actualizar = async (id, data) => {
 
 const eliminar = async (id) => {
   try {
+    const descargaExistente = await prisma.descargaFaenaConsumo.findUnique({ where: { id } });
+    if (!descargaExistente) throw new NotFoundError('DescargaFaenaConsumo no encontrada');
+    
     if (await tieneDetalles(id)) {
-      throw new ConflictError('No se puede eliminar porque tiene detalles asociados.');
+      throw new ConflictError('No se puede eliminar la descarga porque tiene detalles asociados.');
     }
-    await prisma.descargaFaenaConsumo.delete({ where: { id } });
-    return true;
+    
+    return await prisma.descargaFaenaConsumo.delete({ where: { id } });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const obtenerPorFaena = async (faenaPescaConsumoId) => {
+  try {
+    return await prisma.descargaFaenaConsumo.findMany({
+      where: { faenaPescaConsumoId }
+    });
+  } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -152,5 +171,6 @@ export default {
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  obtenerPorFaena
 };

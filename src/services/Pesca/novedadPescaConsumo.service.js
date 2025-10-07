@@ -256,11 +256,44 @@ const iniciar = async (id) => {
         embarcacionId: Number(embarcacion.id),
         bolicheRedId: null,
         urlInformeFaena: null,
-        estadoFaenaId: Number(estadoIniciada.id), // ← CORREGIDO: Asignar estado INICIADA
+        estadoFaenaId: Number(estadoIniciada.id),
         toneladasCapturadasFaena: null,
         updatedAt: new Date(),
       },
     });
+
+    // ✅ NUEVO: Crear TripulanteFaenaConsumo
+    // Filtrar tripulantes según especificaciones
+    const tripulantesPesca = await prisma.personal.findMany({
+      where: {
+        empresaId: Number(novedad.empresaId), // Personal.empresaId = FaenaPescaConsumo.novedadPescaConsumo.empresaId
+        cesado: false, // Personal.cesado = false
+        paraPescaConsumo: true, // Personal.paraPescaConsumo = true
+        cargoId: {
+          in: [21, 22, 14], // 21: TRIPULANTE, 22: PATRON, 14: MOTORISTA
+        },
+      },
+    });
+
+    // Crear registros en TripulanteFaenaConsumo
+    const tripulantesData = tripulantesPesca.map((personal) => ({
+      faenaPescaConsumoId: Number(faenaCreada.id),
+      personalId: Number(personal.id),
+      cargoId: Number(personal.cargoId),
+      nombres: personal.nombres,
+      apellidos: personal.apellidos,
+      observaciones: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    let tripulantesCreados = 0;
+    if (tripulantesData.length > 0) {
+      await prisma.tripulanteFaenaConsumo.createMany({
+        data: tripulantesData,
+      });
+      tripulantesCreados = tripulantesData.length;
+    }
 
     // Crear EntregaARendirPescaConsumo (siguiendo patrón de TemporadaPesca)
     const entregaCreada = await prisma.entregaARendirPescaConsumo.create({
@@ -288,8 +321,8 @@ const iniciar = async (id) => {
     // Buscar responsable (moduloSistemaId=3 "PESCA DE CONSUMO")
     const responsable = await prisma.parametroAprobador.findFirst({
       where: {
-        empresaId: Number(novedad.empresaId), // FaenaPescaConsumo.novedadPescaConsumo.empresaId
-        embarcacionId: Number(embarcacion?.id || null), // FaenaPescaConsumo.embarcacionId
+        empresaId: Number(novedad.empresaId),
+        embarcacionId: Number(embarcacion?.id || null),
         moduloSistemaId: 3, // PESCA DE CONSUMO
         cesado: false,
         vigenteDesde: { lte: fechaActual },
@@ -344,7 +377,7 @@ const iniciar = async (id) => {
     // 1. Filtrar tripulantes según especificaciones
     const tripulantes = await prisma.personal.findMany({
       where: {
-        empresaId: Number(novedad.empresaId), // Personal.empresaId = FaenaPescaConsumo.novedadPescaConsumo.empresaId
+        empresaId: Number(novedad.empresaId),
         cargoId: {
           in: [21, 22, 14], // 21: TRIPULANTE, 22: PATRON, 14: MOTORISTA
         },
@@ -366,8 +399,7 @@ const iniciar = async (id) => {
     // 3. Crear registros en DetDocTripulantesFaenaConsumo
     const detallesDocTripulantes = documentacionPersonal.map((doc) => {
       // Calcular si el documento está vencido
-      // Si fechaVencimiento es null, asignar true (Vencido)
-      let docVencido = true; // Por defecto vencido si no hay fecha
+      let docVencido = true;
 
       if (doc.fechaVencimiento) {
         const fechaActual = new Date();
@@ -387,7 +419,7 @@ const iniciar = async (id) => {
         urlDocTripulantePdf: doc.urlDocPdf,
         observaciones: doc.observaciones,
         verificado: false,
-        docVencido: docVencido, // true si null o vencido, false si vigente
+        docVencido: docVencido,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -412,16 +444,18 @@ const iniciar = async (id) => {
         },
       });
 
-    const detallesDocEmbarcacion = documentacionEmbarcacion.map((doc) => ({
-      faenaPescaConsumoId: Number(faenaCreada.id),
-      documentacionEmbarcacionId: Number(doc.id),
-      embarcacionId: Number(doc.embarcacionId),
-      vigente: true,
-      fechaVerificacion: new Date(),
-      observaciones: null,
-      fechaCreacion: new Date(),
-      fechaActualizacion: new Date(),
-    }));
+      const detallesDocEmbarcacion = documentacionEmbarcacion.map((doc) => ({
+        faenaPescaConsumoId: Number(faenaCreada.id),
+        documentoPescaId: Number(doc.documentoPescaId), // ✅ CORREGIDO: era documentacionEmbarcacionId
+        numeroDocumento: doc.numeroDocumento || null,
+        fechaEmision: doc.fechaEmision || null,
+        fechaVencimiento: doc.fechaVencimiento || null,
+        urlDocEmbarcacion: doc.urlDocPdf || null,
+        observaciones: doc.observaciones || null,
+        verificado: false,
+        docVencido: doc.docVencido || false,
+        updatedAt: new Date(),
+      }));
 
     if (detallesDocEmbarcacion.length > 0) {
       await prisma.detDocEmbarcacionPescaConsumo.createMany({
@@ -442,6 +476,7 @@ const iniciar = async (id) => {
       mensaje: "Novedad de pesca consumo iniciada correctamente",
       faenaCreada: Number(faenaCreada.id),
       entregaCreada: Number(entregaCreada.id),
+      tripulantesCreados: tripulantesCreados, // ✅ NUEVO
       accionesPreviasCreadas: detallesAccionesPrevias.length,
       docTripulantesCreados: detallesDocTripulantes.length,
       docEmbarcacionCreados: detallesDocEmbarcacion.length,

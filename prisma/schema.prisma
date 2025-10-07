@@ -1292,6 +1292,7 @@ model FaenaPesca {
   temporada       TemporadaPesca @relation("FaenaTemporadas", fields: [temporadaId], references: [id])
   embarcacion     Embarcacion?   @relation("EmbarcacionFaenas", fields: [embarcacionId], references: [id])
   boliche         BolicheRed?    @relation("BolicheFaenas", fields: [bolicheRedId], references: [id])
+
   detallesDoc DetalleDocEmbarcacion[]
   tripulantes     TripulanteFaena[]
   detalleDocsTripulantes DetalleDocTripulantes[]
@@ -1303,26 +1304,24 @@ model FaenaPesca {
 model FaenaPescaConsumo {
   id                             BigInt                           @id @default(autoincrement())
   novedadPescaConsumoId          BigInt
+  descripcion                    String?
+  createdAt                      DateTime                         @default(now())
+  updatedAt                      DateTime
+  bolicheRedId                   BigInt?
+  embarcacionId                  BigInt?
+  fechaSalida                    DateTime?
+  fechaDescarga                  DateTime?
+  puertoDescargaId               BigInt?
+  puertoSalidaId                 BigInt?
   bahiaId                        BigInt?
   motoristaId                    BigInt?
   patronId                       BigInt?
-  descripcion                    String?
-  fechaSalida                    DateTime?
-  fechaDescarga                  DateTime?
-  puertoSalidaId                 BigInt?
-  puertoDescargaId               BigInt?
-  embarcacionId                  BigInt?
-  bolicheRedId                   BigInt?
   urlInformeFaena                String?
-  createdAt                      DateTime                         @default(now())
-  updatedAt                      DateTime
   estadoFaenaId           BigInt?
   toneladasCapturadasFaena     Decimal?
   fechaHoraFondeo     DateTime?
   puertoFondeoId      BigInt?
 
-
-  // Relaciones principales
   novedadPescaConsumo   NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
   embarcacion           Embarcacion?        @relation("EmbarcacionFaenasConsumo", fields: [embarcacionId], references: [id])
   boliche               BolicheRed?         @relation("BolicheFaenasConsumo", fields: [bolicheRedId], references: [id])
@@ -1331,9 +1330,9 @@ model FaenaPescaConsumo {
   detallesDocEmbarcacion    DetDocEmbarcacionPescaConsumo[]
   tripulantes               TripulanteFaenaConsumo[]
   detalleDocsTripulantes    DetDocTripulantesFaenaConsumo[]
-  accionesPrevias           DetAccionesPreviasFaenaConsumo[]
   calas                     CalaFaenaConsumo[]
   descargaFaenaConsumo      DescargaFaenaConsumo?
+  accionesPrevias           DetAccionesPreviasFaenaConsumo[]
 }
 
 model FamiliaProducto {
@@ -1609,6 +1608,7 @@ model NovedadPescaConsumo {
   estadoNovedadPescaConsumoId         BigInt
   toneladasCapturadas     Decimal?
   novedadPescaConsumoIniciada   Boolean @default(false)
+  urlResolucionPdf String?
 
   faenas                FaenaPescaConsumo[]
   entregasARendir       EntregaARendirPescaConsumo[]
