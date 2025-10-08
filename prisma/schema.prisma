@@ -732,9 +732,18 @@ model DetMovsEntRendirPescaConsumo {
   descripcion                  String?
   creadoEn                     DateTime                   @default(now())
   actualizadoEn                DateTime
+  urlComprobanteMovimiento String?
+  validadoTesoreria    Boolean @default(false)
+  fechaValidacionTesoreria DateTime?
+  operacionSinFactura  Boolean @default(false)
+  fechaOperacionMovCaja DateTime?
+  operacionMovCajaId BigInt?
+  moduloOrigenMovCajaId BigInt?
+  entidadComercialId BigInt?
 
   entregaARendirPescaConsumo EntregaARendirPescaConsumo @relation(fields: [entregaARendirPescaConsumoId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+  entidadComercial EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
 }
 
 model DetMovsEntregaRendir {
@@ -1196,6 +1205,7 @@ model EntidadComercial {
   ordenesCompra OrdenCompra[]
   movimientosCaja MovimientoCaja[]
   detalleMovsEntregaRendir DetMovsEntregaRendir[]
+  detalleMovsEntregaRendirPescaConsumo DetMovsEntRendirPescaConsumo[]
   preFacturasCliente PreFactura[] @relation("EntidadComercialToPreFactura")
 }
 
@@ -1609,6 +1619,10 @@ model NovedadPescaConsumo {
   toneladasCapturadas     Decimal?
   novedadPescaConsumoIniciada   Boolean @default(false)
   urlResolucionPdf String?
+  cuotaAlquiladaTon         Decimal?
+  cuotaPropiaTon            Decimal?
+  numeroResolucion          String?
+  referenciaExtra           String?
 
   faenas                FaenaPescaConsumo[]
   entregasARendir       EntregaARendirPescaConsumo[]

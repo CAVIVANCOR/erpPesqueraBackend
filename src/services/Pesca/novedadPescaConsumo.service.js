@@ -50,9 +50,19 @@ const obtenerPorId = async (id) => {
   try {
     const novedad = await prisma.novedadPescaConsumo.findUnique({
       where: { id },
+      include: {
+        faenas: true
+      }
     });
     if (!novedad) throw new NotFoundError("NovedadPescaConsumo no encontrada");
-    return novedad;
+
+    // Calcular toneladas capturadas dinámicamente
+    return {
+      ...novedad,
+      toneladasCapturadas: novedad.faenas.reduce((total, faena) => 
+        total + (parseFloat(faena.toneladasDescargadas) || 0), 0
+      )
+    };
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -113,6 +123,10 @@ const actualizar = async (id, data) => {
       "estadoNovedadPescaConsumoId",
       "toneladasCapturadas",
       "novedadPescaConsumoIniciada",
+      "urlResolucionPdf",
+      "cuotaAlquiladaTon",
+      "cuotaPropiaTon",
+      "numeroResolucion",
     ];
 
     const dataFiltrada = {};

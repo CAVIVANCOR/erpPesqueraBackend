@@ -38,7 +38,14 @@ const crear = async (data) => {
     if (!data.zona) throw new ValidationError('El campo zona es obligatorio.');
     if (!data.nombre) throw new ValidationError('El campo nombre es obligatorio.');
     await validarUnicidadNombre(data.nombre);
-    return await prisma.puertoPesca.create({ data });
+    
+    // Agregar fecha_actualizacion automáticamente
+    const dataConFechas = {
+      ...data,
+      fecha_actualizacion: new Date()
+    };
+    
+    return await prisma.puertoPesca.create({ data: dataConFechas });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -53,7 +60,14 @@ const actualizar = async (id, data) => {
     if (data.nombre && data.nombre !== existente.nombre) {
       await validarUnicidadNombre(data.nombre, id);
     }
-    return await prisma.puertoPesca.update({ where: { id }, data });
+    
+    // Agregar fecha_actualizacion automáticamente en cada actualización
+    const dataConFechaActualizacion = {
+      ...data,
+      fecha_actualizacion: new Date()
+    };
+    
+    return await prisma.puertoPesca.update({ where: { id }, data: dataConFechaActualizacion });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

@@ -116,6 +116,7 @@ import incotermRoutes from '../routes/Ventas/incoterm.routes.js';
 import detallePreFacturaRoutes from '../routes/Ventas/detallePreFactura.routes.js';
 import temporadaPescaRoutes from '../routes/Pesca/temporadaPesca.routes.js';
 import temporadaPescaResolucionRoutes from '../routes/Pesca/temporadaPesca.resolucion.routes.js';
+import novedadPescaConsumoResolucionRoutes from '../routes/Pesca/novedadPescaConsumo.resolucion.routes.js';
 import embarcacionRoutes from '../routes/Pesca/embarcacion.routes.js';
 import tipoEmbarcacionRoutes from '../routes/Pesca/tipoEmbarcacion.routes.js';
 import documentoPescaRoutes from '../routes/Pesca/documentoPesca.routes.js';
@@ -179,7 +180,8 @@ router.use('/certificados-embarcacion', certificadosEmbarcacionRoutes);
 router.use('/empresas-adjuntos', empresaAdjuntosRoutes);
 // Ruta para manejo de resoluciones PDF de temporada de pesca (upload y serving)
 router.use('/temporada-pesca-resolucion', temporadaPescaResolucionRoutes);
-
+// Ruta para manejo de resoluciones PDF de novedad de pesca consumo (upload y serving)
+router.use('/novedad-pesca-consumo-resolucion', novedadPescaConsumoResolucionRoutes);
 // Ruta para manejo de reportes generados por empresa (upload y serving)
 router.use('/empresas-reportes', empresaReporteRoutes);
 
@@ -396,6 +398,8 @@ router.use('/detalles-pre-factura', detallePreFacturaRoutes);
 router.use('/pesca/temporadas-pesca', temporadaPescaRoutes);
 // Rutas para TemporadaPescaResolucion
 router.use('/pesca/temporada-pesca-resolucion', temporadaPescaResolucionRoutes);
+// Rutas para NovedadPescaConsumoResolucion
+router.use('/pesca/novedad-pesca-consumo-resolucion', novedadPescaConsumoResolucionRoutes);
 // Rutas para Embarcacion
 router.use('/pesca/embarcaciones', embarcacionRoutes);
 // Rutas para TipoEmbarcacion
