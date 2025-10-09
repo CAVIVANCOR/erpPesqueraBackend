@@ -83,10 +83,25 @@ const eliminar = async (id) => {
   }
 };
 
+const obtenerPorCala = async (calaFaenaConsumoId) => {
+  try {
+    return await prisma.detCalaPescaConsumo.findMany({
+      where: { calaFaenaConsumoId: Number(calaFaenaConsumoId) },
+      include: {
+        especie: true,
+      },
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  obtenerPorCala
 };

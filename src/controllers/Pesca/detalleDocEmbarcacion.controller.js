@@ -7,7 +7,8 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  */
 export async function listar(req, res, next) {
   try {
-    const detalles = await detalleDocEmbarcacionService.listar();
+    const { faenaPescaId } = req.query;  // ← AGREGAR ESTA LÍNEA
+    const detalles = await detalleDocEmbarcacionService.listar(faenaPescaId);  // ← PASAR PARÁMETRO
     res.json(toJSONBigInt(detalles));
   } catch (err) {
     next(err);

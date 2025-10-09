@@ -77,7 +77,24 @@ async function tieneEspecies(id) {
 
 const listar = async () => {
   try {
-    return await prisma.calaFaenaConsumo.findMany();
+    const calas = await prisma.calaFaenaConsumo.findMany({
+      include: {
+        faenaPescaConsumo: true,
+        especiesPescadas: {
+          include: {
+            especie: true
+          }
+        }
+      }
+    });
+
+    // Calcular toneladas capturadas dinámicamente
+    return calas.map(cala => ({
+      ...cala,
+      toneladasCapturadas: cala.especiesPescadas.reduce((total, detalle) => 
+        total + (parseFloat(detalle.toneladas) || 0), 0
+      )
+    }));
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -87,9 +104,25 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const cala = await prisma.calaFaenaConsumo.findUnique({ where: { id } });
+    const cala = await prisma.calaFaenaConsumo.findUnique({ 
+      where: { id },
+      include: {
+        especiesPescadas: {
+          include: {
+            especie: true
+          }
+        }
+      }
+    });
     if (!cala) throw new NotFoundError("CalaFaenaConsumo no encontrada");
-    return cala;
+    
+    // Calcular toneladas capturadas dinámicamente
+    return {
+      ...cala,
+      toneladasCapturadas: cala.especiesPescadas.reduce((total, detalle) => 
+        total + (parseFloat(detalle.toneladas) || 0), 0
+      )
+    };
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -110,14 +143,20 @@ const obtenerPorFaena = async (faenaId) => {
       },
       orderBy: { fechaHoraInicio: 'asc' },
     });
-    return calas;
+    
+    // Calcular toneladas capturadas dinámicamente para cada cala
+    return calas.map(cala => ({
+      ...cala,
+      toneladasCapturadas: cala.especiesPescadas.reduce((total, detalle) => 
+        total + (parseFloat(detalle.toneladas) || 0), 0
+      )
+    }));
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
-
 const crear = async (data) => {
   try {
     // Validar solo campos obligatorios según el modelo Prisma

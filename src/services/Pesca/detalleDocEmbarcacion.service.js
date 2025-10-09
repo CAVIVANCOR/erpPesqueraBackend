@@ -16,9 +16,13 @@ async function validarClavesForaneas(data) {
   if (!documento) throw new ValidationError('El documentoPescaId no existe.');
 }
 
-const listar = async () => {
+const listar = async (faenaPescaId) => {
   try {
-    return await prisma.detalleDocEmbarcacion.findMany();
+    const where = {};
+    if (faenaPescaId) {
+      where.faenaPescaId = BigInt(faenaPescaId);
+    }
+    return await prisma.detalleDocEmbarcacion.findMany({ where });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

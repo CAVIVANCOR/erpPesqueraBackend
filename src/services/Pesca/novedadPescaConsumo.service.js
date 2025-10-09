@@ -51,17 +51,18 @@ const obtenerPorId = async (id) => {
     const novedad = await prisma.novedadPescaConsumo.findUnique({
       where: { id },
       include: {
-        faenas: true
-      }
+        faenas: true,
+      },
     });
     if (!novedad) throw new NotFoundError("NovedadPescaConsumo no encontrada");
 
     // Calcular toneladas capturadas dinámicamente
     return {
       ...novedad,
-      toneladasCapturadas: novedad.faenas.reduce((total, faena) => 
-        total + (parseFloat(faena.toneladasDescargadas) || 0), 0
-      )
+      toneladasCapturadas: novedad.faenas.reduce(
+        (total, faena) => total + (parseFloat(faena.toneladasDescargadas) || 0),
+        0
+      ),
     };
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -127,6 +128,7 @@ const actualizar = async (id, data) => {
       "cuotaAlquiladaTon",
       "cuotaPropiaTon",
       "numeroResolucion",
+      "referenciaExtra", // ← AGREGAR ESTA LÍNEA
     ];
 
     const dataFiltrada = {};
@@ -184,17 +186,27 @@ const iniciar = async (id) => {
       throw new ValidationError("La novedad ya fue iniciada");
     }
 
-    // Buscar el estado "INICIADA" para FAENA PESCA CONSUMO (tipoProvieneDeId=8)
-    const estadoIniciada = await prisma.estadoMultiFuncion.findFirst({
+    const estadoEnProceso = await prisma.estadoMultiFuncion.findFirst({
       where: {
-        tipoProvieneDe: {
-          descripcion: "FAENA PESCA CONSUMO"
-        },
-        descripcion: "INICIADA"
+        tipoProvieneDeId: 7, // Novedad Pesca Consumo
+        descripcion: "EN PROCESO",
+        cesado: false,
+      },
+    });
+    const estadoFaenaIniciada = await prisma.estadoMultiFuncion.findFirst({
+      where: {
+        tipoProvieneDeId: 8, // Faena Pesca Consumo
+        descripcion: "INICIADA",
+        cesado: false
       }
     });
-
-    if (!estadoIniciada) {
+   
+    if (!estadoEnProceso) {
+      throw new ValidationError(
+        "No se encontró el estado 'EN PROCESO' para NOVEDAD PESCA CONSUMO. Verifique que exista en EstadoMultiFuncion con tipoProvieneDeId=7"
+      );
+    }
+    if (!estadoFaenaIniciada) {
       throw new ValidationError(
         "No se encontró el estado 'INICIADA' para FAENA PESCA CONSUMO. Verifique que exista en EstadoMultiFuncion con tipoProvieneDeId=8"
       );
@@ -270,7 +282,7 @@ const iniciar = async (id) => {
         embarcacionId: Number(embarcacion.id),
         bolicheRedId: null,
         urlInformeFaena: null,
-        estadoFaenaId: Number(estadoIniciada.id),
+        estadoFaenaId: Number(estadoFaenaIniciada.id),
         toneladasCapturadasFaena: null,
         updatedAt: new Date(),
       },
@@ -458,18 +470,18 @@ const iniciar = async (id) => {
         },
       });
 
-      const detallesDocEmbarcacion = documentacionEmbarcacion.map((doc) => ({
-        faenaPescaConsumoId: Number(faenaCreada.id),
-        documentoPescaId: Number(doc.documentoPescaId), // ✅ CORREGIDO: era documentacionEmbarcacionId
-        numeroDocumento: doc.numeroDocumento || null,
-        fechaEmision: doc.fechaEmision || null,
-        fechaVencimiento: doc.fechaVencimiento || null,
-        urlDocEmbarcacion: doc.urlDocPdf || null,
-        observaciones: doc.observaciones || null,
-        verificado: false,
-        docVencido: doc.docVencido || false,
-        updatedAt: new Date(),
-      }));
+    const detallesDocEmbarcacion = documentacionEmbarcacion.map((doc) => ({
+      faenaPescaConsumoId: Number(faenaCreada.id),
+      documentoPescaId: Number(doc.documentoPescaId), // ✅ CORREGIDO: era documentacionEmbarcacionId
+      numeroDocumento: doc.numeroDocumento || null,
+      fechaEmision: doc.fechaEmision || null,
+      fechaVencimiento: doc.fechaVencimiento || null,
+      urlDocEmbarcacion: doc.urlDocPdf || null,
+      observaciones: doc.observaciones || null,
+      verificado: false,
+      docVencido: doc.docVencido || false,
+      updatedAt: new Date(),
+    }));
 
     if (detallesDocEmbarcacion.length > 0) {
       await prisma.detDocEmbarcacionPescaConsumo.createMany({
@@ -482,6 +494,7 @@ const iniciar = async (id) => {
       where: { id },
       data: {
         novedadPescaConsumoIniciada: true,
+        estadoNovedadPescaConsumoId: Number(estadoEnProceso.id),  // ← AGREGAR
         fechaActualizacion: new Date(),
       },
     });
@@ -504,6 +517,77 @@ const iniciar = async (id) => {
   }
 };
 
+
+const finalizar = async (id) => {
+  try {
+    const novedad = await prisma.novedadPescaConsumo.findUnique({ where: { id } });
+    if (!novedad) throw new NotFoundError('NovedadPescaConsumo no encontrada');
+
+    // Buscar el estado "FINALIZADA" para Novedad Pesca Consumo
+    const estadoFinalizada = await prisma.estadoMultiFuncion.findFirst({
+      where: {
+        tipoProvieneDeId: 7, // Novedad Pesca Consumo
+        descripcion: "FINALIZADA",
+        cesado: false
+      }
+    });
+
+    if (!estadoFinalizada) {
+      throw new ValidationError('No se encontró el estado "FINALIZADA" para Novedad Pesca Consumo');
+    }
+
+    // Actualizar el estado de la novedad a "FINALIZADA"
+    const novedadActualizada = await prisma.novedadPescaConsumo.update({
+      where: { id: Number(id) },
+      data: {
+        estadoNovedadPescaConsumoId: Number(estadoFinalizada.id),
+        updatedAt: new Date()
+      }
+    });
+
+    return novedadActualizada;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const cancelar = async (id) => {
+  try {
+    const novedad = await prisma.novedadPescaConsumo.findUnique({ where: { id } });
+    if (!novedad) throw new NotFoundError('NovedadPescaConsumo no encontrada');
+
+    // Buscar el estado "CANCELADA" para Novedad Pesca Consumo
+    const estadoCancelada = await prisma.estadoMultiFuncion.findFirst({
+      where: {
+        tipoProvieneDeId: 7, // Novedad Pesca Consumo
+        descripcion: "CANCELADA",
+        cesado: false
+      }
+    });
+
+    if (!estadoCancelada) {
+      throw new ValidationError('No se encontró el estado "CANCELADA" para Novedad Pesca Consumo');
+    }
+
+    // Actualizar el estado de la novedad a "CANCELADA"
+    const novedadActualizada = await prisma.novedadPescaConsumo.update({
+      where: { id: Number(id) },
+      data: {
+        estadoNovedadPescaConsumoId: Number(estadoCancelada.id),
+        updatedAt: new Date()
+      }
+    });
+
+    return novedadActualizada;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -511,4 +595,6 @@ export default {
   actualizar,
   eliminar,
   iniciar,
+  finalizar,
+  cancelar,
 };

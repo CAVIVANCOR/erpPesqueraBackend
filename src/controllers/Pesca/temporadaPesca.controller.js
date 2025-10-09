@@ -62,3 +62,23 @@ export async function iniciar(req, res, next) {
     next(err);
   }
 }
+
+export async function finalizar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const temporada = await temporadaPescaService.finalizar(id);
+    res.json(toJSONBigInt(temporada));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const temporada = await temporadaPescaService.cancelar(id);
+    res.json(toJSONBigInt(temporada));
+  } catch (err) {
+    next(err);
+  }
+}

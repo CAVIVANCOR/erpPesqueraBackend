@@ -452,11 +452,83 @@ const iniciar = async (id) => {
   }
 };
 
+const finalizar = async (id) => {
+  try {
+    const temporada = await prisma.temporadaPesca.findUnique({ where: { id } });
+    if (!temporada) throw new NotFoundError('TemporadaPesca no encontrada');
+
+    // Buscar el estado "FINALIZADA" para temporadas de pesca
+    const estadoFinalizada = await prisma.estadoMultiFuncion.findFirst({
+      where: {
+        tipoProvieneDeId: 4, // Temporada Pesca
+        descripcion: "FINALIZADA",
+        cesado: false
+      }
+    });
+
+    if (!estadoFinalizada) {
+      throw new ValidationError('No se encontró el estado "FINALIZADA" para temporadas de pesca');
+    }
+
+    // Actualizar el estado de la temporada a "FINALIZADA"
+    const temporadaActualizada = await prisma.temporadaPesca.update({
+      where: { id: Number(id) },
+      data: {
+        estadoTemporadaId: Number(estadoFinalizada.id),
+        fechaActualizacion: new Date()
+      }
+    });
+
+    return temporadaActualizada;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const cancelar = async (id) => {
+  try {
+    const temporada = await prisma.temporadaPesca.findUnique({ where: { id } });
+    if (!temporada) throw new NotFoundError('TemporadaPesca no encontrada');
+
+    // Buscar el estado "CANCELADA" para temporadas de pesca
+    const estadoCancelada = await prisma.estadoMultiFuncion.findFirst({
+      where: {
+        tipoProvieneDeId: 4, // Temporada Pesca
+        descripcion: "CANCELADA",
+        cesado: false
+      }
+    });
+
+    if (!estadoCancelada) {
+      throw new ValidationError('No se encontró el estado "CANCELADA" para temporadas de pesca');
+    }
+
+    // Actualizar el estado de la temporada a "CANCELADA"
+    const temporadaActualizada = await prisma.temporadaPesca.update({
+      where: { id: Number(id) },
+      data: {
+        estadoTemporadaId: Number(estadoCancelada.id),
+        fechaActualizacion: new Date()
+      }
+    });
+
+    return temporadaActualizada;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
-  iniciar
+  iniciar,
+  finalizar,
+  cancelar,
 };

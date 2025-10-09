@@ -62,3 +62,23 @@ export async function iniciar(req, res, next) {
     next(err);
   }
 }
+
+export async function finalizar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const novedad = await novedadPescaConsumoService.finalizar(id);
+    res.json(toJSONBigInt(novedad));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const novedad = await novedadPescaConsumoService.cancelar(id);
+    res.json(toJSONBigInt(novedad));
+  } catch (err) {
+    next(err);
+  }
+}

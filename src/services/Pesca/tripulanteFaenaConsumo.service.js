@@ -11,13 +11,12 @@ async function validarClavesForaneas(data) {
   const [faena, personal, cargo] = await Promise.all([
     prisma.faenaPescaConsumo.findUnique({ where: { id: data.faenaPescaConsumoId } }),
     data.personalId ? prisma.personal.findUnique({ where: { id: data.personalId } }) : true,
-    data.cargoId ? prisma.cargo.findUnique({ where: { id: data.cargoId } }) : true
+    data.cargoId ? prisma.cargosPersonal.findUnique({ where: { id: data.cargoId } }) : true  // ← CAMBIAR cargo por cargosPersonal
   ]);
   if (!faena) throw new ValidationError('El faenaPescaConsumoId no existe.');
   if (data.personalId && !personal) throw new ValidationError('El personalId no existe.');
   if (data.cargoId && !cargo) throw new ValidationError('El cargoId no existe.');
 }
-
 const listar = async () => {
   try {
     return await prisma.tripulanteFaenaConsumo.findMany();

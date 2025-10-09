@@ -4,6 +4,7 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 /**
  * Servicio CRUD para DescargaFaenaConsumo
  * Valida existencia de claves foráneas y previene borrado si tiene detalles asociados.
+ * Actualiza automáticamente FaenaPescaConsumo con datos de descarga.
  * Documentado en español.
  */
 
@@ -14,7 +15,6 @@ async function validarClavesForaneas(data) {
   validaciones.push(prisma.faenaPescaConsumo.findUnique({ where: { id: data.faenaPescaConsumoId } }));
   validaciones.push(prisma.personal.findUnique({ where: { id: data.patronId } }));
   validaciones.push(prisma.personal.findUnique({ where: { id: data.motoristaId } }));
-  // ❌ ELIMINADO: validaciones.push(prisma.bahiaComercial.findUnique({ where: { id: data.bahiaId } }));
   // bahiaId es solo un campo numérico sin relación definida en el schema
   
   // Validaciones opcionales (solo si el campo tiene valor)
@@ -54,7 +54,6 @@ async function validarClavesForaneas(data) {
   if (!faena) throw new ValidationError('El faenaPescaConsumoId no existe.');
   if (!patron) throw new ValidationError('El patronId no existe.');
   if (!motorista) throw new ValidationError('El motoristaId no existe.');
-  // ❌ ELIMINADO: if (!bahia) throw new ValidationError('El bahiaId no existe.');
   
   // Validar campos opcionales solo si se proporcionaron
   if (data.puertoDescargaId && !puerto) throw new ValidationError('El puertoDescargaId no existe.');
@@ -71,6 +70,45 @@ async function tieneDetalles(id) {
   });
   if (!descarga) throw new NotFoundError('DescargaFaenaConsumo no encontrada');
   return descarga.detalles && descarga.detalles.length > 0;
+}
+
+/**
+ * Actualiza FaenaPescaConsumo con datos agregados de todas las descargas
+ * Se ejecuta automáticamente después de crear, actualizar o eliminar una descarga
+ */
+async function actualizarFaenaPescaConsumo(faenaPescaConsumoId, descargaActual) {
+  try {
+    // Obtener todas las descargas de esta faena
+    const todasLasDescargas = await prisma.descargaFaenaConsumo.findMany({
+      where: { faenaPescaConsumoId: Number(faenaPescaConsumoId) }
+    });
+
+    // Calcular total de toneladas capturadas sumando todas las descargas
+    const toneladasCapturadasFaena = todasLasDescargas.reduce((total, descarga) => {
+      return total + (parseFloat(descarga.toneladas) || 0);
+    }, 0);
+
+    // Preparar datos para actualizar (usar datos de la descarga actual si existe)
+    const faenaUpdateData = {
+      puertoDescargaId: descargaActual.puertoDescargaId || null,
+      fechaDescarga: descargaActual.fechaHoraInicioDescarga || null,
+      puertoFondeoId: descargaActual.puertoFondeoId || null,
+      fechaHoraFondeo: descargaActual.fechaHoraFondeo || null,
+      toneladasCapturadasFaena: toneladasCapturadasFaena,
+      updatedAt: new Date(),
+    };
+
+    // Actualizar FaenaPescaConsumo
+    await prisma.faenaPescaConsumo.update({
+      where: { id: Number(faenaPescaConsumoId) },
+      data: faenaUpdateData
+    });
+
+    console.log(`✅ FaenaPescaConsumo ${faenaPescaConsumoId} actualizada: ${toneladasCapturadasFaena.toFixed(3)} toneladas`);
+  } catch (error) {
+    console.error('Error al actualizar FaenaPescaConsumo:', error);
+    // No lanzar error para no bloquear la creación/actualización de la descarga
+  }
 }
 
 const listar = async () => {
@@ -109,7 +147,12 @@ const crear = async (data) => {
       actualizadoEn: new Date()
     };
     
-    return await prisma.descargaFaenaConsumo.create({ data: dataConTimestamp });
+    const nuevaDescarga = await prisma.descargaFaenaConsumo.create({ data: dataConTimestamp });
+    
+    // ✅ Actualizar FaenaPescaConsumo automáticamente
+    await actualizarFaenaPescaConsumo(data.faenaPescaConsumoId, nuevaDescarga);
+    
+    return nuevaDescarga;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -130,7 +173,12 @@ const actualizar = async (id, data) => {
       actualizadoEn: new Date()
     };
     
-    return await prisma.descargaFaenaConsumo.update({ where: { id }, data: dataConTimestamp });
+    const descargaActualizada = await prisma.descargaFaenaConsumo.update({ where: { id }, data: dataConTimestamp });
+    
+    // ✅ Actualizar FaenaPescaConsumo automáticamente
+    await actualizarFaenaPescaConsumo(descargaActualizada.faenaPescaConsumoId, descargaActualizada);
+    
+    return descargaActualizada;
   } catch (err) {
     if (err instanceof ValidationError || err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -147,7 +195,12 @@ const eliminar = async (id) => {
       throw new ConflictError('No se puede eliminar la descarga porque tiene detalles asociados.');
     }
     
-    return await prisma.descargaFaenaConsumo.delete({ where: { id } });
+    const descargaEliminada = await prisma.descargaFaenaConsumo.delete({ where: { id } });
+    
+    // ✅ Recalcular totales de FaenaPescaConsumo después de eliminar
+    await actualizarFaenaPescaConsumo(descargaEliminada.faenaPescaConsumoId, {});
+    
+    return descargaEliminada;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

@@ -17,7 +17,7 @@ async function validarClavesForaneas(data) {
     if (!personal) throw new ValidationError('El personalId no existe.');
   }
   if (data.cargoId) {
-    const cargo = await prisma.cargo.findUnique({ where: { id: data.cargoId } });
+    const cargo = await prisma.cargosPersonal.findUnique({ where: { id: data.cargoId } });
     if (!cargo) throw new ValidationError('El cargoId no existe.');
   }
 }

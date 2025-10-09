@@ -8,19 +8,38 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
  */
 
 async function validarClavesForaneas(data) {
-  const [faena, personal, documento] = await Promise.all([
-    prisma.faenaPescaConsumo.findUnique({ where: { id: data.faenaPescaConsumoId } }),
-    data.tripulanteId ? prisma.personal.findUnique({ where: { id: data.tripulanteId } }) : true, // ← CAMBIAR a personal
-    data.documentoId ? prisma.documentoPesca.findUnique({ where: { id: data.documentoId } }) : true
-  ]);
+  const promises = [
+    prisma.faenaPescaConsumo.findUnique({ where: { id: data.faenaPescaConsumoId } })
+  ];
+  
+  // Solo validar documentoId si no es null/undefined
+  if (data.documentoId !== null && data.documentoId !== undefined) {
+    promises.push(prisma.documentoPesca.findUnique({ where: { id: data.documentoId } }));
+  } else {
+    promises.push(Promise.resolve(true)); // Placeholder
+  }
+  
+  // Solo validar tripulanteId si no es null/undefined
+  if (data.tripulanteId !== null && data.tripulanteId !== undefined) {
+    promises.push(prisma.personal.findUnique({ where: { id: data.tripulanteId } }));
+  } else {
+    promises.push(Promise.resolve(true)); // Placeholder
+  }
+  
+  const [faena, documento, personal] = await Promise.all(promises);
+  
   if (!faena) throw new ValidationError('El faenaPescaConsumoId no existe.');
-  if (data.tripulanteId && !personal) throw new ValidationError('El tripulanteId no existe.');
   if (data.documentoId && !documento) throw new ValidationError('El documentoId no existe.');
+  if (data.tripulanteId && !personal) throw new ValidationError('El tripulanteId no existe.');
 }
 
-const listar = async () => {
+const listar = async (faenaPescaConsumoId) => {
   try {
-    return await prisma.detDocTripulantesFaenaConsumo.findMany();
+    const where = {};
+    if (faenaPescaConsumoId) {
+      where.faenaPescaConsumoId = BigInt(faenaPescaConsumoId);
+    }
+    return await prisma.detDocTripulantesFaenaConsumo.findMany({ where });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -29,9 +48,9 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const det = await prisma.detDocTripulantesFaenaConsumo.findUnique({ where: { id } });
-    if (!det) throw new NotFoundError('DetDocTripulantesFaenaConsumo no encontrado');
-    return det;
+    const detalle = await prisma.detDocTripulantesFaenaConsumo.findUnique({ where: { id } });
+    if (!detalle) throw new NotFoundError('DetDocTripulantesFaenaConsumo no encontrado');
+    return detalle;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -40,18 +59,13 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    if (typeof data.faenaPescaConsumoId === 'undefined' || data.faenaPescaConsumoId === null) {
-      throw new ValidationError('El campo faenaPescaConsumoId es obligatorio.');
+    // Solo faenaPescaConsumoId y verificado son obligatorios
+    // documentoId y tripulanteId son opcionales (nullable en el modelo)
+    if (!data.faenaPescaConsumoId || typeof data.verificado !== 'boolean') {
+      throw new ValidationError('Los campos faenaPescaConsumoId y verificado son obligatorios.');
     }
     await validarClavesForaneas(data);
-    
-    // Agregar updatedAt automáticamente
-    const dataConFecha = {
-      ...data,
-      updatedAt: new Date()
-    };
-    
-    return await prisma.detDocTripulantesFaenaConsumo.create({ data: dataConFecha });
+    return await prisma.detDocTripulantesFaenaConsumo.create({ data });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -63,19 +77,11 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.detDocTripulantesFaenaConsumo.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('DetDocTripulantesFaenaConsumo no encontrado');
-    // Validar claves foráneas si cambian
-    const claves = ['faenaPescaConsumoId','tripulanteId','documentoId'];
+    const claves = ['faenaPescaConsumoId', 'documentoPescaId', 'personalId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    
-    // Agregar updatedAt automáticamente
-    const dataConFecha = {
-      ...data,
-      updatedAt: new Date()
-    };
-    
-    return await prisma.detDocTripulantesFaenaConsumo.update({ where: { id }, data: dataConFecha });
+    return await prisma.detDocTripulantesFaenaConsumo.update({ where: { id }, data });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
