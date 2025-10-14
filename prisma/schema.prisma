@@ -270,11 +270,12 @@ model Color {
 model ConceptoMovAlmacen {
   id                    BigInt                @id @default(autoincrement())
   descripcion           String                @db.VarChar(100)
+  descripcionArmada     String                @db.VarChar(255)
   almacenOrigenId       BigInt?
   almacenDestinoId      BigInt?
-  kardexOrigen          Boolean               @default(false)
-  kardexDestino         Boolean               @default(false)
-  custodia              Boolean               @default(false)
+  llevaKardexOrigen     Boolean               @default(false)
+  llevaKardexDestino    Boolean               @default(false)
+  esCustodia            Boolean               @default(false)
   tipoConceptoId        BigInt
   tipoMovimientoId      BigInt
   tipoAlmacenId         BigInt
@@ -285,6 +286,41 @@ model ConceptoMovAlmacen {
   tipoMovimiento   TipoMovimientoAlmacen @relation(fields: [tipoMovimientoId], references: [id])
   tipoAlmacen      TipoAlmacen   @relation(fields: [tipoAlmacenId], references: [id])
 }
+
+model Almacen {
+  id                 BigInt           @id @default(autoincrement())
+  tipoAlmacenamientoId BigInt
+  tipoAlmacenId      BigInt
+  nombre             String
+  descripcion        String?
+  activo             Boolean          @default(true)
+  centroAlmacenId    BigInt
+  seLlevaKardex      Boolean          @default(false)
+  esAlmacenExterno   Boolean          @default(false)
+  esAlmacenPropioSede Boolean          @default(false)
+  esAlmacenProduccion Boolean          @default(false)
+
+
+  centroAlmacen CentrosAlmacen @relation(fields: [centroAlmacenId], references: [id])
+  tipoAlmacenamiento TipoAlmacenamiento @relation(fields: [tipoAlmacenamientoId], references: [id])
+  tipoAlmacen TipoAlmacen @relation(fields: [tipoAlmacenId], references: [id])
+}
+
+model CentrosAlmacen {
+  id                 BigInt           @id @default(autoincrement())
+  nombre             String
+  descripcion        String?
+  activo             Boolean          @default(true)
+  proveedorId        BigInt?
+  esCentroExterno    Boolean          @default(false)
+  esCentroPropioSede       Boolean          @default(false)
+  esCentroProduccion Boolean          @default(false)
+  empresaId BigInt
+
+  almacenes Almacen[]
+
+}
+
 
 model ContactoEntidad {
   id                 BigInt           @id @default(autoincrement())
@@ -740,10 +776,13 @@ model DetMovsEntRendirPescaConsumo {
   operacionMovCajaId BigInt?
   moduloOrigenMovCajaId BigInt?
   entidadComercialId BigInt?
+  monedaId BigInt?
+  urlComprobanteOperacionMovCaja String?
 
   entregaARendirPescaConsumo EntregaARendirPescaConsumo @relation(fields: [entregaARendirPescaConsumoId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   entidadComercial EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
+  moneda Moneda? @relation(fields: [monedaId], references: [id])
 }
 
 model DetMovsEntregaRendir {
@@ -765,10 +804,13 @@ model DetMovsEntregaRendir {
   operacionMovCajaId BigInt?
   moduloOrigenMovCajaId BigInt?
   entidadComercialId BigInt?
+  monedaId BigInt?
+  urlComprobanteOperacionMovCaja String?
 
   entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   entidadComercial EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
+  moneda Moneda? @relation(fields: [monedaId], references: [id])
 }
 
 model DetMovsEntregaRendirPCompras {
@@ -866,6 +908,8 @@ model DetalleCalaEspecie {
   cala                Cala   @relation(fields: [calaId], references: [id])
   especie             Especie @relation(fields: [especieId], references: [id])
 }
+
+
 
 model Especie {
   id BigInt @id @default(autoincrement())
@@ -1495,6 +1539,8 @@ model Moneda {
 
   precios    PrecioEntidad[]
   ctacte     CuentaCorriente[]
+  detEntregaRendirPescaIndustrial DetMovsEntregaRendir[]
+  detEntregaRendirPescaConsumo DetMovsEntRendirPescaConsumo[]
 }
 
 model MotivoAcceso {
@@ -1598,6 +1644,8 @@ model MovimientoCaja {
   usuarioMotivoOperacionId                                                 BigInt?
   fechaOperacionMovCaja                                                  DateTime? @default(now())
   operacionSinFactura                                                  Boolean @default(false)
+  urlComprobanteOperacionMovCaja String?
+  urlDocumentoMovCaja String?
 
   cuentaCorrienteOrigen     CuentaCorriente @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
   cuentaCorrienteDestino    CuentaCorriente @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
@@ -1860,6 +1908,8 @@ model Producto {
   urlFichaTecnica                   String?
   urlFotoProducto                   String?
   descripcionMedidaAdicional        String?                             @db.VarChar(120)
+  especieId BigInt?
+  cesado Boolean @default(false)
 
 familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
   subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
@@ -2084,12 +2134,14 @@ model TipoAlmacen {
   activo             Boolean              @default(true)
 
   conceptos   ConceptoMovAlmacen[]
+  almacenes   Almacen[]
 }
 
 model TipoAlmacenamiento {
   id       BigInt     @id @default(autoincrement())
   nombre   String     @db.VarChar(120)
   productos  Producto[]
+  almacenes  Almacen[]
 }
 
 model TipoConcepto {

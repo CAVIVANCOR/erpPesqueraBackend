@@ -172,6 +172,74 @@ router.post('/upload', autenticarJWT, (req, res, next) => {
 });
 
 /**
+ * POST /api/det-movs-entrega-rendir/upload-comprobante-operacion
+ * Sube un PDF de comprobante de operación de movimiento de caja.
+ * Retorna la URL relativa para guardar en DetMovsEntregaRendir.urlComprobanteOperacionMovCaja
+ */
+router.post('/upload-comprobante-operacion', autenticarJWT, (req, res, next) => {
+  upload.single('documento')(req, res, function (err) {
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        mensaje: 'El archivo supera el tamaño máximo permitido (15MB).',
+        codigo: 'ERR_TAMANO_ARCHIVO'
+      });
+    } else if (err) {
+      return res.status(400).json({
+        mensaje: err.message,
+        codigo: 'ERR_MULTER'
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const { detMovsEntregaRendirId } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        error: 'No se subió ningún archivo.',
+        codigo: 'ERR_NO_ARCHIVO'
+      });
+    }
+
+    // Construye la ruta relativa para la BD
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    
+    const rutaRelativa = path.join(
+      '/uploads/comprobantes-det-movs-entrega-rendir',
+      String(year),
+      month,
+      req.file.filename
+    ).replace(/\\/g, '/'); // Normaliza para Windows/Linux
+
+    // Si se proporciona detMovsEntregaRendirId, actualiza el registro
+    if (detMovsEntregaRendirId) {
+      await prisma.detMovsEntregaRendir.update({
+        where: { id: BigInt(detMovsEntregaRendirId) },
+        data: { urlComprobanteOperacionMovCaja: rutaRelativa }
+      });
+    }
+
+    // Respuesta exitosa con la URL para el frontend
+    res.json({ 
+      success: true, 
+      urlDocumento: rutaRelativa,
+      nombreArchivo: req.file.filename,
+      mensaje: 'Comprobante de operación subido exitosamente.'
+    });
+
+  } catch (error) {
+    console.error('[ERP DET MOVS ENTREGA RENDIR] Error al subir comprobante de operación:', error);
+    res.status(500).json({ 
+      error: 'Error interno al guardar el comprobante de operación.',
+      codigo: 'ERR_SERVIDOR'
+    });
+  }
+});
+
+/**
  * GET /api/det-movs-entrega-rendir/archivo/*
  * Sirve archivos PDF de comprobantes con autenticación JWT
  */

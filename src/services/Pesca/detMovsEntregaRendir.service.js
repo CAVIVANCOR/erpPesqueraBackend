@@ -39,6 +39,15 @@ async function validarClavesForaneas(data) {
     );
   }
 
+  // Agregar validación de Moneda si se proporciona monedaId
+  if (data.monedaId) {
+    validaciones.push(
+      prisma.moneda.findUnique({
+        where: { id: data.monedaId },
+      })
+    );
+  }
+
   const [
     entrega,
     responsable,
@@ -46,6 +55,7 @@ async function validarClavesForaneas(data) {
     centroCosto,
     moduloSistema,
     entidadComercial,
+    moneda,
   ] = await Promise.all(validaciones);
 
   if (!entrega) throw new ValidationError("El entregaARendirId no existe.");
@@ -57,6 +67,8 @@ async function validarClavesForaneas(data) {
     throw new ValidationError("El moduloOrigenMovCajaId no existe.");
   if (data.entidadComercialId && !entidadComercial)
     throw new ValidationError("El entidadComercialId no existe.");
+  if (data.monedaId && !moneda)
+    throw new ValidationError("El monedaId no existe.");
 }
 
 const listar = async () => {
@@ -121,6 +133,7 @@ const actualizar = async (id, data) => {
       "centroCostoId",
       "moduloOrigenMovCajaId",
       "entidadComercialId",
+      "monedaId",
     ];
     if (claves.some((k) => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });

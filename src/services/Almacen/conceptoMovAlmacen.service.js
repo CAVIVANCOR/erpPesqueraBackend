@@ -28,14 +28,90 @@ async function validarForaneas(data) {
     const tipoAlm = await prisma.tipoAlmacen.findUnique({ where: { id: data.tipoAlmacenId } });
     if (!tipoAlm) throw new ValidationError('El tipo de almacén referenciado no existe.');
   }
+  // almacenOrigenId (opcional)
+  if (data.almacenOrigenId !== undefined && data.almacenOrigenId !== null) {
+    const almOrigen = await prisma.almacen.findUnique({ where: { id: data.almacenOrigenId } });
+    if (!almOrigen) throw new ValidationError('El almacén origen referenciado no existe.');
+  }
+  // almacenDestinoId (opcional)
+  if (data.almacenDestinoId !== undefined && data.almacenDestinoId !== null) {
+    const almDestino = await prisma.almacen.findUnique({ where: { id: data.almacenDestinoId } });
+    if (!almDestino) throw new ValidationError('El almacén destino referenciado no existe.');
+  }
 }
 
 /**
- * Lista todos los conceptos de movimiento de almacén.
+ * Construye la descripción armada según la regla de negocio:
+ * Si esCustodia=false: Tipo Concepto + Tipo Movimiento + Tipo Almacen + " DE " + Almacen Origen + " A " + Almacen Destino + descripcion
+ * Si esCustodia=true: "CUSTODIA " + Tipo Concepto + Tipo Movimiento + Tipo Almacen + " DE " + Almacen Origen + " A " + Almacen Destino + descripcion
+ * @param {Object} data - Datos del concepto con los IDs
+ * @returns {Promise<string>} - Descripción armada
+ */
+async function construirDescripcionArmada(data) {
+  const partes = [];
+
+  // Prefijo si es custodia
+  if (data.esCustodia) {
+    partes.push('CUSTODIA');
+  }
+
+  // Tipo Concepto
+  if (data.tipoConceptoId) {
+    const tipoConcepto = await prisma.tipoConcepto.findUnique({ where: { id: data.tipoConceptoId } });
+    if (tipoConcepto) partes.push(tipoConcepto.nombre);
+  }
+
+  // Tipo Movimiento
+  if (data.tipoMovimientoId) {
+    const tipoMovimiento = await prisma.tipoMovimientoAlmacen.findUnique({ where: { id: data.tipoMovimientoId } });
+    if (tipoMovimiento) partes.push(tipoMovimiento.nombre);
+  }
+
+  // Tipo Almacén
+  if (data.tipoAlmacenId) {
+    const tipoAlmacen = await prisma.tipoAlmacen.findUnique({ where: { id: data.tipoAlmacenId } });
+    if (tipoAlmacen) partes.push(tipoAlmacen.nombre);
+  }
+
+  // Almacén Origen
+  if (data.almacenOrigenId) {
+    const almacenOrigen = await prisma.almacen.findUnique({ where: { id: data.almacenOrigenId } });
+    if (almacenOrigen) {
+      partes.push('DE');
+      partes.push(almacenOrigen.nombre);
+    }
+  }
+
+  // Almacén Destino
+  if (data.almacenDestinoId) {
+    const almacenDestino = await prisma.almacen.findUnique({ where: { id: data.almacenDestinoId } });
+    if (almacenDestino) {
+      partes.push('A');
+      partes.push(almacenDestino.nombre);
+    }
+  }
+
+  // Descripción
+  if (data.descripcion) {
+    partes.push(data.descripcion);
+  }
+
+  return partes.join(' ');
+}
+
+/**
+ * Lista todos los conceptos de movimiento de almacén con sus relaciones.
  */
 const listar = async () => {
   try {
-    return await prisma.conceptoMovAlmacen.findMany({ include: { movimientos: true } });
+    return await prisma.conceptoMovAlmacen.findMany({ 
+      include: { 
+        tipoConcepto: true,
+        tipoMovimiento: true,
+        tipoAlmacen: true,
+        movimientos: true 
+      } 
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -43,11 +119,19 @@ const listar = async () => {
 };
 
 /**
- * Obtiene un concepto por ID (incluyendo movimientos asociados).
+ * Obtiene un concepto por ID con sus relaciones.
  */
 const obtenerPorId = async (id) => {
   try {
-    const concepto = await prisma.conceptoMovAlmacen.findUnique({ where: { id }, include: { movimientos: true } });
+    const concepto = await prisma.conceptoMovAlmacen.findUnique({ 
+      where: { id }, 
+      include: { 
+        tipoConcepto: true,
+        tipoMovimiento: true,
+        tipoAlmacen: true,
+        movimientos: true 
+      } 
+    });
     if (!concepto) throw new NotFoundError('ConceptoMovAlmacen no encontrado');
     return concepto;
   } catch (err) {
@@ -58,6 +142,7 @@ const obtenerPorId = async (id) => {
 
 /**
  * Crea un concepto validando existencia de claves foráneas principales y campos obligatorios.
+ * Construye automáticamente la descripcionArmada.
  */
 const crear = async (data) => {
   try {
@@ -65,7 +150,16 @@ const crear = async (data) => {
       throw new ValidationError('Los campos descripcion, tipoConceptoId, tipoMovimientoId y tipoAlmacenId son obligatorios.');
     }
     await validarForaneas(data);
-    return await prisma.conceptoMovAlmacen.create({ data });
+    
+    // Construir descripcionArmada automáticamente
+    const descripcionArmada = await construirDescripcionArmada(data);
+    
+    return await prisma.conceptoMovAlmacen.create({ 
+      data: {
+        ...data,
+        descripcionArmada
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -75,14 +169,29 @@ const crear = async (data) => {
 
 /**
  * Actualiza un concepto existente, validando existencia y claves foráneas si se modifican.
+ * Reconstruye automáticamente la descripcionArmada.
  */
 const actualizar = async (id, data) => {
   try {
     const existente = await prisma.conceptoMovAlmacen.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('ConceptoMovAlmacen no encontrado');
+    
+    // Combinar datos existentes con los nuevos para validación
+    const datosCompletos = { ...existente, ...data };
+    
     // Validar foráneas si se modifican
-    await validarForaneas({ ...existente, ...data });
-    return await prisma.conceptoMovAlmacen.update({ where: { id }, data });
+    await validarForaneas(datosCompletos);
+    
+    // Reconstruir descripcionArmada automáticamente
+    const descripcionArmada = await construirDescripcionArmada(datosCompletos);
+    
+    return await prisma.conceptoMovAlmacen.update({ 
+      where: { id }, 
+      data: {
+        ...data,
+        descripcionArmada
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

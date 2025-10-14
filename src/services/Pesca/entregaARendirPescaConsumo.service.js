@@ -29,7 +29,11 @@ async function tieneMovimientos(id) {
 
 const listar = async () => {
   try {
-    return await prisma.entregaARendirPescaConsumo.findMany();
+    return await prisma.entregaARendirPescaConsumo.findMany({
+      include: {
+        novedadPescaConsumo: true,  // ← AGREGAR ESTA RELACIÓN
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -38,7 +42,12 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const entrega = await prisma.entregaARendirPescaConsumo.findUnique({ where: { id } });
+    const entrega = await prisma.entregaARendirPescaConsumo.findUnique({ 
+      where: { id },
+      include: {
+        novedadPescaConsumo: true,  // ← AGREGAR ESTA RELACIÓN
+      }
+    });
     if (!entrega) throw new NotFoundError('EntregaARendirPescaConsumo no encontrada');
     return entrega;
   } catch (err) {

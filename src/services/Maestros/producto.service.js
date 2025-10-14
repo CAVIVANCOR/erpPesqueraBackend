@@ -161,7 +161,10 @@ const crear = async (data) => {
   try {
     await validarProducto(data);
     const producto = await prisma.producto.create({
-      data,
+      data: {
+        ...data,
+        fechaActualizacion: new Date()
+      },
       include: includeRelaciones
     });
     return producto;
@@ -182,7 +185,10 @@ const actualizar = async (id, data) => {
     await validarProducto(data, id);
     const producto = await prisma.producto.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        fechaActualizacion: new Date()
+      },
       include: includeRelaciones
     });
     return producto;

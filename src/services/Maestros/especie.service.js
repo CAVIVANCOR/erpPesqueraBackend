@@ -48,7 +48,6 @@ const crear = async (data) => {
     
     // Convertir a mayúsculas
     const dataToSave = {
-      ...data,
       nombre: data.nombre.toUpperCase(),
       nombreCientifico: data.nombreCientifico.toUpperCase()
     };
@@ -77,11 +76,16 @@ const actualizar = async (id, data) => {
       throw new ValidationError('El campo nombre científico es obligatorio.');
     }
     
-    // Convertir a mayúsculas
+    // Convertir a mayúsculas y procesar IDs
     const dataToSave = {
-      ...data,
       nombre: data.nombre ? data.nombre.toUpperCase() : existente.nombre,
-      nombreCientifico: data.nombreCientifico ? data.nombreCientifico.toUpperCase() : existente.nombreCientifico
+      nombreCientifico: data.nombreCientifico ? data.nombreCientifico.toUpperCase() : existente.nombreCientifico,
+      enlacePescaIndustrialProductoMateriaPrimaId: data.enlacePescaIndustrialProductoMateriaPrimaId !== undefined
+        ? (data.enlacePescaIndustrialProductoMateriaPrimaId ? BigInt(data.enlacePescaIndustrialProductoMateriaPrimaId) : null)
+        : existente.enlacePescaIndustrialProductoMateriaPrimaId,
+      enlacePescaConsumoProductoMateriaPrimaId: data.enlacePescaConsumoProductoMateriaPrimaId !== undefined
+        ? (data.enlacePescaConsumoProductoMateriaPrimaId ? BigInt(data.enlacePescaConsumoProductoMateriaPrimaId) : null)
+        : existente.enlacePescaConsumoProductoMateriaPrimaId
     };
     
     return await prisma.especie.update({ where: { id }, data: dataToSave });

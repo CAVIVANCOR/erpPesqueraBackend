@@ -156,7 +156,8 @@ import recalcularToneladasRoutes from '../routes/Pesca/recalcularToneladas.route
 import testRecalculoRoutes from '../routes/Pesca/testRecalculo.routes.js';
 import empresaReporteRoutes from '../routes/Maestros/empresa.reporte.routes.js';
 import productoRoutes from '../routes/Maestros/producto.routes.js';
-
+import centrosAlmacenRoutes from './Almacen/centrosAlmacen.routes.js';
+import almacenRoutes from './Almacen/almacen.routes.js';
 import { autenticarJWT } from '../middlewares/authMiddleware.js';
 import * as usuarioController from '../controllers/Usuarios/usuario.controller.js'
 
@@ -314,6 +315,8 @@ router.use('/tipos-documento', tipoDocumentoRoutes);
 router.use('/conceptos-mov-almacen', conceptoMovAlmacenRoutes);
 // Rutas para TipoConcepto
 router.use('/tipos-concepto', tipoConceptoRoutes);
+router.use('/centros-almacen', centrosAlmacenRoutes);
+router.use('/almacenes', almacenRoutes);
 // Rutas para TipoMovimientoAlmacen
 router.use('/tipos-movimiento-almacen', tipoMovimientoAlmacenRoutes);
 // Rutas para TipoAlmacen
@@ -481,5 +484,6 @@ router.use('/tipos-contrato', tipoContratoRoutes);
 router.use('/tipos-referencia-movimiento-caja', tipoReferenciaMovimientoCajaRoutes);
 router.use('/bancos', bancoRoutes);
 router.use('/tipos-cuenta-corriente', tipoCuentaCorrienteRoutes);
+
 
 export default router;

@@ -20,7 +20,11 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.entregaARendir.findMany();
+    return await prisma.entregaARendir.findMany({
+      include: {
+        temporadaPesca: true,  // ← AGREGAR ESTA RELACIÓN
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -29,7 +33,12 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const entrega = await prisma.entregaARendir.findUnique({ where: { id } });
+    const entrega = await prisma.entregaARendir.findUnique({ 
+      where: { id },
+      include: {
+        temporadaPesca: true,  // ← AGREGAR ESTA RELACIÓN
+      }
+    });
     if (!entrega) throw new NotFoundError('EntregaARendir no encontrada');
     return entrega;
   } catch (err) {

@@ -7,12 +7,17 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
  * Documentado en español.
  */
 
-// Función helper para convertir BigInt a String
+// Función helper para convertir BigInt a String y Date a ISO String
 function convertirBigIntAString(obj) {
   if (obj === null || obj === undefined) return obj;
   
   if (typeof obj === 'bigint') {
     return obj.toString();
+  }
+  
+  // ✅ AGREGAR: Convertir Date a ISO string
+  if (obj instanceof Date) {
+    return obj.toISOString();
   }
   
   if (Array.isArray(obj)) {
@@ -31,16 +36,43 @@ function convertirBigIntAString(obj) {
 }
 
 async function validarClavesForaneas(data) {
-  const [entrega, responsable, tipoMovimiento, centroCosto] = await Promise.all([
+  const validaciones = [
     prisma.entregaARendirPescaConsumo.findUnique({ where: { id: data.entregaARendirPescaConsumoId } }),
     prisma.personal.findUnique({ where: { id: data.responsableId } }),
     prisma.tipoMovEntregaRendir.findUnique({ where: { id: data.tipoMovimientoId } }),
     prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } })
-  ]);
+  ];
+
+  // Agregar validación de Moneda si se proporciona monedaId
+  if (data.monedaId) {
+    validaciones.push(
+      prisma.moneda.findUnique({ where: { id: data.monedaId } })
+    );
+  }
+
+  // Agregar validación de EntidadComercial si se proporciona entidadComercialId
+  if (data.entidadComercialId) {
+    validaciones.push(
+      prisma.entidadComercial.findUnique({ where: { id: data.entidadComercialId } })
+    );
+  }
+
+  // Agregar validación de ModuloSistema si se proporciona moduloOrigenMovCajaId
+  if (data.moduloOrigenMovCajaId) {
+    validaciones.push(
+      prisma.moduloSistema.findUnique({ where: { id: data.moduloOrigenMovCajaId } })
+    );
+  }
+
+  const [entrega, responsable, tipoMovimiento, centroCosto, moneda, entidadComercial, moduloSistema] = await Promise.all(validaciones);
+  
   if (!entrega) throw new ValidationError('El entregaARendirPescaConsumoId no existe.');
   if (!responsable) throw new ValidationError('El responsableId no existe.');
   if (!tipoMovimiento) throw new ValidationError('El tipoMovimientoId no existe.');
   if (!centroCosto) throw new ValidationError('El centroCostoId no existe.');
+  if (data.monedaId && !moneda) throw new ValidationError('El monedaId no existe.');
+  if (data.entidadComercialId && !entidadComercial) throw new ValidationError('El entidadComercialId no existe.');
+  if (data.moduloOrigenMovCajaId && !moduloSistema) throw new ValidationError('El moduloOrigenMovCajaId no existe.');
 }
 
 const listar = async () => {
@@ -50,6 +82,7 @@ const listar = async () => {
         entregaARendirPescaConsumo: true,
         tipoMovimiento: true,
         entidadComercial: true,
+        moneda: true,
       },
       orderBy: {
         fechaMovimiento: 'desc',
@@ -71,6 +104,7 @@ const obtenerPorId = async (id) => {
         entregaARendirPescaConsumo: true,
         tipoMovimiento: true,
         entidadComercial: true,
+        moneda: true,
       },
     });
     
@@ -115,6 +149,10 @@ async function crear(data) {
         entidadComercialId: data.entidadComercialId 
           ? BigInt(data.entidadComercialId) 
           : null,
+        monedaId: data.monedaId 
+          ? BigInt(data.monedaId) 
+          : null,
+        urlComprobanteOperacionMovCaja: data.urlComprobanteOperacionMovCaja || null,
         
         creadoEn: data.creadoEn ? new Date(data.creadoEn) : new Date(),
         actualizadoEn: data.actualizadoEn ? new Date(data.actualizadoEn) : new Date(),
@@ -123,6 +161,7 @@ async function crear(data) {
         entregaARendirPescaConsumo: true,
         tipoMovimiento: true,
         entidadComercial: true,
+        moneda: true,
       },
     });
 
@@ -170,6 +209,12 @@ async function actualizar(id, data) {
         entidadComercialId: data.entidadComercialId !== undefined
           ? (data.entidadComercialId ? BigInt(data.entidadComercialId) : null)
           : undefined,
+        monedaId: data.monedaId !== undefined
+          ? (data.monedaId ? BigInt(data.monedaId) : null)
+          : undefined,
+        urlComprobanteOperacionMovCaja: data.urlComprobanteOperacionMovCaja !== undefined
+          ? data.urlComprobanteOperacionMovCaja
+          : undefined,
         
         actualizadoEn: new Date(),
       },
@@ -177,6 +222,7 @@ async function actualizar(id, data) {
         entregaARendirPescaConsumo: true,
         tipoMovimiento: true,
         entidadComercial: true,
+        moneda: true,
       },
     });
 
