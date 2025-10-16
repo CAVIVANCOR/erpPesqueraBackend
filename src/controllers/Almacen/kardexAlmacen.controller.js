@@ -1,53 +1,319 @@
-import kardexAlmacenService from '../../services/Almacen/kardexAlmacen.service.js';
+import prisma from '../../config/prismaClient.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
+import { ValidationError } from '../../utils/errors.js';
 
 /**
- * Controlador para KardexAlmacen
+ * Controlador Profesional para KardexAlmacen
+ * 
+ * Endpoints para consultar kardex con ordenamiento profesional:
+ * - Por producto y almacén
+ * - Por rango de fechas
+ * - Por cliente (custodia)
+ * - Saldos actuales
+ * 
  * Documentado en español.
  */
-export async function listar(req, res, next) {
+
+/**
+ * Obtiene kardex por producto y almacén con ordenamiento profesional
+ * Query params: empresaId, almacenId, productoId, clienteId?, esCustodia?, fechaDesde?, fechaHasta?
+ */
+export async function obtenerKardexPorProducto(req, res, next) {
   try {
-    const kardex = await kardexAlmacenService.listar();
+    const { empresaId, almacenId, productoId, clienteId, esCustodia, fechaDesde, fechaHasta } = req.query;
+
+    if (!empresaId || !almacenId || !productoId) {
+      throw new ValidationError('empresaId, almacenId y productoId son requeridos');
+    }
+
+    const where = {
+      empresaId: BigInt(empresaId),
+      almacenId: BigInt(almacenId),
+      productoId: BigInt(productoId),
+      esCustodia: esCustodia === 'true'
+    };
+
+    // Solo agregar clienteId si es custodia
+    if (esCustodia === 'true' && clienteId) {
+      where.clienteId = BigInt(clienteId);
+    }
+
+    // Filtro por rango de fechas
+    if (fechaDesde || fechaHasta) {
+      where.fechaMovimientoAlmacen = {};
+      if (fechaDesde) where.fechaMovimientoAlmacen.gte = new Date(fechaDesde);
+      if (fechaHasta) where.fechaMovimientoAlmacen.lte = new Date(fechaHasta);
+    }
+
+    // Ordenamiento profesional: fecha ASC, INGRESOS primero, id ASC
+    const kardex = await prisma.kardexAlmacen.findMany({
+      where,
+      orderBy: [
+        { fechaMovimientoAlmacen: 'asc' },
+        { esIngresoEgreso: 'desc' }, // INGRESOS (true) antes que EGRESOS (false)
+        { id: 'asc' }
+      ],
+      include: {
+        producto: {
+          select: {
+            id: true,
+            descripcionArmada: true,
+            codigoInterno: true
+          }
+        },
+        cliente: {
+          select: {
+            id: true,
+            razonSocial: true
+          }
+        },
+        conceptoMovAlmacen: {
+          select: {
+            id: true,
+            nombre: true
+          }
+        }
+      }
+    });
+
     res.json(toJSONBigInt(kardex));
   } catch (err) {
     next(err);
   }
 }
 
-export async function obtenerPorId(req, res, next) {
+/**
+ * Obtiene kardex por movimiento específico
+ */
+export async function obtenerKardexPorMovimiento(req, res, next) {
   try {
-    const id = Number(req.params.id);
-    const registro = await kardexAlmacenService.obtenerPorId(id);
-    res.json(toJSONBigInt(registro));
+    const { movimientoId } = req.params;
+
+    if (!movimientoId) {
+      throw new ValidationError('movimientoId es requerido');
+    }
+
+    const kardex = await prisma.kardexAlmacen.findMany({
+      where: {
+        movimientoAlmacenId: BigInt(movimientoId)
+      },
+      orderBy: [
+        { fechaMovimientoAlmacen: 'asc' },
+        { esIngresoEgreso: 'desc' },
+        { id: 'asc' }
+      ],
+      include: {
+        producto: true,
+        cliente: true,
+        conceptoMovAlmacen: true
+      }
+    });
+
+    res.json(toJSONBigInt(kardex));
   } catch (err) {
     next(err);
   }
 }
 
-export async function crear(req, res, next) {
+/**
+ * Obtiene kardex por cliente (solo custodia)
+ */
+export async function obtenerKardexPorCliente(req, res, next) {
   try {
-    const nuevo = await kardexAlmacenService.crear(req.body);
-    res.status(201).json(toJSONBigInt(nuevo));
+    const { empresaId, clienteId, fechaDesde, fechaHasta } = req.query;
+
+    if (!empresaId || !clienteId) {
+      throw new ValidationError('empresaId y clienteId son requeridos');
+    }
+
+    const where = {
+      empresaId: BigInt(empresaId),
+      clienteId: BigInt(clienteId),
+      esCustodia: true // Solo custodia
+    };
+
+    if (fechaDesde || fechaHasta) {
+      where.fechaMovimientoAlmacen = {};
+      if (fechaDesde) where.fechaMovimientoAlmacen.gte = new Date(fechaDesde);
+      if (fechaHasta) where.fechaMovimientoAlmacen.lte = new Date(fechaHasta);
+    }
+
+    const kardex = await prisma.kardexAlmacen.findMany({
+      where,
+      orderBy: [
+        { fechaMovimientoAlmacen: 'asc' },
+        { esIngresoEgreso: 'desc' },
+        { id: 'asc' }
+      ],
+      include: {
+        producto: true,
+        cliente: true,
+        conceptoMovAlmacen: true
+      }
+    });
+
+    res.json(toJSONBigInt(kardex));
   } catch (err) {
     next(err);
   }
 }
 
-export async function actualizar(req, res, next) {
+/**
+ * Obtiene saldos actuales detallados por producto
+ */
+export async function obtenerSaldosDetallados(req, res, next) {
   try {
-    const id = Number(req.params.id);
-    const actualizado = await kardexAlmacenService.actualizar(id, req.body);
-    res.json(toJSONBigInt(actualizado));
+    const { empresaId, almacenId, productoId, clienteId, esCustodia } = req.query;
+
+    if (!empresaId || !almacenId || !productoId) {
+      throw new ValidationError('empresaId, almacenId y productoId son requeridos');
+    }
+
+    const where = {
+      empresaId: BigInt(empresaId),
+      almacenId: BigInt(almacenId),
+      productoId: BigInt(productoId),
+      esCustodia: esCustodia === 'true',
+      saldoCantidad: { gt: 0 } // Solo saldos positivos
+    };
+
+    // Solo agregar clienteId si es custodia
+    if (esCustodia === 'true' && clienteId) {
+      where.clienteId = BigInt(clienteId);
+    } else if (esCustodia !== 'true') {
+      where.clienteId = null; // Mercadería propia
+    }
+
+    const saldos = await prisma.saldosDetProductoCliente.findMany({
+      where,
+      orderBy: [
+        { fechaVencimiento: 'asc' }, // FEFO: Primero los que vencen antes
+        { fechaIngreso: 'asc' },     // FIFO: Primero los más antiguos
+        { lote: 'asc' }
+      ],
+      include: {
+        producto: {
+          select: {
+            id: true,
+            descripcionArmada: true,
+            codigoInterno: true
+          }
+        },
+        cliente: {
+          select: {
+            id: true,
+            razonSocial: true
+          }
+        }
+      }
+    });
+
+    res.json(toJSONBigInt(saldos));
   } catch (err) {
     next(err);
   }
 }
 
-export async function eliminar(req, res, next) {
+/**
+ * Obtiene saldos generales por producto
+ */
+export async function obtenerSaldosGenerales(req, res, next) {
   try {
-    const id = Number(req.params.id);
-    await kardexAlmacenService.eliminar(id);
-    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+    const { empresaId, almacenId, productoId, clienteId, custodia } = req.query;
+
+    if (!empresaId || !almacenId) {
+      throw new ValidationError('empresaId y almacenId son requeridos');
+    }
+
+    const where = {
+      empresaId: BigInt(empresaId),
+      almacenId: BigInt(almacenId),
+      saldoCantidad: { gt: 0 } // Solo saldos positivos
+    };
+
+    if (productoId) {
+      where.productoId = BigInt(productoId);
+    }
+
+    if (custodia !== undefined) {
+      where.custodia = custodia === 'true';
+      
+      // Solo agregar clienteId si es custodia
+      if (custodia === 'true' && clienteId) {
+        where.clienteId = BigInt(clienteId);
+      } else if (custodia !== 'true') {
+        where.clienteId = null; // Mercadería propia
+      }
+    }
+
+    const saldos = await prisma.saldosProductoCliente.findMany({
+      where,
+      orderBy: [
+        { productoId: 'asc' }
+      ],
+      include: {
+        producto: {
+          select: {
+            id: true,
+            descripcionArmada: true,
+            codigoInterno: true
+          }
+        },
+        cliente: {
+          select: {
+            id: true,
+            razonSocial: true
+          }
+        }
+      }
+    });
+
+    res.json(toJSONBigInt(saldos));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Obtiene reporte de kardex valorizado por período
+ */
+export async function obtenerReporteKardex(req, res, next) {
+  try {
+    const { empresaId, almacenId, productoId, fechaDesde, fechaHasta } = req.query;
+
+    if (!empresaId || !almacenId || !fechaDesde || !fechaHasta) {
+      throw new ValidationError('empresaId, almacenId, fechaDesde y fechaHasta son requeridos');
+    }
+
+    const where = {
+      empresaId: BigInt(empresaId),
+      almacenId: BigInt(almacenId),
+      fechaMovimientoAlmacen: {
+        gte: new Date(fechaDesde),
+        lte: new Date(fechaHasta)
+      }
+    };
+
+    if (productoId) {
+      where.productoId = BigInt(productoId);
+    }
+
+    const kardex = await prisma.kardexAlmacen.findMany({
+      where,
+      orderBy: [
+        { productoId: 'asc' },
+        { fechaMovimientoAlmacen: 'asc' },
+        { esIngresoEgreso: 'desc' },
+        { id: 'asc' }
+      ],
+      include: {
+        producto: true,
+        cliente: true,
+        conceptoMovAlmacen: true
+      }
+    });
+
+    res.json(toJSONBigInt(kardex));
   } catch (err) {
     next(err);
   }

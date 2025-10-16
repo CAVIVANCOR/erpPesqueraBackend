@@ -96,7 +96,12 @@ const obtenerPorEntidad = async (entidadComercialId) => {
 const crear = async (data) => {
   try {
     await validarVehiculoEntidad(data);
-    return await prisma.vehiculoEntidad.create({ data });
+    // Agregar updatedAt automáticamente
+    const dataConFecha = {
+      ...data,
+      updatedAt: new Date()
+    };
+    return await prisma.vehiculoEntidad.create({ data: dataConFecha });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -112,7 +117,12 @@ const actualizar = async (id, data) => {
     const existente = await prisma.vehiculoEntidad.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Vehículo no encontrado');
     await validarVehiculoEntidad(data, id);
-    return await prisma.vehiculoEntidad.update({ where: { id }, data });
+    // Agregar updatedAt automáticamente
+    const dataConFecha = {
+      ...data,
+      updatedAt: new Date()
+    };
+    return await prisma.vehiculoEntidad.update({ where: { id }, data: dataConFecha });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

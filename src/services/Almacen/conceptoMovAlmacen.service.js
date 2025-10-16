@@ -55,10 +55,12 @@ async function construirDescripcionArmada(data) {
     partes.push('CUSTODIA');
   }
 
-  // Tipo Concepto
+  // Tipo Concepto - Solo si es TRANSFERENCIA
   if (data.tipoConceptoId) {
     const tipoConcepto = await prisma.tipoConcepto.findUnique({ where: { id: data.tipoConceptoId } });
-    if (tipoConcepto) partes.push(tipoConcepto.nombre);
+    if (tipoConcepto && tipoConcepto.nombre === 'TRANSFERENCIA') {
+      partes.push(tipoConcepto.nombre);
+    }
   }
 
   // Tipo Movimiento

@@ -1,46 +1,34 @@
 import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import { ValidationError, DatabaseError } from '../../utils/errors.js';
 
 /**
- * Servicio CRUD para KardexAlmacen
- * Aplica validaciones de existencia de claves foráneas y manejo de errores personalizado.
+ * Servicio Profesional de Kardex y Saldos
+ * 
+ * REGLAS DE NEGOCIO FUNDAMENTALES:
+ * 1. Mercadería Propia (esCustodia=false): clienteId NO interviene en cálculo de saldos (se usa NULL)
+ * 2. Mercadería en Custodia (esCustodia=true): clienteId SÍ interviene (identifica al dueño)
+ * 3. Ordenamiento Anti-Negativos: fecha DESC, esIngresoEgreso DESC (INGRESOS primero), id DESC
+ * 4. Variables de Control: Se agrupa por TODAS (lote, fechas, contenedor, serie, estados)
+ * 
  * Documentado en español.
  */
 
 /**
- * Valida existencia de claves foráneas principales.
- * Lanza ValidationError si no existe alguna clave foránea requerida.
- * @param {Object} data - Datos del kardex
+ * Obtiene el stock disponible de un producto en un almacén específico.
  */
-async function validarForaneas(data) {
-  // productoId
-  if (data.productoId !== undefined && data.productoId !== null) {
-    const prod = await prisma.producto.findUnique({ where: { id: data.productoId } });
-    if (!prod) throw new ValidationError('El producto referenciado no existe.');
-  }
-  // clienteId (opcional)
-  if (data.clienteId !== undefined && data.clienteId !== null) {
-    const cli = await prisma.entidadComercial.findUnique({ where: { id: data.clienteId } });
-    if (!cli) throw new ValidationError('El cliente referenciado no existe.');
-  }
-  // tipoMovimientoId
-  if (data.tipoMovimientoId !== undefined && data.tipoMovimientoId !== null) {
-    const tipoMov = await prisma.tipoMovimientoAlmacen.findUnique({ where: { id: data.tipoMovimientoId } });
-    if (!tipoMov) throw new ValidationError('El tipo de movimiento referenciado no existe.');
-  }
-  // conceptoMovAlmacenId
-  if (data.conceptoMovAlmacenId !== undefined && data.conceptoMovAlmacenId !== null) {
-    const concepto = await prisma.conceptoMovAlmacen.findUnique({ where: { id: data.conceptoMovAlmacenId } });
-    if (!concepto) throw new ValidationError('El concepto de movimiento referenciado no existe.');
-  }
-}
-
-/**
- * Lista todos los registros de kardex de almacén.
- */
-const listar = async () => {
+export const obtenerStockDisponible = async (empresaId, almacenId, productoId, clienteId, esCustodia) => {
   try {
-    return await prisma.kardexAlmacen.findMany();
+    const saldos = await prisma.saldosDetProductoCliente.findMany({
+      where: {
+        empresaId: BigInt(empresaId),
+        almacenId: BigInt(almacenId),
+        productoId: BigInt(productoId),
+        clienteId: clienteId ? BigInt(clienteId) : null,
+        esCustodia: esCustodia || false
+      }
+    });
+    
+    return saldos;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -48,73 +36,545 @@ const listar = async () => {
 };
 
 /**
- * Obtiene un registro de kardex por ID.
+ * Valida stock disponible para movimientos de salida o transferencia.
  */
-const obtenerPorId = async (id) => {
-  try {
-    const kardex = await prisma.kardexAlmacen.findUnique({ where: { id } });
-    if (!kardex) throw new NotFoundError('KardexAlmacen no encontrado');
-    return kardex;
-  } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
-    throw err;
-  }
-};
-
-/**
- * Crea un registro de kardex validando existencia de claves foráneas principales y campos obligatorios.
- */
-const crear = async (data) => {
-  try {
-    if (!data.empresaId || !data.almacenId || !data.productoId || !data.fechaMovimiento || typeof data.ingreso !== 'boolean' || !data.tipoMovimientoId || !data.conceptoMovAlmacenId || !data.cantidad || !data.saldoCantidad) {
-      throw new ValidationError('Faltan campos obligatorios: empresaId, almacenId, productoId, fechaMovimiento, ingreso, tipoMovimientoId, conceptoMovAlmacenId, cantidad y saldoCantidad.');
+export const validarStockDisponible = async (movimiento, detalles) => {
+  const concepto = await prisma.conceptoMovAlmacen.findUnique({
+    where: { id: BigInt(movimiento.conceptoMovAlmacenId) }
+  });
+  
+  if (!concepto) throw new ValidationError('Concepto de movimiento no encontrado');
+  
+  // Si el concepto lleva kardex origen (es salida o transferencia), validar stock
+  if (concepto.llevaKardexOrigen) {
+    for (const detalle of detalles) {
+      const stock = await obtenerStockDisponible(
+        movimiento.empresaId,
+        concepto.almacenOrigenId,
+        detalle.productoId,
+        detalle.entidadComercialId,
+        detalle.esCustodia
+      );
+      
+      const saldoTotal = stock.reduce((sum, s) => sum + Number(s.saldoCantidad), 0);
+      
+      if (saldoTotal < Number(detalle.cantidad)) {
+        const producto = await prisma.producto.findUnique({ where: { id: BigInt(detalle.productoId) } });
+        throw new ValidationError(
+          `Stock insuficiente para ${producto?.descripcionArmada || 'producto'}. ` +
+          `Disponible: ${saldoTotal}, Requerido: ${detalle.cantidad}`
+        );
+      }
     }
-    await validarForaneas(data);
-    return await prisma.kardexAlmacen.create({ data });
-  } catch (err) {
-    if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
-    throw err;
   }
 };
 
 /**
- * Actualiza un registro de kardex existente, validando existencia y claves foráneas si se modifican.
+ * Obtiene el último kardex para calcular saldos iniciales.
+ * Usa ordenamiento profesional: fecha DESC, esIngresoEgreso DESC, id DESC
+ * 
+ * IMPORTANTE: Para mercadería propia NO filtra por clienteId
  */
-const actualizar = async (id, data) => {
-  try {
-    const existente = await prisma.kardexAlmacen.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('KardexAlmacen no encontrado');
-    // Validar foráneas si se modifican
-    await validarForaneas({ ...existente, ...data });
-    return await prisma.kardexAlmacen.update({ where: { id }, data });
-  } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
-    throw err;
+const obtenerUltimoKardex = async (tx, empresaId, almacenId, productoId, clienteId, esCustodia, variables = {}) => {
+  // Ordenamiento profesional anti-negativos
+  const orderByProfesional = [
+    { fechaMovimientoAlmacen: 'desc' },
+    { esIngresoEgreso: 'desc' }, // INGRESOS (true) antes que EGRESOS (false)
+    { id: 'desc' }
+  ];
+
+  // Base común
+  const whereBase = {
+    empresaId,
+    almacenId,
+    productoId,
+    esCustodia
+  };
+
+  // REGLA: Solo agregar clienteId si es custodia
+  if (esCustodia) {
+    whereBase.clienteId = clienteId;
+  }
+
+  // Saldo general (sin variables de control)
+  const ultimoKardexGeneral = await tx.kardexAlmacen.findFirst({
+    where: whereBase,
+    orderBy: orderByProfesional
+  });
+
+  // Saldo con variables de control (lote, fechas, contenedor, serie, estados)
+  const whereVariables = {
+    ...whereBase,
+    lote: variables.lote || null,
+    fechaIngreso: variables.fechaIngreso || null,
+    fechaProduccion: variables.fechaProduccion || null,
+    fechaVencimiento: variables.fechaVencimiento || null,
+    estadoId: variables.estadoId || null,
+    estadoCalidadId: variables.estadoCalidadId || null,
+    numContenedor: variables.numContenedor || null,
+    nroSerie: variables.nroSerie || null
+  };
+
+  const ultimoKardexVariables = await tx.kardexAlmacen.findFirst({
+    where: whereVariables,
+    orderBy: orderByProfesional
+  });
+
+  return {
+    saldoIniCant: ultimoKardexGeneral?.saldoFinalCant || 0,
+    saldoInicialPeso: ultimoKardexGeneral?.saldoFinalPeso || null,
+    saldoInicialCantVariables: ultimoKardexVariables?.saldoFinalCantVariables || 0,
+    saldoInicialPesoVariables: ultimoKardexVariables?.saldoFinalPesoVariables || null
+  };
+};
+
+/**
+ * Genera registros de kardex para un detalle de movimiento.
+ * Calcula saldos iniciales y finales correctamente.
+ */
+export const generarKardex = async (tx, movimiento, detalle, concepto) => {
+  const kardexGenerados = [];
+  
+  // Variables de control del detalle
+  const variables = {
+    lote: detalle.lote,
+    fechaIngreso: detalle.fechaIngreso,
+    fechaProduccion: detalle.fechaProduccion,
+    fechaVencimiento: detalle.fechaVencimiento,
+    estadoId: detalle.estadoMercaderiaId,
+    estadoCalidadId: detalle.estadoCalidadId,
+    numContenedor: detalle.nroContenedor,
+    nroSerie: detalle.nroSerie
+  };
+
+  // Si lleva kardex origen (EGRESO)
+  if (concepto.llevaKardexOrigen && concepto.almacenOrigenId) {
+    // Obtener saldos iniciales
+    const saldosIniciales = await obtenerUltimoKardex(
+      tx,
+      movimiento.empresaId,
+      concepto.almacenOrigenId,
+      detalle.productoId,
+      detalle.entidadComercialId || movimiento.entidadComercialId,
+      detalle.esCustodia || false,
+      variables
+    );
+
+    // Calcular saldos finales (restar egreso)
+    const saldoFinalCant = Number(saldosIniciales.saldoIniCant) - Number(detalle.cantidad);
+    const saldoFinalPeso = detalle.peso 
+      ? Number(saldosIniciales.saldoInicialPeso || 0) - Number(detalle.peso)
+      : null;
+    const saldoFinalCantVariables = Number(saldosIniciales.saldoInicialCantVariables) - Number(detalle.cantidad);
+    const saldoFinalPesoVariables = detalle.peso
+      ? Number(saldosIniciales.saldoInicialPesoVariables || 0) - Number(detalle.peso)
+      : null;
+
+    const kardexOrigen = await tx.kardexAlmacen.create({
+      data: {
+        empresaId: movimiento.empresaId,
+        almacenId: concepto.almacenOrigenId,
+        productoId: detalle.productoId,
+        clienteId: detalle.entidadComercialId || movimiento.entidadComercialId || BigInt(0),
+        esCustodia: detalle.esCustodia || false,
+        fechaMovimientoAlmacen: movimiento.fechaDocumento,
+        esIngresoEgreso: false, // EGRESO
+        conceptoMovAlmacenId: movimiento.conceptoMovAlmacenId,
+        movimientoAlmacenId: movimiento.id,
+        detalleMovimientoAlmacenId: detalle.id,
+        // Egresos
+        egresoCant: detalle.cantidad,
+        egresoPeso: detalle.peso,
+        egresoCantVariables: detalle.cantidad,
+        egresoPesoVariables: detalle.peso,
+        // Saldos iniciales
+        saldoIniCant: saldosIniciales.saldoIniCant,
+        saldoInicialPeso: saldosIniciales.saldoInicialPeso,
+        saldoInicialCantVariables: saldosIniciales.saldoInicialCantVariables,
+        saldoInicialPesoVariables: saldosIniciales.saldoInicialPesoVariables,
+        // Saldos finales
+        saldoFinalCant: saldoFinalCant,
+        saldoFinalPeso: saldoFinalPeso,
+        saldoFinalCantVariables: saldoFinalCantVariables,
+        saldoFinalPesoVariables: saldoFinalPesoVariables,
+        // Variables de control
+        lote: detalle.lote,
+        fechaVencimiento: detalle.fechaVencimiento,
+        fechaProduccion: detalle.fechaProduccion,
+        fechaIngreso: detalle.fechaIngreso,
+        numContenedor: detalle.nroContenedor,
+        nroSerie: detalle.nroSerie,
+        estadoId: detalle.estadoMercaderiaId,
+        estadoCalidadId: detalle.estadoCalidadId
+      }
+    });
+    kardexGenerados.push(kardexOrigen);
+  }
+  
+  // Si lleva kardex destino (INGRESO)
+  if (concepto.llevaKardexDestino && concepto.almacenDestinoId) {
+    // Obtener saldos iniciales
+    const saldosIniciales = await obtenerUltimoKardex(
+      tx,
+      movimiento.empresaId,
+      concepto.almacenDestinoId,
+      detalle.productoId,
+      detalle.entidadComercialId || movimiento.entidadComercialId,
+      detalle.esCustodia || false,
+      variables
+    );
+
+    // Calcular saldos finales (sumar ingreso)
+    const saldoFinalCant = Number(saldosIniciales.saldoIniCant) + Number(detalle.cantidad);
+    const saldoFinalPeso = detalle.peso
+      ? Number(saldosIniciales.saldoInicialPeso || 0) + Number(detalle.peso)
+      : null;
+    const saldoFinalCantVariables = Number(saldosIniciales.saldoInicialCantVariables) + Number(detalle.cantidad);
+    const saldoFinalPesoVariables = detalle.peso
+      ? Number(saldosIniciales.saldoInicialPesoVariables || 0) + Number(detalle.peso)
+      : null;
+
+    const kardexDestino = await tx.kardexAlmacen.create({
+      data: {
+        empresaId: movimiento.empresaId,
+        almacenId: concepto.almacenDestinoId,
+        productoId: detalle.productoId,
+        clienteId: detalle.entidadComercialId || movimiento.entidadComercialId || BigInt(0),
+        esCustodia: detalle.esCustodia || false,
+        fechaMovimientoAlmacen: movimiento.fechaDocumento,
+        esIngresoEgreso: true, // INGRESO
+        conceptoMovAlmacenId: movimiento.conceptoMovAlmacenId,
+        movimientoAlmacenId: movimiento.id,
+        detalleMovimientoAlmacenId: detalle.id,
+        // Ingresos
+        ingresoCant: detalle.cantidad,
+        ingresoPeso: detalle.peso,
+        ingresoCantVariables: detalle.cantidad,
+        ingresoPesoVariables: detalle.peso,
+        // Saldos iniciales
+        saldoIniCant: saldosIniciales.saldoIniCant,
+        saldoInicialPeso: saldosIniciales.saldoInicialPeso,
+        saldoInicialCantVariables: saldosIniciales.saldoInicialCantVariables,
+        saldoInicialPesoVariables: saldosIniciales.saldoInicialPesoVariables,
+        // Saldos finales
+        saldoFinalCant: saldoFinalCant,
+        saldoFinalPeso: saldoFinalPeso,
+        saldoFinalCantVariables: saldoFinalCantVariables,
+        saldoFinalPesoVariables: saldoFinalPesoVariables,
+        // Variables de control
+        lote: detalle.lote,
+        fechaVencimiento: detalle.fechaVencimiento,
+        fechaProduccion: detalle.fechaProduccion,
+        fechaIngreso: detalle.fechaIngreso,
+        numContenedor: detalle.nroContenedor,
+        nroSerie: detalle.nroSerie,
+        estadoId: detalle.estadoMercaderiaId,
+        estadoCalidadId: detalle.estadoCalidadId
+      }
+    });
+    kardexGenerados.push(kardexDestino);
+  }
+  
+  return kardexGenerados;
+};
+
+/**
+ * Actualiza saldos detallados por producto, cliente y características.
+ * 
+ * REGLA CRÍTICA: Para mercadería propia (esCustodia=false), clienteId = NULL
+ */
+export const actualizarSaldosDetallados = async (tx, movimiento, detalle, concepto) => {
+  // Construir el objeto con TODAS las variables del constraint único
+  // @@unique([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie])
+  const buildUniqueWhere = (almacenId) => {
+    const where = {
+      empresaId: movimiento.empresaId,
+      almacenId: BigInt(almacenId),
+      productoId: detalle.productoId,
+      esCustodia: detalle.esCustodia || false,
+      lote: detalle.lote || null,
+      fechaIngreso: detalle.fechaIngreso || null,
+      fechaProduccion: detalle.fechaProduccion || null,
+      fechaVencimiento: detalle.fechaVencimiento || null,
+      estadoId: detalle.estadoMercaderiaId || null,
+      estadoCalidadId: detalle.estadoCalidadId || null,
+      numContenedor: detalle.nroContenedor || null,
+      nroSerie: detalle.nroSerie || null
+    };
+
+    // REGLA: Solo agregar clienteId si es custodia
+    if (detalle.esCustodia) {
+      where.clienteId = detalle.entidadComercialId || movimiento.entidadComercialId || null;
+    } else {
+      where.clienteId = null; // Mercadería propia: clienteId = NULL
+    }
+
+    return where;
+  };
+  
+  // Si es egreso (origen) - DECREMENTAR
+  if (concepto.llevaKardexOrigen && concepto.almacenOrigenId) {
+    const whereOrigen = buildUniqueWhere(concepto.almacenOrigenId);
+    
+    // Buscar saldo existente
+    const saldoActual = await tx.saldosDetProductoCliente.findUnique({ 
+      where: {
+        empresaId_almacenId_productoId_clienteId_esCustodia_lote_fechaIngreso_fechaProduccion_fechaVencimiento_estadoId_estadoCalidadId_numContenedor_nroSerie: whereOrigen
+      }
+    });
+    
+    if (saldoActual) {
+      // Actualizar saldo existente
+      await tx.saldosDetProductoCliente.update({
+        where: { id: saldoActual.id },
+        data: {
+          saldoCantidad: { decrement: detalle.cantidad },
+          saldoPeso: detalle.peso ? { decrement: detalle.peso } : undefined,
+          actualizadoEn: new Date()
+        }
+      });
+    } else {
+      // Si no existe saldo, es un error (no se puede retirar de donde no hay)
+      throw new ValidationError(
+        `No existe saldo disponible para el producto en el almacén origen. ` +
+        `Producto: ${detalle.productoId}, Almacén: ${concepto.almacenOrigenId}`
+      );
+    }
+  }
+  
+  // Si es ingreso (destino) - INCREMENTAR o CREAR
+  if (concepto.llevaKardexDestino && concepto.almacenDestinoId) {
+    const whereDestino = buildUniqueWhere(concepto.almacenDestinoId);
+    
+    // Usar upsert para crear o actualizar
+    await tx.saldosDetProductoCliente.upsert({
+      where: {
+        empresaId_almacenId_productoId_clienteId_esCustodia_lote_fechaIngreso_fechaProduccion_fechaVencimiento_estadoId_estadoCalidadId_numContenedor_nroSerie: whereDestino
+      },
+      update: {
+        saldoCantidad: { increment: detalle.cantidad },
+        saldoPeso: detalle.peso ? { increment: detalle.peso } : undefined,
+        actualizadoEn: new Date()
+      },
+      create: {
+        ...whereDestino,
+        saldoCantidad: detalle.cantidad,
+        saldoPeso: detalle.peso || null,
+        actualizadoEn: new Date()
+      }
+    });
   }
 };
 
 /**
- * Elimina un registro de kardex por ID, validando existencia.
+ * Actualiza saldos generales por producto y cliente.
+ * @@unique([empresaId, almacenId, productoId, clienteId, custodia])
+ * 
+ * REGLA CRÍTICA: Para mercadería propia (custodia=false), clienteId = NULL
  */
-const eliminar = async (id) => {
-  try {
-    const existente = await prisma.kardexAlmacen.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('KardexAlmacen no encontrado');
-    await prisma.kardexAlmacen.delete({ where: { id } });
-    return true;
-  } catch (err) {
-    if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
-    throw err;
+export const actualizarSaldosGenerales = async (tx, movimiento, detalle, concepto) => {
+  // Construir el objeto con TODAS las variables del constraint único
+  const buildUniqueWhere = (almacenId) => {
+    const where = {
+      empresaId: movimiento.empresaId,
+      almacenId: BigInt(almacenId),
+      productoId: detalle.productoId,
+      custodia: detalle.esCustodia || false
+    };
+
+    // REGLA: Solo agregar clienteId si es custodia
+    if (detalle.esCustodia) {
+      where.clienteId = detalle.entidadComercialId || movimiento.entidadComercialId || null;
+    } else {
+      where.clienteId = null; // Mercadería propia: clienteId = NULL
+    }
+
+    return where;
+  };
+  
+  // Si es egreso (origen) - DECREMENTAR
+  if (concepto.llevaKardexOrigen && concepto.almacenOrigenId) {
+    const whereOrigen = buildUniqueWhere(concepto.almacenOrigenId);
+    
+    // Buscar saldo existente usando el constraint único
+    const saldoActual = await tx.saldosProductoCliente.findUnique({ 
+      where: {
+        empresaId_almacenId_productoId_clienteId_custodia: whereOrigen
+      }
+    });
+    
+    if (saldoActual) {
+      await tx.saldosProductoCliente.update({
+        where: { id: saldoActual.id },
+        data: {
+          saldoCantidad: { decrement: detalle.cantidad },
+          saldoPeso: detalle.peso ? { decrement: detalle.peso } : undefined,
+          actualizadoEn: new Date()
+        }
+      });
+    } else {
+      // Si no existe saldo general, es un error
+      throw new ValidationError(
+        `No existe saldo general disponible para el producto en el almacén origen. ` +
+        `Producto: ${detalle.productoId}, Almacén: ${concepto.almacenOrigenId}`
+      );
+    }
+  }
+  
+  // Si es ingreso (destino) - INCREMENTAR o CREAR
+  if (concepto.llevaKardexDestino && concepto.almacenDestinoId) {
+    const whereDestino = buildUniqueWhere(concepto.almacenDestinoId);
+    
+    // Usar upsert para crear o actualizar
+    await tx.saldosProductoCliente.upsert({
+      where: {
+        empresaId_almacenId_productoId_clienteId_custodia: whereDestino
+      },
+      update: {
+        saldoCantidad: { increment: detalle.cantidad },
+        saldoPeso: detalle.peso ? { increment: detalle.peso } : undefined,
+        actualizadoEn: new Date()
+      },
+      create: {
+        ...whereDestino,
+        saldoCantidad: detalle.cantidad,
+        saldoPeso: detalle.peso || null,
+        costoUnitarioPromedio: null, // Se calculará en otro proceso
+        actualizadoEn: new Date()
+      }
+    });
+  }
+};
+
+/**
+ * Elimina kardex asociado a un movimiento.
+ */
+export const eliminarKardex = async (tx, movimientoId) => {
+  await tx.kardexAlmacen.deleteMany({
+    where: { movimientoAlmacenId: BigInt(movimientoId) }
+  });
+};
+
+/**
+ * Revierte saldos al anular un movimiento.
+ */
+export const revertirSaldos = async (tx, movimiento, detalles, concepto) => {
+  for (const detalle of detalles) {
+    // Revertir saldos detallados
+    await revertirSaldosDetallados(tx, movimiento, detalle, concepto);
+    
+    // Revertir saldos generales
+    await revertirSaldosGenerales(tx, movimiento, detalle, concepto);
+  }
+};
+
+const revertirSaldosDetallados = async (tx, movimiento, detalle, concepto) => {
+  const whereBase = {
+    empresaId: movimiento.empresaId,
+    productoId: detalle.productoId,
+    clienteId: detalle.entidadComercialId || movimiento.entidadComercialId,
+    esCustodia: detalle.esCustodia,
+    lote: detalle.lote,
+    fechaIngreso: detalle.fechaIngreso,
+    fechaProduccion: detalle.fechaProduccion,
+    fechaVencimiento: detalle.fechaVencimiento,
+    estadoId: detalle.estadoMercaderiaId,
+    estadoCalidadId: detalle.estadoCalidadId,
+    numContenedor: detalle.nroContenedor,
+    nroSerie: detalle.nroSerie
+  };
+  
+  // Revertir egreso (sumar de vuelta)
+  if (concepto.llevaKardexOrigen && concepto.almacenOrigenId) {
+    const whereOrigen = { ...whereBase, almacenId: concepto.almacenOrigenId };
+    const saldoActual = await tx.saldosDetProductoCliente.findFirst({ where: whereOrigen });
+    
+    if (saldoActual) {
+      await tx.saldosDetProductoCliente.update({
+        where: { id: saldoActual.id },
+        data: {
+          saldoCantidad: { increment: detalle.cantidad },
+          saldoPeso: detalle.peso ? { increment: detalle.peso } : undefined,
+          actualizadoEn: new Date()
+        }
+      });
+    }
+  }
+  
+  // Revertir ingreso (restar)
+  if (concepto.llevaKardexDestino && concepto.almacenDestinoId) {
+    const whereDestino = { ...whereBase, almacenId: concepto.almacenDestinoId };
+    const saldoExistente = await tx.saldosDetProductoCliente.findFirst({ where: whereDestino });
+    
+    if (saldoExistente) {
+      await tx.saldosDetProductoCliente.update({
+        where: { id: saldoExistente.id },
+        data: {
+          saldoCantidad: { decrement: detalle.cantidad },
+          saldoPeso: detalle.peso ? { decrement: detalle.peso } : undefined,
+          actualizadoEn: new Date()
+        }
+      });
+    }
+  }
+};
+
+const revertirSaldosGenerales = async (tx, movimiento, detalle, concepto) => {
+  // Revertir egreso
+  if (concepto.llevaKardexOrigen && concepto.almacenOrigenId) {
+    const whereOrigen = {
+      empresaId: movimiento.empresaId,
+      almacenId: concepto.almacenOrigenId,
+      productoId: detalle.productoId,
+      clienteId: detalle.entidadComercialId || movimiento.entidadComercialId,
+      custodia: detalle.esCustodia
+    };
+    
+    const saldoActual = await tx.saldosProductoCliente.findFirst({ where: whereOrigen });
+    
+    if (saldoActual) {
+      await tx.saldosProductoCliente.update({
+        where: { id: saldoActual.id },
+        data: {
+          saldoCantidad: { increment: detalle.cantidad },
+          saldoPeso: detalle.peso ? { increment: detalle.peso } : undefined,
+          actualizadoEn: new Date()
+        }
+      });
+    }
+  }
+  
+  // Revertir ingreso
+  if (concepto.llevaKardexDestino && concepto.almacenDestinoId) {
+    const whereDestino = {
+      empresaId: movimiento.empresaId,
+      almacenId: concepto.almacenDestinoId,
+      productoId: detalle.productoId,
+      clienteId: detalle.entidadComercialId || movimiento.entidadComercialId,
+      custodia: detalle.esCustodia
+    };
+    
+    const saldoExistente = await tx.saldosProductoCliente.findFirst({ where: whereDestino });
+    
+    if (saldoExistente) {
+      await tx.saldosProductoCliente.update({
+        where: { id: saldoExistente.id },
+        data: {
+          saldoCantidad: { decrement: detalle.cantidad },
+          saldoPeso: detalle.peso ? { decrement: detalle.peso } : undefined,
+          actualizadoEn: new Date()
+        }
+      });
+    }
   }
 };
 
 export default {
-  listar,
-  obtenerPorId,
-  crear,
-  actualizar,
-  eliminar
+  obtenerStockDisponible,
+  validarStockDisponible,
+  generarKardex,
+  actualizarSaldosDetallados,
+  actualizarSaldosGenerales,
+  eliminarKardex,
+  revertirSaldos
 };

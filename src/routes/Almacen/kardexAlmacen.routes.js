@@ -3,11 +3,12 @@ import * as kardexAlmacenController from '../../controllers/Almacen/kardexAlmace
 
 const router = Router();
 
-// Rutas CRUD para KardexAlmacen
-router.get('/', kardexAlmacenController.listar);
-router.get('/:id', kardexAlmacenController.obtenerPorId);
-router.post('/', kardexAlmacenController.crear);
-router.put('/:id', kardexAlmacenController.actualizar);
-router.delete('/:id', kardexAlmacenController.eliminar);
+// Rutas profesionales para consultar kardex
+router.get('/producto', kardexAlmacenController.obtenerKardexPorProducto);
+router.get('/movimiento/:movimientoId', kardexAlmacenController.obtenerKardexPorMovimiento);
+router.get('/cliente', kardexAlmacenController.obtenerKardexPorCliente);
+router.get('/saldos-detallados', kardexAlmacenController.obtenerSaldosDetallados);
+router.get('/saldos-generales', kardexAlmacenController.obtenerSaldosGenerales);
+router.get('/reporte', kardexAlmacenController.obtenerReporteKardex);
 
 export default router;

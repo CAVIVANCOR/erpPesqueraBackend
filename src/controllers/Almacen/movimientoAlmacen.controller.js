@@ -52,3 +52,71 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Cierra un movimiento de almacén
+ */
+export async function cerrarMovimiento(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const cerrado = await movimientoAlmacenService.cerrarMovimiento(id);
+    res.json(toJSONBigInt(cerrado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Anula un movimiento de almacén
+ */
+export async function anularMovimiento(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const anulado = await movimientoAlmacenService.anularMovimiento(id);
+    res.json(toJSONBigInt(anulado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Obtiene series de documentos filtradas
+ * Query params: empresaId, tipoDocumentoId, tipoAlmacenId
+ */
+export async function obtenerSeriesDoc(req, res, next) {
+  try {
+    const { empresaId, tipoDocumentoId, tipoAlmacenId } = req.query;
+    
+    const series = await movimientoAlmacenService.obtenerSeriesDoc(
+      empresaId,
+      tipoDocumentoId,
+      tipoAlmacenId
+    );
+    
+    res.json(toJSONBigInt(series));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Consulta stock disponible de un producto
+ * Query params: empresaId, almacenId, productoId, clienteId?, esCustodia?
+ */
+export async function consultarStock(req, res, next) {
+  try {
+    const { empresaId, almacenId, productoId, clienteId, esCustodia } = req.query;
+    
+    const stock = await movimientoAlmacenService.consultarStock(
+      empresaId,
+      almacenId,
+      productoId,
+      clienteId,
+      esCustodia === 'true'
+    );
+    
+    res.json(toJSONBigInt(stock));
+  } catch (err) {
+    next(err);
+  }
+}

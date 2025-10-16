@@ -1,4 +1,5 @@
 import faenaPescaService from '../../services/Pesca/faenaPesca.service.js';
+import wmsService from '../../services/Almacen/wms.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import multer from 'multer';
 import path from 'path';
@@ -406,5 +407,52 @@ export async function servirArchivoDeclaracionDesembarque(req, res) {
   } catch (error) {
     console.error('Error sirviendo archivo declaración:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+/**
+ * Finaliza una faena de pesca y genera automáticamente el movimiento de almacén
+ * @param {Object} req.params.id - ID de la faena de pesca
+ * @param {Object} req.body.temporadaPescaId - ID de la temporada de pesca
+ * @param {Object} req.user.id - ID del usuario logueado (desde middleware de autenticación)
+ */
+export async function finalizarFaenaConMovimientoAlmacen(req, res, next) {
+  try {
+    const faenaPescaId = BigInt(req.params.id);
+    const { temporadaPescaId } = req.body;
+    const usuarioId = BigInt(req.user?.id || 1); // ID del usuario logueado
+
+    if (!temporadaPescaId) {
+      return res.status(400).json({
+        error: 'El ID de la temporada de pesca es requerido',
+      });
+    }
+
+    // 1. Actualizar el estado de la faena a FINALIZADA (19)
+    const faena = await faenaPescaService.actualizar(Number(faenaPescaId), {
+      estadoFaenaId: 19, // FINALIZADA
+    });
+
+    // 2. Generar el movimiento de almacén
+    const movimientoAlmacen = await wmsService.generarMovimientoDesdeTemporadaPesca(
+      BigInt(temporadaPescaId),
+      faenaPescaId,
+      usuarioId
+    );
+
+    res.json(
+      toJSONBigInt({
+        faena,
+        movimientoAlmacen: {
+          id: movimientoAlmacen.movimientoAlmacen.id,
+          numeroDocumento: movimientoAlmacen.movimientoAlmacen.numeroDocumento,
+          cantidadDetalles: movimientoAlmacen.detalles.length,
+          cantidadKardex: movimientoAlmacen.kardex.length,
+        },
+        mensaje: 'Faena finalizada y movimiento de almacén generado exitosamente',
+      })
+    );
+  } catch (err) {
+    next(err);
   }
 }

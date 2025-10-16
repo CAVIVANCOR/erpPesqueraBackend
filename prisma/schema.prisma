@@ -285,6 +285,7 @@ model ConceptoMovAlmacen {
   tipoConcepto     TipoConcepto  @relation(fields: [tipoConceptoId], references: [id])
   tipoMovimiento   TipoMovimientoAlmacen @relation(fields: [tipoMovimientoId], references: [id])
   tipoAlmacen      TipoAlmacen   @relation(fields: [tipoAlmacenId], references: [id])
+  kardexAlmacenes KardexAlmacen[]
 }
 
 model Almacen {
@@ -963,20 +964,17 @@ model DetalleMovimientoAlmacen {
   movimientoAlmacenId BigInt
   productoId          BigInt
   cantidad            Decimal
-  pesoNeto            Decimal?
+  peso            Decimal?
   lote                String?           @db.VarChar(40)
   fechaProduccion     DateTime?
   fechaVencimiento    DateTime?
   fechaIngreso        DateTime?
   nroSerie            String?           @db.VarChar(40)
   nroContenedor       String?           @db.VarChar(40)
-  ubicacionOrigenId   BigInt?
-  ubicacionDestinoId  BigInt?
-  paletaAlmacenId     BigInt?
   estadoMercaderiaId  BigInt?
   estadoCalidadId     BigInt?
   entidadComercialId  BigInt?
-  custodia            Boolean           @default(false)
+  esCustodia          Boolean           @default(false)
   empresaId           BigInt
   observaciones       String?
   creadoEn            DateTime          @default(now())
@@ -1181,6 +1179,7 @@ model Empresa {
   porcentajeRetencion  Decimal?
   soyAgentePercepcion  Boolean              @default(false)
   soyAgenteRetencion   Boolean              @default(false)
+  entidadComercialId   BigInt?
 
   sedes SedesEmpresa[]
   centrosCosto EmpresaCentroCosto[]
@@ -1251,6 +1250,8 @@ model EntidadComercial {
   detalleMovsEntregaRendir DetMovsEntregaRendir[]
   detalleMovsEntregaRendirPescaConsumo DetMovsEntRendirPescaConsumo[]
   preFacturasCliente PreFactura[] @relation("EntidadComercialToPreFactura")
+  saldosDetProductoCliente SaldosDetProductoCliente[]
+  saldosProductoCliente SaldosProductoCliente[]
 }
 
 model EntregaARendir {
@@ -1426,48 +1427,82 @@ model Incoterm {
 }
 
 model KardexAlmacen {
-  id                    BigInt            @id @default(autoincrement())
-  empresaId             BigInt
-  almacenId             BigInt
-  productoId            BigInt
-  clienteId             BigInt?
-  custodia              Boolean           @default(false)
-  fechaMovimiento       DateTime
-  ingreso               Boolean
-  tipoMovimientoId      BigInt
-  conceptoMovAlmacenId  BigInt
-  documentoId           BigInt?
-  detalleId             BigInt?
-  cantidad              Decimal
-  peso                  Decimal?
-  lote                  String?           @db.VarChar(40)
-  fechaVencimiento      DateTime?
-  fechaProduccion       DateTime?
-  fechaIngreso          DateTime?
-  numContenedor         String?           @db.VarChar(40)
-  nroSerie              String?           @db.VarChar(40)
-  paletaAlmacenId       BigInt?
-  ubicacionId           BigInt?
-  estadoId              BigInt?
-  saldoCantidad         Decimal
-  saldoPeso             Decimal?
-  costoUnitarioPromedio Decimal?
-  costoSaldoPromedio    Decimal?
-  saldoDetCantidad      Decimal?
-  saldoDetPeso          Decimal?
-  costoUnitario         Decimal?
-  observaciones         String?
-  creadoEn              DateTime          @default(now())
+  id                         BigInt            @id @default(autoincrement())
+  empresaId                  BigInt            // Empresa (dueña si esCustodia=false, custodia si esCustodia=true)
+  almacenId                  BigInt            // Almacén físico
+  productoId                 BigInt            // Producto específico
+  clienteId                  BigInt            // Cliente/Proveedor de la transacción
+  esCustodia                 Boolean           @default(false) // false=mercadería propia, true=mercadería en custodia
+  fechaMovimientoAlmacen     DateTime          // Fecha del movimiento
+  esIngresoEgreso            Boolean           @default(false) // false=EGRESO, true=INGRESO
+  conceptoMovAlmacenId       BigInt            // Concepto del movimiento
+  movimientoAlmacenId        BigInt            // ID del movimiento de almacén
+  detalleMovimientoAlmacenId BigInt            // ID del detalle del movimiento
+  
+  // INGRESOS
+  ingresoCant                Decimal?          // Cantidad ingresada
+  ingresoCantCostoUnit       Decimal?          // Costo unitario por cantidad
+  ingresoCantCostoTotal      Decimal?          // Costo total por cantidad
+  ingresoCantVariables       Decimal?          // Cantidad con variables de control
+  ingresoPeso                Decimal?          // Peso ingresado
+  ingresoPesoCostoUnit       Decimal?          // Costo unitario por peso
+  ingresoPesoCostoTotal      Decimal?          // Costo total por peso
+  ingresoPesoVariables       Decimal?          // Peso con variables de control
+  
+  // EGRESOS
+  egresoCant                 Decimal?          // Cantidad egresada
+  egresoCantCostoUnit        Decimal?          // Costo unitario por cantidad
+  egresoCantCostoTotal       Decimal?          // Costo total por cantidad
+  egresoCantVariables        Decimal?          // Cantidad con variables de control
+  egresoPeso                 Decimal?          // Peso egresado
+  egresoPesoCostoUnit        Decimal?          // Costo unitario por peso
+  egresoPesoCostoTotal       Decimal?          // Costo total por peso
+  egresoPesoVariables        Decimal?          // Peso con variables de control
+  
+  // SALDOS INICIALES (antes del movimiento)
+  saldoIniCant               Decimal           // Saldo inicial cantidad (general)
+  saldoInicialCostoUnitCant  Decimal?          // Costo unitario del saldo inicial
+  saldoInicialCostoTotalCant Decimal?          // Costo total del saldo inicial
+  saldoInicialCantVariables  Decimal?          // Saldo inicial con variables de control
+  saldoInicialPeso           Decimal?          // Saldo inicial peso (general)
+  saldoInicialPesoCostoUnit  Decimal?          // Costo unitario por peso del saldo inicial
+  saldoInicialPesoCostoTotal Decimal?          // Costo total por peso del saldo inicial
+  saldoInicialPesoVariables  Decimal?          // Saldo inicial peso con variables de control
+  
+  // SALDOS FINALES (después del movimiento)
+  saldoFinalCant             Decimal           // Saldo final cantidad (general)
+  saldoFinalCostoUnitCant    Decimal?          // Costo unitario del saldo final
+  saldoFinalCostoTotalCant   Decimal?          // Costo total del saldo final
+  saldoFinalCantVariables    Decimal?          // Saldo final con variables de control
+  saldoFinalPeso             Decimal?          // Saldo final peso (general)
+  saldoFinalPesoCostoUnit    Decimal?          // Costo unitario por peso del saldo final
+  saldoFinalPesoCostoTotal   Decimal?          // Costo total por peso del saldo final
+  saldoFinalPesoVariables    Decimal?          // Saldo final peso con variables de control
+  
+  // VARIABLES DE CONTROL - Trazabilidad
+  lote                       String?           @db.VarChar(40)  // Número de lote
+  fechaVencimiento           DateTime?         // Fecha de vencimiento
+  fechaProduccion            DateTime?         // Fecha de producción
+  fechaIngreso               DateTime?         // Fecha de ingreso al almacén
+  numContenedor              String?           @db.VarChar(40)  // Número de contenedor
+  nroSerie                   String?           @db.VarChar(40)  // Número de serie
+  estadoId                   BigInt?           // Estado de la mercadería
+  estadoCalidadId            BigInt?           // Estado de calidad
 
-  producto                Producto           @relation(fields: [productoId], references: [id])
-  cliente                 EntidadComercial?  @relation(fields: [clienteId], references: [id])
+  // RELACIONES
+  producto           Producto           @relation(fields: [productoId], references: [id])
+  cliente            EntidadComercial?  @relation(fields: [clienteId], references: [id])
+  conceptoMovAlmacen ConceptoMovAlmacen @relation(fields: [conceptoMovAlmacenId], references: [id])
 
-  // Índices compuestos para rendimiento y trazabilidad
-  @@index([empresaId, clienteId, productoId, custodia])
-  @@index([empresaId, clienteId, productoId, custodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, paletaAlmacenId, ubicacionId, estadoId, numContenedor, nroSerie])
-  // Índices simples para búsquedas rápidas
-  @@index([productoId])
-  @@index([clienteId])
+  // ÍNDICES OPTIMIZADOS - Ordenamiento: fecha DESC, INGRESOS primero (esIngresoEgreso DESC), id DESC
+  @@index([empresaId, almacenId, productoId, esCustodia, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_propio_general")
+  @@index([empresaId, almacenId, productoId, clienteId, esCustodia, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_custodia_general")
+  @@index([empresaId, almacenId, productoId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_propio_detallado")
+  @@index([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_custodia_detallado")
+  @@index([empresaId, almacenId, fechaMovimientoAlmacen, productoId, esCustodia], name: "idx_kardex_reportes_fecha")
+  @@index([productoId], name: "idx_kardex_producto")
+  @@index([clienteId], name: "idx_kardex_cliente")
+  @@index([movimientoAlmacenId], name: "idx_kardex_movimiento")
 }
 
 model LineaCreditoEntidad {
@@ -1585,7 +1620,6 @@ model MovimientoAlmacen {
   numeroDocumento          String?
   fechaDocumento           DateTime
   entidadComercialId       BigInt?
-  liquidacionViajeId       BigInt?
   faenaPescaId             BigInt?
   embarcacionId            BigInt?
   ordenTrabajoId           BigInt?
@@ -1595,17 +1629,13 @@ model MovimientoAlmacen {
   fechaGuiaSunat           DateTime?
   transportistaId          BigInt?
   vehiculoId               BigInt?
-  choferId                 BigInt?
   agenciaEnvioId           BigInt?
   dirAgenciaEnvioId        BigInt?
   personalRespAlmacen      BigInt?
   ordenCompraId            BigInt?
   pedidoVentaId            BigInt?
   estadoDocAlmacenId       BigInt?
-  refEmbarcacionMatricula  String?                    @db.VarChar(40)
-  refEmbarcacionNombre     String?                    @db.VarChar(100)
-  refEmbarcacionNroPlaca   String?                    @db.VarChar(40)
-  custodia                 Boolean                    @default(false)
+  esCustodia               Boolean                    @default(false)
   observaciones            String?
   creadoEn                 DateTime                   @default(now())
   actualizadoEn            DateTime
@@ -1927,6 +1957,8 @@ familia                 FamiliaProducto      @relation(fields: [familiaId], refe
   detallesCotizacionCompras DetCotizacionCompras[]
   detallesProductoFinalCotizacionCompras DetProductoFinalCotizacionCompras[]
   detallesCotizacionVentas DetCotizacionVentas[]
+  saldosDetProductoCliente SaldosDetProductoCliente[]
+  saldosProductoCliente SaldosProductoCliente[]
 }
 
 model Provincia {
@@ -2003,40 +2035,64 @@ model RequerimientoCompra {
 
 model SaldosDetProductoCliente {
   id               BigInt    @id @default(autoincrement())
-  empresaId        BigInt
-  almacenId        BigInt
-  productoId       BigInt
-  clienteId        BigInt?
-  custodia         Boolean   @default(false)
-  lote             String?   @db.VarChar(40)
-  fechaVencimiento DateTime?
-  fechaProduccion  DateTime?
-  fechaIngreso     DateTime?
-  numContenedor    String?   @db.VarChar(40)
-  nroSerie         String?   @db.VarChar(40)
-  paletaAlmacenId  BigInt?
-  ubicacionId      BigInt?
-  estadoId         BigInt?
-  saldoCantidad    Decimal
-  saldoPeso        Decimal?
-  actualizadoEn    DateTime
+  empresaId        BigInt    // Empresa (dueña si esCustodia=false, custodia si esCustodia=true)
+  almacenId        BigInt    // Almacén físico donde está el producto
+  productoId       BigInt    // Producto específico
+  clienteId        BigInt?   // Cliente/Proveedor - Para mercadería PROPIA: NO interviene en cálculo, Para CUSTODIA: SÍ interviene (dueño)
+  esCustodia       Boolean   @default(false) // false=mercadería propia, true=mercadería en custodia
+  
+  // Variables de Control - Trazabilidad completa
+  lote             String?   @db.VarChar(40)  // Número de lote de producción
+  fechaVencimiento DateTime? // Fecha de vencimiento del producto
+  fechaProduccion  DateTime? // Fecha de producción
+  fechaIngreso     DateTime? // Fecha de ingreso al almacén
+  numContenedor    String?   @db.VarChar(40)  // Número de contenedor (importaciones)
+  nroSerie         String?   @db.VarChar(40)  // Número de serie (productos individuales)
+  estadoId         BigInt?   // Estado de la mercadería (nuevo, usado, dañado, etc.)
+  estadoCalidadId  BigInt?   // Estado de calidad (A, B, C, rechazado, etc.)
+  
+  // Saldos
+  saldoCantidad    Decimal   // Saldo en unidades
+  saldoPeso        Decimal?  // Saldo en peso
+  actualizadoEn    DateTime  // Última actualización del saldo
 
-  @@unique([empresaId, almacenId, productoId, clienteId, custodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, paletaAlmacenId, ubicacionId, estadoId, numContenedor, nroSerie])
+  // RELACIONES
+  producto Producto          @relation(fields: [productoId], references: [id])
+  cliente  EntidadComercial? @relation(fields: [clienteId], references: [id])
+
+  // CONSTRAINT ÚNICO - Identifica saldo específico con TODAS las variables de control
+  @@unique([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie], name: "uk_saldo_det_completo")
+  
+  // ÍNDICES OPTIMIZADOS
+  @@index([empresaId, almacenId, productoId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie], name: "idx_saldo_det_propio_completo")
+  @@index([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie], name: "idx_saldo_det_custodia_completo")
+  @@index([empresaId, almacenId, productoId, esCustodia], name: "idx_saldo_det_general")
 }
 
 model SaldosProductoCliente {
   id                    BigInt   @id @default(autoincrement())
-  empresaId             BigInt
-  almacenId             BigInt
-  productoId            BigInt
-  clienteId             BigInt?
-  custodia              Boolean  @default(false)
-  saldoCantidad         Decimal
-  saldoPeso             Decimal?
-  costoUnitarioPromedio Decimal?
-  actualizadoEn         DateTime
+  empresaId             BigInt   // Empresa (dueña si custodia=false, custodia si custodia=true)
+  almacenId             BigInt   // Almacén físico
+  productoId            BigInt   // Producto específico
+  clienteId             BigInt?  // Cliente/Proveedor - Para mercadería PROPIA: NO interviene, Para CUSTODIA: SÍ interviene (dueño)
+  custodia              Boolean  @default(false) // false=mercadería propia, true=mercadería en custodia
+  
+  // Saldos Generales (sin variables de control)
+  saldoCantidad         Decimal  // Saldo total en unidades
+  saldoPeso             Decimal? // Saldo total en peso
+  costoUnitarioPromedio Decimal? // Costo promedio ponderado (solo para mercadería propia)
+  actualizadoEn         DateTime // Última actualización
 
-  @@unique([empresaId, almacenId, productoId, clienteId, custodia])
+  // RELACIONES
+  producto Producto          @relation(fields: [productoId], references: [id])
+  cliente  EntidadComercial? @relation(fields: [clienteId], references: [id])
+
+  // CONSTRAINT ÚNICO - Identifica saldo GENERAL (sin variables de control)
+  @@unique([empresaId, almacenId, productoId, clienteId, custodia], name: "uk_saldo_general_completo")
+  
+  // ÍNDICES OPTIMIZADOS
+  @@index([empresaId, almacenId, productoId, custodia], name: "idx_saldo_gen_propio")
+  @@index([empresaId, almacenId, productoId, clienteId, custodia], name: "idx_saldo_gen_cliente")
 }
 
 model SedesEmpresa {
@@ -2063,6 +2119,7 @@ model SerieDoc {
   numCerosIzqCorre  Int                 @default(0)
   numCerosIzqSerie  Int                 @default(0)
   activo            Boolean             @default(true)
+  empresaId         BigInt?
 
   movimientos       MovimientoAlmacen[]
 }

@@ -13,6 +13,11 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  * @param {Object} data - Datos de la serie
  */
 async function validarForaneas(data) {
+  // empresaId
+  if (data.empresaId !== undefined && data.empresaId !== null) {
+    const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
+    if (!empresa) throw new ValidationError('La empresa referenciada no existe.');
+  }
   // tipoDocumentoId
   if (data.tipoDocumentoId !== undefined && data.tipoDocumentoId !== null) {
     const tipoDoc = await prisma.tipoDocumento.findUnique({ where: { id: data.tipoDocumentoId } });

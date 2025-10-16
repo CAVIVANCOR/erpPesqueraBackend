@@ -8,8 +8,8 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 
 /**
- * Valida existencia de representantelegalId si se envía.
- * Lanza ValidationError si no existe.
+ * Valida existencia de representantelegalId y entidadComercialId si se envían.
+ * Lanza ValidationError si no existen.
  * @param {Object} data - Datos de la empresa
  */
 async function validarEmpresa(data) {
@@ -17,6 +17,11 @@ async function validarEmpresa(data) {
     // Si existe la entidad Persona o similar, descomentar y ajustar:
     // const existe = await prisma.persona.findUnique({ where: { id: data.representantelegalId } });
     // if (!existe) throw new ValidationError('Representante legal no existente para el campo representantelegalId.');
+  }
+  
+  if (data.entidadComercialId !== undefined && data.entidadComercialId !== null) {
+    const existe = await prisma.entidadComercial.findUnique({ where: { id: data.entidadComercialId } });
+    if (!existe) throw new ValidationError('Entidad comercial no existente para el campo entidadComercialId.');
   }
 }
 
