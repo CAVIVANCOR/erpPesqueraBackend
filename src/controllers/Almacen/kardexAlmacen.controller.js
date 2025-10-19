@@ -58,7 +58,7 @@ export async function obtenerKardexPorProducto(req, res, next) {
           select: {
             id: true,
             descripcionArmada: true,
-            codigoInterno: true
+            codigo: true
           }
         },
         cliente: {
@@ -70,13 +70,40 @@ export async function obtenerKardexPorProducto(req, res, next) {
         conceptoMovAlmacen: {
           select: {
             id: true,
-            nombre: true
+            descripcion: true,
+            descripcionArmada: true
           }
         }
       }
     });
 
-    res.json(toJSONBigInt(kardex));
+    // Obtener IDs únicos de estados
+    const estadoIds = [...new Set(kardex.map(k => k.estadoId).filter(Boolean))];
+    const estadoCalidadIds = [...new Set(kardex.map(k => k.estadoCalidadId).filter(Boolean))];
+
+    // Buscar descripciones de estados
+    const estados = estadoIds.length > 0 ? await prisma.estadoMultiFuncion.findMany({
+      where: { id: { in: estadoIds } },
+      select: { id: true, descripcion: true }
+    }) : [];
+
+    const estadosCalidad = estadoCalidadIds.length > 0 ? await prisma.estadoMultiFuncion.findMany({
+      where: { id: { in: estadoCalidadIds } },
+      select: { id: true, descripcion: true }
+    }) : [];
+
+    // Crear mapas para búsqueda rápida
+    const estadoMap = new Map(estados.map(e => [e.id.toString(), e]));
+    const estadoCalidadMap = new Map(estadosCalidad.map(e => [e.id.toString(), e]));
+
+    // Agregar descripciones al kardex
+    const kardexConEstados = kardex.map(k => ({
+      ...k,
+      estado: k.estadoId ? estadoMap.get(k.estadoId.toString()) : null,
+      estadoCalidad: k.estadoCalidadId ? estadoCalidadMap.get(k.estadoCalidadId.toString()) : null
+    }));
+
+    res.json(toJSONBigInt(kardexConEstados));
   } catch (err) {
     next(err);
   }
@@ -196,7 +223,7 @@ export async function obtenerSaldosDetallados(req, res, next) {
           select: {
             id: true,
             descripcionArmada: true,
-            codigoInterno: true
+            codigo: true
           }
         },
         cliente: {
@@ -256,7 +283,7 @@ export async function obtenerSaldosGenerales(req, res, next) {
           select: {
             id: true,
             descripcionArmada: true,
-            codigoInterno: true
+            codigo: true
           }
         },
         cliente: {

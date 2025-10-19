@@ -982,6 +982,7 @@ model DetalleMovimientoAlmacen {
   creadoPor           BigInt?
   actualizadoPor      BigInt?
   detalleReqCompraId  BigInt?
+  costoUnitario       Decimal?
 
   movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
   producto              Producto @relation(fields: [productoId], references: [id])
@@ -1183,6 +1184,7 @@ model Empresa {
 
   sedes SedesEmpresa[]
   centrosCosto EmpresaCentroCosto[]
+  movimientosAlmacen MovimientoAlmacen[]
 }
 
 model EmpresaCentroCosto {
@@ -1434,6 +1436,8 @@ model KardexAlmacen {
   clienteId                  BigInt            // Cliente/Proveedor de la transacción
   esCustodia                 Boolean           @default(false) // false=mercadería propia, true=mercadería en custodia
   fechaMovimientoAlmacen     DateTime          // Fecha del movimiento
+  numDocCompleto             String            // Número de Movimiento documento completo
+  
   esIngresoEgreso            Boolean           @default(false) // false=EGRESO, true=INGRESO
   conceptoMovAlmacenId       BigInt            // Concepto del movimiento
   movimientoAlmacenId        BigInt            // ID del movimiento de almacén
@@ -1642,6 +1646,7 @@ model MovimientoAlmacen {
   creadoPor                BigInt?
   actualizadoPor           BigInt?
 
+  empresa Empresa @relation(fields: [empresaId], references: [id])
   tipoDocumento       TipoDocumento         @relation(fields: [tipoDocumentoId], references: [id])
   conceptoMovAlmacen  ConceptoMovAlmacen    @relation(fields: [conceptoMovAlmacenId], references: [id])
   serieDoc            SerieDoc?             @relation(fields: [serieDocId], references: [id])
@@ -2238,6 +2243,9 @@ model TipoDocumento {
   activo            Boolean             @default(true)
   createdAt         DateTime            @default(now())
   updatedAt         DateTime
+  esParaAlmacen     Boolean             @default(false)
+  esParaCompras     Boolean             @default(false)
+  esParaVentas      Boolean             @default(false)
 
   movimientosAlmacen MovimientoAlmacen[]
 }

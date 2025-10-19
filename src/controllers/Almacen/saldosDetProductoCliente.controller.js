@@ -7,7 +7,25 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  */
 export async function listar(req, res, next) {
   try {
-    const saldos = await saldosDetProductoClienteService.listar();
+    // Extraer filtros de query params
+    const filtros = {
+      empresaId: req.query.empresaId ? Number(req.query.empresaId) : undefined,
+      almacenId: req.query.almacenId ? Number(req.query.almacenId) : undefined,
+      clienteId: req.query.clienteId ? Number(req.query.clienteId) : undefined,
+      esCustodia: req.query.esCustodia !== undefined ? req.query.esCustodia === 'true' : undefined,
+      soloConSaldo: req.query.soloConSaldo !== undefined ? req.query.soloConSaldo === 'true' : undefined,
+      productoId: req.query.productoId ? Number(req.query.productoId) : undefined,
+      familiaId: req.query.familiaId ? Number(req.query.familiaId) : undefined,
+      subfamiliaId: req.query.subfamiliaId ? Number(req.query.subfamiliaId) : undefined,
+      marcaId: req.query.marcaId ? Number(req.query.marcaId) : undefined,
+      procedenciaId: req.query.procedenciaId ? Number(req.query.procedenciaId) : undefined,
+      tipoAlmacenamientoId: req.query.tipoAlmacenamientoId ? Number(req.query.tipoAlmacenamientoId) : undefined,
+      tipoMaterialId: req.query.tipoMaterialId ? Number(req.query.tipoMaterialId) : undefined,
+      unidadMedidaId: req.query.unidadMedidaId ? Number(req.query.unidadMedidaId) : undefined,
+      especieId: req.query.especieId ? Number(req.query.especieId) : undefined,
+    };
+    
+    const saldos = await saldosDetProductoClienteService.listar(filtros);
     res.json(toJSONBigInt(saldos));
   } catch (err) {
     next(err);

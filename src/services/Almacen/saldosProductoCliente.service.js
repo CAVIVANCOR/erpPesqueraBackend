@@ -43,11 +43,59 @@ async function validarUnicidad(data, id = null) {
 }
 
 /**
- * Lista todos los saldos producto-cliente.
+ * Lista todos los saldos producto-cliente con filtros opcionales y relaciones incluidas.
+ * @param {Object} filtros - Filtros opcionales
+ * @param {BigInt} [filtros.empresaId] - ID de la empresa
+ * @param {BigInt} [filtros.almacenId] - ID del almacén
+ * @param {BigInt} [filtros.clienteId] - ID del cliente
+ * @param {boolean} [filtros.custodia] - Si es mercadería en custodia
  */
-const listar = async () => {
+const listar = async (filtros = {}) => {
   try {
-    return await prisma.saldosProductoCliente.findMany();
+    const where = {};
+    
+    // Aplicar filtros
+    if (filtros.empresaId !== undefined) where.empresaId = filtros.empresaId;
+    if (filtros.almacenId !== undefined) where.almacenId = filtros.almacenId;
+    if (filtros.clienteId !== undefined) where.clienteId = filtros.clienteId;
+    if (filtros.custodia !== undefined) where.custodia = filtros.custodia;
+    
+    const saldos = await prisma.saldosProductoCliente.findMany({
+      where,
+      include: {
+        producto: {
+          include: {
+            unidadMedida: true
+          }
+        },
+        cliente: true
+      },
+      orderBy: [
+        { producto: { descripcionArmada: 'asc' } }
+      ]
+    });
+    
+    // Enriquecer con empresa y almacén (no están en el schema como relaciones)
+    const saldosEnriquecidos = await Promise.all(
+      saldos.map(async (saldo) => {
+        const empresa = await prisma.empresa.findUnique({ 
+          where: { id: saldo.empresaId },
+          select: { id: true, razonSocial: true }
+        });
+        const almacen = await prisma.almacen.findUnique({ 
+          where: { id: saldo.almacenId },
+          select: { id: true, nombre: true }
+        });
+        
+        return {
+          ...saldo,
+          empresa,
+          almacen
+        };
+      })
+    );
+    
+    return saldosEnriquecidos;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -55,13 +103,38 @@ const listar = async () => {
 };
 
 /**
- * Obtiene un saldo por ID.
+ * Obtiene un saldo por ID con relaciones incluidas.
  */
 const obtenerPorId = async (id) => {
   try {
-    const saldo = await prisma.saldosProductoCliente.findUnique({ where: { id } });
+    const saldo = await prisma.saldosProductoCliente.findUnique({ 
+      where: { id },
+      include: {
+        producto: {
+          include: {
+            unidadMedida: true
+          }
+        },
+        cliente: true
+      }
+    });
     if (!saldo) throw new NotFoundError('SaldosProductoCliente no encontrado');
-    return saldo;
+    
+    // Enriquecer con empresa y almacén
+    const empresa = await prisma.empresa.findUnique({ 
+      where: { id: saldo.empresaId },
+      select: { id: true, razonSocial: true }
+    });
+    const almacen = await prisma.almacen.findUnique({ 
+      where: { id: saldo.almacenId },
+      select: { id: true, nombre: true }
+    });
+    
+    return {
+      ...saldo,
+      empresa,
+      almacen
+    };
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

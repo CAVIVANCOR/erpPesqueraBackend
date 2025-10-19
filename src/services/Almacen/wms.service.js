@@ -196,6 +196,7 @@ const generarMovimientoDesdeTemporadaPesca = async (temporadaPescaId, faenaPesca
               clienteId: detalle.entidadComercialId,
               esCustodia: detalle.esCustodia,
               fechaMovimientoAlmacen: movimientoAlmacen.fechaDocumento,
+              numDocCompleto: movimientoAlmacen.numeroDocumento,
               esIngresoEgreso: false, // Egreso
               conceptoMovAlmacenId: movimientoAlmacen.conceptoMovAlmacenId,
               movimientoAlmacenId: movimientoAlmacen.id,

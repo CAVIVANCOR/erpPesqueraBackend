@@ -178,6 +178,7 @@ export const generarKardex = async (tx, movimiento, detalle, concepto) => {
         clienteId: detalle.entidadComercialId || movimiento.entidadComercialId || BigInt(0),
         esCustodia: detalle.esCustodia || false,
         fechaMovimientoAlmacen: movimiento.fechaDocumento,
+        numDocCompleto: movimiento.numeroDocumento,
         esIngresoEgreso: false, // EGRESO
         conceptoMovAlmacenId: movimiento.conceptoMovAlmacenId,
         movimientoAlmacenId: movimiento.id,
@@ -242,6 +243,7 @@ export const generarKardex = async (tx, movimiento, detalle, concepto) => {
         clienteId: detalle.entidadComercialId || movimiento.entidadComercialId || BigInt(0),
         esCustodia: detalle.esCustodia || false,
         fechaMovimientoAlmacen: movimiento.fechaDocumento,
+        numDocCompleto: movimiento.numeroDocumento,
         esIngresoEgreso: true, // INGRESO
         conceptoMovAlmacenId: movimiento.conceptoMovAlmacenId,
         movimientoAlmacenId: movimiento.id,

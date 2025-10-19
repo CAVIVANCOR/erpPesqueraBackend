@@ -104,7 +104,6 @@ async function actualizarFaenaPescaConsumo(faenaPescaConsumoId, descargaActual) 
       data: faenaUpdateData
     });
 
-    console.log(`✅ FaenaPescaConsumo ${faenaPescaConsumoId} actualizada: ${toneladasCapturadasFaena.toFixed(3)} toneladas`);
   } catch (error) {
     console.error('Error al actualizar FaenaPescaConsumo:', error);
     // No lanzar error para no bloquear la creación/actualización de la descarga

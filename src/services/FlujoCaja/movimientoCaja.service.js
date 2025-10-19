@@ -66,7 +66,6 @@ async function copiarPdfAMovimientoCaja(rutaOrigen) {
       nombreArchivo
     ).replace(/\\/g, '/');
     
-    console.log(`[MOVIMIENTO CAJA] Archivo copiado: ${rutaOrigen} -> ${rutaRelativa}`);
     
     return rutaRelativa;
   } catch (error) {

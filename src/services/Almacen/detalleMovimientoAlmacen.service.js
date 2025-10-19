@@ -65,7 +65,23 @@ const crear = async (data) => {
       throw new ValidationError('Los campos movimientoAlmacenId, productoId, cantidad y empresaId son obligatorios.');
     }
     await validarForaneas(data);
-    return await prisma.detalleMovimientoAlmacen.create({ data });
+    
+    // Crear copia de data y eliminar solo los campos que NO pertenecen al modelo
+    const dataLimpia = { ...data };
+    delete dataLimpia.producto; // Objeto completo del producto (solo para UI)
+    delete dataLimpia.tempId;   // ID temporal del frontend
+    delete dataLimpia.id;       // ID (se genera automáticamente)
+    
+    // Convertir campos string null a string vacío
+    if (dataLimpia.lote === null) dataLimpia.lote = "";
+    if (dataLimpia.nroSerie === null) dataLimpia.nroSerie = "";
+    if (dataLimpia.nroContenedor === null) dataLimpia.nroContenedor = "";
+    if (dataLimpia.observaciones === null) dataLimpia.observaciones = "";
+    
+    // Agregar actualizadoEn
+    dataLimpia.actualizadoEn = new Date();
+    
+    return await prisma.detalleMovimientoAlmacen.create({ data: dataLimpia });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -82,7 +98,23 @@ const actualizar = async (id, data) => {
     if (!existente) throw new NotFoundError('DetalleMovimientoAlmacen no encontrado');
     // Validar foráneas si se modifican
     await validarForaneas({ ...existente, ...data });
-    return await prisma.detalleMovimientoAlmacen.update({ where: { id }, data });
+    
+    // Crear copia de data y eliminar solo los campos que NO pertenecen al modelo
+    const dataLimpia = { ...data };
+    delete dataLimpia.producto; // Objeto completo del producto (solo para UI)
+    delete dataLimpia.tempId;   // ID temporal del frontend
+    delete dataLimpia.id;       // ID (no se puede actualizar)
+    
+    // Convertir campos string null a string vacío
+    if (dataLimpia.lote === null) dataLimpia.lote = "";
+    if (dataLimpia.nroSerie === null) dataLimpia.nroSerie = "";
+    if (dataLimpia.nroContenedor === null) dataLimpia.nroContenedor = "";
+    if (dataLimpia.observaciones === null) dataLimpia.observaciones = "";
+    
+    // Agregar actualizadoEn
+    dataLimpia.actualizadoEn = new Date();
+    
+    return await prisma.detalleMovimientoAlmacen.update({ where: { id }, data: dataLimpia });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

@@ -81,6 +81,7 @@ import serieDocRoutes from '../routes/Almacen/serieDoc.routes.js';
 import kardexAlmacenRoutes from '../routes/Almacen/kardexAlmacen.routes.js';
 import saldosProductoClienteRoutes from '../routes/Almacen/saldosProductoCliente.routes.js';
 import saldosDetProductoClienteRoutes from '../routes/Almacen/saldosDetProductoCliente.routes.js';
+import generarKardexRoutes from '../routes/Almacen/generarKardex.routes.js';
 import tipoMantenimientoRoutes from '../routes/Mantenimiento/tipoMantenimiento.routes.js';
 import otMantenimientoRoutes from '../routes/Mantenimiento/otMantenimiento.routes.js';
 import motivoOriginoOTRoutes from '../routes/Mantenimiento/motivoOriginoOT.routes.js';
@@ -329,6 +330,8 @@ router.use('/kardex-almacen', kardexAlmacenRoutes);
 router.use('/saldos-producto-cliente', saldosProductoClienteRoutes);
 // Rutas para SaldosDetProductoCliente
 router.use('/saldos-det-producto-cliente', saldosDetProductoClienteRoutes);
+// Rutas para Generar Kardex
+router.use('/generar-kardex', generarKardexRoutes);
 // Rutas para OTMantenimiento
 router.use('/ot-mantenimiento', otMantenimientoRoutes);
 // Rutas para TipoMantenimiento

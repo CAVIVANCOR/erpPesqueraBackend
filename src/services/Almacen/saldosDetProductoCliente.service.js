@@ -36,14 +36,13 @@ async function validarUnicidad(data, id = null) {
     almacenId: data.almacenId,
     productoId: data.productoId,
     clienteId: data.clienteId ?? null,
-    custodia: data.custodia ?? false,
+    esCustodia: data.esCustodia ?? false,
     lote: data.lote ?? null,
     fechaIngreso: data.fechaIngreso ?? null,
     fechaProduccion: data.fechaProduccion ?? null,
     fechaVencimiento: data.fechaVencimiento ?? null,
-    paletaAlmacenId: data.paletaAlmacenId ?? null,
-    ubicacionId: data.ubicacionId ?? null,
     estadoId: data.estadoId ?? null,
+    estadoCalidadId: data.estadoCalidadId ?? null,
     numContenedor: data.numContenedor ?? null,
     nroSerie: data.nroSerie ?? null
   };
@@ -52,11 +51,118 @@ async function validarUnicidad(data, id = null) {
 }
 
 /**
- * Lista todos los saldos detallados producto-cliente.
+ * Lista todos los saldos detallados producto-cliente con filtros opcionales.
+ * @param {Object} filtros - Filtros opcionales
+ * @param {BigInt} [filtros.empresaId] - ID de la empresa
+ * @param {BigInt} [filtros.almacenId] - ID del almacén
+ * @param {BigInt} [filtros.clienteId] - ID del cliente
+ * @param {boolean} [filtros.esCustodia] - Si es mercadería en custodia
+ * @param {boolean} [filtros.soloConSaldo] - Solo productos con saldo > 0
+ * @param {BigInt} [filtros.productoId] - ID del producto
+ * @param {BigInt} [filtros.familiaId] - ID de la familia del producto
+ * @param {BigInt} [filtros.subfamiliaId] - ID de la subfamilia del producto
+ * @param {BigInt} [filtros.marcaId] - ID de la marca del producto
+ * @param {BigInt} [filtros.procedenciaId] - ID de procedencia del producto
+ * @param {BigInt} [filtros.tipoAlmacenamientoId] - ID del tipo de almacenamiento
+ * @param {BigInt} [filtros.tipoMaterialId] - ID del tipo de material
+ * @param {BigInt} [filtros.unidadMedidaId] - ID de la unidad de medida
+ * @param {BigInt} [filtros.especieId] - ID de la especie
  */
-const listar = async () => {
+const listar = async (filtros = {}) => {
   try {
-    return await prisma.saldosDetProductoCliente.findMany();
+    const where = {};
+    const productoWhere = {};
+    
+    // Filtros directos de SaldosDetProductoCliente
+    if (filtros.empresaId !== undefined) where.empresaId = filtros.empresaId;
+    if (filtros.almacenId !== undefined) where.almacenId = filtros.almacenId;
+    if (filtros.clienteId !== undefined) where.clienteId = filtros.clienteId;
+    if (filtros.esCustodia !== undefined) where.esCustodia = filtros.esCustodia;
+    if (filtros.productoId !== undefined) where.productoId = filtros.productoId;
+    
+    // Filtro de solo con saldo
+    if (filtros.soloConSaldo === true) {
+      where.saldoCantidad = { gt: 0 };
+    }
+    
+    // Filtros de producto (requieren join)
+    if (filtros.familiaId !== undefined) productoWhere.familiaId = filtros.familiaId;
+    if (filtros.subfamiliaId !== undefined) productoWhere.subfamiliaId = filtros.subfamiliaId;
+    if (filtros.marcaId !== undefined) productoWhere.marcaId = filtros.marcaId;
+    if (filtros.procedenciaId !== undefined) productoWhere.procedenciaId = filtros.procedenciaId;
+    if (filtros.tipoAlmacenamientoId !== undefined) productoWhere.tipoAlmacenamientoId = filtros.tipoAlmacenamientoId;
+    if (filtros.tipoMaterialId !== undefined) productoWhere.tipoMaterialId = filtros.tipoMaterialId;
+    if (filtros.unidadMedidaId !== undefined) productoWhere.unidadMedidaId = filtros.unidadMedidaId;
+    if (filtros.especieId !== undefined) productoWhere.especieId = filtros.especieId;
+    
+    // Si hay filtros de producto, agregarlos al where
+    if (Object.keys(productoWhere).length > 0) {
+      where.producto = productoWhere;
+    }
+    
+    const saldos = await prisma.saldosDetProductoCliente.findMany({
+      where,
+      include: {
+        producto: {
+          include: {
+            unidadMedida: true,
+            familia: true,
+            subfamilia: true,
+            marca: true,
+            tipoAlmacenamiento: true,
+            tipoMaterial: true,
+            color: true
+          }
+        },
+        cliente: true
+      },
+      orderBy: [
+        { producto: { descripcionArmada: 'asc' } },
+        { lote: 'asc' },
+        { fechaIngreso: 'desc' }
+      ]
+    });
+    
+    // Enriquecer con empresa, almacén y estados (no están en el schema como relaciones)
+    const saldosEnriquecidos = await Promise.all(
+      saldos.map(async (saldo) => {
+        const empresa = await prisma.empresa.findUnique({ 
+          where: { id: saldo.empresaId },
+          select: { id: true, razonSocial: true }
+        });
+        const almacen = await prisma.almacen.findUnique({ 
+          where: { id: saldo.almacenId },
+          select: { id: true, nombre: true }
+        });
+        
+        let estado = null;
+        let estadoCalidad = null;
+        
+        if (saldo.estadoId) {
+          estado = await prisma.estadoMultiFuncion.findUnique({
+            where: { id: saldo.estadoId },
+            select: { id: true, descripcion: true }
+          });
+        }
+        
+        if (saldo.estadoCalidadId) {
+          estadoCalidad = await prisma.estadoMultiFuncion.findUnique({
+            where: { id: saldo.estadoCalidadId },
+            select: { id: true, descripcion: true }
+          });
+        }
+        
+        return {
+          ...saldo,
+          empresa,
+          almacen,
+          estado,
+          estadoCalidad
+        };
+      })
+    );
+    
+    return saldosEnriquecidos;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -64,13 +170,57 @@ const listar = async () => {
 };
 
 /**
- * Obtiene un saldo detallado por ID.
+ * Obtiene un saldo detallado por ID con relaciones incluidas.
  */
 const obtenerPorId = async (id) => {
   try {
-    const saldo = await prisma.saldosDetProductoCliente.findUnique({ where: { id } });
+    const saldo = await prisma.saldosDetProductoCliente.findUnique({ 
+      where: { id },
+      include: {
+        producto: {
+          include: {
+            unidadMedida: true
+          }
+        },
+        cliente: true
+      }
+    });
     if (!saldo) throw new NotFoundError('SaldosDetProductoCliente no encontrado');
-    return saldo;
+    
+    // Enriquecer con empresa, almacén y estados
+    const empresa = await prisma.empresa.findUnique({ 
+      where: { id: saldo.empresaId },
+      select: { id: true, razonSocial: true }
+    });
+    const almacen = await prisma.almacen.findUnique({ 
+      where: { id: saldo.almacenId },
+      select: { id: true, nombre: true }
+    });
+    
+    let estado = null;
+    let estadoCalidad = null;
+    
+    if (saldo.estadoId) {
+      estado = await prisma.estadoMultiFuncion.findUnique({
+        where: { id: saldo.estadoId },
+        select: { id: true, descripcion: true }
+      });
+    }
+    
+    if (saldo.estadoCalidadId) {
+      estadoCalidad = await prisma.estadoMultiFuncion.findUnique({
+        where: { id: saldo.estadoCalidadId },
+        select: { id: true, descripcion: true }
+      });
+    }
+    
+    return {
+      ...saldo,
+      empresa,
+      almacen,
+      estado,
+      estadoCalidad
+    };
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -105,7 +255,7 @@ const actualizar = async (id, data) => {
     // Validar foráneas si se modifican
     await validarForaneas({ ...existente, ...data });
     // Validar unicidad si se modifica algún campo de la clave compuesta
-    const claves = ['empresaId', 'almacenId', 'productoId', 'clienteId', 'custodia', 'lote', 'fechaIngreso', 'fechaProduccion', 'fechaVencimiento', 'paletaAlmacenId', 'ubicacionId', 'estadoId', 'numContenedor', 'nroSerie'];
+    const claves = ['empresaId', 'almacenId', 'productoId', 'clienteId', 'esCustodia', 'lote', 'fechaIngreso', 'fechaProduccion', 'fechaVencimiento', 'estadoId', 'estadoCalidadId', 'numContenedor', 'nroSerie'];
     if (claves.some(k => data[k] !== undefined && data[k] !== existente[k])) {
       await validarUnicidad({ ...existente, ...data }, id);
     }
