@@ -5,9 +5,11 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  * Controlador para DetalleReqCompra
  * Documentado en español.
  */
+
 export async function listar(req, res, next) {
   try {
-    const detalles = await detalleReqCompraService.listar();
+    const { requerimientoCompraId } = req.query;
+    const detalles = await detalleReqCompraService.listar(requerimientoCompraId);
     res.json(toJSONBigInt(detalles));
   } catch (err) {
     next(err);

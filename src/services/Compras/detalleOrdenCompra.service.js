@@ -3,64 +3,103 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
 
 /**
  * Servicio CRUD para DetalleOrdenCompra
- * Aplica validaciones de existencia de claves foráneas principales.
  * Documentado en español.
  */
 
-/**
- * Valida existencia de claves foráneas principales.
- * Lanza ValidationError si no existe alguna clave foránea requerida.
- * @param {Object} data - Datos del detalle
- */
 async function validarForaneas(data) {
-  // ordenCompraId
-  if (data.ordenCompraId !== undefined && data.ordenCompraId !== null) {
-    const orden = await prisma.ordenCompra.findUnique({ where: { id: data.ordenCompraId } });
+  if (data.ordenCompraId) {
+    const orden = await prisma.ordenCompra.findUnique({ 
+      where: { id: data.ordenCompraId } 
+    });
     if (!orden) throw new ValidationError('La orden de compra referenciada no existe.');
   }
-  // productoId
-  if (data.productoId !== undefined && data.productoId !== null) {
-    const prod = await prisma.producto.findUnique({ where: { id: data.productoId } });
-    if (!prod) throw new ValidationError('El producto referenciado no existe.');
+  
+  if (data.productoId) {
+    const producto = await prisma.producto.findUnique({ where: { id: data.productoId } });
+    if (!producto) throw new ValidationError('El producto referenciado no existe.');
   }
 }
 
-/**
- * Lista todos los detalles de orden de compra.
- */
-const listar = async () => {
+const listar = async (ordenCompraId) => {
   try {
-    return await prisma.detalleOrdenCompra.findMany();
+    const where = {};
+    if (ordenCompraId) {
+      where.ordenCompraId = BigInt(ordenCompraId);
+    }
+    
+    return await prisma.detalleOrdenCompra.findMany({ 
+      where,
+      include: { 
+        ordenCompra: true,
+        producto: {
+          include: {
+            unidadMedida: true,
+            marca: true,
+            familia: true,
+            subfamilia: true
+          }
+        }
+      },
+      orderBy: {
+        item: 'asc'
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
 };
 
-/**
- * Obtiene un detalle por ID.
- */
 const obtenerPorId = async (id) => {
   try {
-    const det = await prisma.detalleOrdenCompra.findUnique({ where: { id } });
-    if (!det) throw new NotFoundError('DetalleOrdenCompra no encontrado');
-    return det;
+    const detalle = await prisma.detalleOrdenCompra.findUnique({ 
+      where: { id },
+      include: { 
+        ordenCompra: true,
+        producto: {
+          include: {
+            unidadMedida: true,
+            marca: true
+          }
+        }
+      }
+    });
+    
+    if (!detalle) throw new NotFoundError('DetalleOrdenCompra no encontrado');
+    return detalle;
   } catch (err) {
+    if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
 };
 
-/**
- * Crea un detalle validando existencia de claves foráneas.
- */
 const crear = async (data) => {
   try {
-    if (!data.ordenCompraId || !data.productoId || !data.cantidad) {
-      throw new ValidationError('Los campos ordenCompraId, productoId y cantidad son obligatorios.');
-    }
     await validarForaneas(data);
-    return await prisma.detalleOrdenCompra.create({ data });
+    
+    // Calcular subtotal si no viene
+    if (!data.subtotal && data.cantidad && data.precioUnitario) {
+      data.subtotal = data.cantidad * data.precioUnitario;
+    }
+    
+    const nuevo = await prisma.detalleOrdenCompra.create({
+      data: {
+        ...data,
+        fechaCreacion: new Date(),
+        fechaActualizacion: new Date()
+      },
+      include: {
+        producto: {
+          include: {
+            unidadMedida: true,
+            marca: true
+          }
+        }
+      }
+    });
+    
+    return nuevo;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -68,16 +107,37 @@ const crear = async (data) => {
   }
 };
 
-/**
- * Actualiza un detalle existente, validando existencia y claves foráneas si se modifican.
- */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.detalleOrdenCompra.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('DetalleOrdenCompra no encontrado');
-    // Validar foráneas si se modifican
-    await validarForaneas({ ...existente, ...data });
-    return await prisma.detalleOrdenCompra.update({ where: { id }, data });
+    const existe = await prisma.detalleOrdenCompra.findUnique({ where: { id } });
+    if (!existe) throw new NotFoundError('DetalleOrdenCompra no encontrado');
+    
+    await validarForaneas(data);
+    
+    // Recalcular subtotal si cambian cantidad o precio
+    if (data.cantidad || data.precioUnitario) {
+      const cantidad = data.cantidad ?? existe.cantidad;
+      const precio = data.precioUnitario ?? existe.precioUnitario;
+      data.subtotal = cantidad * precio;
+    }
+    
+    const actualizado = await prisma.detalleOrdenCompra.update({
+      where: { id },
+      data: {
+        ...data,
+        fechaActualizacion: new Date()
+      },
+      include: {
+        producto: {
+          include: {
+            unidadMedida: true,
+            marca: true
+          }
+        }
+      }
+    });
+    
+    return actualizado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -85,15 +145,12 @@ const actualizar = async (id, data) => {
   }
 };
 
-/**
- * Elimina un detalle por ID, validando existencia.
- */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.detalleOrdenCompra.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('DetalleOrdenCompra no encontrado');
+    const existe = await prisma.detalleOrdenCompra.findUnique({ where: { id } });
+    if (!existe) throw new NotFoundError('DetalleOrdenCompra no encontrado');
+    
     await prisma.detalleOrdenCompra.delete({ where: { id } });
-    return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

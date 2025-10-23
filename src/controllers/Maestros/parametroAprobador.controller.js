@@ -14,6 +14,19 @@ export async function listar(req, res, next) {
   }
 }
 
+export async function listarPorModulo(req, res, next) {
+  try {
+    const { empresaId, moduloSistemaId } = req.query;
+    if (!empresaId || !moduloSistemaId) {
+      return res.status(400).json({ error: 'empresaId y moduloSistemaId son requeridos' });
+    }
+    const parametros = await parametroAprobadorService.listarPorModulo(empresaId, moduloSistemaId);
+    res.json(toJSONBigInt(parametros));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

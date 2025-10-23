@@ -20,6 +20,48 @@ const listar = async () => {
 };
 
 /**
+ * Lista parámetros aprobadores filtrados por empresaId y moduloSistemaId.
+ * Solo retorna los que no están cesados.
+ */
+const listarPorModulo = async (empresaId, moduloSistemaId) => {
+  try {
+    const parametros = await prisma.parametroAprobador.findMany({
+      where: {
+        empresaId: BigInt(empresaId),
+        moduloSistemaId: BigInt(moduloSistemaId),
+        cesado: false
+      }
+    });
+    
+    // Obtener los IDs de personal únicos
+    const personalIds = [...new Set(parametros.map(p => p.personalRespId))];
+    
+    // Buscar los datos de personal
+    const personales = await prisma.personal.findMany({
+      where: {
+        id: { in: personalIds }
+      },
+      select: {
+        id: true,
+        nombres: true,
+        apellidos: true
+      }
+    });
+    
+    // Mapear para agregar los datos de personal
+    const resultado = parametros.map(param => ({
+      ...param,
+      personal: personales.find(p => p.id === param.personalRespId)
+    }));
+    
+    return resultado;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
  * Obtiene un parámetro aprobador por ID.
  */
 const obtenerPorId = async (id) => {
@@ -94,6 +136,7 @@ const eliminar = async (id) => {
 
 export default {
   listar,
+  listarPorModulo,
   obtenerPorId,
   crear,
   actualizar,

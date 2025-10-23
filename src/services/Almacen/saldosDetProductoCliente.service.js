@@ -156,7 +156,7 @@ const listar = async (filtros = {}) => {
           ...saldo,
           empresa,
           almacen,
-          estado,
+          estadoMercaderia: estado,  // Renombrado para claridad
           estadoCalidad
         };
       })

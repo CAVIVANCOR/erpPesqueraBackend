@@ -93,22 +93,17 @@ const obtenerPorId = async (id) => {
     
     // Cargar manualmente los almacenes origen y destino del concepto
     if (mov.conceptoMovAlmacen) {
-      console.log('ConceptoMovAlmacen:', {
-        almacenOrigenId: mov.conceptoMovAlmacen.almacenOrigenId,
-        almacenDestinoId: mov.conceptoMovAlmacen.almacenDestinoId
-      });
+
       
       if (mov.conceptoMovAlmacen.almacenOrigenId) {
         mov.conceptoMovAlmacen.almacenOrigen = await prisma.almacen.findUnique({
           where: { id: mov.conceptoMovAlmacen.almacenOrigenId }
         });
-        console.log('Almacen Origen cargado:', mov.conceptoMovAlmacen.almacenOrigen?.nombre);
       }
       if (mov.conceptoMovAlmacen.almacenDestinoId) {
         mov.conceptoMovAlmacen.almacenDestino = await prisma.almacen.findUnique({
           where: { id: mov.conceptoMovAlmacen.almacenDestinoId }
         });
-        console.log('Almacen Destino cargado:', mov.conceptoMovAlmacen.almacenDestino?.nombre);
       }
     }
     
@@ -121,7 +116,6 @@ const obtenerPorId = async (id) => {
       mov.personalRespAlmacen = await prisma.personal.findUnique({
         where: { id: personalId }
       });
-      console.log('Personal Responsable cargado:', mov.personalRespAlmacen?.nombreCompleto);
     }
     
     // Cargar manualmente los estados de mercadería y calidad para cada detalle

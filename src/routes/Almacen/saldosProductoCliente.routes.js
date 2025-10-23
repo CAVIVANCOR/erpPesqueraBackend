@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para SaldosProductoCliente
 router.get('/', saldosProductoClienteController.listar);
+router.get('/filtros', saldosProductoClienteController.listarConFiltros); // ANTES de /:id
 router.get('/:id', saldosProductoClienteController.obtenerPorId);
 router.post('/', saldosProductoClienteController.crear);
 router.put('/:id', saldosProductoClienteController.actualizar);

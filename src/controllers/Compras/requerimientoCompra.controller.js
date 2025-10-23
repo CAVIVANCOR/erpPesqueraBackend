@@ -5,10 +5,11 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  * Controlador para RequerimientoCompra
  * Documentado en español.
  */
+
 export async function listar(req, res, next) {
   try {
-    const reqs = await requerimientoCompraService.listar();
-    res.json(toJSONBigInt(reqs));
+    const requerimientos = await requerimientoCompraService.listar();
+    res.json(toJSONBigInt(requerimientos));
   } catch (err) {
     next(err);
   }
@@ -17,8 +18,8 @@ export async function listar(req, res, next) {
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const reqCompra = await requerimientoCompraService.obtenerPorId(id);
-    res.json(toJSONBigInt(reqCompra));
+    const requerimiento = await requerimientoCompraService.obtenerPorId(id);
+    res.json(toJSONBigInt(requerimiento));
   } catch (err) {
     next(err);
   }
@@ -48,6 +49,65 @@ export async function eliminar(req, res, next) {
     const id = Number(req.params.id);
     await requerimientoCompraService.eliminar(id);
     res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Aprueba un requerimiento de compra y crea automáticamente la EntregaARendir
+ */
+export async function aprobar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const aprobado = await requerimientoCompraService.aprobar(id);
+    res.json(toJSONBigInt(aprobado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Anula un requerimiento de compra
+ */
+export async function anular(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const anulado = await requerimientoCompraService.anular(id);
+    res.json(toJSONBigInt(anulado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Autoriza la compra de un requerimiento
+ */
+export async function autorizarCompra(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const { autorizadoPorId } = req.body;
+    const autorizado = await requerimientoCompraService.autorizarCompra(id, autorizadoPorId);
+    res.json(toJSONBigInt(autorizado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Obtiene series de documentos filtradas
+ * Query params: empresaId, tipoDocumentoId
+ */
+export async function obtenerSeriesDoc(req, res, next) {
+  try {
+    const { empresaId, tipoDocumentoId } = req.query;
+    
+    const series = await requerimientoCompraService.obtenerSeriesDoc(
+      empresaId,
+      tipoDocumentoId
+    );
+    
+    res.json(toJSONBigInt(series));
   } catch (err) {
     next(err);
   }

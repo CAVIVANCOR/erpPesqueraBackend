@@ -3,19 +3,21 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Servicio CRUD para ModoDespachoRecepcion
- * Aplica validación de unicidad y prevención de borrado si tiene cotizaciones asociadas.
+ * Valida unicidad de nombre y previene borrado si tiene cotizaciones asociadas.
  * Documentado en español.
  */
 
 async function validarUnicidadNombre(nombre, id = null) {
   const where = id ? { nombre, NOT: { id } } : { nombre };
   const existe = await prisma.modoDespachoRecepcion.findFirst({ where });
-  if (existe) throw new ConflictError('Ya existe un modo de despacho/recepción con ese nombre.');
+  if (existe) throw new ConflictError('Ya existe un ModoDespachoRecepcion con ese nombre.');
 }
 
 const listar = async () => {
   try {
-    return await prisma.modoDespachoRecepcion.findMany();
+    return await prisma.modoDespachoRecepcion.findMany({
+      orderBy: { nombre: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -35,9 +37,19 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    if (!data.nombre) throw new ValidationError('El campo nombre es obligatorio.');
+    if (!data.nombre) {
+      throw new ValidationError('El campo nombre es obligatorio.');
+    }
     await validarUnicidadNombre(data.nombre);
-    return await prisma.modoDespachoRecepcion.create({ data });
+    
+    // Adaptar datos del frontend al modelo
+    const dataParaPrisma = {
+      nombre: data.nombre,
+      descripcion: data.descripcion || null,
+      activo: data.cesado !== undefined ? !data.cesado : true // Invertir cesado a activo
+    };
+    
+    return await prisma.modoDespachoRecepcion.create({ data: dataParaPrisma });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -52,7 +64,15 @@ const actualizar = async (id, data) => {
     if (data.nombre && data.nombre !== existente.nombre) {
       await validarUnicidadNombre(data.nombre, id);
     }
-    return await prisma.modoDespachoRecepcion.update({ where: { id }, data });
+    
+    // Adaptar datos del frontend al modelo
+    const dataParaPrisma = {
+      nombre: data.nombre,
+      descripcion: data.descripcion || null,
+      activo: data.cesado !== undefined ? !data.cesado : true // Invertir cesado a activo
+    };
+    
+    return await prisma.modoDespachoRecepcion.update({ where: { id }, data: dataParaPrisma });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -64,12 +84,18 @@ const eliminar = async (id) => {
   try {
     const existente = await prisma.modoDespachoRecepcion.findUnique({
       where: { id },
-      include: { cotizaciones: true, cotizacionesCompras: true }
+      include: { 
+        cotizaciones: true,
+        requerimientosCompra: true 
+      }
     });
     if (!existente) throw new NotFoundError('ModoDespachoRecepcion no encontrado');
-    if ((existente.cotizaciones && existente.cotizaciones.length > 0) || (existente.cotizacionesCompras && existente.cotizacionesCompras.length > 0)) {
-      throw new ConflictError('No se puede eliminar el modo de despacho/recepción porque tiene cotizaciones asociadas.');
+    
+    const totalRelaciones = (existente.cotizaciones?.length || 0) + (existente.requerimientosCompra?.length || 0);
+    if (totalRelaciones > 0) {
+      throw new ConflictError('No se puede eliminar porque tiene cotizaciones o requerimientos asociados.');
     }
+    
     await prisma.modoDespachoRecepcion.delete({ where: { id } });
     return true;
   } catch (err) {

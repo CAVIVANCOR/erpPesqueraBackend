@@ -196,6 +196,25 @@ const listarParaFaenaPescaConsumo = async () => {
   }
 };
 
+/**
+ * Lista estados multifunción filtrados por tipoProvieneDeId.
+ * Solo retorna los que no están cesados.
+ */
+const listarPorTipoProviene = async (tipoProvieneDeId) => {
+  try {
+    return await prisma.estadoMultiFuncion.findMany({
+      where: {
+        tipoProvieneDeId: BigInt(tipoProvieneDeId),
+        cesado: false
+      },
+      include: { tipoProvieneDe: true }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -206,5 +225,6 @@ export default {
   listarParaEmbarcaciones,
   listarParaTemporadaPesca,
   listarParaFaenaPesca,
-  listarParaFaenaPescaConsumo
+  listarParaFaenaPescaConsumo,
+  listarPorTipoProviene
 };

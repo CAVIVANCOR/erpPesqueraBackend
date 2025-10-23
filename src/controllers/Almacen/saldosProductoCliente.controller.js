@@ -60,3 +60,25 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Listar saldos con filtros profesionales
+ * Incluye opción de filtrar solo registros con saldo > 0
+ */
+export async function listarConFiltros(req, res, next) {
+  try {
+    const filtros = {
+      empresaId: req.query.empresaId ? BigInt(req.query.empresaId) : undefined,
+      almacenId: req.query.almacenId ? BigInt(req.query.almacenId) : undefined,
+      productoId: req.query.productoId ? BigInt(req.query.productoId) : undefined,
+      clienteId: req.query.clienteId ? BigInt(req.query.clienteId) : undefined,
+      custodia: req.query.custodia !== undefined ? req.query.custodia === 'true' : undefined,
+      soloConSaldo: req.query.soloConSaldo === 'true',
+    };
+    
+    const saldos = await saldosProductoClienteService.listarConFiltros(filtros);
+    res.json(toJSONBigInt(saldos));
+  } catch (err) {
+    next(err);
+  }
+}

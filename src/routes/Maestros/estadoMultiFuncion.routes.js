@@ -11,6 +11,7 @@ router.get('/embarcaciones', estadoMultiFuncionController.listarParaEmbarcacione
 router.get('/temporada-pesca', estadoMultiFuncionController.listarParaTemporadaPesca);
 router.get('/faena-pesca', estadoMultiFuncionController.listarParaFaenaPesca);
 router.get('/faena-pesca-consumo', estadoMultiFuncionController.listarParaFaenaPescaConsumo);
+router.get('/por-tipo-proviene', estadoMultiFuncionController.listarPorTipoProviene);
 // La ruta con :id DEBE ir al final
 router.get('/:id', estadoMultiFuncionController.obtenerPorId);
 router.post('/', estadoMultiFuncionController.crear);

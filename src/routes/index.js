@@ -92,15 +92,8 @@ import requerimientoCompraRoutes from '../routes/Compras/requerimientoCompra.rou
 import detalleReqCompraRoutes from '../routes/Compras/detalleReqCompra.routes.js';
 import ordenCompraRoutes from '../routes/Compras/ordenCompra.routes.js';
 import detalleOrdenCompraRoutes from '../routes/Compras/detalleOrdenCompra.routes.js';
-import cotizacionComprasRoutes from '../routes/Compras/cotizacionCompras.routes.js';
-import detGastosComprasProdRoutes from '../routes/Compras/detGastosComprasProd.routes.js';
-import detCotizacionComprasRoutes from '../routes/Compras/detCotizacionCompras.routes.js';
-import detProductoFinalCotizacionComprasRoutes from '../routes/Compras/detProductoFinalCotizacionCompras.routes.js';
-import detDocsReqCotizaComprasRoutes from '../routes/Compras/detDocsReqCotizaCompras.routes.js';
 import entregaARendirPComprasRoutes from '../routes/Compras/entregaARendirPCompras.routes.js';
 import detMovsEntregaRendirPComprasRoutes from '../routes/Compras/detMovsEntregaRendirPCompras.routes.js';
-import liquidacionProcesoComprasProdRoutes from '../routes/Compras/liquidacionProcesoComprasProd.routes.js';
-import movLiquidacionProcesoComprasProdRoutes from '../routes/Compras/movLiquidacionProcesoComprasProd.routes.js';
 import cotizacionVentasRoutes from '../routes/Ventas/cotizacionVentas.routes.js';
 import detCotizacionVentasRoutes from '../routes/Ventas/detCotizacionVentas.routes.js';
 import tipoProductoRoutes from '../routes/Ventas/tipoProducto.routes.js';
@@ -161,6 +154,11 @@ import centrosAlmacenRoutes from './Almacen/centrosAlmacen.routes.js';
 import almacenRoutes from './Almacen/almacen.routes.js';
 import { autenticarJWT } from '../middlewares/authMiddleware.js';
 import * as usuarioController from '../controllers/Usuarios/usuario.controller.js'
+
+import cotizacionProveedorRoutes from './Compras/cotizacionProveedor.routes.js';
+import requerimientoCompraImpresionRoutes from '../routes/Compras/requerimientoCompraImpresion.routes.js';
+
+
 
 const router = express.Router();
 
@@ -348,30 +346,19 @@ router.use('/insumos-tarea-ot', detInsumosTareaOTRoutes);
 router.use('/requerimientos-compra', requerimientoCompraRoutes);
 // Rutas para DetalleReqCompra
 router.use('/detalles-req-compra', detalleReqCompraRoutes);
+// Rutas para RequerimientoCompra - Impresión (upload y serving de PDFs)
+router.use('/requerimiento-compra', requerimientoCompraImpresionRoutes);
+// Rutas para CotizacionProveedor
+router.use('/cotizaciones-proveedor', cotizacionProveedorRoutes);
+
 // Rutas para OrdenCompra
 router.use('/ordenes-compra', ordenCompraRoutes);
 // Rutas para DetalleOrdenCompra
 router.use('/detalles-orden-compra', detalleOrdenCompraRoutes);
-// Rutas para CotizacionCompras
-router.use('/cotizaciones-compras', cotizacionComprasRoutes);
-// Rutas para CotizacionCompras (principal)
-router.use('/cotizacion-compras', cotizacionComprasRoutes);
-// Rutas para DetGastosComprasProd
-router.use('/gastos-compras-prod', detGastosComprasProdRoutes);
-// Rutas para DetCotizacionCompras
-router.use('/detalles-cotizacion-compras', detCotizacionComprasRoutes);
-// Rutas para DetProductoFinalCotizacionCompras
-router.use('/detalles-producto-final-cotizacion-compras', detProductoFinalCotizacionComprasRoutes);
-// Rutas para DetDocsReqCotizaCompras
-router.use('/docs-req-cotiza-compras', detDocsReqCotizaComprasRoutes);
 // Rutas para EntregaARendirPCompras
 router.use('/entregas-a-rendir-compras', entregaARendirPComprasRoutes);
 // Rutas para DetMovsEntregaRendirPCompras
 router.use('/movs-entrega-rendir-compras', detMovsEntregaRendirPComprasRoutes);
-// Rutas para LiquidacionProcesoComprasProd
-router.use('/liquidaciones-proceso-compras', liquidacionProcesoComprasProdRoutes);
-// Rutas para MovLiquidacionProcesoComprasProd
-router.use('/movs-liquidacion-proceso-compras', movLiquidacionProcesoComprasProdRoutes);
 // Rutas para CotizacionVentas
 router.use('/cotizaciones-ventas', cotizacionVentasRoutes);
 // Rutas para DetCotizacionVentas
@@ -385,7 +372,7 @@ router.use('/destinos-producto', destinoProductoRoutes);
 // Rutas para FormaTransaccion
 router.use('/formas-transaccion', formaTransaccionRoutes);
 // Rutas para ModoDespachoRecepcion
-router.use('/modos-despacho-recepcion', modoDespachoRecepcionRoutes);
+router.use('/modo-despacho-recepcion', modoDespachoRecepcionRoutes);
 // Rutas para DocRequeridaComprasVentas
 router.use('/docs-requeridas-compras-ventas', docRequeridaComprasVentasRoutes);
 // Rutas para detDocsReqCotizaVentas

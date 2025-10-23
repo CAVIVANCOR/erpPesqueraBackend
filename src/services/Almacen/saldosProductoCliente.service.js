@@ -197,10 +197,103 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Lista saldos con filtros profesionales incluyendo soloConSaldo
+ * @param {Object} filtros - Filtros opcionales
+ * @param {BigInt} [filtros.empresaId] - ID de la empresa
+ * @param {BigInt} [filtros.almacenId] - ID del almacén
+ * @param {BigInt} [filtros.productoId] - ID del producto
+ * @param {BigInt} [filtros.clienteId] - ID del cliente
+ * @param {boolean} [filtros.custodia] - Si es mercadería en custodia
+ * @param {boolean} [filtros.soloConSaldo] - Si true, solo retorna registros con saldoCantidad > 0
+ */
+const listarConFiltros = async (filtros = {}) => {
+  try {
+    const where = {};
+    
+    // DEBUG: Ver filtros recibidos (convertir BigInt a string para el log)
+    console.log('🔍 Filtros recibidos en listarConFiltros:', {
+      ...filtros,
+      empresaId: filtros.empresaId?.toString(),
+      almacenId: filtros.almacenId?.toString(),
+      productoId: filtros.productoId?.toString(),
+      clienteId: filtros.clienteId?.toString(),
+    });
+    
+    // Aplicar filtros
+    if (filtros.empresaId !== undefined) where.empresaId = filtros.empresaId;
+    if (filtros.almacenId !== undefined) where.almacenId = filtros.almacenId;
+    if (filtros.productoId !== undefined) where.productoId = filtros.productoId;
+    if (filtros.clienteId !== undefined) where.clienteId = filtros.clienteId;
+    if (filtros.custodia !== undefined) where.custodia = filtros.custodia;
+    
+    // Filtro de solo con saldo
+    if (filtros.soloConSaldo) {
+      where.saldoCantidad = { gt: 0 };
+    }
+    
+    // DEBUG: Ver query final (convertir BigInt a string)
+    console.log('📊 Query WHERE final:', {
+      ...where,
+      empresaId: where.empresaId?.toString(),
+      almacenId: where.almacenId?.toString(),
+      productoId: where.productoId?.toString(),
+      clienteId: where.clienteId?.toString(),
+    });
+    
+    const saldos = await prisma.saldosProductoCliente.findMany({
+      where,
+      include: {
+        producto: {
+          include: {
+            unidadMedida: true,
+            familia: true,
+            subfamilia: true,
+            marca: true,
+            color: true,
+            tipoAlmacenamiento: true,
+            tipoMaterial: true
+          }
+        },
+        cliente: true
+      },
+      orderBy: [
+        { producto: { descripcionArmada: 'asc' } }
+      ]
+    });
+    
+    // Enriquecer con empresa y almacén
+    const saldosEnriquecidos = await Promise.all(
+      saldos.map(async (saldo) => {
+        const empresa = await prisma.empresa.findUnique({ 
+          where: { id: saldo.empresaId },
+          select: { id: true, razonSocial: true }
+        });
+        const almacen = await prisma.almacen.findUnique({ 
+          where: { id: saldo.almacenId },
+          select: { id: true, nombre: true }
+        });
+        
+        return {
+          ...saldo,
+          empresa,
+          almacen
+        };
+      })
+    );
+    
+    return saldosEnriquecidos;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  listarConFiltros
 };

@@ -79,6 +79,23 @@ export async function listarParaFaenaPescaConsumo(req, res, next) {
   }
 }
 
+/**
+ * Lista estados multifunción filtrados por tipoProvieneDeId
+ * Solo retorna los que no están cesados
+ */
+export async function listarPorTipoProviene(req, res, next) {
+  try {
+    const { tipoProvieneDeId } = req.query;
+    if (!tipoProvieneDeId) {
+      return res.status(400).json({ error: 'tipoProvieneDeId es requerido' });
+    }
+    const estados = await estadoMultiFuncionService.listarPorTipoProviene(tipoProvieneDeId);
+    res.json(toJSONBigInt(estados));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);
