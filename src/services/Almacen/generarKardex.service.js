@@ -388,20 +388,31 @@ async function actualizarSaldos(tx, movimiento) {
       ? combo.clienteId
       : empresa.entidadComercialId;
 
+    // NORMALIZACIÓN PROFESIONAL: Strings siempre "", fechas/IDs null si vacío
+    // Modelos actualizados con @default("") para strings y DateTime? para fechas
+    const loteNormalizado = combo.lote || "";
+    const numContenedorNormalizado = combo.numContenedor || "";
+    const nroSerieNormalizado = combo.nroSerie || "";
+    const fechaIngresoNormalizada = combo.fechaIngreso || null;
+    const fechaProduccionNormalizada = combo.fechaProduccion || null;
+    const fechaVencimientoNormalizada = combo.fechaVencimiento || null;
+    const estadoIdNormalizado = combo.estadoId || null;
+    const estadoCalidadIdNormalizado = combo.estadoCalidadId || null;
+
     const saldoDet = await recalcularSaldoDetalladoCompleto(tx, {
       empresaId: combo.empresaId,
       almacenId: combo.almacenId,
       productoId: combo.productoId,
       clienteId: clienteIdCorrecto,
       esCustodia: combo.esCustodia,
-      lote: combo.lote,
-      fechaIngreso: combo.fechaIngreso,
-      fechaProduccion: combo.fechaProduccion,
-      fechaVencimiento: combo.fechaVencimiento,
-      estadoId: combo.estadoId,
-      estadoCalidadId: combo.estadoCalidadId,
-      numContenedor: combo.numContenedor,
-      nroSerie: combo.nroSerie,
+      lote: loteNormalizado,
+      fechaIngreso: fechaIngresoNormalizada,
+      fechaProduccion: fechaProduccionNormalizada,
+      fechaVencimiento: fechaVencimientoNormalizada,
+      estadoId: estadoIdNormalizado,
+      estadoCalidadId: estadoCalidadIdNormalizado,
+      numContenedor: numContenedorNormalizado,
+      nroSerie: nroSerieNormalizado,
     });
 
     const whereDet = {
@@ -410,14 +421,14 @@ async function actualizarSaldos(tx, movimiento) {
       productoId: combo.productoId,
       clienteId: clienteIdCorrecto,
       esCustodia: combo.esCustodia,
-      lote: combo.lote || "",
-      fechaIngreso: combo.fechaIngreso,
-      fechaProduccion: combo.fechaProduccion,
-      fechaVencimiento: combo.fechaVencimiento,
-      estadoId: combo.estadoId,
-      estadoCalidadId: combo.estadoCalidadId,
-      numContenedor: combo.numContenedor || "",
-      nroSerie: combo.nroSerie || "",
+      lote: loteNormalizado,
+      fechaIngreso: fechaIngresoNormalizada,
+      fechaProduccion: fechaProduccionNormalizada,
+      fechaVencimiento: fechaVencimientoNormalizada,
+      estadoId: estadoIdNormalizado,
+      estadoCalidadId: estadoCalidadIdNormalizado,
+      numContenedor: numContenedorNormalizado,
+      nroSerie: nroSerieNormalizado,
     };
 
     await upsertConReintentos(tx, "saldosDetProductoCliente", whereDet, {
@@ -457,20 +468,47 @@ async function actualizarSaldos(tx, movimiento) {
 async function upsertConReintentos(tx, tabla, where, data, maxIntentos = 3) {
   for (let intento = 0; intento < maxIntentos; intento++) {
     try {
-      const uniqueKey =
-        tabla === "saldosDetProductoCliente"
-          ? "uk_saldo_det_completo"
-          : "uk_saldo_general_completo";
-      await tx[tabla].upsert({
-        where: { [uniqueKey]: where },
-        update: data,
-        create: { ...where, ...data },
-      });
+      if (tabla === "saldosDetProductoCliente") {
+        // SOLUCIÓN PROFESIONAL: findFirst + update/create
+        // Razón: PostgreSQL no maneja bien nulls en constraints únicos compuestos
+        const existente = await tx[tabla].findFirst({ where });
+        
+        if (existente) {
+          // Actualizar registro existente
+          await tx[tabla].update({
+            where: { id: existente.id },
+            data,
+          });
+        } else {
+          // Crear nuevo registro
+          await tx[tabla].create({
+            data: { ...where, ...data },
+          });
+        }
+      } else {
+        // Para SaldosProductoCliente: usar upsert (tiene constraint único válido sin nulls)
+        const uniqueKey = "uk_saldo_general_completo";
+        await tx[tabla].upsert({
+          where: { [uniqueKey]: where },
+          update: data,
+          create: { ...where, ...data },
+        });
+      }
       return;
     } catch (error) {
+      // Logging detallado del error
+      console.error(`\n❌ ERROR en upsert (intento ${intento + 1}/${maxIntentos}):`);
+      console.error('Tabla:', tabla);
+      console.error('WHERE:', JSON.stringify(where, (key, value) => 
+        typeof value === 'bigint' ? value.toString() : value, 2));
+      console.error('DATA:', JSON.stringify(data, (key, value) => 
+        typeof value === 'bigint' ? value.toString() : value, 2));
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      
       if (intento === maxIntentos - 1)
         throw new DatabaseError(
-          `Error al actualizar ${tabla} después de ${maxIntentos} intentos`,
+          `Error al actualizar ${tabla} después de ${maxIntentos} intentos: ${error.message}`,
           error.message
         );
       await new Promise((resolve) =>
@@ -481,21 +519,23 @@ async function upsertConReintentos(tx, tabla, where, data, maxIntentos = 3) {
 }
 
 async function recalcularSaldoDetalladoCompleto(tx, filtro) {
+  // WHERE clause simplificado: strings siempre "", fechas/IDs pueden ser null
+  // Modelos normalizados con @default("") garantizan consistencia
   const whereClause = {
     empresaId: filtro.empresaId,
     almacenId: filtro.almacenId,
     productoId: filtro.productoId,
     esCustodia: filtro.esCustodia,
-    lote: filtro.lote || null,
-    fechaIngreso: filtro.fechaIngreso || null,
-    fechaProduccion: filtro.fechaProduccion || null,
-    fechaVencimiento: filtro.fechaVencimiento || null,
-    estadoId: filtro.estadoId || null,
-    estadoCalidadId: filtro.estadoCalidadId || null,
-    numContenedor: filtro.numContenedor || "",
-    nroSerie: filtro.nroSerie || "",
+    lote: filtro.lote,
+    fechaIngreso: filtro.fechaIngreso,
+    fechaProduccion: filtro.fechaProduccion,
+    fechaVencimiento: filtro.fechaVencimiento,
+    estadoId: filtro.estadoId,
+    estadoCalidadId: filtro.estadoCalidadId,
+    numContenedor: filtro.numContenedor,
+    nroSerie: filtro.nroSerie,
   };
-  
+
   const kardexRegistros = await tx.kardexAlmacen.findMany({
     where: whereClause,
     orderBy: [
@@ -668,18 +708,19 @@ async function calcularSaldosKardexConVariables(tx, movimiento) {
 }
 
 async function calcularSaldosProductoConVariables(tx, combo) {
+  // Normalizar valores: strings a "", fechas/IDs a null
   const kardexRegistros = await tx.kardexAlmacen.findMany({
     where: {
       empresaId: combo.empresaId,
       almacenId: combo.almacenId,
       productoId: combo.productoId,
       esCustodia: combo.esCustodia,
-      lote: combo.lote || null,
+      lote: combo.lote || "",              // String siempre ""
       fechaVencimiento: combo.fechaVencimiento || null,
       fechaProduccion: combo.fechaProduccion || null,
       fechaIngreso: combo.fechaIngreso || null,
-      numContenedor: combo.numContenedor || "",
-      nroSerie: combo.nroSerie || "",
+      numContenedor: combo.numContenedor || "",  // String siempre ""
+      nroSerie: combo.nroSerie || "",            // String siempre ""
       estadoId: combo.estadoId || null,
       estadoCalidadId: combo.estadoCalidadId || null,
     },

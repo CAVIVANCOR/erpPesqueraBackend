@@ -356,9 +356,9 @@ router.use('/ordenes-compra', ordenCompraRoutes);
 // Rutas para DetalleOrdenCompra
 router.use('/detalles-orden-compra', detalleOrdenCompraRoutes);
 // Rutas para EntregaARendirPCompras
-router.use('/entregas-a-rendir-compras', entregaARendirPComprasRoutes);
+router.use('/entrega-a-rendir-p-compras', entregaARendirPComprasRoutes);
 // Rutas para DetMovsEntregaRendirPCompras
-router.use('/movs-entrega-rendir-compras', detMovsEntregaRendirPComprasRoutes);
+router.use('/det-movs-entrega-rendir-p-compras', detMovsEntregaRendirPComprasRoutes);
 // Rutas para CotizacionVentas
 router.use('/cotizaciones-ventas', cotizacionVentasRoutes);
 // Rutas para DetCotizacionVentas

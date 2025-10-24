@@ -45,12 +45,20 @@ export async function obtenerKardexPorProducto(req, res, next) {
       if (fechaHasta) where.fechaMovimientoAlmacen.lte = new Date(fechaHasta);
     }
 
-    // Ordenamiento profesional: fecha ASC, INGRESOS primero, id ASC
+    // Ordenamiento profesional: fecha ASC, INGRESOS primero, variables de trazabilidad, id ASC
     const kardex = await prisma.kardexAlmacen.findMany({
       where,
       orderBy: [
         { fechaMovimientoAlmacen: 'asc' },
         { esIngresoEgreso: 'desc' }, // INGRESOS (true) antes que EGRESOS (false)
+        { lote: 'asc' },
+        { fechaIngreso: 'asc' },
+        { fechaProduccion: 'asc' },
+        { fechaVencimiento: 'asc' },
+        { numContenedor: 'asc' },
+        { nroSerie: 'asc' },
+        { estadoId: 'asc' },
+        { estadoCalidadId: 'asc' },
         { id: 'asc' }
       ],
       include: {

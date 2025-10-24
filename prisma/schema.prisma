@@ -660,10 +660,15 @@ model DetMovsEntRendirPescaConsumo {
   monedaId BigInt?
   urlComprobanteOperacionMovCaja String?
 
+  tipoDocumentoId        BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
+  numeroSerieComprobante        String?                              // Número Serie del comprobante
+  numeroCorrelativoComprobante String?                               // Número Correlativo del comprobante
+
   entregaARendirPescaConsumo EntregaARendirPescaConsumo @relation(fields: [entregaARendirPescaConsumoId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   entidadComercial EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
   moneda Moneda? @relation(fields: [monedaId], references: [id])
+  tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
 }
 
 model DetMovsEntregaRendir {
@@ -688,10 +693,16 @@ model DetMovsEntregaRendir {
   monedaId BigInt?
   urlComprobanteOperacionMovCaja String?
 
+  tipoDocumentoId        BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
+  numeroSerieComprobante        String?                              // Número Serie del comprobante
+  numeroCorrelativoComprobante String?                               // Número Correlativo del comprobante
+
   entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   entidadComercial EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
   moneda Moneda? @relation(fields: [monedaId], references: [id])
+  tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
+
 }
 
 model DetMovsEntregaRendirPCompras {
@@ -706,7 +717,8 @@ model DetMovsEntregaRendirPCompras {
   entidadComercialId       BigInt?                                     // Proveedor o tercero al que se le pagó
   
   tipoDocumentoId        BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
-  numeroComprobante        String?                                     // Número del comprobante
+  numeroSerieComprobante        String?                              // Número Serie del comprobante
+  numeroCorrelativoComprobante String?                               // Número Correlativo del comprobante
 
   urlComprobanteMovimiento String?                                     // URL del comprobante escaneado/fotografiado
   validadoTesoreria        Boolean     @default(false)                 // Si tesorería validó el movimiento
@@ -738,8 +750,12 @@ model DetMovsEntregaRendirPVentas {
   monedaId BigInt?
   descripcion             String?
   entidadComercialId BigInt?
-  tipoDocumentoId BigInt?
-  numeroComprobante String?
+
+  tipoDocumentoId        BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
+  numeroSerieComprobante        String?                              // Número Serie del comprobante
+  numeroCorrelativoComprobante String?                               // Número Correlativo del comprobante
+
+
   urlComprobanteMovimiento String?
   validadoTesoreria    Boolean @default(false)
   fechaValidacionTesoreria DateTime?
@@ -1441,55 +1457,55 @@ model KardexAlmacen {
   movimientoAlmacenId        BigInt            // ID del movimiento de almacén
   detalleMovimientoAlmacenId BigInt            // ID del detalle del movimiento
   
-  // INGRESOS
-  ingresoCant                Decimal?          // Cantidad ingresada
-  ingresoCantCostoUnit       Decimal?          // Costo unitario por cantidad
-  ingresoCantCostoTotal      Decimal?          // Costo total por cantidad
-  ingresoCantVariables       Decimal?          // Cantidad con variables de control
-  ingresoPeso                Decimal?          // Peso ingresado
-  ingresoPesoCostoUnit       Decimal?          // Costo unitario por peso
-  ingresoPesoCostoTotal      Decimal?          // Costo total por peso
-  ingresoPesoVariables       Decimal?          // Peso con variables de control
+  // INGRESOS (0 si no aplica)
+  ingresoCant                Decimal           @default(0) // Cantidad ingresada
+  ingresoCantCostoUnit       Decimal           @default(0) // Costo unitario por cantidad
+  ingresoCantCostoTotal      Decimal           @default(0) // Costo total por cantidad
+  ingresoCantVariables       Decimal           @default(0) // Cantidad con variables de control
+  ingresoPeso                Decimal           @default(0) // Peso ingresado
+  ingresoPesoCostoUnit       Decimal           @default(0) // Costo unitario por peso
+  ingresoPesoCostoTotal      Decimal           @default(0) // Costo total por peso
+  ingresoPesoVariables       Decimal           @default(0) // Peso con variables de control
   
-  // EGRESOS
-  egresoCant                 Decimal?          // Cantidad egresada
-  egresoCantCostoUnit        Decimal?          // Costo unitario por cantidad
-  egresoCantCostoTotal       Decimal?          // Costo total por cantidad
-  egresoCantVariables        Decimal?          // Cantidad con variables de control
-  egresoPeso                 Decimal?          // Peso egresado
-  egresoPesoCostoUnit        Decimal?          // Costo unitario por peso
-  egresoPesoCostoTotal       Decimal?          // Costo total por peso
-  egresoPesoVariables        Decimal?          // Peso con variables de control
+  // EGRESOS (0 si no aplica)
+  egresoCant                 Decimal           @default(0) // Cantidad egresada
+  egresoCantCostoUnit        Decimal           @default(0) // Costo unitario por cantidad
+  egresoCantCostoTotal       Decimal           @default(0) // Costo total por cantidad
+  egresoCantVariables        Decimal           @default(0) // Cantidad con variables de control
+  egresoPeso                 Decimal           @default(0) // Peso egresado
+  egresoPesoCostoUnit        Decimal           @default(0) // Costo unitario por peso
+  egresoPesoCostoTotal       Decimal           @default(0) // Costo total por peso
+  egresoPesoVariables        Decimal           @default(0) // Peso con variables de control
   
   // SALDOS INICIALES (antes del movimiento)
-  saldoIniCant               Decimal           // Saldo inicial cantidad (general)
-  saldoInicialCostoUnitCant  Decimal?          // Costo unitario del saldo inicial
-  saldoInicialCostoTotalCant Decimal?          // Costo total del saldo inicial
-  saldoInicialCantVariables  Decimal?          // Saldo inicial con variables de control
-  saldoInicialPeso           Decimal?          // Saldo inicial peso (general)
-  saldoInicialPesoCostoUnit  Decimal?          // Costo unitario por peso del saldo inicial
-  saldoInicialPesoCostoTotal Decimal?          // Costo total por peso del saldo inicial
-  saldoInicialPesoVariables  Decimal?          // Saldo inicial peso con variables de control
+  saldoIniCant               Decimal           @default(0) // Saldo inicial cantidad (general)
+  saldoInicialCostoUnitCant  Decimal           @default(0) // Costo unitario del saldo inicial
+  saldoInicialCostoTotalCant Decimal           @default(0) // Costo total del saldo inicial
+  saldoInicialCantVariables  Decimal           @default(0) // Saldo inicial con variables de control
+  saldoInicialPeso           Decimal           @default(0) // Saldo inicial peso (general)
+  saldoInicialPesoCostoUnit  Decimal           @default(0) // Costo unitario por peso del saldo inicial
+  saldoInicialPesoCostoTotal Decimal           @default(0) // Costo total por peso del saldo inicial
+  saldoInicialPesoVariables  Decimal           @default(0) // Saldo inicial peso con variables de control
   
   // SALDOS FINALES (después del movimiento)
-  saldoFinalCant             Decimal           // Saldo final cantidad (general)
-  saldoFinalCostoUnitCant    Decimal?          // Costo unitario del saldo final
-  saldoFinalCostoTotalCant   Decimal?          // Costo total del saldo final
-  saldoFinalCantVariables    Decimal?          // Saldo final con variables de control
-  saldoFinalPeso             Decimal?          // Saldo final peso (general)
-  saldoFinalPesoCostoUnit    Decimal?          // Costo unitario por peso del saldo final
-  saldoFinalPesoCostoTotal   Decimal?          // Costo total por peso del saldo final
-  saldoFinalPesoVariables    Decimal?          // Saldo final peso con variables de control
+  saldoFinalCant             Decimal           @default(0) // Saldo final cantidad (general)
+  saldoFinalCostoUnitCant    Decimal           @default(0) // Costo unitario del saldo final
+  saldoFinalCostoTotalCant   Decimal           @default(0) // Costo total del saldo final
+  saldoFinalCantVariables    Decimal           @default(0) // Saldo final con variables de control
+  saldoFinalPeso             Decimal           @default(0) // Saldo final peso (general)
+  saldoFinalPesoCostoUnit    Decimal           @default(0) // Costo unitario por peso del saldo final
+  saldoFinalPesoCostoTotal   Decimal           @default(0) // Costo total por peso del saldo final
+  saldoFinalPesoVariables    Decimal           @default(0) // Saldo final peso con variables de control
   
   // VARIABLES DE CONTROL - Trazabilidad
-  lote                       String?           @db.VarChar(40)  // Número de lote
-  fechaVencimiento           DateTime?         // Fecha de vencimiento
-  fechaProduccion            DateTime?         // Fecha de producción
-  fechaIngreso               DateTime?         // Fecha de ingreso al almacén
-  numContenedor              String?           @db.VarChar(40)  // Número de contenedor
-  nroSerie                   String?           @db.VarChar(40)  // Número de serie
-  estadoId                   BigInt?           // Estado de la mercadería
-  estadoCalidadId            BigInt?           // Estado de calidad
+  lote                       String            @default("") @db.VarChar(40)  // Número de lote
+  fechaVencimiento           DateTime?         // Fecha de vencimiento (null si no aplica)
+  fechaProduccion            DateTime?         // Fecha de producción (null si no aplica)
+  fechaIngreso               DateTime?         // Fecha de ingreso al almacén (null si no aplica)
+  numContenedor              String            @default("") @db.VarChar(40)  // Número de contenedor
+  nroSerie                   String            @default("") @db.VarChar(40)  // Número de serie
+  estadoId                   BigInt?           // Estado de la mercadería (null si no aplica)
+  estadoCalidadId            BigInt?           // Estado de calidad (null si no aplica)
 
   // RELACIONES
   producto           Producto           @relation(fields: [productoId], references: [id])
@@ -2009,32 +2025,32 @@ model SaldosDetProductoCliente {
   empresaId        BigInt    // Empresa (dueña si esCustodia=false, custodia si esCustodia=true)
   almacenId        BigInt    // Almacén físico donde está el producto
   productoId       BigInt    // Producto específico
-  clienteId        BigInt?   // Cliente/Proveedor - Para mercadería PROPIA: NO interviene en cálculo, Para CUSTODIA: SÍ interviene (dueño)
+  clienteId        BigInt    // Cliente/Proveedor - Siempre tiene valor (entidadComercialId de la empresa o cliente real)
   esCustodia       Boolean   @default(false) // false=mercadería propia, true=mercadería en custodia
   
   // Variables de Control - Trazabilidad completa
-  lote             String?   @db.VarChar(40)  // Número de lote de producción
-  fechaVencimiento DateTime? // Fecha de vencimiento del producto
-  fechaProduccion  DateTime? // Fecha de producción
-  fechaIngreso     DateTime? // Fecha de ingreso al almacén
-  numContenedor    String?   @db.VarChar(40)  // Número de contenedor (importaciones)
-  nroSerie         String?   @db.VarChar(40)  // Número de serie (productos individuales)
-  estadoId         BigInt?   // Estado de la mercadería (nuevo, usado, dañado, etc.)
-  estadoCalidadId  BigInt?   // Estado de calidad (A, B, C, rechazado, etc.)
+  lote             String    @default("") @db.VarChar(40)  // Número de lote de producción
+  fechaVencimiento DateTime? // Fecha de vencimiento del producto (null si no aplica)
+  fechaProduccion  DateTime? // Fecha de producción (null si no aplica)
+  fechaIngreso     DateTime? // Fecha de ingreso al almacén (null si no aplica)
+  numContenedor    String    @default("") @db.VarChar(40)  // Número de contenedor (importaciones)
+  nroSerie         String    @default("") @db.VarChar(40)  // Número de serie (productos individuales)
+  estadoId         BigInt?   // Estado de la mercadería (null si no aplica)
+  estadoCalidadId  BigInt?   // Estado de calidad (null si no aplica)
   
-  // Saldos
-  saldoCantidad    Decimal   // Saldo en unidades
-  saldoPeso        Decimal?  // Saldo en peso
+  // Saldos - Siempre valores numéricos
+  saldoCantidad    Decimal   @default(0) // Saldo en unidades
+  saldoPeso        Decimal   @default(0) // Saldo en peso
   actualizadoEn    DateTime  // Última actualización del saldo
 
   // RELACIONES
-  producto Producto          @relation(fields: [productoId], references: [id])
-  cliente  EntidadComercial? @relation(fields: [clienteId], references: [id])
+  producto Producto         @relation(fields: [productoId], references: [id])
+  cliente  EntidadComercial @relation(fields: [clienteId], references: [id])
 
-  // CONSTRAINT ÚNICO - Identifica saldo específico con TODAS las variables de control
-  @@unique([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie], name: "uk_saldo_det_completo")
+  // ❌ CONSTRAINT ÚNICO ELIMINADO: PostgreSQL no maneja bien nulls en constraints únicos compuestos
+  // Solución profesional: Usar findFirst + update/create en lugar de upsert
   
-  // ÍNDICES OPTIMIZADOS
+  // ✅ ÍNDICES OPTIMIZADOS para performance (sin restricción de unicidad)
   @@index([empresaId, almacenId, productoId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie], name: "idx_saldo_det_propio_completo")
   @@index([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie], name: "idx_saldo_det_custodia_completo")
   @@index([empresaId, almacenId, productoId, esCustodia], name: "idx_saldo_det_general")
@@ -2045,20 +2061,20 @@ model SaldosProductoCliente {
   empresaId             BigInt   // Empresa (dueña si custodia=false, custodia si custodia=true)
   almacenId             BigInt   // Almacén físico
   productoId            BigInt   // Producto específico
-  clienteId             BigInt?  // Cliente/Proveedor - Para mercadería PROPIA: NO interviene, Para CUSTODIA: SÍ interviene (dueño)
+  clienteId             BigInt   // Cliente/Proveedor - Siempre tiene valor (entidadComercialId de la empresa o cliente real)
   custodia              Boolean  @default(false) // false=mercadería propia, true=mercadería en custodia
   
-  // Saldos Generales (sin variables de control)
-  saldoCantidad         Decimal  // Saldo total en unidades
-  saldoPeso             Decimal? // Saldo total en peso
-  costoUnitarioPromedio Decimal? // Costo promedio ponderado (solo para mercadería propia)
+  // Saldos Generales (sin variables de control) - Siempre valores numéricos
+  saldoCantidad         Decimal  @default(0) // Saldo total en unidades
+  saldoPeso             Decimal  @default(0) // Saldo total en peso
+  costoUnitarioPromedio Decimal  @default(0) // Costo promedio ponderado (solo para mercadería propia)
   actualizadoEn         DateTime // Última actualización
 
   // RELACIONES
-  producto Producto          @relation(fields: [productoId], references: [id])
-  cliente  EntidadComercial? @relation(fields: [clienteId], references: [id])
+  producto Producto         @relation(fields: [productoId], references: [id])
+  cliente  EntidadComercial @relation(fields: [clienteId], references: [id])
 
-  // CONSTRAINT ÚNICO - Identifica saldo GENERAL (sin variables de control)
+  // ✅ CONSTRAINT ÚNICO válido (sin campos nullables)
   @@unique([empresaId, almacenId, productoId, clienteId, custodia], name: "uk_saldo_general_completo")
   
   // ÍNDICES OPTIMIZADOS
@@ -2220,6 +2236,8 @@ model TipoDocumento {
   detMovsEntregaRendirPVentas DetMovsEntregaRendirPVentas[]
   requerimientosCompra RequerimientoCompra[]
   ordenesCompra OrdenCompra[]
+  detMovsEntregaRendirPescaConsumo DetMovsEntRendirPescaConsumo[]
+  detMovsEntregaRendir DetMovsEntregaRendir[]
 }
 
 model TipoEmbarcacion {
