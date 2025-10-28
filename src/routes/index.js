@@ -157,6 +157,8 @@ import * as usuarioController from '../controllers/Usuarios/usuario.controller.j
 
 import cotizacionProveedorRoutes from './Compras/cotizacionProveedor.routes.js';
 import requerimientoCompraImpresionRoutes from '../routes/Compras/requerimientoCompraImpresion.routes.js';
+import ordenCompraImpresionRoutes from '../routes/Compras/ordenCompraImpresion.routes.js';
+import movimientoAlmacenImpresionRoutes from '../routes/Almacen/movimientoAlmacenImpresion.routes.js';
 
 
 
@@ -306,6 +308,8 @@ router.use('/confirmaciones-acciones-previas', confirmacionesAccionesPreviasRout
 router.use('/confirmaciones-acciones-previas-consumo', confirmacionesAccionesPreviasConsumoRoutes);
 // Rutas para MovimientoAlmacen
 router.use('/movimientos-almacen', movimientoAlmacenRoutes);
+// Rutas para MovimientoAlmacen - Impresión (upload y serving de PDFs)
+router.use('/movimiento-almacen', movimientoAlmacenImpresionRoutes);
 // Rutas para DetalleMovimientoAlmacen
 router.use('/detalles-movimiento-almacen', detalleMovimientoAlmacenRoutes);
 // Rutas para TipoDocumento
@@ -348,6 +352,8 @@ router.use('/requerimientos-compra', requerimientoCompraRoutes);
 router.use('/detalles-req-compra', detalleReqCompraRoutes);
 // Rutas para RequerimientoCompra - Impresión (upload y serving de PDFs)
 router.use('/requerimiento-compra', requerimientoCompraImpresionRoutes);
+// Rutas para OrdenCompra - Impresión (upload y serving de PDFs)
+router.use('/orden-compra', ordenCompraImpresionRoutes);
 // Rutas para CotizacionProveedor
 router.use('/cotizaciones-proveedor', cotizacionProveedorRoutes);
 

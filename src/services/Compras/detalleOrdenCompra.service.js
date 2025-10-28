@@ -41,7 +41,7 @@ const listar = async (ordenCompraId) => {
         }
       },
       orderBy: {
-        item: 'asc'
+        id: 'asc'
       }
     });
   } catch (err) {

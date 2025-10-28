@@ -28,6 +28,12 @@ app.use('/public/fichas-tecnicas-boliches', express.static(path.join(process.cwd
 app.use('/public/certificados-embarcacion', express.static(path.join(process.cwd(), 'uploads/certificados-embarcacion')));
 // Middleware para servir documentos de visitantes (protegido con JWT)
 app.use('/uploads/documentos-visitantes', express.static(path.join(process.cwd(), 'uploads/documentos-visitantes')));
+// Middleware para servir PDFs de movimientos de almacén
+app.use('/uploads/movimientos-almacen', express.static(path.join(process.cwd(), 'uploads/movimientos-almacen')));
+// Middleware para servir PDFs de requerimientos de compra
+app.use('/uploads/requerimientos-compra', express.static(path.join(process.cwd(), 'uploads/requerimientos-compra')));
+// Middleware para servir PDFs de órdenes de compra
+app.use('/uploads/ordenes-compra', express.static(path.join(process.cwd(), 'uploads/ordenes-compra')));
 
 // Middlewares globales
 app.use(express.json());

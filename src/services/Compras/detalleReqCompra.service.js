@@ -45,7 +45,7 @@ const listar = async (requerimientoCompraId) => {
           }
         },
         proveedor: true,
-        cotizacionProveedor: true
+        detallesCotizacion: true
       },
       orderBy: {
         id: 'asc'
@@ -70,7 +70,7 @@ const obtenerPorId = async (id) => {
           }
         },
         proveedor: true,
-        cotizacionProveedor: true
+        detallesCotizacion: true
       }
     });
     

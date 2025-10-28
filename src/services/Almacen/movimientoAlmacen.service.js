@@ -109,13 +109,13 @@ const obtenerPorId = async (id) => {
     
     // Cargar manualmente el personal responsable de almacén
     if (mov.personalRespAlmacen) {
-      const personalId = typeof mov.personalRespAlmacen === 'string' 
-        ? BigInt(mov.personalRespAlmacen) 
-        : mov.personalRespAlmacen;
+      const personalId = mov.personalRespAlmacen; // Es un BigInt con el ID
       
-      mov.personalRespAlmacen = await prisma.personal.findUnique({
+      const personal = await prisma.personal.findUnique({
         where: { id: personalId }
       });
+      
+      mov.personalRespAlmacen = personal; // Reemplazar el ID con el objeto completo
     }
     
     // Cargar manualmente los estados de mercadería y calidad para cada detalle

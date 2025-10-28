@@ -6,6 +6,7 @@ const router = Router();
 // Rutas específicas (DEBEN IR ANTES de las rutas con parámetros)
 router.get('/stock/consultar', movimientoAlmacenController.consultarStock);
 router.get('/series-doc', movimientoAlmacenController.obtenerSeriesDoc);
+router.post('/upload-pdf', movimientoAlmacenController.uploadPdf);
 
 // Rutas CRUD para MovimientoAlmacen
 router.get('/', movimientoAlmacenController.listar);
