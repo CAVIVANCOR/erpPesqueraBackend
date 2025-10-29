@@ -52,3 +52,16 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Obtener todos los submódulos de un módulo específico
+ */
+export async function obtenerPorModulo(req, res, next) {
+  try {
+    const moduloId = Number(req.params.moduloId);
+    const submodulos = await submoduloSistemaService.obtenerPorModulo(moduloId);
+    res.json(toJSONBigInt(submodulos));
+  } catch (err) {
+    next(err);
+  }
+}

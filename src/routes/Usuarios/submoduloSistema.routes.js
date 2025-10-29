@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para SubmoduloSistema
 router.get('/', submoduloSistemaController.listar);
+router.get('/modulo/:moduloId', submoduloSistemaController.obtenerPorModulo);
 router.get('/:id', submoduloSistemaController.obtenerPorId);
 router.post('/', submoduloSistemaController.crear);
 router.put('/:id', submoduloSistemaController.actualizar);

@@ -48,3 +48,82 @@ export function autorizarRol(rolesPermitidos) {
     next();
   };
 }
+
+/**
+ * Middleware para verificar acceso a un submódulo específico con permisos granulares
+ * Uso: router.post(..., autenticarJWT, verificarAccesoSubmodulo(5, 'crear'))
+ * @param {number} submoduloId - ID del submódulo
+ * @param {string} permiso - Tipo de permiso: 'ver', 'crear', 'editar', 'eliminar', 'aprobar', 'rechazar', 'reactivar'
+ */
+export function verificarAccesoSubmodulo(submoduloId, permiso = 'ver') {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ mensaje: 'No autenticado.' });
+      }
+
+      const usuarioId = BigInt(req.user.id);
+      
+      // Importar dinámicamente el servicio
+      const { default: usuarioService } = await import('../services/Usuarios/usuario.service.js');
+      
+      // Verificar si el usuario puede acceder al sistema
+      const puedeAcceder = await usuarioService.puedeAcceder(usuarioId);
+      if (!puedeAcceder) {
+        return res.status(403).json({ 
+          mensaje: 'Usuario inactivo, bloqueado o cesado.' 
+        });
+      }
+      
+      // Verificar permiso específico
+      const tienePermiso = await usuarioService.verificarPermiso(
+        usuarioId,
+        BigInt(submoduloId),
+        permiso
+      );
+      
+      if (!tienePermiso) {
+        return res.status(403).json({
+          mensaje: `No tienes permiso para ${permiso} en este módulo.`
+        });
+      }
+      
+      next();
+    } catch (err) {
+      console.error('Error en verificación de acceso:', err);
+      return res.status(500).json({ 
+        mensaje: 'Error al verificar permisos.' 
+      });
+    }
+  };
+}
+
+/**
+ * Middleware para verificar que el usuario esté activo y pueda acceder
+ * Uso: router.get(..., autenticarJWT, verificarUsuarioActivo)
+ */
+export async function verificarUsuarioActivo(req, res, next) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ mensaje: 'No autenticado.' });
+    }
+
+    const usuarioId = BigInt(req.user.id);
+    
+    const { default: usuarioService } = await import('../services/Usuarios/usuario.service.js');
+    
+    const puedeAcceder = await usuarioService.puedeAcceder(usuarioId);
+    if (!puedeAcceder) {
+      return res.status(403).json({ 
+        mensaje: 'Usuario inactivo, bloqueado o cesado.' 
+      });
+    }
+    
+    next();
+  } catch (err) {
+    console.error('Error en verificación de usuario activo:', err);
+    return res.status(500).json({ 
+      mensaje: 'Error al verificar estado del usuario.' 
+    });
+  }
+}

@@ -109,9 +109,31 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Obtiene todos los submódulos de un módulo específico
+ * @param {BigInt} moduloId - ID del módulo
+ * @returns {Promise<Array>}
+ */
+const obtenerPorModulo = async (moduloId) => {
+  try {
+    return await prisma.submoduloSistema.findMany({
+      where: { 
+        moduloId,
+        activo: true 
+      },
+      include: { modulo: true },
+      orderBy: { orden: 'asc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
+  obtenerPorModulo,
   crear,
   actualizar,
   eliminar

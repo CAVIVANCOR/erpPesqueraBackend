@@ -65,13 +65,22 @@ model AccesosUsuario {
   puedeCrear         Boolean          @default(false)
   puedeEditar        Boolean          @default(false)
   puedeEliminar      Boolean          @default(false)
-  fechaOtorgado      DateTime         @default(now())
   puedeReactivarDocs Boolean          @default(false)
-  puederAprobarDocs  Boolean          @default(false)
-  puederRechazarDocs Boolean          @default(false)
+  puedeAprobarDocs   Boolean          @default(false)  // Typo corregido
+  puedeRechazarDocs  Boolean          @default(false)  // Typo corregido
+  fechaOtorgado      DateTime         @default(now())
+  otorgadoPor        BigInt?          // Quién otorgó el acceso
+  fechaRevocado      DateTime?        // Cuándo se revocó
+  revocadoPor        BigInt?          // Quién revocó el acceso
+  activo             Boolean          @default(true)   // Para soft delete
 
   usuario        Usuario          @relation(fields: [usuarioId], references: [id])
   submodulo      SubmoduloSistema @relation(fields: [submoduloId], references: [id])
+  
+  @@unique([usuarioId, submoduloId])
+  @@index([usuarioId])
+  @@index([submoduloId])
+  @@index([activo])
 }
 
 model AccionesPreviasFaena {
@@ -1220,6 +1229,7 @@ model Empresa {
   movimientosAlmacen MovimientoAlmacen[]
   ordenesCompra OrdenCompra[]
   requerimientosCompra RequerimientoCompra[]
+  usuarios Usuario[]
 }
 
 model EmpresaCentroCosto {
@@ -2155,10 +2165,17 @@ model SubmoduloSistema {
   moduloId       BigInt
   nombre         String
   descripcion    String?
+  ruta           String?          // Ej: "/compras/orden-compra" para routing
+  icono          String?          // Ej: "pi pi-shopping-cart" para UI
+  orden          Int?             // Para ordenar en el menú
   activo         Boolean          @default(true)
 
   modulo         ModuloSistema @relation(fields: [moduloId], references: [id])
   accesosUsuario AccesosUsuario[]
+  
+  @@unique([moduloId, nombre])
+  @@index([moduloId])
+  @@index([activo])
 }
 
 model TemporadaPesca {
@@ -2514,7 +2531,6 @@ model Usuario {
   id                BigInt           @id @default(autoincrement())
   username          String           @unique
   passwordHash      String
-  cesado            Boolean
   fechaCreacion     DateTime         @default(now())
   fechaUltimoAcceso DateTime?
   personalId        BigInt?          @unique
@@ -2522,10 +2538,22 @@ model Usuario {
   esAdmin           Boolean          @default(false)
   esSuperUsuario    Boolean          @default(false)
   esUsuario         Boolean          @default(true)
+  activo            Boolean          @default(true)   // Estado del usuario en el sistema
+  intentosFallidos  Int              @default(0)      // Seguridad: bloqueo por intentos
+  bloqueadoHasta    DateTime?        // Seguridad: bloqueo temporal
+  motivoInactivacion String?         // Razón de desactivación (opcional)
+  inactivadoPor     BigInt?          // Quién desactivó (auditoría)
+  fechaInactivacion DateTime?        // Cuándo se desactivó
 
   personal          Personal? @relation(fields: [personalId], references: [id])
+  empresa           Empresa @relation(fields: [empresaId], references: [id])
   accesosUsuario    AccesosUsuario[]
   refreshTokens     RefreshToken[]
+  
+  @@index([empresaId])
+  @@index([personalId])
+  @@index([activo])
+  @@index([username])
 }
 
 model VehiculoEntidad {

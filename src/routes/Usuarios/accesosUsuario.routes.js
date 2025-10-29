@@ -10,4 +10,9 @@ router.post('/', accesosUsuarioController.crear);
 router.put('/:id', accesosUsuarioController.actualizar);
 router.delete('/:id', accesosUsuarioController.eliminar);
 
+// Rutas adicionales
+router.get('/usuario/:usuarioId', accesosUsuarioController.obtenerPorUsuario);
+router.post('/asignar-lote', accesosUsuarioController.asignarAccesosEnLote);
+router.post('/revocar-lote', accesosUsuarioController.revocarAccesosEnLote);
+
 export default router;

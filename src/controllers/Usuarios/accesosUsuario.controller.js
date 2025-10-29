@@ -52,3 +52,65 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Obtener todos los accesos de un usuario específico
+ */
+export async function obtenerPorUsuario(req, res, next) {
+  try {
+    const usuarioId = Number(req.params.usuarioId);
+    const accesos = await accesosUsuarioService.obtenerPorUsuario(usuarioId);
+    res.json(toJSONBigInt(accesos));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Asignar múltiples accesos a un usuario (en lote)
+ * Body: { usuarioId, submodulosIds: [1, 2, 3] } o { usuarioId, submodulosIds: [{submoduloId, permisos}, ...] }
+ */
+export async function asignarAccesosEnLote(req, res, next) {
+  try {
+    const { usuarioId, submodulosIds } = req.body;
+    
+    // Detectar si es array de números o array de objetos
+    let submodulosData;
+    if (Array.isArray(submodulosIds) && submodulosIds.length > 0) {
+      if (typeof submodulosIds[0] === 'object' && submodulosIds[0] !== null) {
+        // Array de objetos {submoduloId, permisos}
+        submodulosData = submodulosIds;
+      } else {
+        // Array de números simples
+        submodulosData = submodulosIds.map(Number);
+      }
+    } else {
+      submodulosData = [];
+    }
+    
+    const accesos = await accesosUsuarioService.asignarAccesosEnLote(
+      Number(usuarioId),
+      submodulosData
+    );
+    res.status(201).json(toJSONBigInt(accesos));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Revocar múltiples accesos de un usuario
+ * Body: { usuarioId, submodulosIds: [1, 2, 3] }
+ */
+export async function revocarAccesosEnLote(req, res, next) {
+  try {
+    const { usuarioId, submodulosIds } = req.body;
+    await accesosUsuarioService.revocarAccesosEnLote(
+      Number(usuarioId),
+      submodulosIds.map(Number)
+    );
+    res.json({ revocado: true, usuarioId, cantidad: submodulosIds.length });
+  } catch (err) {
+    next(err);
+  }
+}
