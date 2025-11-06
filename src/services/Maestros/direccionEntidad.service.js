@@ -75,7 +75,38 @@ const obtenerPorEntidad = async (entidadComercialId) => {
       },
       orderBy: { id: 'desc' }
     });
-    return resultado;
+    
+    // Consultar manualmente los datos de personal para cada dirección
+    const resultadoConPersonal = await Promise.all(
+      resultado.map(async (direccion) => {
+        let personalCreador = null;
+        let personalActualizador = null;
+        
+        // Consultar personal creador si existe
+        if (direccion.creadoPor) {
+          personalCreador = await prisma.personal.findUnique({
+            where: { id: direccion.creadoPor },
+            select: { id: true, nombres: true, apellidos: true }
+          });
+        }
+        
+        // Consultar personal actualizador si existe
+        if (direccion.actualizadoPor) {
+          personalActualizador = await prisma.personal.findUnique({
+            where: { id: direccion.actualizadoPor },
+            select: { id: true, nombres: true, apellidos: true }
+          });
+        }
+        
+        return {
+          ...direccion,
+          personalCreador,
+          personalActualizador
+        };
+      })
+    );
+    
+    return resultadoConPersonal;
   } catch (err) {
     console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -113,7 +144,15 @@ const obtenerDireccionFiscalPorEntidad = async (entidadComercialId) => {
 const crear = async (data) => {
   try {
     await validarDireccionEntidad(data);
-    const resultado = await prisma.direccionEntidad.create({ data });
+    
+    // Asegurar que las fechas de auditoría estén presentes
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    const resultado = await prisma.direccionEntidad.create({ data: datosConAuditoria });
     return resultado;
   } catch (err) {
     console.error('❌ [SERVICIO] Error en crear:', err);
@@ -131,7 +170,18 @@ const actualizar = async (id, data) => {
     const existente = await prisma.direccionEntidad.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Dirección no encontrada');
     await validarDireccionEntidad(data);
-    const resultado = await prisma.direccionEntidad.update({ where: { id }, data });
+    
+    // Asegurar que todos los campos de auditoría estén presentes
+    const datosConAuditoria = {
+      ...data,
+      // Si fechaCreacion o creadoPor son null/vacíos en el registro existente, asignarlos ahora
+      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      creadoPor: data.creadoPor || existente.creadoPor || null,
+      // Siempre actualizar estos campos
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    const resultado = await prisma.direccionEntidad.update({ where: { id }, data: datosConAuditoria });
     return resultado;
   } catch (err) {
     console.error('❌ [SERVICIO] Error en actualizar:', err);

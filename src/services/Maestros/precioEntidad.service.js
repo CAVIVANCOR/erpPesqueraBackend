@@ -74,9 +74,41 @@ const obtenerPorEntidad = async (entidadComercialId) => {
       include: {
         entidadComercial: true,
         moneda: true,
-      }
+      },
+      orderBy: { id: 'desc' }
     });
-    return resultado;
+    
+    // Consultar manualmente los datos de personal para cada precio
+    const resultadoConPersonal = await Promise.all(
+      resultado.map(async (precio) => {
+        let personalCreador = null;
+        let personalActualizador = null;
+        
+        // Consultar personal creador si existe
+        if (precio.creadoPor) {
+          personalCreador = await prisma.personal.findUnique({
+            where: { id: precio.creadoPor },
+            select: { id: true, nombres: true, apellidos: true }
+          });
+        }
+        
+        // Consultar personal actualizador si existe
+        if (precio.actualizadoPor) {
+          personalActualizador = await prisma.personal.findUnique({
+            where: { id: precio.actualizadoPor },
+            select: { id: true, nombres: true, apellidos: true }
+          });
+        }
+        
+        return {
+          ...precio,
+          personalCreador,
+          personalActualizador
+        };
+      })
+    );
+    
+    return resultadoConPersonal;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -89,7 +121,15 @@ const obtenerPorEntidad = async (entidadComercialId) => {
 const crear = async (data) => {
   try {
     await validarPrecioEntidad(data);
-    return await prisma.precioEntidad.create({ data });
+    
+    // Asegurar que las fechas de auditoría estén presentes
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.precioEntidad.create({ data: datosConAuditoria });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -105,7 +145,18 @@ const actualizar = async (id, data) => {
     const existente = await prisma.precioEntidad.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Precio no encontrado');
     await validarPrecioEntidad(data);
-    return await prisma.precioEntidad.update({ where: { id }, data });
+    
+    // Asegurar que todos los campos de auditoría estén presentes
+    const datosConAuditoria = {
+      ...data,
+      // Si fechaCreacion o creadoPor son null/vacíos en el registro existente, asignarlos ahora
+      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      creadoPor: data.creadoPor || existente.creadoPor || null,
+      // Siempre actualizar estos campos
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.precioEntidad.update({ where: { id }, data: datosConAuditoria });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

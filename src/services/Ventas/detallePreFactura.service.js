@@ -20,7 +20,18 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.detallePreFactura.findMany();
+    return await prisma.detallePreFactura.findMany({
+      include: {
+        preFactura: true,
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      },
+      orderBy: { id: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -29,9 +40,40 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const det = await prisma.detallePreFactura.findUnique({ where: { id } });
+    const det = await prisma.detallePreFactura.findUnique({ 
+      where: { id },
+      include: {
+        preFactura: true,
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      }
+    });
     if (!det) throw new NotFoundError('DetallePreFactura no encontrado');
     return det;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const obtenerPorPreFactura = async (preFacturaId) => {
+  try {
+    return await prisma.detallePreFactura.findMany({
+      where: { preFacturaId },
+      include: {
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      },
+      orderBy: { id: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -44,7 +86,26 @@ const crear = async (data) => {
       throw new ValidationError('preFacturaId, productoId y cantidad son obligatorios.');
     }
     await validarClavesForaneas(data);
-    return await prisma.detallePreFactura.create({ data });
+    
+    // Asegurar campos de auditoría
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.detallePreFactura.create({ 
+      data: datosConAuditoria,
+      include: {
+        preFactura: true,
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -61,7 +122,28 @@ const actualizar = async (id, data) => {
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.detallePreFactura.update({ where: { id }, data });
+    
+    // Asegurar campos de auditoría
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      creadoPor: data.creadoPor || existente.creadoPor || null,
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.detallePreFactura.update({ 
+      where: { id }, 
+      data: datosConAuditoria,
+      include: {
+        preFactura: true,
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -85,6 +167,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorPreFactura,
   crear,
   actualizar,
   eliminar

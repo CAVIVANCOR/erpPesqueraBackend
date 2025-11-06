@@ -70,7 +70,38 @@ const obtenerPorEntidad = async (entidadComercialId) => {
       },
       orderBy: { id: 'desc' }
     });
-    return resultado;
+    
+    // Consultar manualmente los datos de personal para cada contacto
+    const resultadoConPersonal = await Promise.all(
+      resultado.map(async (contacto) => {
+        let personalCreador = null;
+        let personalActualizador = null;
+        
+        // Consultar personal creador si existe
+        if (contacto.creadoPor) {
+          personalCreador = await prisma.personal.findUnique({
+            where: { id: contacto.creadoPor },
+            select: { id: true, nombres: true, apellidos: true }
+          });
+        }
+        
+        // Consultar personal actualizador si existe
+        if (contacto.actualizadoPor) {
+          personalActualizador = await prisma.personal.findUnique({
+            where: { id: contacto.actualizadoPor },
+            select: { id: true, nombres: true, apellidos: true }
+          });
+        }
+        
+        return {
+          ...contacto,
+          personalCreador,
+          personalActualizador
+        };
+      })
+    );
+    
+    return resultadoConPersonal;
   } catch (err) {
     console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -84,7 +115,15 @@ const obtenerPorEntidad = async (entidadComercialId) => {
 const crear = async (data) => {
   try {
     await validarContactoEntidad(data);
-    return await prisma.contactoEntidad.create({ data });
+    
+    // Asegurar que las fechas de auditoría estén presentes
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.contactoEntidad.create({ data: datosConAuditoria });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -100,7 +139,18 @@ const actualizar = async (id, data) => {
     const existente = await prisma.contactoEntidad.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Contacto no encontrado');
     await validarContactoEntidad(data);
-    return await prisma.contactoEntidad.update({ where: { id }, data });
+    
+    // Asegurar que todos los campos de auditoría estén presentes
+    const datosConAuditoria = {
+      ...data,
+      // Si fechaCreacion o creadoPor son null/vacíos en el registro existente, asignarlos ahora
+      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      creadoPor: data.creadoPor || existente.creadoPor || null,
+      // Siempre actualizar estos campos
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.contactoEntidad.update({ where: { id }, data: datosConAuditoria });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

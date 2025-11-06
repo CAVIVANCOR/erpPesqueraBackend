@@ -3,32 +3,38 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
 
 /**
  * Servicio CRUD para DetCotizacionVentas
- * Aplica validaciones de existencia de claves foráneas principales.
+ * Gestiona detalles de productos en cotizaciones de ventas
  * Documentado en español.
  */
 
-async function validarForaneas(data) {
-  // Validar existencia de claves foráneas principales
-  const claves = [
-    { campo: 'empresaId', modelo: 'empresa' },
-    { campo: 'cotizacionVentasId', modelo: 'cotizacionVentas' },
-    { campo: 'productoId', modelo: 'producto' },
-    { campo: 'clienteId', modelo: 'cliente' },
-    { campo: 'monedaId', modelo: 'moneda' },
-    { campo: 'movSalidaAlmacenId', modelo: 'movimientoAlmacen' },
-    { campo: 'centroCostoId', modelo: 'centroCosto' }
-  ];
-  for (const clave of claves) {
-    if (data[clave.campo] !== undefined && data[clave.campo] !== null) {
-      const existe = await prisma[clave.modelo].findUnique({ where: { id: data[clave.campo] } });
-      if (!existe) throw new ValidationError(`La clave foránea ${clave.campo} (${clave.modelo}) no existe.`);
-    }
-  }
+async function validarClavesForaneas(data) {
+  const [cotizacion, producto, centroCosto, movSalida] = await Promise.all([
+    prisma.cotizacionVentas.findUnique({ where: { id: data.cotizacionVentasId } }),
+    prisma.producto.findUnique({ where: { id: data.productoId } }),
+    prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }),
+    data.movSalidaAlmacenId ? prisma.movimientoAlmacen.findUnique({ where: { id: data.movSalidaAlmacenId } }) : Promise.resolve(true)
+  ]);
+  
+  if (!cotizacion) throw new ValidationError('El cotizacionVentasId no existe.');
+  if (!producto) throw new ValidationError('El productoId no existe.');
+  if (!centroCosto) throw new ValidationError('El centroCostoId no existe.');
+  if (data.movSalidaAlmacenId && !movSalida) throw new ValidationError('El movSalidaAlmacenId no existe.');
 }
 
 const listar = async () => {
   try {
-    return await prisma.detCotizacionVentas.findMany();
+    return await prisma.detCotizacionVentas.findMany({
+      include: {
+        cotizacionVentas: true,
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      },
+      orderBy: { item: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -37,7 +43,18 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const det = await prisma.detCotizacionVentas.findUnique({ where: { id } });
+    const det = await prisma.detCotizacionVentas.findUnique({ 
+      where: { id },
+      include: {
+        cotizacionVentas: true,
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      }
+    });
     if (!det) throw new NotFoundError('DetCotizacionVentas no encontrado');
     return det;
   } catch (err) {
@@ -46,19 +63,52 @@ const obtenerPorId = async (id) => {
   }
 };
 
+const obtenerPorCotizacion = async (cotizacionVentasId) => {
+  try {
+    return await prisma.detCotizacionVentas.findMany({
+      where: { cotizacionVentasId },
+      include: {
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      },
+      orderBy: { item: 'asc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 const crear = async (data) => {
   try {
-    // Validar campos obligatorios
-    const obligatorios = [
-      'empresaId','cotizacionVentasId','productoId','clienteId','cantidad','precioUnitario','monedaId','movSalidaAlmacenId','centroCostoId'
-    ];
-    for (const campo of obligatorios) {
-      if (data[campo] === undefined || data[campo] === null) {
-        throw new ValidationError(`El campo obligatorio ${campo} no fue proporcionado.`);
-      }
+    if (!data.cotizacionVentasId || !data.item || !data.productoId || !data.cantidad || !data.precioUnitario || !data.precioUnitarioFinal || !data.centroCostoId) {
+      throw new ValidationError('Los campos obligatorios no pueden estar vacíos: cotizacionVentasId, item, productoId, cantidad, precioUnitario, precioUnitarioFinal, centroCostoId');
     }
-    await validarForaneas(data);
-    return await prisma.detCotizacionVentas.create({ data });
+    
+    await validarClavesForaneas(data);
+    
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: new Date(),
+      fechaActualizacion: new Date()
+    };
+    
+    return await prisma.detCotizacionVentas.create({ 
+      data: datosConAuditoria,
+      include: {
+        cotizacionVentas: true,
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -70,8 +120,32 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.detCotizacionVentas.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('DetCotizacionVentas no encontrado');
-    await validarForaneas({ ...existente, ...data });
-    return await prisma.detCotizacionVentas.update({ where: { id }, data });
+    
+    const claves = ['cotizacionVentasId', 'productoId', 'centroCostoId', 'movSalidaAlmacenId'];
+    if (claves.some(k => data[k] && data[k] !== existente[k])) {
+      await validarClavesForaneas({ ...existente, ...data });
+    }
+    
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: existente.fechaCreacion,
+      creadoPor: existente.creadoPor,
+      fechaActualizacion: new Date()
+    };
+    
+    return await prisma.detCotizacionVentas.update({ 
+      where: { id }, 
+      data: datosConAuditoria,
+      include: {
+        cotizacionVentas: true,
+        producto: {
+          include: {
+            familia: true,
+            unidadMedida: true
+          }
+        }
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -95,6 +169,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorCotizacion,
   crear,
   actualizar,
   eliminar

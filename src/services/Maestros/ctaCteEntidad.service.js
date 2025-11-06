@@ -1,49 +1,46 @@
 import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 
 /**
- * Servicio CRUD para VehiculoEntidad
+ * Servicio CRUD para CtaCteEntidad
  * Aplica validaciones de referencias y manejo de errores personalizado.
  * Documentado en español.
  */
 
 /**
- * Valida existencia de entidadComercialId y tipoVehiculoId.
+ * Valida existencia de entidadComercialId, bancoId y monedaId.
  * Lanza ValidationError según corresponda.
- * Valida unicidad de placa por entidad comercial.
- * @param {Object} data - Datos del vehículo
+ * @param {Object} data - Datos de la cuenta corriente
  * @param {number|null} excluirId - Si se actualiza, excluir el propio ID de la búsqueda
  */
-async function validarVehiculoEntidad(data, excluirId = null) {
+async function validarCtaCteEntidad(data, excluirId = null) {
   // Validar existencia de EntidadComercial
   if (data.entidadComercialId) {
     const existe = await prisma.entidadComercial.findUnique({ where: { id: data.entidadComercialId } });
     if (!existe) throw new ValidationError('Entidad comercial no existente.');
   }
-  // Validar existencia de TipoVehiculo
-  if (data.tipoVehiculoId) {
-    const existeTipo = await prisma.tipoVehiculo.findUnique({ where: { id: data.tipoVehiculoId } });
-    if (!existeTipo) throw new ValidationError('Tipo de vehículo no existente.');
+  // Validar existencia de Banco
+  if (data.bancoId) {
+    const existeBanco = await prisma.banco.findUnique({ where: { id: data.bancoId } });
+    if (!existeBanco) throw new ValidationError('Banco no existente.');
   }
-  // Validar unicidad de placa por entidad comercial
-  if (data.placa && data.entidadComercialId) {
-    const where = excluirId
-      ? { placa: data.placa, entidadComercialId: data.entidadComercialId, id: { not: excluirId } }
-      : { placa: data.placa, entidadComercialId: data.entidadComercialId };
-    const existePlaca = await prisma.vehiculoEntidad.findFirst({ where });
-    if (existePlaca) throw new ConflictError('Ya existe un vehículo con esa placa para la entidad comercial.');
+  // Validar existencia de Moneda
+  if (data.monedaId) {
+    const existeMoneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
+    if (!existeMoneda) throw new ValidationError('Moneda no existente.');
   }
 }
 
 /**
- * Lista todos los vehículos de entidades comerciales.
+ * Lista todas las cuentas corrientes de entidades comerciales.
  */
 const listar = async () => {
   try {
-    return await prisma.vehiculoEntidad.findMany({
+    return await prisma.ctaCteEntidad.findMany({
       include: {
         entidadComercial: true,
-        tipoVehiculo: true
+        banco: true,
+        moneda: true
       }
     });
   } catch (err) {
@@ -53,16 +50,20 @@ const listar = async () => {
 };
 
 /**
- * Obtiene un vehículo por ID (incluyendo entidad comercial y tipo de vehículo asociados).
+ * Obtiene una cuenta corriente por ID (incluyendo entidad comercial, banco y moneda asociados).
  */
 const obtenerPorId = async (id) => {
   try {
-    const vehiculo = await prisma.vehiculoEntidad.findUnique({
+    const cuenta = await prisma.ctaCteEntidad.findUnique({
       where: { id },
-      include: { entidadComercial: true, tipoVehiculo: true }
+      include: { 
+        entidadComercial: true,
+        banco: true,
+        moneda: true
+      }
     });
-    if (!vehiculo) throw new NotFoundError('Vehículo no encontrado');
-    return vehiculo;
+    if (!cuenta) throw new NotFoundError('Cuenta corriente no encontrada');
+    return cuenta;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -70,43 +71,44 @@ const obtenerPorId = async (id) => {
 };
 
 /**
- * Obtiene todos los vehículos de una entidad comercial específica.
+ * Obtiene todas las cuentas corrientes de una entidad comercial específica.
  */
 const obtenerPorEntidad = async (entidadComercialId) => {
   try {
-    const resultado = await prisma.vehiculoEntidad.findMany({
+    const resultado = await prisma.ctaCteEntidad.findMany({
       where: { entidadComercialId },
       include: {
         entidadComercial: true,
-        tipoVehiculo: true
+        banco: true,
+        moneda: true
       },
       orderBy: { id: 'desc' }
     });
     
-    // Consultar manualmente los datos de personal para cada vehículo
+    // Consultar manualmente los datos de personal para cada cuenta corriente
     const resultadoConPersonal = await Promise.all(
-      resultado.map(async (vehiculo) => {
+      resultado.map(async (cuenta) => {
         let personalCreador = null;
         let personalActualizador = null;
         
         // Consultar personal creador si existe
-        if (vehiculo.creadoPor) {
+        if (cuenta.creadoPor) {
           personalCreador = await prisma.personal.findUnique({
-            where: { id: vehiculo.creadoPor },
+            where: { id: cuenta.creadoPor },
             select: { id: true, nombres: true, apellidos: true }
           });
         }
         
         // Consultar personal actualizador si existe
-        if (vehiculo.actualizadoPor) {
+        if (cuenta.actualizadoPor) {
           personalActualizador = await prisma.personal.findUnique({
-            where: { id: vehiculo.actualizadoPor },
+            where: { id: cuenta.actualizadoPor },
             select: { id: true, nombres: true, apellidos: true }
           });
         }
         
         return {
-          ...vehiculo,
+          ...cuenta,
           personalCreador,
           personalActualizador
         };
@@ -122,11 +124,11 @@ const obtenerPorEntidad = async (entidadComercialId) => {
 };
 
 /**
- * Crea un vehículo validando referencias y unicidad.
+ * Crea una cuenta corriente validando referencias.
  */
 const crear = async (data) => {
   try {
-    await validarVehiculoEntidad(data);
+    await validarCtaCteEntidad(data);
     
     // Asegurar que las fechas de auditoría estén presentes
     const datosConAuditoria = {
@@ -135,22 +137,22 @@ const crear = async (data) => {
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
     
-    return await prisma.vehiculoEntidad.create({ data: datosConAuditoria });
+    return await prisma.ctaCteEntidad.create({ data: datosConAuditoria });
   } catch (err) {
-    if (err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
 };
 
 /**
- * Actualiza un vehículo existente, validando existencia, referencias y unicidad.
+ * Actualiza una cuenta corriente existente, validando existencia y referencias.
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.vehiculoEntidad.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Vehículo no encontrado');
-    await validarVehiculoEntidad(data, id);
+    const existente = await prisma.ctaCteEntidad.findUnique({ where: { id } });
+    if (!existente) throw new NotFoundError('Cuenta corriente no encontrada');
+    await validarCtaCteEntidad(data, id);
     
     // Asegurar que todos los campos de auditoría estén presentes
     const datosConAuditoria = {
@@ -162,22 +164,22 @@ const actualizar = async (id, data) => {
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
     
-    return await prisma.vehiculoEntidad.update({ where: { id }, data: datosConAuditoria });
+    return await prisma.ctaCteEntidad.update({ where: { id }, data: datosConAuditoria });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
 };
 
 /**
- * Elimina un vehículo por ID, validando existencia.
+ * Elimina una cuenta corriente por ID, validando existencia.
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.vehiculoEntidad.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Vehículo no encontrado');
-    await prisma.vehiculoEntidad.delete({ where: { id } });
+    const existente = await prisma.ctaCteEntidad.findUnique({ where: { id } });
+    if (!existente) throw new NotFoundError('Cuenta corriente no encontrada');
+    await prisma.ctaCteEntidad.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;

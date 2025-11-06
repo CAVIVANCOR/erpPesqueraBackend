@@ -28,6 +28,7 @@ import precioEntidadRoutes from './Maestros/precioEntidad.routes.js';
 import vehiculoEntidadRoutes from './Maestros/vehiculoEntidad.routes.js';
 import tipoVehiculoRoutes from './Maestros/tipoVehiculo.routes.js';
 import lineaCreditoEntidadRoutes from './Maestros/lineaCreditoEntidad.routes.js';
+import ctaCteEntidadRoutes from './Maestros/ctaCteEntidad.routes.js';
 import monedaRoutes from './Maestros/moneda.routes.js';
 import familiaProductoRoutes from './Maestros/familiaProducto.routes.js';
 import subfamiliaProductoRoutes from './Maestros/subfamiliaProducto.routes.js';
@@ -108,6 +109,10 @@ import detMovsEntregaRendirPVentasRoutes from '../routes/Ventas/detMovsEntregaRe
 import preFacturaRoutes from '../routes/Ventas/preFactura.routes.js';
 import incotermRoutes from '../routes/Ventas/incoterm.routes.js';
 import detallePreFacturaRoutes from '../routes/Ventas/detallePreFactura.routes.js';
+import docRequeridaVentasRoutes from '../routes/Ventas/docRequeridaVentas.routes.js';
+import requisitoDocPorPaisRoutes from '../routes/Ventas/requisitoDocPorPais.routes.js';
+import costoExportacionPorIncotermRoutes from '../routes/Ventas/costoExportacionPorIncoterm.routes.js';
+import costosExportacionCotizacionRoutes from '../routes/Ventas/costosExportacionCotizacion.routes.js';
 import temporadaPescaRoutes from '../routes/Pesca/temporadaPesca.routes.js';
 import temporadaPescaResolucionRoutes from '../routes/Pesca/temporadaPesca.resolucion.routes.js';
 import novedadPescaConsumoResolucionRoutes from '../routes/Pesca/novedadPescaConsumo.resolucion.routes.js';
@@ -159,6 +164,7 @@ import cotizacionProveedorRoutes from './Compras/cotizacionProveedor.routes.js';
 import requerimientoCompraImpresionRoutes from '../routes/Compras/requerimientoCompraImpresion.routes.js';
 import ordenCompraImpresionRoutes from '../routes/Compras/ordenCompraImpresion.routes.js';
 import movimientoAlmacenImpresionRoutes from '../routes/Almacen/movimientoAlmacenImpresion.routes.js';
+import cotizacionVentasImpresionRoutes from '../routes/Ventas/cotizacionVentasImpresion.routes.js';
 
 
 
@@ -236,6 +242,8 @@ router.use('/vehiculos-entidad', vehiculoEntidadRoutes);
 router.use('/tipos-vehiculo', tipoVehiculoRoutes);
 // Rutas para LineaCreditoEntidad
 router.use('/lineas-credito-entidad', lineaCreditoEntidadRoutes);
+// Rutas para CtaCteEntidad
+router.use('/ctas-cte-entidad', ctaCteEntidadRoutes);
 // Rutas para Moneda
 router.use('/monedas', monedaRoutes);
 // Rutas para Producto
@@ -367,6 +375,8 @@ router.use('/entrega-a-rendir-p-compras', entregaARendirPComprasRoutes);
 router.use('/det-movs-entrega-rendir-p-compras', detMovsEntregaRendirPComprasRoutes);
 // Rutas para CotizacionVentas
 router.use('/cotizaciones-ventas', cotizacionVentasRoutes);
+// Rutas para CotizacionVentas - Impresión (upload y serving de PDFs)
+router.use('/cotizacion-ventas', cotizacionVentasImpresionRoutes);
 // Rutas para DetCotizacionVentas
 router.use('/detalles-cotizacion-ventas', detCotizacionVentasRoutes);
 // Rutas para TipoProducto
@@ -393,6 +403,14 @@ router.use('/pre-facturas', preFacturaRoutes);
 router.use('/incoterms', incotermRoutes);
 // Rutas para DetallePreFactura
 router.use('/detalles-pre-factura', detallePreFacturaRoutes);
+// Rutas para DocRequeridaVentas
+router.use('/docs-requeridas-ventas', docRequeridaVentasRoutes);
+// Rutas para RequisitoDocPorPais
+router.use('/requisitos-doc-por-pais', requisitoDocPorPaisRoutes);
+// Rutas para CostoExportacionPorIncoterm
+router.use('/costos-exportacion-por-incoterm', costoExportacionPorIncotermRoutes);
+// Rutas para CostosExportacionCotizacion
+router.use('/costos-exportacion-cotizacion', costosExportacionCotizacionRoutes);
 // Rutas para TemporadaPesca
 router.use('/pesca/temporadas-pesca', temporadaPescaRoutes);
 // Rutas para TemporadaPescaResolucion

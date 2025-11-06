@@ -52,3 +52,22 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Obtiene series de documentos filtradas
+ * Query params: empresaId, tipoDocumentoId
+ */
+export async function obtenerSeriesDoc(req, res, next) {
+  try {
+    const { empresaId, tipoDocumentoId } = req.query;
+    
+    const series = await cotizacionVentasService.obtenerSeriesDoc(
+      empresaId,
+      tipoDocumentoId
+    );
+    
+    res.json(toJSONBigInt(series));
+  } catch (err) {
+    next(err);
+  }
+}

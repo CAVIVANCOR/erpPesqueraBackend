@@ -3,6 +3,9 @@ import * as cotizacionVentasController from '../../controllers/Ventas/cotizacion
 
 const router = Router();
 
+// Rutas específicas (DEBEN IR ANTES de las rutas con parámetros)
+router.get('/series-doc', cotizacionVentasController.obtenerSeriesDoc);
+
 // Rutas CRUD para CotizacionVentas
 router.get('/', cotizacionVentasController.listar);
 router.get('/:id', cotizacionVentasController.obtenerPorId);

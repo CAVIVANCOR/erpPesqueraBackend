@@ -54,7 +54,7 @@ async function validarEntidadComercial(data, excluirId = null) {
  */
 const listar = async () => {
   try {
-    return await prisma.entidadComercial.findMany({
+    const entidades = await prisma.entidadComercial.findMany({
       include: {
         tipoDocumento: true,
         tipoEntidad: true,
@@ -71,6 +71,33 @@ const listar = async () => {
         lineasCredito: true
       }
     });
+
+    // Agregar manualmente las relaciones con Personal para auditoría
+    const entidadesConAuditoria = await Promise.all(
+      entidades.map(async (entidad) => {
+        const personalCreador = entidad.creadoPor
+          ? await prisma.personal.findUnique({
+              where: { id: entidad.creadoPor },
+              select: { id: true, nombres: true, apellidos: true }
+            })
+          : null;
+
+        const personalActualizador = entidad.actualizadoPor
+          ? await prisma.personal.findUnique({
+              where: { id: entidad.actualizadoPor },
+              select: { id: true, nombres: true, apellidos: true }
+            })
+          : null;
+
+        return {
+          ...entidad,
+          personalCreador,
+          personalActualizador
+        };
+      })
+    );
+
+    return entidadesConAuditoria;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -101,7 +128,27 @@ const obtenerPorId = async (id) => {
       }
     });
     if (!entidad) throw new NotFoundError('Entidad comercial no encontrada');
-    return entidad;
+
+    // Agregar manualmente las relaciones con Personal para auditoría
+    const personalCreador = entidad.creadoPor
+      ? await prisma.personal.findUnique({
+          where: { id: entidad.creadoPor },
+          select: { id: true, nombres: true, apellidos: true }
+        })
+      : null;
+
+    const personalActualizador = entidad.actualizadoPor
+      ? await prisma.personal.findUnique({
+          where: { id: entidad.actualizadoPor },
+          select: { id: true, nombres: true, apellidos: true }
+        })
+      : null;
+
+    return {
+      ...entidad,
+      personalCreador,
+      personalActualizador
+    };
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -114,12 +161,41 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarEntidadComercial(data);
-    // Agregar actualizadoEn con timestamp actual
-    const dataConFechas = {
+    
+    // Preparar datos con campos de auditoría
+    const dataConAuditoria = {
       ...data,
-      actualizadoEn: new Date()
+      // Si creadoEn no viene o es null, asignar fecha actual
+      creadoEn: data.creadoEn || new Date(),
+      // Si actualizadoEn no viene o es null, asignar fecha actual
+      actualizadoEn: data.actualizadoEn || new Date(),
+      // creadoPor y actualizadoPor vienen del frontend, pero validar que sean números o null
+      creadoPor: data.creadoPor ? Number(data.creadoPor) : null,
+      actualizadoPor: data.actualizadoPor ? Number(data.actualizadoPor) : null
     };
-    return await prisma.entidadComercial.create({ data: dataConFechas });
+
+    const entidadCreada = await prisma.entidadComercial.create({ data: dataConAuditoria });
+
+    // Agregar manualmente las relaciones con Personal para auditoría
+    const personalCreador = entidadCreada.creadoPor
+      ? await prisma.personal.findUnique({
+          where: { id: entidadCreada.creadoPor },
+          select: { id: true, nombres: true, apellidos: true }
+        })
+      : null;
+
+    const personalActualizador = entidadCreada.actualizadoPor
+      ? await prisma.personal.findUnique({
+          where: { id: entidadCreada.actualizadoPor },
+          select: { id: true, nombres: true, apellidos: true }
+        })
+      : null;
+
+    return {
+      ...entidadCreada,
+      personalCreador,
+      personalActualizador
+    };
   } catch (err) {
     if (err instanceof ConflictError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -135,7 +211,45 @@ const actualizar = async (id, data) => {
     const existente = await prisma.entidadComercial.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Entidad comercial no encontrada');
     await validarEntidadComercial(data, id);
-    return await prisma.entidadComercial.update({ where: { id }, data });
+    
+    // Preparar datos con campos de auditoría
+    const dataConAuditoria = {
+      ...data,
+      // Si creadoEn no viene o es null, mantener el existente o asignar fecha actual
+      creadoEn: data.creadoEn || existente.creadoEn || new Date(),
+      // Siempre actualizar actualizadoEn con la fecha actual
+      actualizadoEn: new Date(),
+      // Si creadoPor no viene o es null, mantener el existente
+      creadoPor: data.creadoPor ? Number(data.creadoPor) : existente.creadoPor,
+      // Siempre actualizar actualizadoPor
+      actualizadoPor: data.actualizadoPor ? Number(data.actualizadoPor) : null
+    };
+
+    const entidadActualizada = await prisma.entidadComercial.update({ 
+      where: { id }, 
+      data: dataConAuditoria 
+    });
+
+    // Agregar manualmente las relaciones con Personal para auditoría
+    const personalCreador = entidadActualizada.creadoPor
+      ? await prisma.personal.findUnique({
+          where: { id: entidadActualizada.creadoPor },
+          select: { id: true, nombres: true, apellidos: true }
+        })
+      : null;
+
+    const personalActualizador = entidadActualizada.actualizadoPor
+      ? await prisma.personal.findUnique({
+          where: { id: entidadActualizada.actualizadoPor },
+          select: { id: true, nombres: true, apellidos: true }
+        })
+      : null;
+
+    return {
+      ...entidadActualizada,
+      personalCreador,
+      personalActualizador
+    };
   } catch (err) {
     if (err instanceof ConflictError || err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

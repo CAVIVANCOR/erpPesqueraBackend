@@ -15,43 +15,60 @@ async function validarUnicidadCodigo(codigo, id = null) {
 
 async function validarClavesForaneas(data) {
   const checks = [
-    prisma.empresa ? prisma.empresa.findUnique({ where: { id: data.empresaId } }) : Promise.resolve(true),
+    prisma.empresa.findUnique({ where: { id: data.empresaId } }),
     prisma.entidadComercial.findUnique({ where: { id: data.clienteId } }),
-    prisma.direccion ? prisma.direccion.findUnique({ where: { id: data.dirFiscalId } }) : Promise.resolve(true),
-    prisma.direccion ? prisma.direccion.findUnique({ where: { id: data.dirEntregaId } }) : Promise.resolve(true),
-    prisma.movimientoAlmacen ? (data.movSalidaAlmacenId ? prisma.movimientoAlmacen.findUnique({ where: { id: data.movSalidaAlmacenId } }) : Promise.resolve(true)) : Promise.resolve(true),
-    prisma.pais ? (data.paisDestinoId ? prisma.pais.findUnique({ where: { id: data.paisDestinoId } }) : Promise.resolve(true)) : Promise.resolve(true),
-    prisma.puerto ? (data.puertoCargaId ? prisma.puerto.findUnique({ where: { id: data.puertoCargaId } }) : Promise.resolve(true)) : Promise.resolve(true),
-    prisma.puerto ? (data.puertoDescargaId ? prisma.puerto.findUnique({ where: { id: data.puertoDescargaId } }) : Promise.resolve(true)) : Promise.resolve(true),
-    prisma.incoterm ? (data.incotermId ? prisma.incoterm.findUnique({ where: { id: data.incotermId } }) : Promise.resolve(true)) : Promise.resolve(true),
-    prisma.entidadComercial ? (data.agenteAduanaId ? prisma.entidadComercial.findUnique({ where: { id: data.agenteAduanaId } }) : Promise.resolve(true)) : Promise.resolve(true),
-    prisma.banco ? (data.bancoId ? prisma.banco.findUnique({ where: { id: data.bancoId } }) : Promise.resolve(true)) : Promise.resolve(true),
-    prisma.centroCosto ? (data.centroCostoId ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }) : Promise.resolve(true)) : Promise.resolve(true),
-    prisma.estado.findUnique({ where: { id: data.estadoId } }),
-    prisma.moneda ? (data.monedaId ? prisma.moneda.findUnique({ where: { id: data.monedaId } }) : Promise.resolve(true)) : Promise.resolve(true),
-    prisma.persona ? (data.personaRespTransfErpContable ? prisma.persona.findUnique({ where: { id: data.personaRespTransfErpContable } }) : Promise.resolve(true)) : Promise.resolve(true)
+    prisma.tipoDocumento.findUnique({ where: { id: data.tipoDocumentoId } }),
+    prisma.formaPago.findUnique({ where: { id: data.formaPagoId } }),
+    prisma.estadoMultiFuncion.findUnique({ where: { id: data.estadoId } }),
+    data.serieDocId ? prisma.serieDoc.findUnique({ where: { id: data.serieDocId } }) : Promise.resolve(true),
+    data.cotizacionVentasOrigenId ? prisma.cotizacionVentas.findUnique({ where: { id: data.cotizacionVentasOrigenId } }) : Promise.resolve(true),
+    data.movSalidaAlmacenId ? prisma.movimientoAlmacen.findUnique({ where: { id: data.movSalidaAlmacenId } }) : Promise.resolve(true),
+    data.paisDestinoId ? prisma.pais.findUnique({ where: { id: data.paisDestinoId } }) : Promise.resolve(true),
+    data.puertoCargaId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoCargaId } }) : Promise.resolve(true),
+    data.puertoDescargaId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoDescargaId } }) : Promise.resolve(true),
+    data.incotermId ? prisma.incoterm.findUnique({ where: { id: data.incotermId } }) : Promise.resolve(true),
+    data.agenteAduanaId ? prisma.entidadComercial.findUnique({ where: { id: data.agenteAduanaId } }) : Promise.resolve(true),
+    data.bancoId ? prisma.banco.findUnique({ where: { id: data.bancoId } }) : Promise.resolve(true),
+    data.monedaId ? prisma.moneda.findUnique({ where: { id: data.monedaId } }) : Promise.resolve(true),
+    data.centroCostoId ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }) : Promise.resolve(true)
   ];
-  const [empresa, cliente, dirFiscal, dirEntrega, movSalida, paisDestino, puertoCarga, puertoDescarga, incoterm, agenteAduana, banco, centroCosto, estado, moneda, personaResp] = await Promise.all(checks);
-  if (prisma.empresa && !empresa) throw new ValidationError('El empresaId no existe.');
+  const [empresa, cliente, tipoDoc, formaPago, estado, serieDoc, cotizacion, movSalida, paisDestino, puertoCarga, puertoDescarga, incoterm, agenteAduana, banco, moneda, centroCosto] = await Promise.all(checks);
+  
+  if (!empresa) throw new ValidationError('El empresaId no existe.');
   if (!cliente) throw new ValidationError('El clienteId no existe.');
-  if (prisma.direccion && !dirFiscal) throw new ValidationError('El dirFiscalId no existe.');
-  if (prisma.direccion && !dirEntrega) throw new ValidationError('El dirEntregaId no existe.');
-  if (data.movSalidaAlmacenId && prisma.movimientoAlmacen && !movSalida) throw new ValidationError('El movSalidaAlmacenId no existe.');
-  if (data.paisDestinoId && prisma.pais && !paisDestino) throw new ValidationError('El paisDestinoId no existe.');
-  if (data.puertoCargaId && prisma.puerto && !puertoCarga) throw new ValidationError('El puertoCargaId no existe.');
-  if (data.puertoDescargaId && prisma.puerto && !puertoDescarga) throw new ValidationError('El puertoDescargaId no existe.');
-  if (data.incotermId && prisma.incoterm && !incoterm) throw new ValidationError('El incotermId no existe.');
-  if (data.agenteAduanaId && prisma.entidadComercial && !agenteAduana) throw new ValidationError('El agenteAduanaId no existe.');
-  if (data.bancoId && prisma.banco && !banco) throw new ValidationError('El bancoId no existe.');
-  if (data.centroCostoId && prisma.centroCosto && !centroCosto) throw new ValidationError('El centroCostoId no existe.');
+  if (!tipoDoc) throw new ValidationError('El tipoDocumentoId no existe.');
+  if (!formaPago) throw new ValidationError('El formaPagoId no existe.');
   if (!estado) throw new ValidationError('El estadoId no existe.');
-  if (data.monedaId && prisma.moneda && !moneda) throw new ValidationError('El monedaId no existe.');
-  if (data.personaRespTransfErpContable && prisma.persona && !personaResp) throw new ValidationError('El personaRespTransfErpContable no existe.');
+  if (data.serieDocId && !serieDoc) throw new ValidationError('El serieDocId no existe.');
+  if (data.cotizacionVentasOrigenId && !cotizacion) throw new ValidationError('El cotizacionVentasOrigenId no existe.');
+  if (data.movSalidaAlmacenId && !movSalida) throw new ValidationError('El movSalidaAlmacenId no existe.');
+  if (data.paisDestinoId && !paisDestino) throw new ValidationError('El paisDestinoId no existe.');
+  if (data.puertoCargaId && !puertoCarga) throw new ValidationError('El puertoCargaId no existe.');
+  if (data.puertoDescargaId && !puertoDescarga) throw new ValidationError('El puertoDescargaId no existe.');
+  if (data.incotermId && !incoterm) throw new ValidationError('El incotermId no existe.');
+  if (data.agenteAduanaId && !agenteAduana) throw new ValidationError('El agenteAduanaId no existe.');
+  if (data.bancoId && !banco) throw new ValidationError('El bancoId no existe.');
+  if (data.monedaId && !moneda) throw new ValidationError('El monedaId no existe.');
+  if (data.centroCostoId && !centroCosto) throw new ValidationError('El centroCostoId no existe.');
 }
 
 const listar = async () => {
   try {
-    return await prisma.preFactura.findMany();
+    return await prisma.preFactura.findMany({
+      include: {
+        empresa: true,
+        cliente: true,
+        tipoDocumento: true,
+        moneda: true,
+        incoterm: true,
+        detalles: {
+          include: {
+            producto: true
+          }
+        }
+      },
+      orderBy: { fechaDocumento: 'desc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -60,7 +77,28 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const pf = await prisma.preFactura.findUnique({ where: { id } });
+    const pf = await prisma.preFactura.findUnique({ 
+      where: { id },
+      include: {
+        empresa: true,
+        cliente: true,
+        tipoDocumento: true,
+        moneda: true,
+        incoterm: true,
+        cotizacionVentasOrigen: true,
+        detalles: {
+          include: {
+            producto: {
+              include: {
+                familia: true,
+                unidadMedida: true
+              }
+            }
+          },
+          orderBy: { item: 'asc' }
+        }
+      }
+    });
     if (!pf) throw new NotFoundError('PreFactura no encontrada');
     return pf;
   } catch (err) {
@@ -69,14 +107,73 @@ const obtenerPorId = async (id) => {
   }
 };
 
+const obtenerPorCliente = async (clienteId) => {
+  try {
+    return await prisma.preFactura.findMany({
+      where: { clienteId },
+      include: {
+        empresa: true,
+        tipoDocumento: true,
+        moneda: true,
+        incoterm: true
+      },
+      orderBy: { fechaDocumento: 'desc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const obtenerPorCotizacion = async (cotizacionVentasOrigenId) => {
+  try {
+    return await prisma.preFactura.findMany({
+      where: { cotizacionVentasOrigenId },
+      include: {
+        empresa: true,
+        cliente: true,
+        tipoDocumento: true,
+        moneda: true,
+        incoterm: true,
+        detalles: {
+          include: {
+            producto: true
+          }
+        }
+      },
+      orderBy: { fechaDocumento: 'desc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 const crear = async (data) => {
   try {
-    if (!data.codigo || !data.empresaId || !data.clienteId || !data.dirFiscalId || !data.dirEntregaId || !data.estadoId) {
-      throw new ValidationError('Los campos obligatorios no pueden estar vacíos.');
+    if (!data.codigo || !data.empresaId || !data.clienteId || !data.tipoDocumentoId || !data.formaPagoId || !data.estadoId) {
+      throw new ValidationError('Los campos obligatorios no pueden estar vacíos: codigo, empresaId, clienteId, tipoDocumentoId, formaPagoId, estadoId');
     }
     await validarUnicidadCodigo(data.codigo);
     await validarClavesForaneas(data);
-    return await prisma.preFactura.create({ data });
+    
+    // Asegurar campos de auditoría
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.preFactura.create({ 
+      data: datosConAuditoria,
+      include: {
+        empresa: true,
+        cliente: true,
+        tipoDocumento: true,
+        moneda: true,
+        incoterm: true
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -92,11 +189,30 @@ const actualizar = async (id, data) => {
       await validarUnicidadCodigo(data.codigo, id);
     }
     // Validar claves foráneas si cambian
-    const claves = ['empresaId','clienteId','dirFiscalId','dirEntregaId','movSalidaAlmacenId','paisDestinoId','puertoCargaId','puertoDescargaId','incotermId','agenteAduanaId','bancoId','centroCostoId','estadoId','monedaId','personaRespTransfErpContable'];
+    const claves = ['empresaId','clienteId','tipoDocumentoId','formaPagoId','estadoId','serieDocId','cotizacionVentasOrigenId','movSalidaAlmacenId','paisDestinoId','puertoCargaId','puertoDescargaId','incotermId','agenteAduanaId','bancoId','monedaId','centroCostoId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.preFactura.update({ where: { id }, data });
+    
+    // Asegurar campos de auditoría
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      creadoPor: data.creadoPor || existente.creadoPor || null,
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.preFactura.update({ 
+      where: { id }, 
+      data: datosConAuditoria,
+      include: {
+        empresa: true,
+        cliente: true,
+        tipoDocumento: true,
+        moneda: true,
+        incoterm: true
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -126,6 +242,8 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorCliente,
+  obtenerPorCotizacion,
   crear,
   actualizar,
   eliminar

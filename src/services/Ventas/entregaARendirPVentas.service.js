@@ -20,7 +20,22 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.entregaARendirPVentas.findMany();
+    return await prisma.entregaARendirPVentas.findMany({
+      include: {
+        cotizacionVentas: true,
+        movimientos: {
+          include: {
+            tipoMovimiento: true,
+            producto: true,
+            moneda: true,
+            entidadComercial: true,
+            tipoDocumento: true
+          },
+          orderBy: { fechaMovimiento: 'desc' }
+        }
+      },
+      orderBy: { fechaCreacion: 'desc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -29,8 +44,48 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const entrega = await prisma.entregaARendirPVentas.findUnique({ where: { id } });
+    const entrega = await prisma.entregaARendirPVentas.findUnique({ 
+      where: { id },
+      include: {
+        cotizacionVentas: true,
+        movimientos: {
+          include: {
+            tipoMovimiento: true,
+            producto: true,
+            moneda: true,
+            entidadComercial: true,
+            tipoDocumento: true
+          },
+          orderBy: { fechaMovimiento: 'desc' }
+        }
+      }
+    });
     if (!entrega) throw new NotFoundError('EntregaARendirPVentas no encontrada');
+    return entrega;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+const obtenerPorCotizacion = async (cotizacionVentasId) => {
+  try {
+    const entrega = await prisma.entregaARendirPVentas.findUnique({ 
+      where: { cotizacionVentasId },
+      include: {
+        cotizacionVentas: true,
+        movimientos: {
+          include: {
+            tipoMovimiento: true,
+            producto: true,
+            moneda: true,
+            entidadComercial: true,
+            tipoDocumento: true
+          },
+          orderBy: { fechaMovimiento: 'desc' }
+        }
+      }
+    });
     return entrega;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -44,7 +99,21 @@ const crear = async (data) => {
       throw new ValidationError('cotizacionVentasId, respEntregaRendirId y centroCostoId son obligatorios.');
     }
     await validarClavesForaneas(data);
-    return await prisma.entregaARendirPVentas.create({ data });
+    
+    // Asegurar campos de auditoría
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.entregaARendirPVentas.create({ 
+      data: datosConAuditoria,
+      include: {
+        cotizacionVentas: true,
+        movimientos: true
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -61,7 +130,23 @@ const actualizar = async (id, data) => {
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.entregaARendirPVentas.update({ where: { id }, data });
+    
+    // Asegurar campos de auditoría
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      creadoPor: data.creadoPor || existente.creadoPor || null,
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.entregaARendirPVentas.update({ 
+      where: { id }, 
+      data: datosConAuditoria,
+      include: {
+        cotizacionVentas: true,
+        movimientos: true
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -91,6 +176,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorCotizacion,
   crear,
   actualizar,
   eliminar

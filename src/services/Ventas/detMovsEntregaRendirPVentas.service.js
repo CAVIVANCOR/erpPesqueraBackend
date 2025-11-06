@@ -22,7 +22,17 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.detMovsEntregaRendirPVentas.findMany();
+    return await prisma.detMovsEntregaRendirPVentas.findMany({
+      include: {
+        entregaARendirPVentas: true,
+        tipoMovimiento: true,
+        producto: true,
+        moneda: true,
+        entidadComercial: true,
+        tipoDocumento: true
+      },
+      orderBy: { fechaMovimiento: 'desc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -31,7 +41,17 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const det = await prisma.detMovsEntregaRendirPVentas.findUnique({ where: { id } });
+    const det = await prisma.detMovsEntregaRendirPVentas.findUnique({ 
+      where: { id },
+      include: {
+        entregaARendirPVentas: true,
+        tipoMovimiento: true,
+        producto: true,
+        moneda: true,
+        entidadComercial: true,
+        tipoDocumento: true
+      }
+    });
     if (!det) throw new NotFoundError('DetMovsEntregaRendirPVentas no encontrado');
     return det;
   } catch (err) {
@@ -40,13 +60,50 @@ const obtenerPorId = async (id) => {
   }
 };
 
+const obtenerPorEntrega = async (entregaARendirPVentasId) => {
+  try {
+    return await prisma.detMovsEntregaRendirPVentas.findMany({
+      where: { entregaARendirPVentasId },
+      include: {
+        tipoMovimiento: true,
+        producto: true,
+        moneda: true,
+        entidadComercial: true,
+        tipoDocumento: true
+      },
+      orderBy: { fechaMovimiento: 'desc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 const crear = async (data) => {
   try {
-    if (!data.entregaARendirPVentasId || !data.responsableId || !data.fechaMovimiento || !data.tipoMovimientoId || !data.centroCostoId || data.monto === undefined) {
+    if (!data.entregaARendirPVentasId || !data.responsableId || !data.fechaMovimiento || !data.tipoMovimientoId || !data.centroCostoId || data.monto === undefined || !data.monedaId) {
       throw new ValidationError('Todos los campos obligatorios deben estar presentes.');
     }
     await validarClavesForaneas(data);
-    return await prisma.detMovsEntregaRendirPVentas.create({ data });
+    
+    // Asegurar campos de auditoría
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.detMovsEntregaRendirPVentas.create({ 
+      data: datosConAuditoria,
+      include: {
+        entregaARendirPVentas: true,
+        tipoMovimiento: true,
+        producto: true,
+        moneda: true,
+        entidadComercial: true,
+        tipoDocumento: true
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -63,7 +120,27 @@ const actualizar = async (id, data) => {
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.detMovsEntregaRendirPVentas.update({ where: { id }, data });
+    
+    // Asegurar campos de auditoría
+    const datosConAuditoria = {
+      ...data,
+      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      creadoPor: data.creadoPor || existente.creadoPor || null,
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.detMovsEntregaRendirPVentas.update({ 
+      where: { id }, 
+      data: datosConAuditoria,
+      include: {
+        entregaARendirPVentas: true,
+        tipoMovimiento: true,
+        producto: true,
+        moneda: true,
+        entidadComercial: true,
+        tipoDocumento: true
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -87,6 +164,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerPorEntrega,
   crear,
   actualizar,
   eliminar
