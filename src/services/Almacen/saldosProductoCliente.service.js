@@ -211,15 +211,6 @@ const listarConFiltros = async (filtros = {}) => {
   try {
     const where = {};
     
-    // DEBUG: Ver filtros recibidos (convertir BigInt a string para el log)
-    console.log('🔍 Filtros recibidos en listarConFiltros:', {
-      ...filtros,
-      empresaId: filtros.empresaId?.toString(),
-      almacenId: filtros.almacenId?.toString(),
-      productoId: filtros.productoId?.toString(),
-      clienteId: filtros.clienteId?.toString(),
-    });
-    
     // Aplicar filtros
     if (filtros.empresaId !== undefined) where.empresaId = filtros.empresaId;
     if (filtros.almacenId !== undefined) where.almacenId = filtros.almacenId;
@@ -231,15 +222,6 @@ const listarConFiltros = async (filtros = {}) => {
     if (filtros.soloConSaldo) {
       where.saldoCantidad = { gt: 0 };
     }
-    
-    // DEBUG: Ver query final (convertir BigInt a string)
-    console.log('📊 Query WHERE final:', {
-      ...where,
-      empresaId: where.empresaId?.toString(),
-      almacenId: where.almacenId?.toString(),
-      productoId: where.productoId?.toString(),
-      clienteId: where.clienteId?.toString(),
-    });
     
     const saldos = await prisma.saldosProductoCliente.findMany({
       where,

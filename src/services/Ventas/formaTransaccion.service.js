@@ -3,7 +3,7 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Servicio CRUD para FormaTransaccion
- * Aplica validación de unicidad y prevención de borrado si tiene cotizaciones asociadas.
+ * Valida unicidad de nombre y previene borrado si tiene cotizaciones asociadas.
  * Documentado en español.
  */
 
@@ -15,7 +15,10 @@ async function validarUnicidadNombre(nombre, id = null) {
 
 const listar = async () => {
   try {
-    return await prisma.formaTransaccion.findMany();
+    return await prisma.formaTransaccion.findMany({
+      where: { activo: true },
+      orderBy: { nombre: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -35,7 +38,9 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    if (!data.nombre) throw new ValidationError('El campo nombre es obligatorio.');
+    if (!data.nombre) {
+      throw new ValidationError('El campo nombre es obligatorio.');
+    }
     await validarUnicidadNombre(data.nombre);
     return await prisma.formaTransaccion.create({ data });
   } catch (err) {
@@ -64,12 +69,15 @@ const eliminar = async (id) => {
   try {
     const existente = await prisma.formaTransaccion.findUnique({
       where: { id },
-      include: { cotizaciones: true, cotizacionesCompras: true }
+      include: { cotizaciones: true }
     });
     if (!existente) throw new NotFoundError('FormaTransaccion no encontrada');
-    if ((existente.cotizaciones && existente.cotizaciones.length > 0) || (existente.cotizacionesCompras && existente.cotizacionesCompras.length > 0)) {
-      throw new ConflictError('No se puede eliminar la forma de transacción porque tiene cotizaciones asociadas.');
+    
+    // Validar que no tenga registros asociados
+    if (existente.cotizaciones && existente.cotizaciones.length > 0) {
+      throw new ConflictError('No se puede eliminar porque tiene cotizaciones asociadas.');
     }
+    
     await prisma.formaTransaccion.delete({ where: { id } });
     return true;
   } catch (err) {

@@ -26,7 +26,29 @@ export async function obtenerPorId(req, res, next) {
 
 export async function crear(req, res, next) {
   try {
-    const nuevo = await cotizacionVentasService.crear(req.body);
+    const { body } = req;
+    const camposFaltantes = [];
+
+    // Validar campos obligatorios
+    if (!body.empresaId) camposFaltantes.push('empresaId');
+    if (!body.tipoDocumentoId) camposFaltantes.push('tipoDocumentoId');
+    if (!body.serieDocId) camposFaltantes.push('serieDocId');
+    if (!body.fechaDocumento) camposFaltantes.push('fechaDocumento');
+    if (!body.clienteId) camposFaltantes.push('clienteId');
+    if (!body.tipoProductoId) camposFaltantes.push('tipoProductoId');
+    if (!body.formaPagoId) camposFaltantes.push('formaPagoId');
+    if (!body.monedaId) camposFaltantes.push('monedaId');
+    if (!body.estadoId) camposFaltantes.push('estadoId');
+
+    if (camposFaltantes.length > 0) {
+      return res.status(400).json({
+        error: 'Campos obligatorios faltantes',
+        mensaje: `Los siguientes campos son obligatorios: ${camposFaltantes.join(', ')}`,
+        camposFaltantes
+      });
+    }
+
+    const nuevo = await cotizacionVentasService.crear(body);
     res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
     next(err);

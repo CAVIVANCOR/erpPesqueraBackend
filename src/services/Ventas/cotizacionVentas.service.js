@@ -49,6 +49,7 @@ const listar = async () => {
         empresa: true,
         cliente: true,
         tipoDocumento: true,
+        serieDoc: true,
         moneda: true,
         formaPago: true,
         incoterms: true,
@@ -84,6 +85,7 @@ const obtenerPorId = async (id) => {
         empresa: true,
         cliente: true,
         tipoDocumento: true,
+        serieDoc: true,
         moneda: true,
         formaPago: true,
         incoterms: true,
@@ -170,45 +172,114 @@ const crear = async (data) => {
     if (!data.empresaId || !data.clienteId || !data.tipoDocumentoId || !data.monedaId || !data.formaPagoId) {
       throw new ValidationError('Faltan campos obligatorios: empresaId, clienteId, tipoDocumentoId, monedaId, formaPagoId');
     }
-
-    // Generar código único con versión
-    if (!data.codigo) {
-      const version = data.version || 1;
-      data.codigo = await generarCodigoCotizacion(data.empresaId, version);
+    
+    if (!data.serieDocId) {
+      throw new ValidationError('El campo serieDocId es obligatorio.');
     }
 
-    // Validar existencia de empresa
-    const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
-    if (!empresa) throw new ValidationError('Empresa no existente.');
-
-    // Validar existencia de cliente
-    const cliente = await prisma.entidadComercial.findUnique({ where: { id: data.clienteId } });
-    if (!cliente) throw new ValidationError('Cliente no existente.');
-
-    // Validar Incoterm si se proporciona
-    if (data.incotermsId) {
-      const incoterm = await prisma.incoterm.findUnique({ where: { id: data.incotermsId } });
-      if (!incoterm) throw new ValidationError('Incoterm no existente.');
-    }
-
-    // Asegurar campos de auditoría
-    const datosConAuditoria = {
-      ...data,
-      version: data.version || 1, // Asegurar que siempre tenga versión
-      fechaCreacion: data.fechaCreacion || new Date(),
-      fechaActualizacion: data.fechaActualizacion || new Date(),
-    };
-
-    return await prisma.cotizacionVentas.create({
-      data: datosConAuditoria,
-      include: {
-        empresa: true,
-        cliente: true,
-        tipoDocumento: true,
-        moneda: true,
-        formaPago: true,
-        incoterms: true
+    // Usar transacción para generar número y actualizar correlativo atómicamente
+    return await prisma.$transaction(async (tx) => {
+      // 1. Generar código único con versión
+      let codigo = data.codigo;
+      if (!codigo) {
+        const version = data.version || 1;
+        codigo = await generarCodigoCotizacion(data.empresaId, version);
       }
+
+      // 2. Validar existencia de empresa
+      const empresa = await tx.empresa.findUnique({ where: { id: data.empresaId } });
+      if (!empresa) throw new ValidationError('Empresa no existente.');
+
+      // 3. Validar existencia de cliente
+      const cliente = await tx.entidadComercial.findUnique({ where: { id: data.clienteId } });
+      if (!cliente) throw new ValidationError('Cliente no existente.');
+
+      // 4. Validar Incoterm si se proporciona
+      if (data.incotermsId) {
+        const incoterm = await tx.incoterm.findUnique({ where: { id: data.incotermsId } });
+        if (!incoterm) throw new ValidationError('Incoterm no existente.');
+      }
+
+      // 5. Obtener la serie seleccionada
+      const serie = await tx.serieDoc.findUnique({
+        where: { id: BigInt(data.serieDocId) }
+      });
+      
+      if (!serie) {
+        throw new ValidationError('Serie de documento no encontrada.');
+      }
+      
+      // 6. Calcular nuevo correlativo
+      const nuevoCorrelativo = Number(serie.correlativo) + 1;
+      
+      // 7. Generar números con formato
+      const numSerie = String(serie.serie).padStart(serie.numCerosIzqSerie, '0');
+      const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, '0');
+      const numeroDocumento = `${numSerie}-${numCorre}`;
+      
+      // 8. Actualizar el correlativo en SerieDoc
+      await tx.serieDoc.update({
+        where: { id: BigInt(data.serieDocId) },
+        data: { correlativo: BigInt(nuevoCorrelativo) }
+      });
+
+      // 9. Calcular fechaVencimiento si no viene (30 días después de fechaDocumento)
+      let fechaVencimiento = data.fechaVencimiento;
+      if (!fechaVencimiento) {
+        const fechaDoc = data.fechaDocumento ? new Date(data.fechaDocumento) : new Date();
+        fechaVencimiento = new Date(fechaDoc);
+        fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
+      }
+
+      // 10. Obtener autorizaVentaId desde ParametroAprobador si no viene
+      let autorizaVentaId = data.autorizaVentaId;
+      if (!autorizaVentaId && data.empresaId) {
+        const parametroAprobador = await tx.parametroAprobador.findFirst({
+          where: {
+            empresaId: BigInt(data.empresaId),
+            moduloSistemaId: BigInt(5), // 5 = VENTAS
+            cesado: false,
+          },
+        });
+
+        if (parametroAprobador) {
+          autorizaVentaId = parametroAprobador.personalRespId;
+          console.log(`[CotizacionVentas] autorizaVentaId asignado desde ParametroAprobador: ${autorizaVentaId}`);
+        } else {
+          console.log(`[CotizacionVentas] No se encontró ParametroAprobador para empresaId=${data.empresaId}, moduloSistemaId=5, cesado=false`);
+        }
+      }
+
+      // 10. Extraer y remover campos de relaciones anidadas
+      const { detalles, costos, documentos, ...dataSinRelaciones } = data;
+
+      // 11. Asegurar campos de auditoría
+      const datosConAuditoria = {
+        ...dataSinRelaciones,
+        codigo,
+        numSerieDoc: numSerie,
+        numCorreDoc: numCorre,
+        numeroDocumento,
+        fechaVencimiento,
+        autorizaVentaId, // Asignado desde ParametroAprobador si no venía
+        version: data.version || 1, // Asegurar que siempre tenga versión
+        fechaCreacion: data.fechaCreacion || new Date(),
+        fechaActualizacion: data.fechaActualizacion || new Date(),
+      };
+
+      // 12. Crear la cotización con los números generados
+      return await tx.cotizacionVentas.create({
+        data: datosConAuditoria,
+        include: {
+          empresa: true,
+          cliente: true,
+          tipoDocumento: true,
+          serieDoc: true,
+          moneda: true,
+          formaPago: true,
+          incoterms: true
+        }
+      });
     });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
@@ -241,9 +312,30 @@ const actualizar = async (id, data) => {
       if (!incoterm) throw new ValidationError('Incoterm no existente.');
     }
 
+    // Extraer y remover campos que no deben actualizarse
+    const {
+      detalles,
+      costos,
+      documentos,
+      empresaId,
+      clienteId,
+      tipoDocumentoId,
+      serieDocId,
+      monedaId,
+      formaPagoId,
+      tipoProductoId,
+      incotermsId,
+      codigo,
+      version,
+      numSerieDoc,
+      numCorreDoc,
+      numeroDocumento,
+      ...dataSinCamposInmutables
+    } = data;
+
     // Asegurar campos de auditoría
     const datosConAuditoria = {
-      ...data,
+      ...dataSinCamposInmutables,
       fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
       creadoPor: data.creadoPor || existente.creadoPor || null,
       fechaActualizacion: data.fechaActualizacion || new Date(),
@@ -256,6 +348,7 @@ const actualizar = async (id, data) => {
         empresa: true,
         cliente: true,
         tipoDocumento: true,
+        serieDoc: true,
         moneda: true,
         formaPago: true,
         incoterms: true
@@ -350,6 +443,8 @@ const crearVersion = async (cotizacionPadreId, data) => {
       include: {
         empresa: true,
         cliente: true,
+        tipoDocumento: true,
+        serieDoc: true,
         moneda: true,
         incoterms: true
       }

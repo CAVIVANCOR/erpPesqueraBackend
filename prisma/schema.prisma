@@ -411,8 +411,10 @@ model CotizacionVentas {
   // Datos del documento
   empresaId                   BigInt
   tipoDocumentoId             BigInt                                 // Valor: 18 (Cotización Venta)
-  serieDocId                  BigInt?
+  serieDocId                  BigInt
   numeroDocumento             String?     @db.VarChar(40)
+  numSerieDoc                 String?     @db.VarChar(40)
+  numCorreDoc                 String?     @db.VarChar(40)
   fechaDocumento              DateTime    @default(now())
   fechaVencimiento            DateTime
   
@@ -438,7 +440,7 @@ model CotizacionVentas {
   tipoCambio                  Decimal     @db.Decimal(18, 6)
   
   // Datos de exportación
-  esExportacion               Boolean     @default(true)
+  esExportacion               Boolean     @default(false)
   paisDestinoId               BigInt?
   incotermsId                 BigInt?
   puertoCargaId               BigInt?
@@ -507,12 +509,14 @@ model CotizacionVentas {
   moneda                      Moneda                   @relation(fields: [monedaId], references: [id])
   formaPago                   FormaPago                @relation(fields: [formaPagoId], references: [id])
   incoterms                   Incoterm?                @relation(fields: [incotermsId], references: [id])
+  serieDoc                    SerieDoc                 @relation(fields: [serieDocId], references: [id])
   
   tipoProducto                TipoProducto             @relation(fields: [tipoProductoId], references: [id])
   tipoEstadoProducto          TipoEstadoProducto?      @relation(fields: [tipoEstadoProductoId], references: [id])
   destinoProducto             DestinoProducto?         @relation(fields: [destinoProductoId], references: [id])
   formaTransaccion            FormaTransaccion?        @relation(fields: [formaTransaccionId], references: [id])
   modoDespachoRecepcion       ModoDespachoRecepcion?   @relation(fields: [modoDespachoRecepcionId], references: [id])
+  tipoContenedor              TipoContenedor?          @relation(fields: [tipoContenedorId], references: [id])
 
   cotizacionPadre             CotizacionVentas?        @relation("VersionesCotizacion", fields: [cotizacionPadreId], references: [id])
   versiones                   CotizacionVentas[]       @relation("VersionesCotizacion")
@@ -526,6 +530,22 @@ model CotizacionVentas {
   @@index([estadoId])
   @@index([clienteId])
   @@index([codigo])
+}
+
+model TipoContenedor {
+  id                BigInt       @id @default(autoincrement())
+  codigo            String       @unique @db.VarChar(10)              // "FOB", "CIF", "DDP"
+  nombre            String       @db.VarChar(100)                     // "Free On Board"
+  descripcion       String?      @db.Text                             // Descripción detallada
+  activo            Boolean      @default(true)
+  
+  fechaCreacion     DateTime     @default(now())
+  fechaActualizacion DateTime?   @updatedAt
+  creadoPor         BigInt?
+  actualizadoPor    BigInt?
+
+  cotizaciones      CotizacionVentas[]
+  preFacturas       PreFactura[]
 }
 
 // ============================================
@@ -808,8 +828,10 @@ model PreFactura {
   empresaId                    BigInt
   clienteId                    BigInt
   tipoDocumentoId              BigInt
-  serieDocId                   BigInt?
+  serieDocId                   BigInt
   numeroDocumento              String?     @db.VarChar(40)
+  numSerieDoc                 String?     @db.VarChar(40)
+  numCorreDoc                 String?     @db.VarChar(40)
   fechaDocumento               DateTime    @default(now())
   cotizacionVentasOrigenId     BigInt?                               // Cotización que originó esta PreFactura
   ordenCompraCliente           String?     @db.VarChar(100)
@@ -826,6 +848,7 @@ model PreFactura {
   numeroBuque                  String?     @db.VarChar(100)
   numeroBL                     String?     @db.VarChar(100)          // Bill of Lading
   numContenedor                String?     @db.VarChar(100)
+  tipoContenedorId             BigInt?
   
   // Impuestos
   exoneradoIgv                 Boolean     @default(false)
@@ -863,7 +886,9 @@ model PreFactura {
   tipoDocumento                TipoDocumento @relation(fields: [tipoDocumentoId], references: [id])
   moneda                       Moneda? @relation(fields: [monedaId], references: [id])
   incoterm                     Incoterm? @relation(fields: [incotermId], references: [id])
+  serieDoc                     SerieDoc @relation(fields: [serieDocId], references: [id])
   formaPago                    FormaPago @relation(fields: [formaPagoId], references: [id])
+  tipoContenedor               TipoContenedor? @relation(fields: [tipoContenedorId], references: [id])
   movSalidaAlmacen             MovimientoAlmacen? @relation("MovimientoAlmacenToPreFactura", fields: [movSalidaAlmacenId], references: [id])
   detalles                     DetallePreFactura[]
   
@@ -2592,6 +2617,8 @@ model SerieDoc {
   movimientos       MovimientoAlmacen[]
   requerimientosCompra RequerimientoCompra[]
   ordenesCompra OrdenCompra[]
+  cotizacionesVentas CotizacionVentas[]
+  preFacturas PreFactura[]
 }
 
 model SubfamiliaProducto {

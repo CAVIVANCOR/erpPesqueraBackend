@@ -378,10 +378,6 @@ async function actualizarSaldos(tx, movimiento) {
     },
   });
 
-  console.log('\n🔍 COMBINACIONES encontradas para movimiento', movimiento.id, ':');
-  combinaciones.forEach((c, i) => {
-    console.log(`  [${i}] Producto: ${c.productoId}, Lote: "${c.lote}", AlmacenId: ${c.almacenId}`);
-  });
 
   for (const combo of combinaciones) {
     const clienteIdCorrecto = combo.esCustodia
@@ -545,18 +541,6 @@ async function recalcularSaldoDetalladoCompleto(tx, filtro) {
     ],
   });
 
-  console.log('🔍 recalcularSaldoDetalladoCompleto - Producto:', filtro.productoId, 'Lote:', filtro.lote);
-  console.log('   WHERE:', JSON.stringify(whereClause, (key, value) => 
-    typeof value === 'bigint' ? value.toString() : value, 2));
-  console.log('📊 Registros encontrados:', kardexRegistros.length);
-  if (kardexRegistros.length > 0) {
-    console.log('📝 Primer registro:', {
-      id: kardexRegistros[0].id,
-      ingresoCant: kardexRegistros[0].ingresoCant,
-      ingresoCantVariables: kardexRegistros[0].ingresoCantVariables,
-      saldoFinalCantVariables: kardexRegistros[0].saldoFinalCantVariables
-    });
-  }
 
   let saldoCantidad = 0,
     saldoPeso = 0;
@@ -698,11 +682,6 @@ async function calcularSaldosKardexConVariables(tx, movimiento) {
     ],
   });
   
-  console.log('\n📦 calcularSaldosKardexConVariables - Combinaciones:', combinaciones.length);
-  combinaciones.forEach((c, i) => {
-    console.log(`  [${i}] Prod: ${c.productoId}, Lote: "${c.lote}", FechaIng: ${c.fechaIngreso}, Estado: ${c.estadoId}`);
-  });
-  
   for (const combo of combinaciones)
     await calcularSaldosProductoConVariables(tx, combo);
 }
@@ -731,11 +710,6 @@ async function calcularSaldosProductoConVariables(tx, combo) {
     ],
   });
 
-  console.log(`\n⚙️ calcularSaldosProductoConVariables - Prod: ${combo.productoId}, Lote: "${combo.lote}"`);
-  console.log(`   Registros encontrados: ${kardexRegistros.length}`);
-  if (kardexRegistros.length > 0) {
-    console.log(`   Primer registro ID: ${kardexRegistros[0].id}, ingresoCant: ${kardexRegistros[0].ingresoCant}`);
-  }
 
   let saldoCantidadVar = 0,
     saldoPesoVar = 0;

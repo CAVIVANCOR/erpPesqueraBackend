@@ -49,7 +49,7 @@ const listar = async () => {
         conceptoMovAlmacen: true,
         entidadComercial: true,
         detalles: true, 
-        preFacturasSalida: true 
+        preFacturas: true 
       } 
     });
   } catch (err) {
@@ -86,7 +86,7 @@ const obtenerPorId = async (id) => {
             }
           }
         },
-        preFacturasSalida: true 
+        preFacturas: true 
       } 
     });
     if (!mov) throw new NotFoundError('MovimientoAlmacen no encontrado');
