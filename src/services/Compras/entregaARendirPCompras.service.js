@@ -41,6 +41,9 @@ const listar = async () => {
             centroCostoId: true,
           },
         },
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true           // Centro de costo
       },
       orderBy: {
         fechaCreacion: 'desc',
@@ -67,6 +70,9 @@ const obtenerPorId = async (id) => {
             centroCostoId: true,
           },
         },
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true           // Centro de costo
       },
     });
     if (!entrega) throw new NotFoundError('EntregaARendirPCompras no encontrada');
@@ -98,6 +104,8 @@ const crear = async (data) => {
         centroCostoId: data.centroCostoId,
         entregaLiquidada: data.entregaLiquidada || false,
         fechaLiquidacion: data.fechaLiquidacion || null,
+        respLiquidacionId: data.respLiquidacionId || null,
+        urlLiquidacionPdf: data.urlLiquidacionPdf || null,
         fechaActualizacion: new Date(),
         creadoPor: data.creadoPor || null,
         actualizadoPor: data.actualizadoPor || null,
@@ -112,6 +120,9 @@ const crear = async (data) => {
             centroCostoId: true,
           },
         },
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true           // Centro de costo
       },
     });
   } catch (err) {
@@ -147,6 +158,8 @@ const actualizar = async (id, data) => {
         centroCostoId: data.centroCostoId,
         entregaLiquidada: data.entregaLiquidada,
         fechaLiquidacion: data.fechaLiquidacion,
+        respLiquidacionId: data.respLiquidacionId,
+        urlLiquidacionPdf: data.urlLiquidacionPdf,
         fechaActualizacion: new Date(),
         actualizadoPor: data.actualizadoPor || null,
       },
@@ -160,6 +173,9 @@ const actualizar = async (id, data) => {
             centroCostoId: true,
           },
         },
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true           // Centro de costo
       },
     });
   } catch (err) {

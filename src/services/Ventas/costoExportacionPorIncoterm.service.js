@@ -35,9 +35,13 @@ const listar = async () => {
         incoterm: true,
         producto: {
           include: {
-            familia: true
+            familia: true,
+            subfamilia: true
           }
-        }
+        },
+        proveedorDefault: true,
+        monedaDefault: true,
+        documentoAsociado: true
       },
       orderBy: [
         { incotermId: 'asc' },
@@ -61,9 +65,13 @@ const obtenerPorId = async (id) => {
         incoterm: true,
         producto: {
           include: {
-            familia: true
+            familia: true,
+            subfamilia: true
           }
-        }
+        },
+        proveedorDefault: true,
+        monedaDefault: true,
+        documentoAsociado: true
       }
     });
     if (!costo) throw new NotFoundError('Costo de exportación no encontrado');
@@ -87,9 +95,13 @@ const obtenerPorIncoterm = async (incotermId) => {
       include: {
         producto: {
           include: {
-            familia: true
+            familia: true,
+            subfamilia: true
           }
-        }
+        },
+        proveedorDefault: true,
+        monedaDefault: true,
+        documentoAsociado: true
       },
       orderBy: { orden: 'asc' }
     });
@@ -113,9 +125,13 @@ const obtenerCostosVendedorPorIncoterm = async (incotermId) => {
       include: {
         producto: {
           include: {
-            familia: true
+            familia: true,
+            subfamilia: true
           }
-        }
+        },
+        proveedorDefault: true,
+        monedaDefault: true,
+        documentoAsociado: true
       },
       orderBy: { orden: 'asc' }
     });
@@ -128,7 +144,7 @@ const obtenerCostosVendedorPorIncoterm = async (incotermId) => {
 /**
  * Crea un nuevo costo por Incoterm
  */
-const crear = async (data) => {
+const crear = async (data, usuarioId) => {
   try {
     if (!data.incotermId || !data.productoId) {
       throw new ValidationError('Los campos incotermId y productoId son obligatorios.');
@@ -158,8 +174,10 @@ const crear = async (data) => {
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
-      fechaCreacion: data.fechaCreacion || new Date(),
-      fechaActualizacion: data.fechaActualizacion || new Date(),
+      fechaCreacion: new Date(),
+      fechaActualizacion: new Date(),
+      creadoPor: usuarioId || null,
+      actualizadoPor: usuarioId || null,
     };
     
     return await prisma.costoExportacionPorIncoterm.create({ 
@@ -168,9 +186,13 @@ const crear = async (data) => {
         incoterm: true,
         producto: {
           include: {
-            familia: true
+            familia: true,
+            subfamilia: true
           }
-        }
+        },
+        proveedorDefault: true,
+        monedaDefault: true,
+        documentoAsociado: true
       }
     });
   } catch (err) {
@@ -183,7 +205,7 @@ const crear = async (data) => {
 /**
  * Actualiza un costo por Incoterm existente
  */
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId) => {
   try {
     const existente = await prisma.costoExportacionPorIncoterm.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Costo de exportación no encontrado');
@@ -225,10 +247,14 @@ const actualizar = async (id, data) => {
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
-      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
-      creadoPor: data.creadoPor || existente.creadoPor || null,
-      fechaActualizacion: data.fechaActualizacion || new Date(),
+      fechaActualizacion: new Date(),
+      actualizadoPor: usuarioId || null,
     };
+    
+    // Si no existe creadoPor, establecerlo con el usuario actual
+    if (!existente.creadoPor && usuarioId) {
+      datosConAuditoria.creadoPor = usuarioId;
+    }
     
     return await prisma.costoExportacionPorIncoterm.update({ 
       where: { id }, 
@@ -237,9 +263,13 @@ const actualizar = async (id, data) => {
         incoterm: true,
         producto: {
           include: {
-            familia: true
+            familia: true,
+            subfamilia: true
           }
-        }
+        },
+        proveedorDefault: true,
+        monedaDefault: true,
+        documentoAsociado: true
       }
     });
   } catch (err) {

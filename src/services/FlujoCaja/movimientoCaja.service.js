@@ -4,11 +4,100 @@ import fs from 'fs';
 import path from 'path';
 
 const incluirRelaciones = {
-  cuentaCorrienteOrigen: true,
-  cuentaCorrienteDestino: true,
+  cuentaCorrienteOrigen: {
+    select: {
+      id: true,
+      numeroCuenta: true,
+      banco: { select: { id: true, nombre: true } },
+      moneda: { select: { id: true, simbolo: true } }
+    }
+  },
+  cuentaCorrienteDestino: {
+    select: {
+      id: true,
+      numeroCuenta: true,
+      banco: { select: { id: true, nombre: true } },
+      moneda: { select: { id: true, simbolo: true } }
+    }
+  },
   tipoReferencia: true,
-  asientosContables: true,
-  entidadComercial: true
+  entidadComercial: {
+    select: {
+      id: true,
+      razonSocial: true,
+      numeroDocumento: true
+    }
+  },
+  estadoMovimientoCaja: {
+    select: {
+      id: true,
+      descripcion: true
+    }
+  },
+  empresaOrigen: {
+    select: {
+      id: true,
+      razonSocial: true,
+      ruc: true
+    }
+  },
+  empresaDestino: {
+    select: {
+      id: true,
+      razonSocial: true,
+      ruc: true
+    }
+  },
+  moneda: {
+    select: {
+      id: true,
+      simbolo: true,
+      codigoSunat: true
+    }
+  },
+  tipoMovimiento: {
+    select: {
+      id: true,
+      nombre: true,
+      esIngreso: true
+    }
+  },
+  ctaCteEntidad: {
+    select: {
+      id: true,
+      numeroCuenta: true,
+      numeroCuentaCCI: true,
+      numeroTelefonoBilletera: true,
+      BilleteraDigital: true,
+      banco: {
+        select: {
+          id: true,
+          nombre: true
+        }
+      },
+      moneda: {
+        select: {
+          id: true,
+          simbolo: true,
+          codigoSunat: true
+        }
+      },
+      entidadComercial: {
+        select: {
+          id: true,
+          razonSocial: true,
+          numeroDocumento: true
+        }
+      }
+    }
+  },
+  producto: {
+    select: {
+      id: true,
+      descripcionArmada: true,
+      codigo: true
+    }
+  }
 };
 
 /**
@@ -95,47 +184,65 @@ async function validarReferenciasMovimientoCaja(data) {
     entidadComercialId
   } = data;
 
-  // Valida existencia de cuenta corriente origen
-  if (cuentaCorrienteOrigenId) {
-    const cuentaOrigen = await prisma.cuentaCorriente.findUnique({ where: { id: cuentaCorrienteOrigenId } });
-    if (!cuentaOrigen) throw new ValidationError('Cuenta corriente origen no existente');
+  // Valida existencia de cuenta corriente origen (OBLIGATORIO)
+  if (!cuentaCorrienteOrigenId) {
+    throw new ValidationError('Cuenta corriente origen es obligatoria');
   }
+  const cuentaOrigen = await prisma.cuentaCorriente.findUnique({ where: { id: cuentaCorrienteOrigenId } });
+  if (!cuentaOrigen) throw new ValidationError('Cuenta corriente origen no existente');
   
-  // Valida existencia de cuenta corriente destino
+  // Valida existencia de cuenta corriente destino (OPCIONAL)
   if (cuentaCorrienteDestinoId) {
     const cuentaDestino = await prisma.cuentaCorriente.findUnique({ where: { id: cuentaCorrienteDestinoId } });
     if (!cuentaDestino) throw new ValidationError('Cuenta corriente destino no existente');
   }
 
-  // Valida existencia de empresa origen
-  if (empresaOrigenId) {
-    const empresaOrigen = await prisma.empresa.findUnique({ where: { id: empresaOrigenId } });
-    if (!empresaOrigen) throw new ValidationError('Empresa origen no existente');
+  // Valida existencia de empresa origen (OBLIGATORIO)
+  if (!empresaOrigenId) {
+    throw new ValidationError('Empresa origen es obligatoria');
   }
+  const empresaOrigen = await prisma.empresa.findUnique({ where: { id: empresaOrigenId } });
+  if (!empresaOrigen) throw new ValidationError('Empresa origen no existente');
   
-  // Valida existencia de empresa destino
+  // Valida existencia de empresa destino (OPCIONAL - solo para transferencias entre empresas)
   if (empresaDestinoId) {
     const empresaDestino = await prisma.empresa.findUnique({ where: { id: empresaDestinoId } });
     if (!empresaDestino) throw new ValidationError('Empresa destino no existente');
   }
 
-  // Valida existencia de tipo de movimiento
-  if (tipoMovimientoId) {
-    const tipoMov = await prisma.tipoMovEntregaRendir.findUnique({ where: { id: tipoMovimientoId } });
-    if (!tipoMov) throw new ValidationError('Tipo de movimiento no existente');
+  // Valida existencia de tipo de movimiento (OBLIGATORIO)
+  if (!tipoMovimientoId) {
+    throw new ValidationError('Tipo de movimiento es obligatorio');
   }
+  const tipoMov = await prisma.tipoMovEntregaRendir.findUnique({ where: { id: tipoMovimientoId } });
+  if (!tipoMov) throw new ValidationError('Tipo de movimiento no existente');
 
-  // Valida existencia de entidad comercial
+  // Valida existencia de entidad comercial (OPCIONAL - solo cuando hay proveedor/cliente)
   if (entidadComercialId) {
     const entidadComercial = await prisma.entidadComercial.findUnique({ where: { id: entidadComercialId } });
     if (!entidadComercial) throw new ValidationError('Entidad comercial no existente');
   }
 
-  // Valida existencia de moneda
-  if (monedaId) {
-    const moneda = await prisma.moneda.findUnique({ where: { id: monedaId } });
-    if (!moneda) throw new ValidationError('Moneda no existente');
+  // Valida existencia de cuenta de entidad comercial (OPCIONAL - solo para pagos a proveedores)
+  if (data.cuentaDestinoEntidadComercialId) {
+    const ctaCteEntidad = await prisma.ctaCteEntidad.findUnique({ 
+      where: { id: data.cuentaDestinoEntidadComercialId },
+      include: { entidadComercial: true }
+    });
+    if (!ctaCteEntidad) throw new ValidationError('Cuenta de entidad comercial no existente');
+    
+    // Validar que la cuenta pertenezca a la entidad comercial especificada
+    if (entidadComercialId && ctaCteEntidad.entidadComercialId !== entidadComercialId) {
+      throw new ValidationError('La cuenta seleccionada no pertenece a la entidad comercial especificada');
+    }
   }
+
+  // Valida existencia de moneda (OBLIGATORIO)
+  if (!monedaId) {
+    throw new ValidationError('Moneda es obligatoria');
+  }
+  const moneda = await prisma.moneda.findUnique({ where: { id: monedaId } });
+  if (!moneda) throw new ValidationError('Moneda no existente');
 
   // Valida existencia de usuario si se provee
   if (usuarioId) {
@@ -211,16 +318,26 @@ const crear = async (data) => {
       // PESCA INDUSTRIAL - Buscar en DetMovsEntregaRendir
       const detMov = await prisma.detMovsEntregaRendir.findUnique({
         where: { id: BigInt(origenId) },
-        select: { urlComprobanteMovimiento: true }
+        select: { 
+          urlComprobanteMovimiento: true,
+          productoId: true
+        }
       });
       
-      if (detMov && detMov.urlComprobanteMovimiento) {
+      if (detMov) {
+        // Copiar el productoId si existe
+        if (detMov.productoId) {
+          data.productoId = detMov.productoId;
+        }
+        
         // Copiar físicamente el archivo PDF
-        const nuevaRuta = await copiarPdfAMovimientoCaja(detMov.urlComprobanteMovimiento);
-        if (nuevaRuta) {
-          data.urlDocumentoMovCaja = nuevaRuta;
-        } else {
-          data.urlDocumentoMovCaja = detMov.urlComprobanteMovimiento;
+        if (detMov.urlComprobanteMovimiento) {
+          const nuevaRuta = await copiarPdfAMovimientoCaja(detMov.urlComprobanteMovimiento);
+          if (nuevaRuta) {
+            data.urlDocumentoMovCaja = nuevaRuta;
+          } else {
+            data.urlDocumentoMovCaja = detMov.urlComprobanteMovimiento;
+          }
         }
       }
     } else if (moduloOrigen === 3 && origenId) {
@@ -250,14 +367,12 @@ const crear = async (data) => {
       if (match) {
         const campoFaltante = match[1];
         const nombresCampos = {
-          'cuentaCorrienteOrigen': 'Cuenta Corriente Origen',
-          'cuentaCorrienteDestino': 'Cuenta Corriente Destino',
-          'empresaOrigen': 'Empresa Origen',
-          'empresaDestino': 'Empresa Destino',
-          'tipoMovimiento': 'Tipo de Movimiento',
-          'moneda': 'Moneda',
-          'usuario': 'Usuario',
-          'estado': 'Estado'
+          'cuentaCorrienteOrigenId': 'Cuenta Corriente Origen',
+          'empresaOrigenId': 'Empresa Origen',
+          'tipoMovimientoId': 'Tipo de Movimiento',
+          'monedaId': 'Moneda',
+          'monto': 'Monto',
+          'estadoId': 'Estado'
         };
         const nombreAmigable = nombresCampos[campoFaltante] || campoFaltante;
         throw new ValidationError(`El campo "${nombreAmigable}" es obligatorio para crear el movimiento de caja.`);
@@ -374,6 +489,7 @@ const validarMovimiento = async (id) => {
           operacionSinFactura: movimiento.operacionSinFactura,
           urlComprobanteOperacionMovCaja: movimiento.urlComprobanteOperacionMovCaja,
           urlComprobanteMovimiento: movimiento.urlDocumentoMovCaja,
+          productoId: movimiento.productoId, // Sincronizar productoId de vuelta
           actualizadoEn: fechaActual
         }
       });
@@ -400,6 +516,54 @@ const validarMovimiento = async (id) => {
           monedaId: movimiento.monedaId,
           operacionSinFactura: movimiento.operacionSinFactura,
           actualizadoEn: fechaActual
+        }
+      });
+    } else if (moduloOrigen === 4) {
+      // COMPRAS - Buscar en DetMovsEntregaRendirPCompras
+      const detMovCompras = await prisma.detMovsEntregaRendirPCompras.findUnique({
+        where: { id: origenId }
+      });
+
+      if (!detMovCompras) {
+        throw new ValidationError('La operación de Movimiento de Caja No encuentra el Origen de la Operación en DetMovsEntregaRendirPCompras');
+      }
+
+      // Actualizar DetMovsEntregaRendirPCompras
+      await prisma.detMovsEntregaRendirPCompras.update({
+        where: { id: origenId },
+        data: {
+          validadoTesoreria: true,
+          fechaValidacionTesoreria: fechaActual,
+          fechaOperacionMovCaja: movimiento.fechaOperacionMovCaja,
+          operacionMovCajaId: movimiento.id,
+          operacionSinFactura: movimiento.operacionSinFactura,
+          urlComprobanteOperacionMovCaja: movimiento.urlComprobanteOperacionMovCaja,
+          urlComprobanteMovimiento: movimiento.urlDocumentoMovCaja,
+          actualizadoEn: fechaActual
+        }
+      });
+    } else if (moduloOrigen === 5) {
+      // VENTAS - Buscar en DetMovsEntregaRendirPVentas
+      const detMovVentas = await prisma.detMovsEntregaRendirPVentas.findUnique({
+        where: { id: origenId }
+      });
+
+      if (!detMovVentas) {
+        throw new ValidationError('La operación de Movimiento de Caja No encuentra el Origen de la Operación en DetMovsEntregaRendirPVentas');
+      }
+
+      // Actualizar DetMovsEntregaRendirPVentas
+      await prisma.detMovsEntregaRendirPVentas.update({
+        where: { id: origenId },
+        data: {
+          validadoTesoreria: true,
+          fechaValidacionTesoreria: fechaActual,
+          fechaOperacionMovCaja: movimiento.fechaOperacionMovCaja,
+          operacionMovCajaId: movimiento.id,
+          operacionSinFactura: movimiento.operacionSinFactura,
+          urlComprobanteOperacionMovCaja: movimiento.urlComprobanteOperacionMovCaja,
+          urlComprobanteMovimiento: movimiento.urlDocumentoMovCaja,
+          fechaActualizacion: fechaActual
         }
       });
     } else {

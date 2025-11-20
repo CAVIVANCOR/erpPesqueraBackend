@@ -21,6 +21,23 @@ async function validarClavesForaneas(data) {
   if (data.movSalidaAlmacenId && !movSalida) throw new ValidationError('El movSalidaAlmacenId no existe.');
 }
 
+/**
+ * Valida que el margen de utilidad real no sea menor al mínimo permitido
+ * Fórmula: margenReal = ((precioFinal - precioBase) / precioFinal) × 100
+ */
+function validarMargenUtilidad(margenMinimo, precioFinal, precioBase, nombreProducto) {
+  if (!precioFinal || precioFinal <= 0) return null;
+  
+  const margenReal = ((precioFinal - precioBase) / precioFinal) * 100;
+  
+  if (margenMinimo && margenReal < margenMinimo) {
+    console.warn(`⚠️ Advertencia: Margen real (${margenReal.toFixed(2)}%) es menor al mínimo permitido (${margenMinimo}%) para el producto: ${nombreProducto}`);
+    // No lanzar error, solo advertencia
+  }
+  
+  return margenReal;
+}
+
 const listar = async () => {
   try {
     return await prisma.detCotizacionVentas.findMany({
@@ -85,11 +102,30 @@ const obtenerPorCotizacion = async (cotizacionVentasId) => {
 
 const crear = async (data) => {
   try {
-    if (!data.cotizacionVentasId || !data.item || !data.productoId || !data.cantidad || !data.precioUnitario || !data.precioUnitarioFinal || !data.centroCostoId) {
-      throw new ValidationError('Los campos obligatorios no pueden estar vacíos: cotizacionVentasId, item, productoId, cantidad, precioUnitario, precioUnitarioFinal, centroCostoId');
+    // Validar campos obligatorios (item se calcula automáticamente)
+    if (!data.cotizacionVentasId || !data.productoId || !data.cantidad || !data.precioUnitario || !data.precioUnitarioFinal || !data.centroCostoId) {
+      throw new ValidationError('Los campos obligatorios no pueden estar vacíos: cotizacionVentasId, productoId, cantidad, precioUnitario, precioUnitarioFinal, centroCostoId');
     }
     
     await validarClavesForaneas(data);
+    
+    // Calcular automáticamente el número de item si no viene
+    if (!data.item) {
+      const maxItem = await prisma.detCotizacionVentas.findFirst({
+        where: { cotizacionVentasId: data.cotizacionVentasId },
+        orderBy: { item: 'desc' },
+        select: { item: true }
+      });
+      data.item = maxItem ? maxItem.item + 1 : 1;
+    }
+    
+    const producto = await prisma.producto.findUnique({ where: { id: data.productoId } });
+    if (producto && producto.margenMinimoPermitido) {
+      const margenReal = validarMargenUtilidad(producto.margenMinimoPermitido, data.precioUnitarioFinal, data.precioUnitario, producto.nombre);
+      if (margenReal !== null) {
+        data.margenUtilidadReal = margenReal;
+      }
+    }
     
     const datosConAuditoria = {
       ...data,

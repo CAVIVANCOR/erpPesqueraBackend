@@ -142,7 +142,7 @@ router.post('/upload-pdf', autenticarJWT, (req, res, next) => {
     if (cotizacionId) {
       await prisma.cotizacionVentas.update({
         where: { id: BigInt(cotizacionId) },
-        data: { urlCotizacionVentaPdf: rutaRelativa }
+        data: { urlCotizacionPdf: rutaRelativa }
       });
     }
 

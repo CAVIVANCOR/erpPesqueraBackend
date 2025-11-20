@@ -93,3 +93,62 @@ export async function obtenerSeriesDoc(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Carga los costos de exportación según el Incoterm seleccionado
+ * POST /cotizaciones-ventas/:id/cargar-costos-incoterm
+ */
+export async function cargarCostosSegunIncoterm(req, res, next) {
+  try {
+    const id = BigInt(req.params.id);
+    
+    const resultado = await cotizacionVentasService.cargarCostosSegunIncoterm(id);
+    
+    const totalProcesados = resultado.creados.length + resultado.actualizados.length;
+    
+    let mensaje = '';
+    if (resultado.creados.length > 0 && resultado.actualizados.length > 0) {
+      mensaje = `Se crearon ${resultado.creados.length} y actualizaron ${resultado.actualizados.length} costos de exportación`;
+    } else if (resultado.creados.length > 0) {
+      mensaje = `Se crearon ${resultado.creados.length} costos de exportación`;
+    } else if (resultado.actualizados.length > 0) {
+      mensaje = `Se actualizaron ${resultado.actualizados.length} costos de exportación`;
+    } else {
+      mensaje = 'No se procesaron costos de exportación';
+    }
+    
+    res.status(201).json({
+      mensaje,
+      cantidadCreados: resultado.creados.length,
+      cantidadActualizados: resultado.actualizados.length,
+      total: totalProcesados,
+      creados: toJSONBigInt(resultado.creados),
+      actualizados: toJSONBigInt(resultado.actualizados)
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Genera automáticamente los documentos requeridos para una cotización
+ * POST /api/cotizaciones/:id/generar-documentos
+ */
+export async function generarDocumentosRequeridos(req, res, next) {
+  try {
+    const cotizacionId = BigInt(req.params.id);
+    const usuarioId = BigInt(req.user?.id || 1); // Usuario autenticado
+    
+    const resultado = await cotizacionVentasService.generarDocumentosRequeridos(cotizacionId, usuarioId);
+    
+    res.status(201).json({
+      mensaje: resultado.mensaje,
+      totalCreados: resultado.totalCreados,
+      totalExistentes: resultado.totalExistentes,
+      documentosCreados: toJSONBigInt(resultado.documentosCreados),
+      documentosExistentes: toJSONBigInt(resultado.documentosExistentes)
+    });
+  } catch (err) {
+    next(err);
+  }
+}

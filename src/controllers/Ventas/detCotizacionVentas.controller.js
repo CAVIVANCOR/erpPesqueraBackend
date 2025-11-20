@@ -24,6 +24,16 @@ export async function obtenerPorId(req, res, next) {
   }
 }
 
+export async function obtenerPorCotizacion(req, res, next) {
+  try {
+    const cotizacionVentasId = Number(req.params.cotizacionId);
+    const detalles = await detCotizacionVentasService.obtenerPorCotizacion(cotizacionVentasId);
+    res.json(toJSONBigInt(detalles));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const nuevo = await detCotizacionVentasService.crear(req.body);

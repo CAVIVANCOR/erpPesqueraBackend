@@ -24,6 +24,17 @@ export async function obtenerPorEntidad(req, res, next) {
   }
 }
 
+export async function obtenerPrecioEspecialActivo(req, res, next) {
+  try {
+    const entidadComercialId = Number(req.params.entidadComercialId);
+    const productoId = Number(req.params.productoId);
+    const precio = await precioEntidadService.obtenerPrecioEspecialActivo(entidadComercialId, productoId);
+    res.json(toJSONBigInt(precio));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

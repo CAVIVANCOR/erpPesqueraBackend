@@ -31,7 +31,10 @@ const listar = async () => {
   try {
     return await prisma.entregaARendirPescaConsumo.findMany({
       include: {
-        novedadPescaConsumo: true,  // ← AGREGAR ESTA RELACIÓN
+        novedadPescaConsumo: true,
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true           // Centro de costo
       }
     });
   } catch (err) {
@@ -45,7 +48,10 @@ const obtenerPorId = async (id) => {
     const entrega = await prisma.entregaARendirPescaConsumo.findUnique({ 
       where: { id },
       include: {
-        novedadPescaConsumo: true,  // ← AGREGAR ESTA RELACIÓN
+        novedadPescaConsumo: true,
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true           // Centro de costo
       }
     });
     if (!entrega) throw new NotFoundError('EntregaARendirPescaConsumo no encontrada');
@@ -65,7 +71,29 @@ const crear = async (data) => {
       }
     }
     await validarClavesForaneas(data);
-    return await prisma.entregaARendirPescaConsumo.create({ data });
+    
+    // Preparar datos con campos opcionales explícitos
+    const datosNormalizados = {
+      novedadPescaConsumoId: data.novedadPescaConsumoId,
+      respEntregaRendirId: data.respEntregaRendirId,
+      centroCostoId: data.centroCostoId,
+      entregaLiquidada: data.entregaLiquidada || false,
+      fechaLiquidacion: data.fechaLiquidacion || null,
+      respLiquidacionId: data.respLiquidacionId || null,
+      urlLiquidacionPdf: data.urlLiquidacionPdf || null,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.entregaARendirPescaConsumo.create({ 
+      data: datosNormalizados,
+      include: {
+        novedadPescaConsumo: true,
+        respLiquidacion: true,
+        respEntregaRendir: true,
+        centroCosto: true
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -82,7 +110,23 @@ const actualizar = async (id, data) => {
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.entregaARendirPescaConsumo.update({ where: { id }, data });
+    
+    // Preparar datos con campos opcionales explícitos
+    const datosActualizacion = {
+      ...data,
+      fechaActualizacion: new Date(),
+    };
+    
+    return await prisma.entregaARendirPescaConsumo.update({ 
+      where: { id }, 
+      data: datosActualizacion,
+      include: {
+        novedadPescaConsumo: true,
+        respLiquidacion: true,
+        respEntregaRendir: true,
+        centroCosto: true
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

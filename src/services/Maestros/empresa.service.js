@@ -9,7 +9,8 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Valida existencia de representantelegalId y entidadComercialId si se envían.
- * Lanza ValidationError si no existen.
+ * También valida que los márgenes sean válidos.
+ * Lanza ValidationError si no existen o son inválidos.
  * @param {Object} data - Datos de la empresa
  */
 async function validarEmpresa(data) {
@@ -22,6 +23,37 @@ async function validarEmpresa(data) {
   if (data.entidadComercialId !== undefined && data.entidadComercialId !== null) {
     const existe = await prisma.entidadComercial.findUnique({ where: { id: data.entidadComercialId } });
     if (!existe) throw new ValidationError('Entidad comercial no existente para el campo entidadComercialId.');
+  }
+
+  // Validar márgenes de utilidad
+  if (data.margenMinimoPermitido !== undefined && data.margenMinimoPermitido !== null) {
+    const margenMinimo = Number(data.margenMinimoPermitido);
+    if (margenMinimo < 0) {
+      throw new ValidationError('El margen mínimo no puede ser negativo');
+    }
+    if (margenMinimo > 100) {
+      throw new ValidationError('El margen mínimo no puede ser mayor a 100%');
+    }
+  }
+
+  if (data.margenUtilidadObjetivo !== undefined && data.margenUtilidadObjetivo !== null) {
+    const margenObjetivo = Number(data.margenUtilidadObjetivo);
+    if (margenObjetivo < 0) {
+      throw new ValidationError('El margen objetivo no puede ser negativo');
+    }
+    if (margenObjetivo > 100) {
+      throw new ValidationError('El margen objetivo no puede ser mayor a 100%');
+    }
+  }
+
+  // Validar que margenMinimo <= margenObjetivo
+  if (data.margenMinimoPermitido !== undefined && data.margenUtilidadObjetivo !== undefined &&
+      data.margenMinimoPermitido !== null && data.margenUtilidadObjetivo !== null) {
+    const margenMinimo = Number(data.margenMinimoPermitido);
+    const margenObjetivo = Number(data.margenUtilidadObjetivo);
+    if (margenMinimo > margenObjetivo) {
+      throw new ValidationError('El margen mínimo no puede ser mayor al margen objetivo');
+    }
   }
 }
 
@@ -100,10 +132,60 @@ const eliminar = async (id) => {
   }
 };
 
-export default {
-  listar,
-  obtenerPorId,
-  crear,
-  actualizar,
-  eliminar
+/**
+ * Propaga los márgenes de utilidad de la empresa a todos sus productos.
+ * Actualiza margenMinimoPermitido y margenUtilidadObjetivo en todos los productos de la empresa.
+ * @param {BigInt} id - ID de la empresa
+ * @returns {Object} - Resultado con cantidad de productos actualizados
+ */
+const propagarMargenes = async (id) => {
+  try {
+    // Obtener empresa
+    const empresa = await prisma.empresa.findUnique({ where: { id } });
+    if (!empresa) throw new NotFoundError('Empresa no encontrada');
+
+    // Validar que la empresa tenga márgenes configurados
+    if (empresa.margenMinimoPermitido === null || empresa.margenUtilidadObjetivo === null) {
+      throw new ValidationError('La empresa no tiene márgenes configurados');
+    }
+
+    // Contar productos que serán afectados
+    const totalProductos = await prisma.producto.count({
+      where: { empresaId: id }
+    });
+
+    if (totalProductos === 0) {
+      return {
+        success: true,
+        mensaje: 'No hay productos para actualizar',
+        productosActualizados: 0,
+        margenMinimo: empresa.margenMinimoPermitido,
+        margenObjetivo: empresa.margenUtilidadObjetivo
+      };
+    }
+
+    // Actualizar todos los productos de la empresa
+    const resultado = await prisma.producto.updateMany({
+      where: { empresaId: id },
+      data: {
+        margenMinimoPermitido: empresa.margenMinimoPermitido,
+        margenUtilidadObjetivo: empresa.margenUtilidadObjetivo,
+        fechaActualizacion: new Date()
+      }
+    });
+
+    return {
+      success: true,
+      mensaje: `Se actualizaron ${resultado.count} productos correctamente`,
+      productosActualizados: resultado.count,
+      margenMinimo: empresa.margenMinimoPermitido,
+      margenObjetivo: empresa.margenUtilidadObjetivo
+    };
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
 };
+
+export default { listar, obtenerPorId, crear, actualizar, eliminar, propagarMargenes };

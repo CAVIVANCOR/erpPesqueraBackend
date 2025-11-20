@@ -38,6 +38,11 @@ const listar = async () => {
     return await prisma.precioEntidad.findMany({
       include: {
         entidadComercial: true,
+        producto: {
+          include: {
+            unidadMedida: true
+          }
+        },
         moneda: true
       }
     });
@@ -48,13 +53,21 @@ const listar = async () => {
 };
 
 /**
- * Obtiene un precio por ID (incluyendo entidad comercial y moneda asociadas).
+ * Obtiene un precio por ID (incluyendo entidad comercial, producto y moneda asociadas).
  */
 const obtenerPorId = async (id) => {
   try {
     const precio = await prisma.precioEntidad.findUnique({
       where: { id },
-      include: { entidadComercial: true, moneda: true }
+      include: {
+        entidadComercial: true,
+        producto: {
+          include: {
+            unidadMedida: true
+          }
+        },
+        moneda: true
+      }
     });
     if (!precio) throw new NotFoundError('Precio no encontrado');
     return precio;
@@ -73,6 +86,11 @@ const obtenerPorEntidad = async (entidadComercialId) => {
       where: { entidadComercialId },
       include: {
         entidadComercial: true,
+        producto: {
+          include: {
+            unidadMedida: true
+          }
+        },
         moneda: true,
       },
       orderBy: { id: 'desc' }
@@ -180,10 +198,56 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Obtiene el precio especial activo vigente para un cliente-producto específico.
+ * Busca el precio activo cuya fecha de vigencia incluya la fecha actual.
+ * @param {BigInt} entidadComercialId - ID del cliente
+ * @param {BigInt} productoId - ID del producto
+ * @returns {Promise<Object|null>} - Precio especial vigente o null si no existe
+ */
+const obtenerPrecioEspecialActivo = async (entidadComercialId, productoId) => {
+  try {
+    const fechaActual = new Date();
+    
+    const precio = await prisma.precioEntidad.findFirst({
+      where: {
+        entidadComercialId: BigInt(entidadComercialId),
+        productoId: BigInt(productoId),
+        activo: true,
+        vigenteDesde: {
+          lte: fechaActual  // Vigente desde <= fecha actual
+        },
+        OR: [
+          { vigenteHasta: null },  // Sin fecha de fin (vigencia indefinida)
+          { vigenteHasta: { gte: fechaActual } }  // Vigente hasta >= fecha actual
+        ]
+      },
+      include: {
+        entidadComercial: true,
+        producto: {
+          include: {
+            unidadMedida: true
+          }
+        },
+        moneda: true
+      },
+      orderBy: {
+        vigenteDesde: 'desc'  // El más reciente si hay varios
+      }
+    });
+    
+    return precio;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   obtenerPorEntidad,
+  obtenerPrecioEspecialActivo,
   crear,
   actualizar,
   eliminar

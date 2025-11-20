@@ -10,11 +10,11 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 async function validarClavesForaneas(data) {
   const [cotizacion, responsable, centroCosto] = await Promise.all([
     prisma.cotizacionVentas.findUnique({ where: { id: data.cotizacionVentasId } }),
-    prisma.usuario ? prisma.usuario.findUnique({ where: { id: data.respEntregaRendirId } }) : Promise.resolve(true),
+    prisma.personal ? prisma.personal.findUnique({ where: { id: data.respEntregaRendirId } }) : Promise.resolve(true),
     prisma.centroCosto ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }) : Promise.resolve(true)
   ]);
   if (!cotizacion) throw new ValidationError('El cotizacionVentasId no existe.');
-  if (prisma.usuario && !responsable) throw new ValidationError('El respEntregaRendirId no existe.');
+  if (prisma.personal && !responsable) throw new ValidationError('El respEntregaRendirId no existe.');
   if (prisma.centroCosto && !centroCosto) throw new ValidationError('El centroCostoId no existe.');
 }
 
@@ -23,6 +23,9 @@ const listar = async () => {
     return await prisma.entregaARendirPVentas.findMany({
       include: {
         cotizacionVentas: true,
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true,          // Centro de costo
         movimientos: {
           include: {
             tipoMovimiento: true,
@@ -48,6 +51,9 @@ const obtenerPorId = async (id) => {
       where: { id },
       include: {
         cotizacionVentas: true,
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true,          // Centro de costo
         movimientos: {
           include: {
             tipoMovimiento: true,
@@ -74,6 +80,9 @@ const obtenerPorCotizacion = async (cotizacionVentasId) => {
       where: { cotizacionVentasId },
       include: {
         cotizacionVentas: true,
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true,          // Centro de costo
         movimientos: {
           include: {
             tipoMovimiento: true,
@@ -100,9 +109,13 @@ const crear = async (data) => {
     }
     await validarClavesForaneas(data);
     
-    // Asegurar campos de auditoría
+    // Asegurar campos de auditoría y campos opcionales explícitos
     const datosConAuditoria = {
       ...data,
+      entregaLiquidada: data.entregaLiquidada || false,
+      fechaLiquidacion: data.fechaLiquidacion || null,
+      respLiquidacionId: data.respLiquidacionId || null,
+      urlLiquidacionPdf: data.urlLiquidacionPdf || null,
       fechaCreacion: data.fechaCreacion || new Date(),
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
@@ -111,6 +124,9 @@ const crear = async (data) => {
       data: datosConAuditoria,
       include: {
         cotizacionVentas: true,
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true,          // Centro de costo
         movimientos: true
       }
     });
@@ -144,6 +160,9 @@ const actualizar = async (id, data) => {
       data: datosConAuditoria,
       include: {
         cotizacionVentas: true,
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true,          // Centro de costo
         movimientos: true
       }
     });

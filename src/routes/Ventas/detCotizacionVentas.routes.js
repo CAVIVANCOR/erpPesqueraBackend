@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para DetCotizacionVentas
 router.get('/', detCotizacionVentasController.listar);
+router.get('/cotizacion/:cotizacionId', detCotizacionVentasController.obtenerPorCotizacion);
 router.get('/:id', detCotizacionVentasController.obtenerPorId);
 router.post('/', detCotizacionVentasController.crear);
 router.put('/:id', detCotizacionVentasController.actualizar);

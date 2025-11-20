@@ -73,7 +73,15 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.detMovsEntregaRendir.findMany();
+    return await prisma.detMovsEntregaRendir.findMany({
+      include: {
+        tipoMovimiento: true,
+        entidadComercial: true,
+        moneda: true,
+        producto: true,
+        tipoDocumento: true,
+      },
+    });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -138,7 +146,35 @@ const actualizar = async (id, data) => {
     if (claves.some((k) => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.detMovsEntregaRendir.update({ where: { id }, data });
+    
+    // Preparar datos con SOLO campos escalares permitidos
+    const datosActualizacion = {
+      entregaARendirId: data.entregaARendirId,
+      responsableId: data.responsableId,
+      fechaMovimiento: data.fechaMovimiento,
+      tipoMovimientoId: data.tipoMovimientoId,
+      productoId: data.productoId,
+      monto: data.monto,
+      descripcion: data.descripcion,
+      creadoEn: data.creadoEn,
+      actualizadoEn: new Date(),
+      centroCostoId: data.centroCostoId,
+      urlComprobanteMovimiento: data.urlComprobanteMovimiento,
+      validadoTesoreria: data.validadoTesoreria,
+      fechaValidacionTesoreria: data.fechaValidacionTesoreria,
+      operacionSinFactura: data.operacionSinFactura,
+      fechaOperacionMovCaja: data.fechaOperacionMovCaja,
+      operacionMovCajaId: data.operacionMovCajaId,
+      moduloOrigenMovCajaId: data.moduloOrigenMovCajaId,
+      entidadComercialId: data.entidadComercialId,
+      monedaId: data.monedaId,
+      urlComprobanteOperacionMovCaja: data.urlComprobanteOperacionMovCaja,
+      tipoDocumentoId: data.tipoDocumentoId,
+      numeroSerieComprobante: data.numeroSerieComprobante,
+      numeroCorrelativoComprobante: data.numeroCorrelativoComprobante,
+    };
+    
+    return await prisma.detMovsEntregaRendir.update({ where: { id }, data: datosActualizacion });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;

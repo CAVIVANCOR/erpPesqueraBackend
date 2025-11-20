@@ -14,6 +14,16 @@ export async function listar(req, res, next) {
   }
 }
 
+export async function listarPorCotizacion(req, res, next) {
+  try {
+    const cotizacionVentaId = Number(req.params.cotizacionVentaId);
+    const docs = await detDocsReqCotizaVentasService.listarPorCotizacion(cotizacionVentaId);
+    res.json(toJSONBigInt(docs));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

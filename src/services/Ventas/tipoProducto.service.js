@@ -16,6 +16,9 @@ async function validarUnicidadNombre(nombre, id = null) {
 const listar = async () => {
   try {
     return await prisma.tipoProducto.findMany({
+      include: {
+        subfamilia: true
+      },
       orderBy: { nombre: 'asc' }
     });
   } catch (err) {
@@ -26,7 +29,12 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const tipo = await prisma.tipoProducto.findUnique({ where: { id } });
+    const tipo = await prisma.tipoProducto.findUnique({ 
+      where: { id },
+      include: {
+        subfamilia: true
+      }
+    });
     if (!tipo) throw new NotFoundError('TipoProducto no encontrado');
     return tipo;
   } catch (err) {
@@ -35,7 +43,7 @@ const obtenerPorId = async (id) => {
   }
 };
 
-const crear = async (data) => {
+const crear = async (data, usuarioId) => {
   try {
     if (!data.nombre) {
       throw new ValidationError('El campo nombre es obligatorio.');
@@ -45,12 +53,19 @@ const crear = async (data) => {
     const dataParaPrisma = {
       nombre: data.nombre,
       descripcion: data.descripcion || null,
+      subfamiliaId: data.subfamiliaId ? BigInt(data.subfamiliaId) : null,
       activo: data.activo !== undefined ? data.activo : true,
       paraCompras: data.paraCompras !== undefined ? data.paraCompras : false,
-      paraVentas: data.paraVentas !== undefined ? data.paraVentas : false
+      paraVentas: data.paraVentas !== undefined ? data.paraVentas : false,
+      creadoPor: usuarioId ? BigInt(usuarioId) : null
     };
     
-    return await prisma.tipoProducto.create({ data: dataParaPrisma });
+    return await prisma.tipoProducto.create({ 
+      data: dataParaPrisma,
+      include: {
+        subfamilia: true
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -58,7 +73,7 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId) => {
   try {
     const existente = await prisma.tipoProducto.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('TipoProducto no encontrado');
@@ -69,12 +84,20 @@ const actualizar = async (id, data) => {
     const dataParaPrisma = {
       nombre: data.nombre,
       descripcion: data.descripcion || null,
+      subfamiliaId: data.subfamiliaId ? BigInt(data.subfamiliaId) : null,
       activo: data.activo !== undefined ? data.activo : true,
       paraCompras: data.paraCompras !== undefined ? data.paraCompras : false,
-      paraVentas: data.paraVentas !== undefined ? data.paraVentas : false
+      paraVentas: data.paraVentas !== undefined ? data.paraVentas : false,
+      actualizadoPor: usuarioId ? BigInt(usuarioId) : null
     };
     
-    return await prisma.tipoProducto.update({ where: { id }, data: dataParaPrisma });
+    return await prisma.tipoProducto.update({ 
+      where: { id }, 
+      data: dataParaPrisma,
+      include: {
+        subfamilia: true
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -87,13 +110,13 @@ const eliminar = async (id) => {
     const existente = await prisma.tipoProducto.findUnique({
       where: { id },
       include: { 
-        cotizaciones: true,
+        cotizacionesVentas: true,
         requerimientosCompra: true 
       }
     });
     if (!existente) throw new NotFoundError('TipoProducto no encontrado');
     
-    const totalRelaciones = (existente.cotizaciones?.length || 0) + (existente.requerimientosCompra?.length || 0);
+    const totalRelaciones = (existente.cotizacionesVentas?.length || 0) + (existente.requerimientosCompra?.length || 0);
     if (totalRelaciones > 0) {
       throw new ConflictError('No se puede eliminar porque tiene cotizaciones o requerimientos asociados.');
     }

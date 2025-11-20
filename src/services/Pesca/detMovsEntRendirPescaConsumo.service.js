@@ -43,7 +43,14 @@ async function validarClavesForaneas(data) {
     );
   }
 
-  const [entrega, responsable, tipoMovimiento, centroCosto, moneda, entidadComercial, moduloSistema, tipoDocumento] = await Promise.all(validaciones);
+  // Agregar validación de Producto si se proporciona productoId
+  if (data.productoId) {
+    validaciones.push(
+      prisma.producto.findUnique({ where: { id: data.productoId } })
+    );
+  }
+
+  const [entrega, responsable, tipoMovimiento, centroCosto, moneda, entidadComercial, moduloSistema, tipoDocumento, producto] = await Promise.all(validaciones);
   
   if (!entrega) throw new ValidationError('El entregaARendirPescaConsumoId no existe.');
   if (!responsable) throw new ValidationError('El responsableId no existe.');
@@ -53,6 +60,7 @@ async function validarClavesForaneas(data) {
   if (data.entidadComercialId && !entidadComercial) throw new ValidationError('El entidadComercialId no existe.');
   if (data.moduloOrigenMovCajaId && !moduloSistema) throw new ValidationError('El moduloOrigenMovCajaId no existe.');
   if (data.tipoDocumentoId && !tipoDocumento) throw new ValidationError('El tipoDocumentoId no existe.');
+  if (data.productoId && !producto) throw new ValidationError('El productoId no existe.');
 }
 
 const listar = async () => {

@@ -47,7 +47,8 @@ export async function obtenerPorDocumento(req, res, next) {
 
 export async function crear(req, res, next) {
   try {
-    const nuevo = await requisitoDocPorPaisService.crear(req.body);
+    const usuarioId = BigInt(req.user?.id || 1); // ID del usuario logueado
+    const nuevo = await requisitoDocPorPaisService.crear(req.body, usuarioId);
     res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
     next(err);
@@ -57,7 +58,8 @@ export async function crear(req, res, next) {
 export async function actualizar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const actualizado = await requisitoDocPorPaisService.actualizar(id, req.body);
+    const usuarioId = BigInt(req.user?.id || 1); // ID del usuario logueado
+    const actualizado = await requisitoDocPorPaisService.actualizar(id, req.body, usuarioId);
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
     next(err);

@@ -271,6 +271,11 @@ model CentroCosto {
 
   categoria       CategoriaCCosto @relation(fields: [CategoriaID], references: [id])
   empresasCentro EmpresaCentroCosto[]
+  
+  entregasARendirVentas         EntregaARendirPVentas[] 
+  entregasARendirIndustrial     EntregaARendir[]
+  entregasARendirCompras        EntregaARendirPCompras[]
+  entregasARendirConsumo        EntregaARendirPescaConsumo[]
 }
 
 model Color {
@@ -387,9 +392,17 @@ model CostoExportacionPorIncoterm {
   fechaActualizacion          DateTime?   @updatedAt
   creadoPor                   BigInt?
   actualizadoPor              BigInt?
+  proveedorDefaultId          BigInt?
+  monedaDefaultId           BigInt?
+  valorVentaDefault           Decimal?
+  requiereDocumento           Boolean     @default(false)
+  documentoAsociadoId         BigInt?
 
-  incoterm                    Incoterm @relation(fields: [incotermId], references: [id], onDelete: Cascade)
-  producto                    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  proveedorDefault            EntidadComercial? @relation("ProveedorDefaultCostoIncoterm", fields: [proveedorDefaultId], references: [id])
+  monedaDefault               Moneda? @relation("MonedaDefaultCostoIncoterm", fields: [monedaDefaultId], references: [id])
+  incoterm                    Incoterm @relation(fields: [incotermId], references: [id])
+  producto                    Producto @relation(fields: [productoId], references: [id])
+  documentoAsociado           DocRequeridaVentas? @relation("CostoIncotermDocumento", fields: [documentoAsociadoId], references: [id])  
   
   @@unique([incotermId, productoId])
   @@index([incotermId])
@@ -510,6 +523,7 @@ model CotizacionVentas {
   formaPago                   FormaPago                @relation(fields: [formaPagoId], references: [id])
   incoterms                   Incoterm?                @relation(fields: [incotermsId], references: [id])
   serieDoc                    SerieDoc                 @relation(fields: [serieDocId], references: [id])
+  estado                      EstadoMultiFuncion       @relation(fields: [estadoId], references: [id])
   
   tipoProducto                TipoProducto             @relation(fields: [tipoProductoId], references: [id])
   tipoEstadoProducto          TipoEstadoProducto?      @relation(fields: [tipoEstadoProductoId], references: [id])
@@ -569,6 +583,17 @@ model DetCotizacionVentas {
   costoUnitarioEstimado       Decimal?    @db.Decimal(18, 6)         // Costo base del producto
   factorExportacionAplicado   Decimal?    @db.Decimal(18, 6)         // Factor aplicado
   precioUnitario              Decimal     @db.Decimal(18, 6)         // = costo × factor
+
+  // 🆕 AGREGAR: Trazabilidad de precio especial (PrecioEntidad)
+  precioEntidadId             BigInt?                                 // FK a PrecioEntidad (nullable)
+  precioEntidadOriginal       Decimal?    @db.Decimal(18, 6)         // Precio que se jaló de PrecioEntidad (histórico)
+  precioFueEditado            Boolean     @default(false)             // true si usuario modificó el precio especial
+  
+  // 🆕 AGREGAR: Márgenes de utilidad (copiados del producto, editables en cotización)
+  margenMinimoPermitido       Decimal?    @db.Decimal(5, 2)          // % mínimo de margen
+  margenUtilidadObjetivo      Decimal?    @db.Decimal(5, 2)          // % objetivo de margen
+  margenUtilidadReal          Decimal?    @db.Decimal(5, 2)          // % real calculado: ((precioFinal - precioUnitario) / precioFinal) × 100
+
   precioUnitarioFinal         Decimal     @db.Decimal(18, 6)         // = precioUnitario × (1 + margen)
   
   // Trazabilidad de producción
@@ -588,8 +613,14 @@ model DetCotizacionVentas {
 
   cotizacionVentas            CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id], onDelete: Cascade)
   producto                    Producto @relation(fields: [productoId], references: [id])
-  
+    // 🆕 AGREGAR: Relación con PrecioEntidad (nullable)
+  precioEntidad               PrecioEntidad? @relation(fields: [precioEntidadId], references: [id])
+
+
   @@index([cotizacionVentasId])
+  @@index([productoId])
+  // 🆕 AGREGAR: Índice para búsquedas por precio especial
+  @@index([precioEntidadId])
 }
 
 // ============================================
@@ -601,10 +632,7 @@ model DetCotizacionVentas {
 model CostosExportacionCotizacion {
   id                          BigInt      @id @default(autoincrement())
   cotizacionVentasId          BigInt
-  productoId                  BigInt                                 // Producto de Familia "Gastos Exportación"
-  concepto                    String      @db.VarChar(255)           // Nombre del costo
-  descripcion                 String?     @db.Text
-  
+  productoId                  BigInt                                 // Producto de Familia "Gastos Exportación"  
   // ESTIMADO (al cotizar)
   montoEstimado               Decimal     @db.Decimal(18, 2)
   monedaId                    BigInt
@@ -619,7 +647,6 @@ model CostosExportacionCotizacion {
   movimientoEntregaRendirId   BigInt?                                // Vincula con gasto real
   
   aplicaSegunIncoterm         Boolean     @default(true)
-  responsableSegunIncoterm    String?     @db.VarChar(50)            // "VENDEDOR" o "COMPRADOR"
   proveedorId                 BigInt?
   requiereDocumento           Boolean     @default(false)
   documentoAsociadoId         BigInt?
@@ -636,7 +663,8 @@ model CostosExportacionCotizacion {
   moneda                      Moneda @relation(fields: [monedaId], references: [id])
   proveedor                   EntidadComercial? @relation("ProveedorCostoExport", fields: [proveedorId], references: [id])
   movimientoEntregaRendir     DetMovsEntregaRendirPVentas? @relation(fields: [movimientoEntregaRendirId], references: [id])
-  
+  documentoAsociado           DocRequeridaVentas? @relation("CostoExportacionDocumento", fields: [documentoAsociadoId], references: [id])
+
   @@index([cotizacionVentasId])
   @@index([productoId])
   @@index([movimientoEntregaRendirId])
@@ -670,7 +698,8 @@ model DetDocsReqCotizaVentas {
 
   cotizacionVentas            CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id], onDelete: Cascade)
   docRequeridaVentas          DocRequeridaVentas @relation(fields: [docRequeridaVentasId], references: [id])
-  
+  moneda                      Moneda? @relation("MonedaDetDocsReqCotizaVentas", fields: [monedaId], references: [id])
+
   @@index([cotizacionVentasId])
 }
 
@@ -708,6 +737,8 @@ model DocRequeridaVentas {
   moneda                      Moneda? @relation(fields: [monedaId], references: [id])
   documentosRequeridos        DetDocsReqCotizaVentas[]
   requisitosPorPais           RequisitoDocPorPais[]
+  costosCotizacionAsociados   CostosExportacionCotizacion[] @relation("CostoExportacionDocumento")
+  costosIncotermAsociados     CostoExportacionPorIncoterm[] @relation("CostoIncotermDocumento")
 }
 
 // ============================================
@@ -746,17 +777,23 @@ model EntregaARendirPVentas {
   respEntregaRendirId         BigInt                                 // Personal responsable
   entregaLiquidada            Boolean     @default(false)
   fechaLiquidacion            DateTime?
-  liquidadoPorId              BigInt?
   centroCostoId               BigInt
   fechaCreacion               DateTime    @default(now())
   fechaActualizacion          DateTime?   @updatedAt
   creadoPor                   BigInt?
   actualizadoPor              BigInt?
+  urlLiquidacionPdf String?
+  respLiquidacionId BigInt?
 
   cotizacionVentas            CotizacionVentas @relation(fields: [cotizacionVentasId], references: [id])
   movimientos                 DetMovsEntregaRendirPVentas[]
+  respLiquidacion Personal? @relation("LiquidadorVentas", fields: [respLiquidacionId], references: [id])
+  respEntregaRendir Personal @relation("ResponsableEntregaVentas", fields: [respEntregaRendirId], references: [id])
+  centroCosto CentroCosto @relation(fields: [centroCostoId], references: [id])
   
   @@index([cotizacionVentasId])
+  @@index([respEntregaRendirId])
+  @@index([entregaLiquidada])
 }
 
 // ============================================
@@ -1440,6 +1477,7 @@ model RequerimientoCompra {
   serieDoc              SerieDoc? @relation(fields: [serieDocId], references: [id])
   empresa               Empresa @relation(fields: [empresaId], references: [id])
   moneda                Moneda? @relation(fields: [monedaId], references: [id])
+  estado                EstadoMultiFuncion @relation(fields: [estadoId], references: [id])
   
   cotizacionesProveedores CotizacionProveedor[]                 // Cotizaciones recibidas (si aplica)
   detalles              DetalleReqCompra[]                      // Items del requerimiento
@@ -1634,6 +1672,10 @@ model Empresa {
   soyAgenteRetencion   Boolean              @default(false)
   entidadComercialId   BigInt?
 
+    // 🆕 AGREGAR: Márgenes de utilidad globales (heredados a productos)
+  margenMinimoPermitido Decimal?            @default(20.00) @db.Decimal(5, 2)  // % mínimo de margen (ej: 20.00%)
+  margenUtilidadObjetivo Decimal?           @default(50.00) @db.Decimal(5, 2)  // % objetivo de margen (ej: 50.00%)
+
   sedes SedesEmpresa[]
   centrosCosto EmpresaCentroCosto[]
   movimientosAlmacen MovimientoAlmacen[]
@@ -1642,6 +1684,9 @@ model Empresa {
   usuarios Usuario[]
   cotizacionVentas CotizacionVentas[]
   preFactura PreFactura[]
+
+  movimientosCajaOrigen   MovimientoCaja[] @relation("EmpresaOrigenMovCaja")
+  movimientosCajaDestino  MovimientoCaja[] @relation("EmpresaDestinoMovCaja")
 }
 
 model EmpresaCentroCosto {
@@ -1719,6 +1764,7 @@ model EntidadComercial {
   cotizacionesVentas CotizacionVentas[]
   preFacturas PreFactura[] @relation("ClientePreFactura")
   costosExportacionCotizacion CostosExportacionCotizacion[] @relation("ProveedorCostoExport")
+costosExportacionPorIncoterm CostoExportacionPorIncoterm[] @relation("ProveedorDefaultCostoIncoterm")
 }
 
 model LineaCreditoEntidad {
@@ -1782,6 +1828,16 @@ actualizadoPor       BigInt?
 
   entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
   moneda             Moneda           @relation(fields: [monedaId], references: [id])
+  producto           Producto         @relation(fields: [productoId], references: [id])
+
+    // 🆕 AGREGAR: Relación inversa con DetCotizacionVentas
+  detallesCotizacionVentas DetCotizacionVentas[]
+
+  @@index([entidadComercialId])
+  @@index([productoId])
+  @@index([entidadComercialId, productoId, activo])  // Para buscar precio activo de cliente-producto
+  @@index([vigenteDesde, vigenteHasta])              // Para búsquedas por rango de fechas
+
 }
 
 model DireccionEntidad {
@@ -1847,6 +1903,7 @@ model CtaCteEntidad {
   banco Banco @relation(fields: [bancoId], references: [id])
   moneda Moneda @relation(fields: [monedaId], references: [id])
 
+  movimientosCaja      MovimientoCaja[]
 }
 
 model EntregaARendir {
@@ -1858,9 +1915,18 @@ model EntregaARendir {
   fechaActualizacion   DateTime
   respEntregaRendirId  BigInt
   centroCostoId        BigInt
+  urlLiquidacionPdf String?
+  respLiquidacionId BigInt?
   
   temporadaPesca        TemporadaPesca @relation(fields: [temporadaPescaId], references: [id])
+  respLiquidacion Personal? @relation("LiquidadorIndustrial", fields: [respLiquidacionId], references: [id])
+  respEntregaRendir Personal @relation("ResponsableEntregaIndustrial", fields: [respEntregaRendirId], references: [id])
+  centroCosto CentroCosto @relation(fields: [centroCostoId], references: [id])
   movimientos           DetMovsEntregaRendir[]
+
+  @@index([respEntregaRendirId])
+  @@index([entregaLiquidada])
+  @@index([temporadaPescaId])
 }
 
 model EntregaARendirPCompras {
@@ -1874,12 +1940,18 @@ model EntregaARendirPCompras {
   fechaActualizacion           DateTime    @updatedAt
   creadoPor                    BigInt?
   actualizadoPor               BigInt?
+  urlLiquidacionPdf String?
+  respLiquidacionId BigInt?
   
   requerimientoCompra          RequerimientoCompra @relation(fields: [requerimientoCompraId], references: [id])
   movimientos                  DetMovsEntregaRendirPCompras[]          // TODOS los movimientos (entregas + gastos + devoluciones)
-  
+  respLiquidacion Personal? @relation("LiquidadorCompras", fields: [respLiquidacionId], references: [id])
+  respEntregaRendir Personal @relation("ResponsableEntregaCompras", fields: [respEntregaRendirId], references: [id])
+  centroCosto CentroCosto @relation(fields: [centroCostoId], references: [id])
+
   @@index([respEntregaRendirId])
   @@index([entregaLiquidada])
+  @@index([requerimientoCompraId])
 }
 
 
@@ -1892,9 +1964,19 @@ model EntregaARendirPescaConsumo {
   fechaActualizacion           DateTime
   respEntregaRendirId          BigInt
   centroCostoId                BigInt
+  urlLiquidacionPdf String?
+  respLiquidacionId BigInt?
 
   novedadPescaConsumo   NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
   movimientos           DetMovsEntRendirPescaConsumo[]
+
+  respLiquidacion Personal? @relation("LiquidadorConsumo", fields: [respLiquidacionId], references: [id])
+  respEntregaRendir Personal @relation("ResponsableEntregaConsumo", fields: [respEntregaRendirId], references: [id])
+  centroCosto CentroCosto @relation(fields: [centroCostoId], references: [id])
+
+  @@index([respEntregaRendirId])
+  @@index([entregaLiquidada])
+  @@index([novedadPescaConsumoId])
 }
 
 model EstadoMultiFuncion {
@@ -1904,8 +1986,14 @@ model EstadoMultiFuncion {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime
   tipoProvieneDeId BigInt?
+  severityColor String?
 
   tipoProvieneDe    TipoProvieneDe? @relation(fields: [tipoProvieneDeId], references: [id])
+  cotizacionVentas CotizacionVentas[]
+  ordenesCompra OrdenCompra[]
+  movimientosAlmacen MovimientoAlmacen[]
+  requerimientoCompra RequerimientoCompra[]
+  movimientosCaja MovimientoCaja[]
 }
 
 model FaenaPesca {
@@ -2120,7 +2208,9 @@ model Moneda {
   docRequeridaVentas DocRequeridaVentas[]
   preFactura PreFactura[]
   detMovsEntregaRendirPVentas DetMovsEntregaRendirPVentas[]
-
+  costosExportacionPorIncoterm CostoExportacionPorIncoterm[] @relation("MonedaDefaultCostoIncoterm")
+  detDocsReqCotizaVentas      DetDocsReqCotizaVentas[] @relation("MonedaDetDocsReqCotizaVentas")
+  movimientosCaja  MovimientoCaja[]
 }
 
 model MotivoAcceso {
@@ -2166,7 +2256,7 @@ model MovimientoAlmacen {
   personalRespAlmacen      BigInt?
   ordenCompraId            BigInt?
   pedidoVentaId            BigInt?
-  estadoDocAlmacenId       BigInt?
+  estadoDocAlmacenId       BigInt
   esCustodia               Boolean                    @default(false)
   observaciones            String?
   creadoEn                 DateTime                   @default(now())
@@ -2181,42 +2271,53 @@ model MovimientoAlmacen {
   conceptoMovAlmacen  ConceptoMovAlmacen    @relation(fields: [conceptoMovAlmacenId], references: [id])
   serieDoc            SerieDoc?             @relation(fields: [serieDocId], references: [id])
   entidadComercial    EntidadComercial?     @relation(fields: [entidadComercialId], references: [id])
+  estadoDocAlmacen    EstadoMultiFuncion    @relation(fields: [estadoDocAlmacenId], references: [id])
   detalles            DetalleMovimientoAlmacen[]
   preFacturas PreFactura[] @relation("MovimientoAlmacenToPreFactura")
 }
 
 model MovimientoCaja {
-  id                                                                       BigInt                        @id @default(autoincrement())
-  empresaOrigenId                                                          BigInt
-  empresaDestinoId                                                         BigInt
-  tipoMovimientoId                                                         BigInt
-  entidadComercialId                                                       BigInt
-  monto                                                                    Decimal
-  monedaId                                                                 BigInt
-  descripcion                                                              String?
-  referenciaExtId                                                          String?
-  tipoReferenciaId                                                         BigInt?
-  usuarioId                                                                BigInt?
-  estadoId                                                                 BigInt
-  cuentaCorrienteDestinoId                                                 BigInt
-  cuentaCorrienteOrigenId                                                  BigInt
-  fechaCreacion                                                            DateTime?                      @default(now())
-  fechaActualizacion                                                       DateTime?                      @default(now())
-  centroCostoId                                                            BigInt?
-  moduloOrigenMotivoOperacionId                                            BigInt?
-  origenMotivoOperacionId                                                  BigInt?
-  fechaMotivoOperacion                                                     DateTime?
-  usuarioMotivoOperacionId                                                 BigInt?
-  fechaOperacionMovCaja                                                  DateTime? @default(now())
-  operacionSinFactura                                                  Boolean @default(false)
-  urlComprobanteOperacionMovCaja String?
-  urlDocumentoMovCaja String?
+  id                                      BigInt                        @id @default(autoincrement())
+  empresaOrigenId                         BigInt
+  empresaDestinoId                        BigInt?
+  tipoMovimientoId                        BigInt
+  entidadComercialId                      BigInt?
+  monto                                   Decimal
+  monedaId                                BigInt
+  descripcion                             String?
+  referenciaExtId                         String?
+  tipoReferenciaId                        BigInt?
+  usuarioId                               BigInt?
+  estadoId                                BigInt
+  cuentaCorrienteDestinoId                BigInt?
+  cuentaCorrienteOrigenId                 BigInt
+  fechaCreacion                           DateTime?                      @default(now())
+  fechaActualizacion                      DateTime?                      @default(now())
+  centroCostoId                           BigInt?
+  moduloOrigenMotivoOperacionId           BigInt?
+  origenMotivoOperacionId                 BigInt?
+  fechaMotivoOperacion                    DateTime?
+  usuarioMotivoOperacionId                BigInt?
+  fechaOperacionMovCaja                   DateTime? @default(now())
+  operacionSinFactura                     Boolean @default(false)
+  urlComprobanteOperacionMovCaja          String?
+  urlDocumentoMovCaja                     String?
+  cuentaDestinoEntidadComercialId         BigInt?
+  productoId                              BigInt?
 
   cuentaCorrienteOrigen     CuentaCorriente @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
-  cuentaCorrienteDestino    CuentaCorriente @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
+  cuentaCorrienteDestino    CuentaCorriente? @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
   tipoReferencia            TipoReferenciaMovimientoCaja? @relation(fields: [tipoReferenciaId], references: [id])
   asientosContables         AsientoContableInterfaz[]
   entidadComercial          EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
+  estadoMovimientoCaja      EstadoMultiFuncion @relation(fields: [estadoId], references: [id])
+  empresaOrigen             Empresa @relation("EmpresaOrigenMovCaja", fields: [empresaOrigenId], references: [id])
+  empresaDestino            Empresa? @relation("EmpresaDestinoMovCaja", fields: [empresaDestinoId], references: [id])
+  moneda                    Moneda @relation(fields: [monedaId], references: [id])
+  tipoMovimiento            TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+  ctaCteEntidad             CtaCteEntidad? @relation(fields: [cuentaDestinoEntidadComercialId], references: [id])
+  producto                  Producto? @relation(fields: [productoId], references: [id])
+
 }
 
 model NovedadPescaConsumo {
@@ -2314,6 +2415,7 @@ model OrdenCompra {
   serieDoc             SerieDoc? @relation(fields: [serieDocId], references: [id])
   empresa              Empresa @relation(fields: [empresaId], references: [id])
   moneda               Moneda? @relation(fields: [monedaId], references: [id])
+  estado               EstadoMultiFuncion @relation(fields: [estadoId], references: [id])
   
   detalles             DetalleOrdenCompra[]                     // Items de la orden
   
@@ -2400,6 +2502,18 @@ model Personal {
   ubigeo      Ubigeo?            @relation(fields: [ubigeoId], references: [id])
   tipoContrato TipoContrato?      @relation(fields: [tipoContratoId], references: [id])
   tipoDocIdentidad TiposDocIdentidad? @relation(fields: [tipoDocumentoId], references: [id])
+
+   // Relaciones como Liquidador
+  entregasLiquidadasVentas      EntregaARendirPVentas[] @relation("LiquidadorVentas")
+  entregasLiquidadasIndustrial  EntregaARendir[] @relation("LiquidadorIndustrial")
+  entregasLiquidadasCompras     EntregaARendirPCompras[] @relation("LiquidadorCompras")
+  entregasLiquidadasConsumo     EntregaARendirPescaConsumo[] @relation("LiquidadorConsumo")
+  
+  // Relaciones como Responsable de Entrega
+  entregasResponsableVentas     EntregaARendirPVentas[] @relation("ResponsableEntregaVentas")
+  entregasResponsableIndustrial EntregaARendir[] @relation("ResponsableEntregaIndustrial")
+  entregasResponsableCompras    EntregaARendirPCompras[] @relation("ResponsableEntregaCompras")
+  entregasResponsableConsumo    EntregaARendirPescaConsumo[] @relation("ResponsableEntregaConsumo")
 }
 
 model Producto {
@@ -2449,6 +2563,10 @@ model Producto {
   descripcionMedidaAdicional        String?                             @db.VarChar(120)
   especieId BigInt?
   cesado Boolean @default(false)
+  // 🆕 AGREGAR: Márgenes de utilidad (heredados de Empresa, editables por producto)
+  margenMinimoPermitido             Decimal?                            @db.Decimal(5, 2)  // % mínimo de margen
+  margenUtilidadObjetivo            Decimal?                            @db.Decimal(5, 2)  // % objetivo de margen
+
 
   familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
   subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
@@ -2473,6 +2591,8 @@ model Producto {
   detMovsEntregaRendirPVentas DetMovsEntregaRendirPVentas[] @relation("MovimientoGastoExportacion")
   costosExportacionCotizacion CostosExportacionCotizacion[] @relation("CostoExportacionProducto")
   costosExportacionPorIncoterm CostoExportacionPorIncoterm[]
+  precioEntidad PrecioEntidad[]
+  movimientosCaja           MovimientoCaja[]
 }
 
 model Provincia {
@@ -2626,6 +2746,8 @@ model SubfamiliaProducto {
   id        BigInt     @id @default(autoincrement())
   nombre    String     @db.VarChar(120)
   productos  Producto[]
+  tiposProducto TipoProducto[]
+
 }
 
 model SubmoduloSistema {
@@ -2817,6 +2939,7 @@ model TipoMovEntregaRendir {
   movimientosConsumo DetMovsEntRendirPescaConsumo[]
   movimientosVentas DetMovsEntregaRendirPVentas[]
   movimientosCompras DetMovsEntregaRendirPCompras[]
+  movimientosCaja  MovimientoCaja[]
 }
 
 model TipoMovimientoAcceso {
@@ -2848,16 +2971,27 @@ model TipoPersona {
 }
 
 model TipoProducto {
-  id                BigInt              @id @default(autoincrement())
-  nombre            String              @unique
-  descripcion       String?
-  activo            Boolean             @default(true)
-  paraCompras       Boolean             @default(false)
-  paraVentas        Boolean             @default(false)
+  id                  BigInt              @id @default(autoincrement())
+  subfamiliaId        BigInt?              // AGREGAR
+  nombre              String              @unique @db.VarChar(100)
+  descripcion         String?             @db.Text  // Cambiar a Text
+  activo              Boolean             @default(true)
+  paraCompras         Boolean             @default(false)
+  paraVentas          Boolean             @default(false)
+  
+  //AGREGAR: Auditoría
+  fechaCreacion       DateTime            @default(now())
+  fechaActualizacion  DateTime?           @updatedAt
+  creadoPor           BigInt?
+  actualizadoPor      BigInt?
 
-  cotizacionesVentas CotizacionVentas[]
-  requisitoDocPorPais RequisitoDocPorPais[]
-  requerimientosCompra  RequerimientoCompra[]
+  // Relaciones
+ subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
+ cotizacionesVentas      CotizacionVentas[]
+ requisitoDocPorPais     RequisitoDocPorPais[]
+ requerimientosCompra    RequerimientoCompra[]
+  
+  @@index([subfamiliaId])
 }
 
 model TipoEstadoProducto {

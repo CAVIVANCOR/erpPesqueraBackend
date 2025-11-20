@@ -18,7 +18,8 @@ const listar = async () => {
         cotizacionVentas: true,
         producto: {
           include: {
-            familia: true
+            familia: true,
+            subfamilia: true
           }
         },
         moneda: true,
@@ -47,7 +48,8 @@ const obtenerPorId = async (id) => {
         cotizacionVentas: true,
         producto: {
           include: {
-            familia: true
+            familia: true,
+            subfamilia: true
           }
         },
         moneda: true,
@@ -73,7 +75,8 @@ const obtenerPorCotizacion = async (cotizacionVentasId) => {
       include: {
         producto: {
           include: {
-            familia: true
+            familia: true,
+            subfamilia: true
           }
         },
         moneda: true,

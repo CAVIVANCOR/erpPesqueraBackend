@@ -52,3 +52,13 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+export async function propagarMargenes(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await empresaService.propagarMargenes(id);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

@@ -146,6 +146,7 @@ const eliminar = async (id) => {
 
 export default {
   listar,
+  listarPorCotizacion: obtenerPorCotizacion,
   obtenerPorId,
   obtenerPorCotizacion,
   crear,

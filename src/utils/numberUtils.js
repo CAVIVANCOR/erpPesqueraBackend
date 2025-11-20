@@ -38,7 +38,19 @@ const toNumber = (valor) => {
   return Number(valor);
 };
 
+/**
+ * Convierte un string a mayúsculas de forma segura
+ * @param {string|null|undefined} value - String a convertir
+ * @returns {string|null} - String en mayúsculas o null si está vacío/inválido
+ */
+const toUpperCaseSafe = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.toUpperCase() : null;
+};
+
 export {
   llenaNumerosIzquierda,
   toNumber,
+  toUpperCaseSafe,  // ← AGREGAR ESTA LÍNEA
 };

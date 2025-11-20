@@ -6,6 +6,7 @@ const router = Router();
 // Rutas CRUD para PrecioEntidad
 router.get('/', precioEntidadController.listar);
 router.get('/entidad/:entidadComercialId', precioEntidadController.obtenerPorEntidad);
+router.get('/especial/:entidadComercialId/:productoId', precioEntidadController.obtenerPrecioEspecialActivo);
 router.get('/:id', precioEntidadController.obtenerPorId);
 router.post('/', precioEntidadController.crear);
 router.put('/:id', precioEntidadController.actualizar);

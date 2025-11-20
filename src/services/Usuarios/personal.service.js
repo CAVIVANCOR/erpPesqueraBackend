@@ -94,7 +94,8 @@ const obtenerPorId = async (id) => {
       include: {
         usuario: true,
         cargo: true,
-        ubigeo: true
+        ubigeo: true,
+        tipoDocIdentidad: true
       }
     });
     if (!persona) throw new NotFoundError('Personal no encontrado');

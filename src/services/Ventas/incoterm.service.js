@@ -36,7 +36,7 @@ const obtenerPorId = async (id) => {
   }
 };
 
-const crear = async (data) => {
+const crear = async (data, usuarioId) => {
   try {
     if (!data.codigo || !data.nombre) {
       throw new ValidationError('Los campos código y nombre son obligatorios.');
@@ -46,8 +46,10 @@ const crear = async (data) => {
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
-      fechaCreacion: data.fechaCreacion || new Date(),
-      fechaActualizacion: data.fechaActualizacion || new Date(),
+      fechaCreacion: new Date(),
+      fechaActualizacion: new Date(),
+      creadoPor: usuarioId || null,
+      actualizadoPor: usuarioId || null,
     };
     
     return await prisma.incoterm.create({ data: datosConAuditoria });
@@ -58,7 +60,7 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId) => {
   try {
     const existente = await prisma.incoterm.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Incoterm no encontrado');
@@ -69,10 +71,14 @@ const actualizar = async (id, data) => {
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
-      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
-      creadoPor: data.creadoPor || existente.creadoPor || null,
-      fechaActualizacion: data.fechaActualizacion || new Date(),
+      fechaActualizacion: new Date(),
+      actualizadoPor: usuarioId || null,
     };
+    
+    // Si no existe creadoPor, establecerlo con el usuario actual
+    if (!existente.creadoPor && usuarioId) {
+      datosConAuditoria.creadoPor = usuarioId;
+    }
     
     return await prisma.incoterm.update({ where: { id }, data: datosConAuditoria });
   } catch (err) {

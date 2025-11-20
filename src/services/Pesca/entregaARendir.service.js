@@ -22,7 +22,10 @@ const listar = async () => {
   try {
     return await prisma.entregaARendir.findMany({
       include: {
-        temporadaPesca: true,  // ← AGREGAR ESTA RELACIÓN
+        temporadaPesca: true,
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true           // Centro de costo
       }
     });
   } catch (err) {
@@ -36,7 +39,10 @@ const obtenerPorId = async (id) => {
     const entrega = await prisma.entregaARendir.findUnique({ 
       where: { id },
       include: {
-        temporadaPesca: true,  // ← AGREGAR ESTA RELACIÓN
+        temporadaPesca: true,
+        respLiquidacion: true,      // Personal que aprobó la liquidación
+        respEntregaRendir: true,    // Personal responsable de la entrega
+        centroCosto: true           // Centro de costo
       }
     });
     if (!entrega) throw new NotFoundError('EntregaARendir no encontrada');
@@ -56,7 +62,29 @@ const crear = async (data) => {
       }
     }
     await validarClavesForaneas(data);
-    return await prisma.entregaARendir.create({ data });
+    
+    // Preparar datos con campos opcionales explícitos
+    const datosNormalizados = {
+      temporadaPescaId: data.temporadaPescaId,
+      respEntregaRendirId: data.respEntregaRendirId,
+      centroCostoId: data.centroCostoId,
+      entregaLiquidada: data.entregaLiquidada || false,
+      fechaLiquidacion: data.fechaLiquidacion || null,
+      respLiquidacionId: data.respLiquidacionId || null,
+      urlLiquidacionPdf: data.urlLiquidacionPdf || null,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      fechaActualizacion: data.fechaActualizacion || new Date(),
+    };
+    
+    return await prisma.entregaARendir.create({ 
+      data: datosNormalizados,
+      include: {
+        temporadaPesca: true,
+        respLiquidacion: true,
+        respEntregaRendir: true,
+        centroCosto: true
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -73,7 +101,30 @@ const actualizar = async (id, data) => {
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.entregaARendir.update({ where: { id }, data });
+    
+    // Preparar datos con SOLO campos escalares permitidos
+    const datosActualizacion = {
+      temporadaPescaId: data.temporadaPescaId,
+      respEntregaRendirId: data.respEntregaRendirId,
+      centroCostoId: data.centroCostoId,
+      entregaLiquidada: data.entregaLiquidada,
+      fechaLiquidacion: data.fechaLiquidacion,
+      respLiquidacionId: data.respLiquidacionId,
+      urlLiquidacionPdf: data.urlLiquidacionPdf,
+      fechaCreacion: data.fechaCreacion,
+      fechaActualizacion: new Date(),
+    };
+    
+    return await prisma.entregaARendir.update({ 
+      where: { id }, 
+      data: datosActualizacion,
+      include: {
+        temporadaPesca: true,
+        respLiquidacion: true,
+        respEntregaRendir: true,
+        centroCosto: true
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

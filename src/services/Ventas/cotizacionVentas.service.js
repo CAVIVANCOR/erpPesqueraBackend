@@ -53,7 +53,13 @@ const listar = async () => {
         moneda: true,
         formaPago: true,
         incoterms: true,
+        estado: true,
         tipoProducto: true,
+        destinoProducto: true,
+        tipoEstadoProducto: true,
+        formaTransaccion: true,
+        modoDespachoRecepcion: true,
+        tipoContenedor: true,
         detallesProductos: {
           include: {
             producto: true
@@ -62,6 +68,12 @@ const listar = async () => {
         costosExportacion: {
           include: {
             producto: true,
+            moneda: true
+          }
+        },
+        documentosRequeridos: {
+          include: {
+            docRequeridaVentas: true,
             moneda: true
           }
         }
@@ -94,8 +106,10 @@ const obtenerPorId = async (id) => {
         destinoProducto: true,
         formaTransaccion: true,
         modoDespachoRecepcion: true,
+        tipoContenedor: true,
         cotizacionPadre: true,
         versiones: true,
+        estado: true,
         detallesProductos: {
           include: {
             producto: {
@@ -118,7 +132,8 @@ const obtenerPorId = async (id) => {
         },
         documentosRequeridos: {
           include: {
-            docRequeridaVentas: true
+            docRequeridaVentas: true,
+            moneda: true
           }
         },
         entregaARendir: {
@@ -244,7 +259,6 @@ const crear = async (data) => {
 
         if (parametroAprobador) {
           autorizaVentaId = parametroAprobador.personalRespId;
-          console.log(`[CotizacionVentas] autorizaVentaId asignado desde ParametroAprobador: ${autorizaVentaId}`);
         } else {
           console.log(`[CotizacionVentas] No se encontró ParametroAprobador para empresaId=${data.empresaId}, moduloSistemaId=5, cesado=false`);
         }
@@ -490,6 +504,269 @@ const obtenerSeriesDoc = async (empresaId, tipoDocumentoId) => {
   }
 };
 
+/**
+ * Carga los costos de exportación según el Incoterm seleccionado
+ * Si el costo ya existe (mismo productoId), lo actualiza
+ * Si no existe, lo crea
+ * @param {BigInt} cotizacionId - ID de la cotización
+ * @returns {Promise<Object>} Resultado con costos creados y actualizados
+ */
+const cargarCostosSegunIncoterm = async (cotizacionId) => {
+  try {
+    // 1. Obtener la cotización con su Incoterm y costos existentes
+    const cotizacion = await prisma.cotizacionVentas.findUnique({
+      where: { id: cotizacionId },
+      include: {
+        costosExportacion: true
+      }
+    });
+
+    if (!cotizacion) {
+      throw new NotFoundError('Cotización no encontrada');
+    }
+
+    if (!cotizacion.incotermsId) {
+      throw new ValidationError('La cotización no tiene un Incoterm seleccionado');
+    }
+
+    // 2. Obtener los costos configurados para el Incoterm con todas las relaciones
+    const costosIncoterm = await prisma.costoExportacionPorIncoterm.findMany({
+      where: {
+        incotermId: cotizacion.incotermsId,
+        activo: true
+      },
+      include: {
+        producto: true,
+        proveedorDefault: true,
+        monedaDefault: true,
+        documentoAsociado: true
+      },
+      orderBy: {
+        orden: 'asc'
+      }
+    });
+
+    if (costosIncoterm.length === 0) {
+      throw new ValidationError(
+        'No hay costos de exportación configurados para el Incoterm seleccionado'
+      );
+    }
+
+    // 3. Crear mapa de costos existentes por productoId
+    const costosExistentesMap = new Map(
+      cotizacion.costosExportacion.map(c => [Number(c.productoId), c])
+    );
+
+    // 4. Procesar costos: crear o actualizar según corresponda
+    const resultado = await prisma.$transaction(async (tx) => {
+      const creados = [];
+      const actualizados = [];
+
+      for (const costoIncoterm of costosIncoterm) {
+        const productoId = Number(costoIncoterm.productoId);
+        const costoExistente = costosExistentesMap.get(productoId);
+
+        // Preparar datos base con los nuevos campos
+        const datosBase = {
+          aplicaSegunIncoterm: true,
+          esObligatorio: costoIncoterm.esObligatorio,
+          orden: costoIncoterm.orden || 0,
+          proveedorId: costoIncoterm.proveedorDefaultId || null,
+          requiereDocumento: costoIncoterm.requiereDocumento || false,
+          documentoAsociadoId: costoIncoterm.documentoAsociadoId || null,
+          fechaActualizacion: new Date()
+        };
+
+        if (costoExistente) {
+          // Actualizar costo existente
+          const costoActualizado = await tx.costosExportacionCotizacion.update({
+            where: { id: costoExistente.id },
+            data: datosBase,
+            include: {
+              producto: true,
+              moneda: true
+            }
+          });
+          actualizados.push(costoActualizado);
+        } else {
+          // Crear nuevo costo con valores por defecto del Incoterm
+          const monedaId = costoIncoterm.monedaDefaultId || cotizacion.monedaId;
+          const montoEstimado = costoIncoterm.valorVentaDefault 
+            ? Number(costoIncoterm.valorVentaDefault) 
+            : 0;
+          
+          // Calcular tipo de cambio y monto en moneda base
+          const tipoCambio = monedaId === cotizacion.monedaId 
+            ? 1 
+            : (cotizacion.tipoCambio || 1);
+          const montoEstimadoMonedaBase = montoEstimado * tipoCambio;
+          
+          const nuevoCosto = await tx.costosExportacionCotizacion.create({
+            data: {
+              cotizacionVentasId: cotizacionId,
+              productoId: costoIncoterm.productoId,
+              montoEstimado: montoEstimado,
+              monedaId: monedaId,
+              tipoCambioAplicado: tipoCambio,
+              montoEstimadoMonedaBase: montoEstimadoMonedaBase,
+              ...datosBase,
+              fechaCreacion: new Date()
+            },
+            include: {
+              producto: true,
+              moneda: true,
+              proveedor: true
+            }
+          });
+          creados.push(nuevoCosto);
+        }
+      }
+
+      return { creados, actualizados };
+    });
+
+    return resultado;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) {
+      throw err;
+    }
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Genera automáticamente los documentos requeridos para una cotización
+ * basándose en país destino, tipo de producto e incoterm
+ * @param {BigInt} cotizacionId - ID de la cotización
+ * @param {BigInt} usuarioId - ID del usuario que ejecuta la acción
+ * @returns {Object} - { documentosCreados, documentosExistentes }
+ */
+const generarDocumentosRequeridos = async (cotizacionId, usuarioId) => {
+  try {
+    // 1. Obtener la cotización con sus datos
+    const cotizacion = await prisma.cotizacionVentas.findUnique({
+      where: { id: cotizacionId },
+      include: {
+        moneda: true
+      }
+    });
+
+    if (!cotizacion) {
+      throw new NotFoundError('Cotización no encontrada');
+    }
+
+    if (!cotizacion.esExportacion) {
+      throw new ValidationError('Esta cotización no es de exportación');
+    }
+
+    if (!cotizacion.paisDestinoId || !cotizacion.tipoProductoId) {
+      throw new ValidationError('La cotización debe tener país destino y tipo de producto definidos');
+    }
+
+    // 2. Buscar documentos requeridos según país y tipo de producto
+    const requisitos = await prisma.requisitoDocPorPais.findMany({
+      where: {
+        paisId: cotizacion.paisDestinoId,
+        OR: [
+          { tipoProductoId: cotizacion.tipoProductoId },
+          { tipoProductoId: null } // Documentos universales
+        ],
+        esObligatorio: true
+      },
+      include: {
+        docRequeridaVentas: {
+          include: {
+            moneda: true
+          }
+        }
+      }
+    });
+
+    if (requisitos.length === 0) {
+      return {
+        documentosCreados: [],
+        documentosExistentes: [],
+        mensaje: 'No se encontraron documentos requeridos para este país y tipo de producto'
+      };
+    }
+
+    // 3. Obtener documentos ya existentes en la cotización
+    const documentosExistentes = await prisma.detDocsReqCotizaVentas.findMany({
+      where: { cotizacionVentasId: cotizacionId },
+      select: { docRequeridaVentasId: true }
+    });
+
+    const idsExistentes = new Set(documentosExistentes.map(d => d.docRequeridaVentasId.toString()));
+
+    // 4. Crear solo los documentos que no existen
+    const documentosCreados = [];
+    const documentosYaExistentes = [];
+
+    for (const requisito of requisitos) {
+      const docId = requisito.docRequeridaVentas.id;
+
+      if (idsExistentes.has(docId.toString())) {
+        documentosYaExistentes.push({
+          id: docId,
+          nombre: requisito.docRequeridaVentas.nombre,
+          mensaje: 'Ya existe en la cotización'
+        });
+        continue;
+      }
+
+      // Crear el documento requerido
+      const nuevoDoc = await prisma.detDocsReqCotizaVentas.create({
+        data: {
+          cotizacionVentasId: cotizacionId,
+          docRequeridaVentasId: docId,
+          esObligatorio: requisito.esObligatorio,
+          monedaId: requisito.docRequeridaVentas.monedaId || cotizacion.monedaId,
+          costoDocumento: requisito.docRequeridaVentas.costoEstimado || 0,
+          observacionesVerificacion: requisito.observaciones,
+          verificado: false,
+          fechaCreacion: new Date(),
+          fechaActualizacion: new Date(),
+          creadoPor: usuarioId,
+          actualizadoPor: usuarioId
+        },
+        include: {
+          docRequeridaVentas: true,
+          moneda: true
+        }
+      });
+
+      documentosCreados.push({
+        id: nuevoDoc.id,
+        documentoId: docId,
+        nombre: requisito.docRequeridaVentas.nombre,
+        esObligatorio: requisito.esObligatorio,
+        costoDocumento: nuevoDoc.costoDocumento,
+        moneda: nuevoDoc.moneda.simbolo || 'USD'
+      });
+    }
+
+    return {
+      documentosCreados,
+      documentosExistentes: documentosYaExistentes,
+      totalCreados: documentosCreados.length,
+      totalExistentes: documentosYaExistentes.length,
+      mensaje: `Se crearon ${documentosCreados.length} documentos. ${documentosYaExistentes.length} ya existían.`
+    };
+
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) {
+      throw err;
+    }
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al generar documentos', err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -498,5 +775,7 @@ export default {
   actualizar,
   eliminar,
   crearVersion,
-  obtenerSeriesDoc
+  obtenerSeriesDoc,
+  cargarCostosSegunIncoterm,
+  generarDocumentosRequeridos
 };

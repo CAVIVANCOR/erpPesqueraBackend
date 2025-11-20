@@ -123,11 +123,18 @@ const crear = async (data) => {
       if (!moneda) throw new ValidationError('Moneda no existente.');
     }
     
+    // Convertir campos de texto a mayúsculas
+    const datosNormalizados = {
+      ...data,
+      nombre: data.nombre ? data.nombre.trim().toUpperCase() : null,
+      descripcion: data.descripcion ? data.descripcion.trim().toUpperCase() : null,
+    };
+    
     // Asegurar campos de auditoría
     const datosConAuditoria = {
-      ...data,
-      fechaCreacion: data.fechaCreacion || new Date(),
-      fechaActualizacion: data.fechaActualizacion || new Date(),
+      ...datosNormalizados,
+      fechaCreacion: datosNormalizados.fechaCreacion || new Date(),
+      fechaActualizacion: datosNormalizados.fechaActualizacion || new Date(),
     };
     
     return await prisma.docRequeridaVentas.create({ 
@@ -157,12 +164,34 @@ const actualizar = async (id, data) => {
       if (!moneda) throw new ValidationError('Moneda no existente.');
     }
     
+    // Filtrar solo los campos válidos del modelo DocRequeridaVentas
+    // Convertir campos de texto a mayúsculas
+    const camposValidos = {
+      nombre: data.nombre ? data.nombre.trim().toUpperCase() : undefined,
+      descripcion: data.descripcion ? data.descripcion.trim().toUpperCase() : undefined,
+      aplicaPorPais: data.aplicaPorPais,
+      aplicaPorProducto: data.aplicaPorProducto,
+      aplicaPorIncoterm: data.aplicaPorIncoterm,
+      esObligatorioPorDefecto: data.esObligatorioPorDefecto,
+      tieneVencimiento: data.tieneVencimiento,
+      diasValidez: data.diasValidez,
+      costoEstimado: data.costoEstimado,
+      monedaId: data.monedaId,
+      activo: data.activo,
+      actualizadoPor: data.actualizadoPor,
+    };
+    
+    // Eliminar campos undefined
+    Object.keys(camposValidos).forEach(key => {
+      if (camposValidos[key] === undefined) {
+        delete camposValidos[key];
+      }
+    });
+    
     // Asegurar campos de auditoría
     const datosConAuditoria = {
-      ...data,
-      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
-      creadoPor: data.creadoPor || existente.creadoPor || null,
-      fechaActualizacion: data.fechaActualizacion || new Date(),
+      ...camposValidos,
+      fechaActualizacion: new Date(),
     };
     
     return await prisma.docRequeridaVentas.update({ 

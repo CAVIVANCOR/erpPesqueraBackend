@@ -10,4 +10,7 @@ router.post('/', empresaController.crear);
 router.put('/:id', empresaController.actualizar);
 router.delete('/:id', empresaController.eliminar);
 
+// Ruta para propagar márgenes a productos
+router.post('/:id/propagar-margenes', empresaController.propagarMargenes);
+
 export default router;

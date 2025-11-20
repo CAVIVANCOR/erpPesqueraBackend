@@ -23,6 +23,11 @@ async function validarForaneas(data) {
     const tipo = await prisma.tipoMovEntregaRendir.findUnique({ where: { id: data.tipoMovimientoId } });
     if (!tipo) throw new ValidationError('El tipo de movimiento referenciado no existe.');
   }
+  // productoId (opcional)
+  if (data.productoId !== undefined && data.productoId !== null) {
+    const producto = await prisma.producto.findUnique({ where: { id: data.productoId } });
+    if (!producto) throw new ValidationError('El producto referenciado no existe.');
+  }
 }
 
 /**

@@ -3,8 +3,11 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Servicio CRUD para RequisitoDocPorPais
- * Gestiona los requisitos de documentos específicos por país y tipo de producto
- * Incluye validaciones de relaciones y campos de auditoría.
+ * Define qué documentos son obligatorios para cada país/producto
+ * Ejemplo: China + Langostinos = Certificado Sanitario obligatorio
+ * 
+ * Valida unicidad de la combinación (docRequeridaVentasId, paisId, tipoProductoId)
+ * Incluye manejo de campos de auditoría.
  * Documentado en español.
  */
 
@@ -112,7 +115,7 @@ const obtenerPorDocumento = async (docRequeridaVentasId) => {
 /**
  * Crea un nuevo requisito
  */
-const crear = async (data) => {
+const crear = async (data, usuarioId) => {
   try {
     if (!data.docRequeridaVentasId || !data.paisId) {
       throw new ValidationError('Los campos docRequeridaVentasId y paisId son obligatorios.');
@@ -146,8 +149,10 @@ const crear = async (data) => {
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
-      fechaCreacion: data.fechaCreacion || new Date(),
-      fechaActualizacion: data.fechaActualizacion || new Date(),
+      fechaCreacion: new Date(),
+      fechaActualizacion: new Date(),
+      creadoPor: usuarioId || null,
+      actualizadoPor: usuarioId || null,
     };
     
     return await prisma.requisitoDocPorPais.create({ 
@@ -168,7 +173,7 @@ const crear = async (data) => {
 /**
  * Actualiza un requisito existente
  */
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId) => {
   try {
     const existente = await prisma.requisitoDocPorPais.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Requisito no encontrado');
@@ -211,10 +216,14 @@ const actualizar = async (id, data) => {
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
-      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
-      creadoPor: data.creadoPor || existente.creadoPor || null,
-      fechaActualizacion: data.fechaActualizacion || new Date(),
+      fechaActualizacion: new Date(),
+      actualizadoPor: usuarioId || null,
     };
+    
+    // Si no existe creadoPor, establecerlo con el usuario actual
+    if (!existente.creadoPor && usuarioId) {
+      datosConAuditoria.creadoPor = usuarioId;
+    }
     
     return await prisma.requisitoDocPorPais.update({ 
       where: { id }, 
