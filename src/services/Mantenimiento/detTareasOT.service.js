@@ -21,11 +21,20 @@ async function validarForaneas(data) {
 }
 
 /**
- * Lista todas las tareas de OT.
+ * Lista todas las tareas de OT con relaciones.
  */
 const listar = async () => {
   try {
-    return await prisma.detTareasOT.findMany();
+    return await prisma.detTareasOT.findMany({
+      include: {
+        otMantenimiento: { select: { id: true, codigo: true } },
+        responsable: { select: { id: true, nombres: true, apellidos: true } },
+        personalValida: { select: { id: true, nombres: true, apellidos: true } },
+        contratista: { select: { id: true, razonSocial: true } },
+        estadoTarea: { select: { id: true, descripcion: true, severityColor: true } }
+      },
+      orderBy: { numeroTarea: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -33,11 +42,56 @@ const listar = async () => {
 };
 
 /**
- * Obtiene una tarea por ID.
+ * Lista tareas de una OT específica con relaciones.
+ * @param {BigInt} otMantenimientoId - ID de la OT
+ */
+const listarPorOT = async (otMantenimientoId) => {
+  try {
+    return await prisma.detTareasOT.findMany({
+      where: { otMantenimientoId },
+      include: {
+        responsable: { select: { id: true, nombres: true, apellidos: true } },
+        personalValida: { select: { id: true, nombres: true, apellidos: true } },
+        contratista: { select: { id: true, razonSocial: true } },
+        estadoTarea: { select: { id: true, descripcion: true, severityColor: true } },
+        insumosOT: {
+          select: {
+            id: true,
+            producto: { select: { id: true, codigo: true, descripcion: true } },
+            cantidad: true,
+            estadoInsumo: { select: { id: true, descripcion: true, severityColor: true } }
+          }
+        }
+      },
+      orderBy: { numeroTarea: 'asc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Obtiene una tarea por ID con relaciones.
  */
 const obtenerPorId = async (id) => {
   try {
-    const tarea = await prisma.detTareasOT.findUnique({ where: { id } });
+    const tarea = await prisma.detTareasOT.findUnique({ 
+      where: { id },
+      include: {
+        otMantenimiento: true,
+        responsable: true,
+        personalValida: true,
+        contratista: true,
+        estadoTarea: true,
+        insumosOT: {
+          include: {
+            producto: true,
+            estadoInsumo: true
+          }
+        }
+      }
+    });
     if (!tarea) throw new NotFoundError('DetTareasOT no encontrada');
     return tarea;
   } catch (err) {
@@ -105,6 +159,7 @@ const eliminar = async (id) => {
 
 export default {
   listar,
+  listarPorOT,
   obtenerPorId,
   crear,
   actualizar,

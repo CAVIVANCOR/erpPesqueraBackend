@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para DetTareasOT
 router.get('/', detTareasOTController.listar);
+router.get('/ot/:otMantenimientoId', detTareasOTController.listarPorOT); // Listar tareas de una OT específica
 router.get('/:id', detTareasOTController.obtenerPorId);
 router.post('/', detTareasOTController.crear);
 router.put('/:id', detTareasOTController.actualizar);

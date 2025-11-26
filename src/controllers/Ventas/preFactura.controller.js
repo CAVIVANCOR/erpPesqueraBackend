@@ -1,5 +1,6 @@
 import preFacturaService from '../../services/Ventas/preFactura.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
+import prisma from '../../config/prismaClient.js';
 
 /**
  * Controlador para PreFactura
@@ -48,6 +49,36 @@ export async function eliminar(req, res, next) {
     const id = Number(req.params.id);
     await preFacturaService.eliminar(id);
     res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Obtiene series de documentos filtradas
+ * Query params: empresaId, tipoDocumentoId
+ */
+export async function obtenerSeriesDoc(req, res, next) {
+  try {
+    const { empresaId, tipoDocumentoId } = req.query;
+    
+    if (!empresaId || !tipoDocumentoId) {
+      return res.status(400).json({
+        error: 'Parámetros faltantes',
+        mensaje: 'Se requieren empresaId y tipoDocumentoId'
+      });
+    }
+
+    const series = await prisma.serieDoc.findMany({
+      where: {
+        empresaId: BigInt(empresaId),
+        tipoDocumentoId: BigInt(tipoDocumentoId),
+        activo: true
+      },
+      orderBy: { serie: 'asc' }
+    });
+
+    res.json(toJSONBigInt(series));
   } catch (err) {
     next(err);
   }

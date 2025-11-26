@@ -3,16 +3,25 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Servicio CRUD para MotivoOriginoOT
- * Aplica validaciones de campo obligatorio y prevención de borrado si tiene órdenes asociadas.
+ * Valida unicidad de nombre y previene borrado si tiene órdenes asociadas.
  * Documentado en español.
  */
 
+async function validarUnicidadNombre(nombre, id = null) {
+  const where = id ? { nombre, NOT: { id } } : { nombre };
+  const existe = await prisma.motivoOriginoOT.findFirst({ where });
+  if (existe) throw new ConflictError('Ya existe un Motivo de Origen con ese nombre.');
+}
+
 /**
- * Lista todos los motivos de origen de OT.
+ * Lista todos los motivos de origen de OT activos.
  */
 const listar = async () => {
   try {
-    return await prisma.motivoOriginoOT.findMany();
+    return await prisma.motivoOriginoOT.findMany({
+      where: { activo: true },
+      orderBy: { nombre: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -34,7 +43,7 @@ const obtenerPorId = async (id) => {
 };
 
 /**
- * Crea un motivo de origen validando campo obligatorio.
+ * Crea un motivo de origen validando campo obligatorio y unicidad.
  */
 const crear = async (data) => {
   try {
@@ -44,27 +53,36 @@ const crear = async (data) => {
     if (data.nombre.length > 40) {
       throw new ValidationError('El nombre no puede superar los 40 caracteres.');
     }
+    await validarUnicidadNombre(data.nombre);
+    
     return await prisma.motivoOriginoOT.create({ data });
   } catch (err) {
-    if (err instanceof ValidationError) throw err;
+    if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
 };
 
 /**
- * Actualiza un motivo de origen existente, validando campo obligatorio.
+ * Actualiza un motivo de origen existente, validando campo obligatorio y unicidad.
  */
 const actualizar = async (id, data) => {
   try {
     const existente = await prisma.motivoOriginoOT.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('MotivoOriginoOT no encontrado');
-    if (data.nombre && data.nombre.length > 40) {
-      throw new ValidationError('El nombre no puede superar los 40 caracteres.');
+    
+    if (data.nombre) {
+      if (data.nombre.length > 40) {
+        throw new ValidationError('El nombre no puede superar los 40 caracteres.');
+      }
+      if (data.nombre !== existente.nombre) {
+        await validarUnicidadNombre(data.nombre, id);
+      }
     }
+    
     return await prisma.motivoOriginoOT.update({ where: { id }, data });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

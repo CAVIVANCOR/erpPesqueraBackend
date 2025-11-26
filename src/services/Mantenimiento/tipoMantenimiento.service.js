@@ -3,16 +3,22 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Servicio CRUD para TipoMantenimiento
- * Aplica validaciones de campo obligatorio y prevención de borrado si tiene órdenes asociadas.
+ * Valida unicidad de nombre y previene borrado si tiene órdenes asociadas.
  * Documentado en español.
  */
 
-/**
- * Lista todos los tipos de mantenimiento.
- */
+async function validarUnicidadNombre(nombre, id = null) {
+  const where = id ? { nombre, NOT: { id } } : { nombre };
+  const existe = await prisma.tipoMantenimiento.findFirst({ where });
+  if (existe) throw new ConflictError('Ya existe un Tipo de Mantenimiento con ese nombre.');
+}
+
 const listar = async () => {
   try {
-    return await prisma.tipoMantenimiento.findMany();
+    return await prisma.tipoMantenimiento.findMany({
+      where: { activo: true },
+      orderBy: { nombre: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -41,12 +47,14 @@ const crear = async (data) => {
     if (!data.nombre) {
       throw new ValidationError('El campo nombre es obligatorio.');
     }
-    if (data.nombre.length > 40) {
-      throw new ValidationError('El nombre no puede superar los 40 caracteres.');
+    if (data.nombre.length > 20) {
+      throw new ValidationError('El nombre no puede superar los 20 caracteres.');
     }
+    await validarUnicidadNombre(data.nombre);
+    
     return await prisma.tipoMantenimiento.create({ data });
   } catch (err) {
-    if (err instanceof ValidationError) throw err;
+    if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -59,12 +67,19 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.tipoMantenimiento.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('TipoMantenimiento no encontrado');
-    if (data.nombre && data.nombre.length > 40) {
-      throw new ValidationError('El nombre no puede superar los 40 caracteres.');
+    
+    if (data.nombre) {
+      if (data.nombre.length > 20) {
+        throw new ValidationError('El nombre no puede superar los 20 caracteres.');
+      }
+      if (data.nombre !== existente.nombre) {
+        await validarUnicidadNombre(data.nombre, id);
+      }
     }
+    
     return await prisma.tipoMantenimiento.update({ where: { id }, data });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -77,12 +92,15 @@ const eliminar = async (id) => {
   try {
     const existente = await prisma.tipoMantenimiento.findUnique({
       where: { id },
-      include: { ordenesTrabajo: true }
+      include: { ordenesMantenimiento: true }
     });
     if (!existente) throw new NotFoundError('TipoMantenimiento no encontrado');
-    if (existente.ordenesTrabajo && existente.ordenesTrabajo.length > 0) {
-      throw new ConflictError('No se puede eliminar el tipo de mantenimiento porque tiene órdenes de trabajo asociadas.');
+    
+    // Validar que no tenga registros asociados
+    if (existente.ordenesMantenimiento && existente.ordenesMantenimiento.length > 0) {
+      throw new ConflictError('No se puede eliminar porque tiene órdenes de mantenimiento asociadas.');
     }
+    
     await prisma.tipoMantenimiento.delete({ where: { id } });
     return true;
   } catch (err) {

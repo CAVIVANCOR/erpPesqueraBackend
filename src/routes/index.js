@@ -83,12 +83,17 @@ import kardexAlmacenRoutes from '../routes/Almacen/kardexAlmacen.routes.js';
 import saldosProductoClienteRoutes from '../routes/Almacen/saldosProductoCliente.routes.js';
 import saldosDetProductoClienteRoutes from '../routes/Almacen/saldosDetProductoCliente.routes.js';
 import generarKardexRoutes from '../routes/Almacen/generarKardex.routes.js';
+import entregaARendirMovAlmacenRoutes from '../routes/Almacen/entregaARendirMovAlmacen.routes.js';
+import detMovsEntregaRendirMovAlmacenRoutes from '../routes/Almacen/detMovsEntregaRendirMovAlmacen.routes.js';
+import entregaARendirMovAlmacenImpresionRoutes from '../routes/Almacen/entregaARendirMovAlmacenImpresion.routes.js';
 import tipoMantenimientoRoutes from '../routes/Mantenimiento/tipoMantenimiento.routes.js';
 import otMantenimientoRoutes from '../routes/Mantenimiento/otMantenimiento.routes.js';
 import motivoOriginoOTRoutes from '../routes/Mantenimiento/motivoOriginoOT.routes.js';
 import detPermisoGestionadoOTRoutes from '../routes/Mantenimiento/detPermisoGestionadoOT.routes.js';
 import detTareasOTRoutes from '../routes/Mantenimiento/detTareasOT.routes.js';
 import detInsumosTareaOTRoutes from '../routes/Mantenimiento/detInsumosTareaOT.routes.js';
+import otMantenimientoAlmacenRoutes from '../routes/Mantenimiento/otMantenimientoAlmacen.routes.js';
+import otMantenimientoPdfRoutes from '../routes/Mantenimiento/otMantenimientoPdf.routes.js';
 import requerimientoCompraRoutes from '../routes/Compras/requerimientoCompra.routes.js';
 import detalleReqCompraRoutes from '../routes/Compras/detalleReqCompra.routes.js';
 import ordenCompraRoutes from '../routes/Compras/ordenCompra.routes.js';
@@ -97,6 +102,11 @@ import entregaARendirPComprasRoutes from '../routes/Compras/entregaARendirPCompr
 import detMovsEntregaRendirPComprasRoutes from '../routes/Compras/detMovsEntregaRendirPCompras.routes.js';
 import cotizacionVentasRoutes from '../routes/Ventas/cotizacionVentas.routes.js';
 import detCotizacionVentasRoutes from '../routes/Ventas/detCotizacionVentas.routes.js';
+import contratoServicioRoutes from '../routes/ContratoServicio/contratoServicio.routes.js';
+import detServicioContratoRoutes from '../routes/ContratoServicio/detServicioContrato.routes.js';
+import contratoServicioPdfRoutes from '../routes/ContratoServicio/contratoServicioPdf.routes.js';
+import entregaARendirContratoServiciosRoutes from '../routes/ContratoServicio/entregaARendirContratoServicios.routes.js';
+import detMovsEntregaRendirContratoServiciosRoutes from '../routes/ContratoServicio/detMovsEntregaRendirContratoServicios.routes.js';
 import tipoProductoRoutes from '../routes/Ventas/tipoProducto.routes.js';
 import tipoEstadoProductoRoutes from '../routes/Ventas/tipoEstadoProducto.routes.js';
 import destinoProductoRoutes from '../routes/Ventas/destinoProducto.routes.js';
@@ -344,6 +354,11 @@ router.use('/saldos-producto-cliente', saldosProductoClienteRoutes);
 router.use('/saldos-det-producto-cliente', saldosDetProductoClienteRoutes);
 // Rutas para Generar Kardex
 router.use('/generar-kardex', generarKardexRoutes);
+// Rutas para EntregaARendirMovAlmacen
+router.use('/entregas-rendir-mov-almacen', entregaARendirMovAlmacenImpresionRoutes);
+router.use('/entregas-rendir-mov-almacen', entregaARendirMovAlmacenRoutes);
+// Rutas para DetMovsEntregaRendirMovAlmacen
+router.use('/det-movs-entrega-rendir-mov-almacen', detMovsEntregaRendirMovAlmacenRoutes);
 // Rutas para OTMantenimiento
 router.use('/ot-mantenimiento', otMantenimientoRoutes);
 // Rutas para TipoMantenimiento
@@ -356,6 +371,10 @@ router.use('/permisos-gestionados-ot', detPermisoGestionadoOTRoutes);
 router.use('/tareas-ot', detTareasOTRoutes);
 // Rutas para DetInsumosTareaOT
 router.use('/insumos-tarea-ot', detInsumosTareaOTRoutes);
+// Rutas para integración OT Mantenimiento con Almacén
+router.use('/ot-mantenimiento-almacen', otMantenimientoAlmacenRoutes);
+// Rutas para PDFs de OT Mantenimiento (upload y serving)
+router.use('/ot-mantenimiento', otMantenimientoPdfRoutes);
 // Rutas para RequerimientoCompra
 router.use('/requerimientos-compra', requerimientoCompraRoutes);
 // Rutas para DetalleReqCompra
@@ -381,6 +400,16 @@ router.use('/cotizaciones-ventas', cotizacionVentasRoutes);
 router.use('/cotizacion-ventas', cotizacionVentasImpresionRoutes);
 // Rutas para DetCotizacionVentas
 router.use('/detalles-cotizacion-ventas', detCotizacionVentasRoutes);
+// Rutas para ContratoServicio
+router.use('/contratos-servicio', contratoServicioRoutes);
+// Rutas para DetServicioContrato
+router.use('/detalles-servicio-contrato', detServicioContratoRoutes);
+// Rutas para PDFs de ContratoServicio (upload y serving)
+router.use('/contrato-servicio-pdf', contratoServicioPdfRoutes);
+// Rutas para EntregaARendirContratoServicios
+router.use('/entregas-rendir-contrato-servicios', entregaARendirContratoServiciosRoutes);
+// Rutas para DetMovsEntregaRendirContratoServicios
+router.use('/det-movs-entrega-rendir-contrato-servicios', detMovsEntregaRendirContratoServiciosRoutes);
 // Rutas para TipoProducto
 router.use('/tipos-producto', tipoProductoRoutes);
 // Rutas para TipoEstadoProducto

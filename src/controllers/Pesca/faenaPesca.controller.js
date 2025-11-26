@@ -1,5 +1,6 @@
 import faenaPescaService from '../../services/Pesca/faenaPesca.service.js';
 import wmsService from '../../services/Almacen/wms.service.js';
+import finalizarFaenaService from '../../services/Pesca/finalizarFaenaConMovimientos.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import multer from 'multer';
 import path from 'path';
@@ -411,7 +412,13 @@ export async function servirArchivoDeclaracionDesembarque(req, res) {
 }
 
 /**
- * Finaliza una faena de pesca y genera automáticamente el movimiento de almacén
+ * Finaliza una faena de pesca y genera automáticamente DOS movimientos de almacén:
+ * 1. INGRESO (Concepto 1): De Proveedor MEGUI a Almacén MP Recurso Hidrobiológico
+ * 2. SALIDA (Concepto 3): De Almacén MP Recurso Hidrobiológico a Cliente MEGUI
+ * 
+ * Utiliza las funciones genéricas del módulo de Inventarios para garantizar
+ * consistencia con el resto del sistema.
+ * 
  * @param {Object} req.params.id - ID de la faena de pesca
  * @param {Object} req.body.temporadaPescaId - ID de la temporada de pesca
  * @param {Object} req.user.id - ID del usuario logueado (desde middleware de autenticación)
@@ -428,30 +435,14 @@ export async function finalizarFaenaConMovimientoAlmacen(req, res, next) {
       });
     }
 
-    // 1. Actualizar el estado de la faena a FINALIZADA (19)
-    const faena = await faenaPescaService.actualizar(Number(faenaPescaId), {
-      estadoFaenaId: 19, // FINALIZADA
-    });
-
-    // 2. Generar el movimiento de almacén
-    const movimientoAlmacen = await wmsService.generarMovimientoDesdeTemporadaPesca(
-      BigInt(temporadaPescaId),
+    // Ejecutar el proceso completo de finalización con movimientos de almacén
+    const resultado = await finalizarFaenaService.finalizarFaenaConMovimientosAlmacen(
       faenaPescaId,
+      BigInt(temporadaPescaId),
       usuarioId
     );
 
-    res.json(
-      toJSONBigInt({
-        faena,
-        movimientoAlmacen: {
-          id: movimientoAlmacen.movimientoAlmacen.id,
-          numeroDocumento: movimientoAlmacen.movimientoAlmacen.numeroDocumento,
-          cantidadDetalles: movimientoAlmacen.detalles.length,
-          cantidadKardex: movimientoAlmacen.kardex.length,
-        },
-        mensaje: 'Faena finalizada y movimiento de almacén generado exitosamente',
-      })
-    );
+    res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }

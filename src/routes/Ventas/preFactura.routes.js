@@ -3,6 +3,9 @@ import * as preFacturaController from '../../controllers/Ventas/preFactura.contr
 
 const router = Router();
 
+// Rutas específicas (DEBEN IR ANTES de las rutas con parámetros)
+router.get('/series-doc', preFacturaController.obtenerSeriesDoc);
+
 // Rutas CRUD para PreFactura
 router.get('/', preFacturaController.listar);
 router.get('/:id', preFacturaController.obtenerPorId);

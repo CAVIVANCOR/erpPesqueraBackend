@@ -14,6 +14,16 @@ export async function listar(req, res, next) {
   }
 }
 
+export async function listarPorOT(req, res, next) {
+  try {
+    const otMantenimientoId = Number(req.params.otMantenimientoId);
+    const tareas = await detTareasOTService.listarPorOT(otMantenimientoId);
+    res.json(toJSONBigInt(tareas));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

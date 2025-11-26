@@ -2,9 +2,10 @@
 import prisma from "../../config/prismaClient.js";
 import { ValidationError, DatabaseError } from "../../utils/errors.js";
 
-const generarKardexMovimiento = async (movimientoAlmacenId) => {
+const generarKardexMovimiento = async (movimientoAlmacenId, transaccion = null) => {
   try {
-    return await prisma.$transaction(async (tx) => {
+    // Si se proporciona una transacción, usarla; sino, crear una nueva
+    const ejecutarEnTransaccion = async (tx) => {
       const movimiento = await tx.movimientoAlmacen.findUnique({
         where: { id: movimientoAlmacenId },
         include: {
@@ -70,7 +71,14 @@ const generarKardexMovimiento = async (movimientoAlmacenId) => {
       resultados.saldosGenActualizados =
         saldosActualizados.saldosGenActualizados;
       return resultados;
-    });
+    };
+
+    // Si se proporcionó una transacción, usarla; sino, crear una nueva
+    if (transaccion) {
+      return await ejecutarEnTransaccion(transaccion);
+    } else {
+      return await prisma.$transaction(ejecutarEnTransaccion);
+    }
   } catch (error) {
     if (error instanceof ValidationError) throw error;
     if (error.code?.startsWith("P"))

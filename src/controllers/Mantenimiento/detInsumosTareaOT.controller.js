@@ -14,6 +14,16 @@ export async function listar(req, res, next) {
   }
 }
 
+export async function listarPorTarea(req, res, next) {
+  try {
+    const tareaId = Number(req.params.tareaId);
+    const insumos = await detInsumosTareaOTService.listarPorTarea(tareaId);
+    res.json(toJSONBigInt(insumos));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);

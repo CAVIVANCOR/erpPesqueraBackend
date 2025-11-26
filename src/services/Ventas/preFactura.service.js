@@ -3,9 +3,39 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Servicio CRUD para PreFactura
- * Valida unicidad de código, existencia de claves foráneas y previene borrado si tiene detalles asociados.
+ * Gestiona pre-facturas generadas desde cotizaciones aprobadas
+ * Incluye generación automática de código y número de documento
  * Documentado en español.
  */
+
+/**
+ * Genera código único para la pre-factura
+ * Formato: PF-YYYY-NNNNNN
+ * Ejemplo: PF-2024-000001
+ */
+async function generarCodigoPreFactura(empresaId) {
+  const año = new Date().getFullYear();
+  
+  // Buscar la última pre-factura del año
+  const ultimaPreFactura = await prisma.preFactura.findFirst({
+    where: {
+      empresaId,
+      codigo: {
+        startsWith: `PF-${año}-`
+      }
+    },
+    orderBy: { id: 'desc' }
+  });
+
+  let correlativo = 1;
+  if (ultimaPreFactura) {
+    // Extraer el correlativo del código: PF-2024-000001
+    const partes = ultimaPreFactura.codigo.split('-');
+    correlativo = parseInt(partes[2]) + 1;
+  }
+
+  return `PF-${año}-${String(correlativo).padStart(6, '0')}`;
+}
 
 async function validarUnicidadCodigo(codigo, id = null) {
   const where = id ? { codigo, NOT: { id } } : { codigo };
@@ -59,8 +89,11 @@ const listar = async () => {
         empresa: true,
         cliente: true,
         tipoDocumento: true,
+        serieDoc: true,
         moneda: true,
+        formaPago: true,
         incoterm: true,
+        tipoContenedor: true,
         detalles: {
           include: {
             producto: true
@@ -83,9 +116,13 @@ const obtenerPorId = async (id) => {
         empresa: true,
         cliente: true,
         tipoDocumento: true,
+        serieDoc: true,
         moneda: true,
+        formaPago: true,
         incoterm: true,
-        cotizacionVentasOrigen: true,
+        tipoContenedor: true,
+        movSalidaAlmacen: true,
+        contratoServicio: true,
         detalles: {
           include: {
             producto: {
@@ -95,7 +132,7 @@ const obtenerPorId = async (id) => {
               }
             }
           },
-          orderBy: { item: 'asc' }
+          orderBy: { id: 'asc' }
         }
       }
     });
@@ -151,28 +188,96 @@ const obtenerPorCotizacion = async (cotizacionVentasOrigenId) => {
 
 const crear = async (data) => {
   try {
-    if (!data.codigo || !data.empresaId || !data.clienteId || !data.tipoDocumentoId || !data.formaPagoId || !data.estadoId) {
-      throw new ValidationError('Los campos obligatorios no pueden estar vacíos: codigo, empresaId, clienteId, tipoDocumentoId, formaPagoId, estadoId');
+    // Validar campos obligatorios
+    if (!data.empresaId || !data.clienteId || !data.tipoDocumentoId || !data.monedaId || !data.formaPagoId || !data.estadoId) {
+      throw new ValidationError('Faltan campos obligatorios: empresaId, clienteId, tipoDocumentoId, monedaId, formaPagoId, estadoId');
     }
-    await validarUnicidadCodigo(data.codigo);
-    await validarClavesForaneas(data);
     
-    // Asegurar campos de auditoría
-    const datosConAuditoria = {
-      ...data,
-      fechaCreacion: data.fechaCreacion || new Date(),
-      fechaActualizacion: data.fechaActualizacion || new Date(),
-    };
-    
-    return await prisma.preFactura.create({ 
-      data: datosConAuditoria,
-      include: {
-        empresa: true,
-        cliente: true,
-        tipoDocumento: true,
-        moneda: true,
-        incoterm: true
+    if (!data.serieDocId) {
+      throw new ValidationError('El campo serieDocId es obligatorio.');
+    }
+
+    // Usar transacción para generar número y actualizar correlativo atómicamente
+    return await prisma.$transaction(async (tx) => {
+      // 1. Generar código único
+      let codigo = data.codigo;
+      if (!codigo) {
+        codigo = await generarCodigoPreFactura(data.empresaId);
       }
+
+      // 2. Validar existencia de empresa
+      const empresa = await tx.empresa.findUnique({ where: { id: data.empresaId } });
+      if (!empresa) throw new ValidationError('Empresa no existente.');
+
+      // 3. Validar existencia de cliente
+      const cliente = await tx.entidadComercial.findUnique({ where: { id: data.clienteId } });
+      if (!cliente) throw new ValidationError('Cliente no existente.');
+
+      // 4. Validar Incoterm si se proporciona
+      if (data.incotermId) {
+        const incoterm = await tx.incoterm.findUnique({ where: { id: data.incotermId } });
+        if (!incoterm) throw new ValidationError('Incoterm no existente.');
+      }
+
+      // 5. Obtener la serie seleccionada
+      const serie = await tx.serieDoc.findUnique({
+        where: { id: BigInt(data.serieDocId) }
+      });
+      
+      if (!serie) {
+        throw new ValidationError('Serie de documento no encontrada.');
+      }
+      
+      // 6. Calcular nuevo correlativo
+      const nuevoCorrelativo = Number(serie.correlativo) + 1;
+      
+      // 7. Generar números con formato
+      const numSerie = String(serie.serie).padStart(serie.numCerosIzqSerie, '0');
+      const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, '0');
+      const numeroDocumento = `${numSerie}-${numCorre}`;
+      
+      // 8. Actualizar el correlativo en SerieDoc
+      await tx.serieDoc.update({
+        where: { id: BigInt(data.serieDocId) },
+        data: { correlativo: BigInt(nuevoCorrelativo) }
+      });
+
+      // 9. Calcular fechaVencimiento si no viene (30 días después de fechaDocumento)
+      let fechaVencimiento = data.fechaVencimiento;
+      if (!fechaVencimiento) {
+        const fechaDoc = data.fechaDocumento ? new Date(data.fechaDocumento) : new Date();
+        fechaVencimiento = new Date(fechaDoc);
+        fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
+      }
+
+      // 10. Extraer y remover campos de relaciones anidadas
+      const { detalles, ...dataSinRelaciones } = data;
+
+      // 11. Asegurar campos de auditoría
+      const datosConAuditoria = {
+        ...dataSinRelaciones,
+        codigo,
+        numSerieDoc: numSerie,
+        numCorreDoc: numCorre,
+        numeroDocumento,
+        fechaVencimiento,
+        fechaCreacion: data.fechaCreacion || new Date(),
+        fechaActualizacion: data.fechaActualizacion || new Date(),
+      };
+
+      // 12. Crear la pre-factura con los números generados
+      return await tx.preFactura.create({
+        data: datosConAuditoria,
+        include: {
+          empresa: true,
+          cliente: true,
+          tipoDocumento: true,
+          serieDoc: true,
+          moneda: true,
+          formaPago: true,
+          incoterm: true
+        }
+      });
     });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;

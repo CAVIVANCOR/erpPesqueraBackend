@@ -109,6 +109,9 @@ model Activo {
   tipo        TipoActivo @relation(fields: [tipoId], references: [id])
   permisos    DetallePermisoActivo[]
   embarcacion Embarcacion?
+  ordenesMantenimiento OTMantenimiento[]
+  contratosServicio       ContratoServicio[]    @relation("ContratoServicioActivo")
+
 }
 
 model AgrupacionEntidad {
@@ -276,6 +279,10 @@ model CentroCosto {
   entregasARendirIndustrial     EntregaARendir[]
   entregasARendirCompras        EntregaARendirPCompras[]
   entregasARendirConsumo        EntregaARendirPescaConsumo[]
+
+  entregasRendirMovAlmacen EntregaARendirMovAlmacen[]
+    entregasRendirContratoServicio    EntregaARendirContratoServicios[] @relation("EntregaRendirContratoServicio")
+  detallesMovContratoServicio       DetMovsEntregaRendirContratoServicios[] @relation("DetMovContratoServicio")
 }
 
 model Color {
@@ -322,6 +329,8 @@ model Almacen {
   centroAlmacen CentrosAlmacen @relation(fields: [centroAlmacenId], references: [id])
   tipoAlmacenamiento TipoAlmacenamiento @relation(fields: [tipoAlmacenamientoId], references: [id])
   tipoAlmacen TipoAlmacen @relation(fields: [tipoAlmacenId], references: [id])
+  contratosServicio       ContratoServicio[]    @relation("ContratoServicioAlmacen")
+
 }
 
 model CentrosAlmacen {
@@ -912,7 +921,8 @@ model PreFactura {
   centroCostoId                BigInt?
   dirEntregaId                 BigInt?
   dirFiscalId                  BigInt?
-  
+  contratoServicioId       BigInt?
+
   fechaCreacion                DateTime    @default(now())
   fechaActualizacion           DateTime?   @updatedAt
   creadoPor                    BigInt?
@@ -928,7 +938,8 @@ model PreFactura {
   tipoContenedor               TipoContenedor? @relation(fields: [tipoContenedorId], references: [id])
   movSalidaAlmacen             MovimientoAlmacen? @relation("MovimientoAlmacenToPreFactura", fields: [movSalidaAlmacenId], references: [id])
   detalles                     DetallePreFactura[]
-  
+  contratoServicio        ContratoServicio?     @relation("PreFacturaContrato", fields: [contratoServicioId], references: [id])
+
   @@index([empresaId, fechaDocumento])
   @@index([clienteId])
 }
@@ -1159,21 +1170,6 @@ model DetDocTripulantesFaenaConsumo {
   faenaPescaConsumo    FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
 }
 
-model DetInsumosTareaOT {
-  id                  BigInt      @id @default(autoincrement())
-  tareaId             BigInt
-  productoId          BigInt
-  cantidad            Decimal?
-  costoUnitario       Decimal?
-  observaciones       String?
-  aprobacionComprasId BigInt?
-  actualizadoEn       DateTime
-  proveedorId         BigInt?
-
-  tarea              DetTareasOT  @relation(fields: [tareaId], references: [id])
-  producto           Producto     @relation(fields: [productoId], references: [id])
-}
-
 model DetMovsEntRendirPescaConsumo {
   id                           BigInt                     @id @default(autoincrement())
   entregaARendirPescaConsumoId BigInt
@@ -1282,39 +1278,17 @@ model DetMovsEntregaRendirPCompras {
 }
 
 model DetPermisoGestionadoOT {
-  id                BigInt          @id @default(autoincrement())
-  otMantenimientoId BigInt
-  permisoId         BigInt
-  gestionado        Boolean         @default(false)
-  fechaGestion      DateTime?
-  observaciones     String?
+  id                       BigInt              @id @default(autoincrement())
+  otMantenimientoId        BigInt
+  permisoAutorizacionId    BigInt              // ← CORREGIR: agregar la 'o' faltante
+  gestionado               Boolean             @default(false)
+  fechaGestion             DateTime?
+  urlPermisoAutorizacion   String?
 
-  otMantenimiento   OTMantenimiento     @relation(fields: [otMantenimientoId], references: [id])
+  otMantenimiento          OTMantenimiento     @relation(fields: [otMantenimientoId], references: [id])
+  permisoAutorizacion      PermisoAutorizacion @relation(fields: [permisoAutorizacionId], references: [id])
 }
 
-
-model DetTareasOT {
-  id                      BigInt              @id @default(autoincrement())
-  otMantenimientoId       BigInt
-  descripcion             String
-  responsableId           BigInt?
-  fechaProgramada         DateTime?
-  fechaInicio             DateTime?
-  fechaFin                DateTime?
-  realizado               Boolean             @default(false)
-  observaciones           String?
-  urlFotosAntesPdf        String?
-  adjuntoCotizacionUno    Boolean             @default(false)
-  urlCotizacionUnoPdf     String?
-  adjuntoCotizacionDos    Boolean             @default(false)
-  urlCotizacionDosPdf     String?
-  actualizadoEn           DateTime
-  fechaValidaTerminoTarea DateTime?
-  validaTerminoTareaId    BigInt?
-
-  otMantenimiento   OTMantenimiento @relation(fields: [otMantenimientoId], references: [id])
-  insumos DetInsumosTareaOT[]
-}
 
 model DetalleCalaEspecie {
   id                  BigInt   @id @default(autoincrement())
@@ -1407,6 +1381,8 @@ model DetalleMovimientoAlmacen {
   movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
   producto              Producto @relation(fields: [productoId], references: [id])
   detalleReqCompra      DetalleReqCompra? @relation(fields: [detalleReqCompraId], references: [id])
+  insumosOT  DetInsumosTareaOT[] @relation("DetMovAlmacenInsumoOT")
+
 }
 
 model DetalleOrdenCompra {
@@ -1424,7 +1400,8 @@ model DetalleOrdenCompra {
   
   ordenCompra    OrdenCompra @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
   producto       Producto @relation(fields: [productoId], references: [id])
-  
+  insumosOT  DetInsumosTareaOT[] @relation("DetOCInsumoOT")
+
   @@index([ordenCompraId])
   @@index([productoId])
 }
@@ -1687,6 +1664,9 @@ model Empresa {
 
   movimientosCajaOrigen   MovimientoCaja[] @relation("EmpresaOrigenMovCaja")
   movimientosCajaDestino  MovimientoCaja[] @relation("EmpresaDestinoMovCaja")
+  ordenesMantenimiento OTMantenimiento[]
+  contratosServicio       ContratoServicio[]    @relation("ContratoServicioEmpresa")
+
 }
 
 model EmpresaCentroCosto {
@@ -1764,7 +1744,12 @@ model EntidadComercial {
   cotizacionesVentas CotizacionVentas[]
   preFacturas PreFactura[] @relation("ClientePreFactura")
   costosExportacionCotizacion CostosExportacionCotizacion[] @relation("ProveedorCostoExport")
-costosExportacionPorIncoterm CostoExportacionPorIncoterm[] @relation("ProveedorDefaultCostoIncoterm")
+  costosExportacionPorIncoterm CostoExportacionPorIncoterm[] @relation("ProveedorDefaultCostoIncoterm")
+  detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[]
+  tareasContratista         DetTareasOT[]       @relation("ContratistaTareaOT")
+  insumosProveedorSugerido  DetInsumosTareaOT[] @relation("ProveedorSugeridoInsumoOT")
+  contratosServicioCliente  ContratoServicio[]  @relation("ContratoServicioCliente")
+  movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[] @relation("ProveedorMovContratoServicio")
 }
 
 model LineaCreditoEntidad {
@@ -1882,6 +1867,8 @@ model ContactoEntidad {
   actualizadoPor       BigInt?
 
    entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
+  contratosServicio       ContratoServicio[]    @relation("ContratoServicioContacto")
+
 }
 
 model CtaCteEntidad {
@@ -1954,6 +1941,137 @@ model EntregaARendirPCompras {
   @@index([requerimientoCompraId])
 }
 
+model EntregaARendirMovAlmacen {
+  id                           BigInt      @id @default(autoincrement())
+  movimientoAlmacenId        BigInt      @unique                     // Movimiento de almacen que origina las entregas (relación 1:1)
+  respEntregaRendirId          BigInt                                  // Personal responsable de rendir cuentas
+  entregaLiquidada             Boolean     @default(false)             // Si ya se cerró y liquidó todo
+  fechaLiquidacion             DateTime?                               // Cuándo se liquidó
+  centroCostoId                BigInt                                  // Centro de costo que asume los gastos
+  fechaCreacion                DateTime    @default(now())
+  fechaActualizacion           DateTime    @updatedAt
+  creadoPor                    BigInt?
+  actualizadoPor               BigInt?
+  urlLiquidacionPdf String?
+  respLiquidacionId BigInt?
+
+  movimientoAlmacen MovimientoAlmacen @relation(fields: [movimientoAlmacenId], references: [id])
+  detMovEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[]
+  respLiquidacion Personal? @relation("LiquidadorInventario", fields: [respLiquidacionId], references: [id])
+  respEntregaRendir Personal @relation("ResponsableEntregaInventario", fields: [respEntregaRendirId], references: [id])
+  centroCosto CentroCosto @relation(fields: [centroCostoId], references: [id])
+
+  @@index([respEntregaRendirId])
+  @@index([entregaLiquidada])
+  @@index([movimientoAlmacenId])
+}
+
+model DetMovsEntregaRendirMovAlmacen {
+  id                       BigInt      @id @default(autoincrement())
+  entregaARendirMovAlmacenId BigInt                                      // Entrega a rendir a la que pertenece
+  tipoMovimientoId         BigInt                                      // 1=Entrega Inicial, 2=Gasto, 3=Devolución, 4=Ampliación
+  productoId               BigInt?                                     // Producto que se movió
+  responsableId            BigInt                                      // Personal que realizó el movimiento
+  fechaMovimiento          DateTime                                    // Fecha del movimiento
+  monto                    Decimal                                     // Monto del movimiento (positivo o negativo según tipo)
+  monedaId                 BigInt?                                     // Moneda del movimiento (PEN, USD)
+  descripcion              String?     @db.Text                        // Descripción detallada del movimiento
+  entidadComercialId       BigInt?                                     // Proveedor o tercero al que se le pagó
+  
+  tipoDocumentoId        BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
+  numeroSerieComprobante        String?                              // Número Serie del comprobante
+  numeroCorrelativoComprobante String?                               // Número Correlativo del comprobante
+
+  urlComprobanteMovimiento String?                                     // URL del comprobante escaneado/fotografiado
+  validadoTesoreria        Boolean     @default(false)                 // Si tesorería validó el movimiento
+  fechaValidacionTesoreria DateTime?                                   // Cuándo se validó
+  operacionSinFactura      Boolean     @default(false)                 // Si no hay comprobante formal
+  motivoSinFactura         String?     @db.Text                        // Por qué no hay comprobante (compra informal, etc.)
+  operacionMovCajaId       BigInt?                                     // Si se registró en movimiento de caja
+  fechaOperacionMovCaja    DateTime?                                   // Fecha del movimiento de caja
+  urlComprobanteOperacionMovCaja String?                               // Comprobante del movimiento de caja
+  moduloOrigenMovCajaId    BigInt?                                     // Módulo que originó el movimiento (Compras, Ventas, etc.)
+  centroCostoId            BigInt                                      // Centro de costo del movimiento
+  creadoEn                 DateTime    @default(now())
+  actualizadoEn            DateTime    @updatedAt
+  
+  entregaARendirMovAlmacen   EntregaARendirMovAlmacen @relation(fields: [entregaARendirMovAlmacenId], references: [id], onDelete: Cascade)
+  tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+  entidadComercial         EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
+  moneda Moneda? @relation(fields: [monedaId], references: [id])
+  tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
+  producto Producto? @relation(fields: [productoId], references: [id])
+}
+
+
+model EntregaARendirContratoServicios {
+  id                           BigInt      @id @default(autoincrement())
+  contratoServicioId           BigInt      @unique                     // Contrato Servicios que origina las entregas (relación 1:1)
+  respEntregaRendirId          BigInt                                  // Personal responsable de rendir cuentas
+  entregaLiquidada             Boolean     @default(false)             // Si ya se cerró y liquidó todo
+  fechaLiquidacion             DateTime?                               // Cuándo se liquidó
+  centroCostoId                BigInt                                  // Centro de costo que asume los gastos
+  fechaCreacion                DateTime    @default(now())
+  fechaActualizacion           DateTime    @updatedAt
+  creadoPor                    BigInt?
+  actualizadoPor               BigInt?
+  urlLiquidacionPdf            String?     @db.VarChar(500)
+  respLiquidacionId            BigInt?
+
+  contratoServicio             ContratoServicio @relation("EntregaRendirContrato", fields: [contratoServicioId], references: [id])
+  detallesMovimientos          DetMovsEntregaRendirContratoServicios[]
+  respLiquidacion              Personal? @relation("LiquidadorContratoServicio", fields: [respLiquidacionId], references: [id])
+  respEntregaRendir            Personal @relation("ResponsableEntregaContratoServicio", fields: [respEntregaRendirId], references: [id])
+  centroCosto                  CentroCosto @relation("EntregaRendirContratoServicio", fields: [centroCostoId], references: [id])
+
+  @@index([respEntregaRendirId])
+  @@index([entregaLiquidada])
+  @@index([contratoServicioId])
+}
+
+model DetMovsEntregaRendirContratoServicios {
+  id                                   BigInt      @id @default(autoincrement())
+  entregaARendirContratoServicioId     BigInt                                      // Entrega a rendir a la que pertenece
+  tipoMovimientoId                     BigInt                                      // 1=Entrega Inicial, 2=Gasto, 3=Devolución, 4=Ampliación
+  productoId                           BigInt?                                     // Producto que se movió
+  responsableId                        BigInt                                      // Personal que realizó el movimiento
+  fechaMovimiento                      DateTime                                    // Fecha del movimiento
+  monto                                Decimal     @db.Decimal(18, 4)              // Monto del movimiento (positivo o negativo según tipo)
+  monedaId                             BigInt?                                     // Moneda del movimiento (PEN, USD)
+  descripcion                          String?     @db.Text                        // Descripción detallada del movimiento
+  entidadComercialId                   BigInt?                                     // Proveedor o tercero al que se le pagó
+  
+  tipoDocumentoId                      BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
+  numeroSerieComprobante               String?     @db.VarChar(20)                 // Número Serie del comprobante
+  numeroCorrelativoComprobante         String?     @db.VarChar(20)                 // Número Correlativo del comprobante
+
+  urlComprobanteMovimiento             String?     @db.VarChar(500)                // URL del comprobante escaneado/fotografiado
+  validadoTesoreria                    Boolean     @default(false)                 // Si tesorería validó el movimiento
+  fechaValidacionTesoreria             DateTime?                                   // Cuándo se validó
+  operacionSinFactura                  Boolean     @default(false)                 // Si no hay comprobante formal
+  motivoSinFactura                     String?     @db.Text                        // Por qué no hay comprobante (compra informal, etc.)
+  operacionMovCajaId                   BigInt?                                     // Si se registró en movimiento de caja
+  fechaOperacionMovCaja                DateTime?                                   // Fecha del movimiento de caja
+  urlComprobanteOperacionMovCaja       String?     @db.VarChar(500)                // Comprobante del movimiento de caja
+  moduloOrigenMovCajaId                BigInt?                                     // Módulo que originó el movimiento (Compras, Ventas, etc.)
+  centroCostoId                        BigInt                                      // Centro de costo del movimiento
+  creadoEn                             DateTime    @default(now())
+  actualizadoEn                        DateTime    @updatedAt
+  
+  entregaARendirContratoServicio       EntregaARendirContratoServicios @relation(fields: [entregaARendirContratoServicioId], references: [id], onDelete: Cascade)
+  tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+  responsable                          Personal @relation("ResponsableMovContratoServicio", fields: [responsableId], references: [id])
+  entidadComercial                     EntidadComercial? @relation("ProveedorMovContratoServicio", fields: [entidadComercialId], references: [id])
+  moneda                               Moneda? @relation(fields: [monedaId], references: [id])
+  tipoDocumento                        TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
+  producto                             Producto? @relation(fields: [productoId], references: [id])
+  centroCosto                          CentroCosto @relation("DetMovContratoServicio", fields: [centroCostoId], references: [id])
+  
+  @@index([entregaARendirContratoServicioId])
+  @@index([tipoMovimientoId])
+  @@index([responsableId])
+  @@index([fechaMovimiento])
+}
 
 model EntregaARendirPescaConsumo {
   id                           BigInt                         @id @default(autoincrement())
@@ -1994,6 +2112,11 @@ model EstadoMultiFuncion {
   movimientosAlmacen MovimientoAlmacen[]
   requerimientoCompra RequerimientoCompra[]
   movimientosCaja MovimientoCaja[]
+  ordenesMantenimiento OTMantenimiento[]
+  tareasOT                  DetTareasOT[]           @relation("EstadoTareaOT")
+  insumosOT                 DetInsumosTareaOT[]     @relation("EstadoInsumoOT")
+    contratosServicio       ContratoServicio[]    @relation("EstadoContratoServicio")
+
 }
 
 model FaenaPesca {
@@ -2211,6 +2334,10 @@ model Moneda {
   costosExportacionPorIncoterm CostoExportacionPorIncoterm[] @relation("MonedaDefaultCostoIncoterm")
   detDocsReqCotizaVentas      DetDocsReqCotizaVentas[] @relation("MonedaDetDocsReqCotizaVentas")
   movimientosCaja  MovimientoCaja[]
+  detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[]
+  ordenesMantenimiento OTMantenimiento[]
+  contratosServicio       ContratoServicio[]    @relation("ContratoServicioMoneda")
+  movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
 }
 
 model MotivoAcceso {
@@ -2274,6 +2401,9 @@ model MovimientoAlmacen {
   estadoDocAlmacen    EstadoMultiFuncion    @relation(fields: [estadoDocAlmacenId], references: [id])
   detalles            DetalleMovimientoAlmacen[]
   preFacturas PreFactura[] @relation("MovimientoAlmacenToPreFactura")
+  entregaARendirMovAlmacen EntregaARendirMovAlmacen?
+  insumosOT  DetInsumosTareaOT[] @relation("MovAlmacenInsumoOT")
+
 }
 
 model MovimientoCaja {
@@ -2342,42 +2472,6 @@ model NovedadPescaConsumo {
   entregasARendir       EntregaARendirPescaConsumo[]
 }
 
-model OTMantenimiento {
-  id                     BigInt                   @id @default(autoincrement())
-  codigo                 String                   @unique @db.VarChar(30)
-  empresaId              BigInt
-  sedeId                 BigInt?
-  activoId               BigInt?
-  tipoMantenimientoId    BigInt
-  motivoOriginoId        BigInt
-  prioridadAlta          Boolean                  @default(false)
-  estadoId               BigInt
-  fechaCreacion          DateTime                 @default(now())
-  fechaProgramada        DateTime?
-  fechaInicio            DateTime?
-  fechaFin               DateTime?
-  solicitanteId          BigInt?
-  responsableId          BigInt?
-  autorizadoPorId        BigInt?
-  descripcion            String?
-  causa                  String?
-  solucion               String?
-  observaciones          String?
-  actualizadoEn          DateTime
-  urlFotosAntesDeOTPdf   String?
-  urlFotosDespuesDeOTPdf String?
-  urlOrdenTrabajoPdf     String?
-  docOrigenProvieneId    BigInt?
-  tipoProvieneDeId       BigInt?
-
-  // Relaciones
-  tipoMantenimiento   TipoMantenimiento   @relation(fields: [tipoMantenimientoId], references: [id])
-  motivoOrigino       MotivoOriginoOT     @relation(fields: [motivoOriginoId], references: [id])
-  permisosGestionados DetPermisoGestionadoOT[]
-  tareas DetTareasOT[]
-
-}
-
 model OrdenCompra {
   id                   BigInt      @id @default(autoincrement())
   empresaId            BigInt                                   // Empresa que emite la orden
@@ -2416,7 +2510,8 @@ model OrdenCompra {
   empresa              Empresa @relation(fields: [empresaId], references: [id])
   moneda               Moneda? @relation(fields: [monedaId], references: [id])
   estado               EstadoMultiFuncion @relation(fields: [estadoId], references: [id])
-  
+  insumosOT  DetInsumosTareaOT[] @relation("OCInsumoOT")
+
   detalles             DetalleOrdenCompra[]                     // Items de la orden
   
   @@index([empresaId, fechaDocumento])
@@ -2455,7 +2550,8 @@ model PermisoAutorizacion {
   descripcion          String?
   activo               Boolean                @default(true)
 
-  activosPermiso DetallePermisoActivo[]
+  activosPermiso       DetallePermisoActivo[]
+  permisosGestionados  DetPermisoGestionadoOT[]  
 }
 
 model DetallePermisoActivo {
@@ -2514,6 +2610,24 @@ model Personal {
   entregasResponsableIndustrial EntregaARendir[] @relation("ResponsableEntregaIndustrial")
   entregasResponsableCompras    EntregaARendirPCompras[] @relation("ResponsableEntregaCompras")
   entregasResponsableConsumo    EntregaARendirPescaConsumo[] @relation("ResponsableEntregaConsumo")
+
+  entregasRendirInventarioLiquidadas EntregaARendirMovAlmacen[] @relation("LiquidadorInventario")
+  entregasRendirInventarioResponsable EntregaARendirMovAlmacen[] @relation("ResponsableEntregaInventario")
+
+  otSolicitadas    OTMantenimiento[] @relation("SolicitanteOT")
+  otResponsable    OTMantenimiento[] @relation("ResponsableOT")
+  otAutorizadas    OTMantenimiento[] @relation("AutorizadorOT")
+  tareasResponsable DetTareasOT[] @relation("ResponsableTareaOT")
+  tareasValidadas   DetTareasOT[] @relation("ValidadorTareaOT")
+  insumosAprobados  DetInsumosTareaOT[] @relation("AprobadorComprasInsumoOT")
+  otValidadas               OTMantenimiento[]       @relation("ValidadorOT")
+    contratosResponsable    ContratoServicio[]    @relation("ContratoServicioResponsable")
+  contratosAprobador      ContratoServicio[]    @relation("ContratoServicioAprobador")
+    // Entregas a Rendir - Contratos de Servicios
+  entregasRendirContratoServicioLiquidadas    EntregaARendirContratoServicios[] @relation("LiquidadorContratoServicio")
+  entregasRendirContratoServicioResponsable   EntregaARendirContratoServicios[] @relation("ResponsableEntregaContratoServicio")
+  movimientosContratoServicioResponsable      DetMovsEntregaRendirContratoServicios[] @relation("ResponsableMovContratoServicio")
+
 }
 
 model Producto {
@@ -2577,7 +2691,6 @@ model Producto {
   marca                   Marca                @relation(fields: [marcaId], references: [id])
   detallesMovimiento      DetalleMovimientoAlmacen[]
   kardexAlmacenes   KardexAlmacen[]
-  insumosTareaOT DetInsumosTareaOT[]
   detallesRequerimientosCompra DetalleReqCompra[]
   detallesOrdenCompra     DetalleOrdenCompra[]
   detallesPreFactura DetallePreFactura[]
@@ -2593,6 +2706,10 @@ model Producto {
   costosExportacionPorIncoterm CostoExportacionPorIncoterm[]
   precioEntidad PrecioEntidad[]
   movimientosCaja           MovimientoCaja[]
+  detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[]
+  insumosOT  DetInsumosTareaOT[]
+  serviciosContrato       DetServicioContrato[] @relation("ServicioContrato")
+  movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
 }
 
 model Provincia {
@@ -2720,7 +2837,10 @@ model SedesEmpresa {
   updatedAt      DateTime
 
  empresa     Empresa  @relation(fields: [empresaId], references: [id])
-  areasFisicas AreaFisicaSede[]
+ areasFisicas AreaFisicaSede[]
+ ordenesMantenimiento OTMantenimiento[]
+ contratosServicio       ContratoServicio[]    @relation("ContratoServicioSede")
+
 }
 
 model SerieDoc {
@@ -2739,6 +2859,8 @@ model SerieDoc {
   ordenesCompra OrdenCompra[]
   cotizacionesVentas CotizacionVentas[]
   preFacturas PreFactura[]
+  ordenesMantenimiento OTMantenimiento[]
+    contratosServicio       ContratoServicio[]    @relation("ContratoServicioSerie")
 }
 
 model SubfamiliaProducto {
@@ -2877,6 +2999,10 @@ model TipoDocumento {
   detMovsEntregaRendir DetMovsEntregaRendir[]
   cotizacionesVentas CotizacionVentas[]
   preFacturas PreFactura[]
+  detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[]
+  ordenesMantenimiento OTMantenimiento[]
+  contratosServicio       ContratoServicio[]    @relation("ContratoServicioTipoDoc")
+  movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
 }
 
 model TipoEmbarcacion {
@@ -2911,14 +3037,7 @@ model TipoEquipo {
   accesos     AccesoInstalacion[]
 }
 
-model TipoMantenimiento {
-  id              BigInt            @id @default(autoincrement())
-  nombre          String            @db.VarChar(40)
-  descripcion     String?           @db.VarChar(200)
-  activo          Boolean           @default(true)
 
-  ordenesTrabajo OTMantenimiento[]
-}
 
 model TipoMaterial {
   id       BigInt     @id @default(autoincrement())
@@ -2940,6 +3059,9 @@ model TipoMovEntregaRendir {
   movimientosVentas DetMovsEntregaRendirPVentas[]
   movimientosCompras DetMovsEntregaRendirPCompras[]
   movimientosCaja  MovimientoCaja[]
+  detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[]
+  movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
+
 }
 
 model TipoMovimientoAcceso {
@@ -3045,6 +3167,7 @@ model TipoProvieneDe {
   updatedAt          DateTime
 
   estados     EstadoMultiFuncion[]
+
 }
 
 model TipoReferenciaMovimientoCaja {
@@ -3105,6 +3228,131 @@ model TripulanteFaenaConsumo {
 faenaPescaConsumo    FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
 }
 
+// ============================================
+// MÓDULO DE MANTENIMIENTO
+// ============================================
+
+model OTMantenimiento {
+  id                     BigInt    @id @default(autoincrement())
+  codigo                 String    @unique @db.VarChar(30)
+  empresaId              BigInt
+  tipoDocumentoId        BigInt
+  serieDocId             BigInt?
+  numeroDocumento        String?
+  fechaDocumento         DateTime  @default(now())
+  sedeId                 BigInt?
+  activoId               BigInt
+  tipoMantenimientoId    BigInt
+  motivoOriginoId        BigInt
+  prioridadAlta          Boolean   @default(false)
+  estadoId               BigInt
+  fechaProgramada        DateTime?
+  fechaInicio            DateTime?
+  fechaFin               DateTime?
+  monedaId               BigInt
+  solicitanteId          BigInt?
+  responsableId          BigInt?
+  autorizadoPorId        BigInt?
+  validadoPorId          BigInt? 
+  descripcionProblema    String?   @db.Text
+  solucionAplicada       String?   @db.Text
+  observaciones          String?   @db.Text
+  urlFotosAntesPdf       String?
+  urlFotosDespuesPdf     String?
+  urlOrdenTrabajoPdf     String?
+  planMantenimientoId    BigInt?
+  creadoEn               DateTime  @default(now())
+  actualizadoEn          DateTime  @updatedAt
+  creadoPor              BigInt?
+  actualizadoPor         BigInt?
+
+  empresa                Empresa             @relation(fields: [empresaId], references: [id])
+  sede                   SedesEmpresa?       @relation(fields: [sedeId], references: [id])
+  activo                 Activo              @relation(fields: [activoId], references: [id])
+  tipoMantenimiento      TipoMantenimiento   @relation(fields: [tipoMantenimientoId], references: [id])
+  motivoOrigino          MotivoOriginoOT     @relation(fields: [motivoOriginoId], references: [id])
+  estado                 EstadoMultiFuncion  @relation(fields: [estadoId], references: [id])
+  moneda                 Moneda              @relation(fields: [monedaId], references: [id])
+  solicitante            Personal?           @relation("SolicitanteOT", fields: [solicitanteId], references: [id])
+  responsable            Personal?           @relation("ResponsableOT", fields: [responsableId], references: [id])
+  autorizadoPor          Personal?           @relation("AutorizadorOT", fields: [autorizadoPorId], references: [id])
+  validadoPor            Personal?           @relation("ValidadorOT", fields: [validadoPorId], references: [id])
+  tipoDocumento          TipoDocumento       @relation(fields: [tipoDocumentoId], references: [id])
+  serieDoc               SerieDoc?           @relation(fields: [serieDocId], references: [id])
+
+  permisosGestionados    DetPermisoGestionadoOT[]
+  tareas                 DetTareasOT[]
+}
+
+model TipoMantenimiento {
+  id                      BigInt    @id @default(autoincrement())
+  nombre                  String    @unique @db.VarChar(20)
+  descripcion             String?   @db.Text
+  activo                  Boolean   @default(true)
+
+  ordenesMantenimiento    OTMantenimiento[]
+}
+
+model DetTareasOT {
+  id                           BigInt              @id @default(autoincrement())
+  otMantenimientoId            BigInt
+  numeroTarea                  Int
+  descripcion                  String              @db.Text
+  responsableId                BigInt?
+  personalValidaId             BigInt?
+  contratistaId                BigInt?
+  fechaProgramada              DateTime?
+  fechaInicio                  DateTime?
+  fechaFin                     DateTime?
+  estadoTareaId                BigInt
+  realizado                    Boolean             @default(false)
+  observaciones                String?             @db.Text
+  creadoEn                     DateTime            @default(now())
+  actualizadoEn                DateTime            @updatedAt
+  creadoPor                    BigInt?
+  actualizadoPor               BigInt?
+
+  otMantenimiento              OTMantenimiento     @relation(fields: [otMantenimientoId], references: [id], onDelete: Cascade)
+  estadoTarea                  EstadoMultiFuncion  @relation("EstadoTareaOT", fields: [estadoTareaId], references: [id])
+  responsable                  Personal?           @relation("ResponsableTareaOT", fields: [responsableId], references: [id])
+  personalValida               Personal?           @relation("ValidadorTareaOT", fields: [personalValidaId], references: [id])
+  contratista                  EntidadComercial?   @relation("ContratistaTareaOT", fields: [contratistaId], references: [id])
+  insumos                      DetInsumosTareaOT[]
+
+  @@unique([otMantenimientoId, numeroTarea])
+}
+
+model DetInsumosTareaOT {
+  id                          BigInt    @id @default(autoincrement())
+  tareaId                     BigInt
+  productoId                  BigInt
+  cantidadRequerida           Decimal
+  cantidadConsumida           Decimal   @default(0)
+  estadoInsumoId              BigInt
+  movimientoAlmacenId         BigInt?
+  detalleMovAlmacenId         BigInt?
+  ordenCompraId               BigInt?
+  detalleOrdenCompraId        BigInt?
+  proveedorSugeridoId         BigInt?
+  personalApruebaComprasId    BigInt?
+  observaciones               String?   @db.Text
+  creadoEn                    DateTime  @default(now())
+  actualizadoEn               DateTime  @updatedAt
+  creadoPor                   BigInt?
+  actualizadoPor              BigInt?
+
+  tarea                       DetTareasOT              @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  producto                    Producto                 @relation(fields: [productoId], references: [id])
+  estadoInsumo                EstadoMultiFuncion       @relation("EstadoInsumoOT", fields: [estadoInsumoId], references: [id])
+  movimientoAlmacen           MovimientoAlmacen?       @relation("MovAlmacenInsumoOT", fields: [movimientoAlmacenId], references: [id])
+  detalleMovAlmacen           DetalleMovimientoAlmacen? @relation("DetMovAlmacenInsumoOT", fields: [detalleMovAlmacenId], references: [id])
+  ordenCompra                 OrdenCompra?             @relation("OCInsumoOT", fields: [ordenCompraId], references: [id])
+  detalleOrdenCompra          DetalleOrdenCompra?      @relation("DetOCInsumoOT", fields: [detalleOrdenCompraId], references: [id])
+  proveedorSugerido           EntidadComercial?        @relation("ProveedorSugeridoInsumoOT", fields: [proveedorSugeridoId], references: [id])
+  personalApruebaCompras      Personal?                @relation("AprobadorComprasInsumoOT", fields: [personalApruebaComprasId], references: [id])
+
+}
+
 model Ubigeo {
   id               BigInt             @id @default(autoincrement())
   codigo           String             @unique
@@ -3159,4 +3407,101 @@ model Usuario {
   @@index([personalId])
   @@index([activo])
   @@index([username])
+}
+
+model ContratoServicio {
+  id                      BigInt                @id @default(autoincrement())
+  
+  // Relaciones Organizacionales
+  empresaId               BigInt
+  sedeId                  BigInt
+  activoId                BigInt?
+  almacenId               BigInt
+  clienteId               BigInt
+  contactoClienteId       BigInt?
+  
+  // Responsables
+  responsableId           BigInt
+  aprobadorId             BigInt?
+  
+  // Documento
+  tipoDocumentoId         BigInt
+  serieDocId              BigInt
+  numeroSerie             String                @db.VarChar(10)
+  numeroCorrelativo       Int
+  numeroCompleto          String                @db.VarChar(20)
+  
+  // Fechas
+  fechaCelebracion        DateTime
+  fechaInicioContrato     DateTime
+  fechaFinContrato        DateTime?
+  fechaInicioCobro        DateTime
+  periodicidadCobro       Int                   @default(1)
+  
+  // Contenido
+  textoEsenciaContrato    String                @db.Text
+  urlContratoPdf          String?               @db.VarChar(500)
+  
+  // Configuración de Luz
+  incluyeLuz              Boolean               @default(false)
+  porcentajeRecargoLuz    Decimal?              @db.Decimal(5, 2)
+  costoPorKilovatio       Decimal?              @db.Decimal(10, 4)
+  
+  // Financiero
+  monedaId                BigInt
+  tipoCambio              Decimal               @db.Decimal(10, 4)
+  estadoContratoId        BigInt
+  
+  // Auditoría
+  creadoPor               BigInt?
+  creadoEn                DateTime              @default(now())
+  actualizadoPor          BigInt?
+  actualizadoEn           DateTime              @updatedAt
+  
+  // Relaciones
+  empresa                 Empresa               @relation("ContratoServicioEmpresa", fields: [empresaId], references: [id])
+  sede                    SedesEmpresa          @relation("ContratoServicioSede", fields: [sedeId], references: [id])
+  activo                  Activo?               @relation("ContratoServicioActivo", fields: [activoId], references: [id])
+  almacen                 Almacen               @relation("ContratoServicioAlmacen", fields: [almacenId], references: [id])
+  cliente                 EntidadComercial      @relation("ContratoServicioCliente", fields: [clienteId], references: [id])
+  contactoCliente         ContactoEntidad?      @relation("ContratoServicioContacto", fields: [contactoClienteId], references: [id])
+  responsable             Personal              @relation("ContratoServicioResponsable", fields: [responsableId], references: [id])
+  aprobador               Personal?             @relation("ContratoServicioAprobador", fields: [aprobadorId], references: [id])
+  tipoDocumento           TipoDocumento         @relation("ContratoServicioTipoDoc", fields: [tipoDocumentoId], references: [id])
+  serieDoc                SerieDoc              @relation("ContratoServicioSerie", fields: [serieDocId], references: [id])
+  moneda                  Moneda                @relation("ContratoServicioMoneda", fields: [monedaId], references: [id])
+  estadoContrato          EstadoMultiFuncion    @relation("EstadoContratoServicio", fields: [estadoContratoId], references: [id])
+  entregaARendir          EntregaARendirContratoServicios? @relation("EntregaRendirContrato")
+  detallesServicios       DetServicioContrato[]
+  prefacturas             PreFactura[]          @relation("PreFacturaContrato")
+  
+  @@index([empresaId, clienteId])
+  @@index([almacenId])
+  @@index([estadoContratoId])
+  @@index([fechaInicioCobro])
+  @@index([responsableId])
+}
+
+model DetServicioContrato {
+  id                      BigInt                @id @default(autoincrement())
+  contratoServicioId      BigInt
+  productoServicioId      BigInt                // Producto que representa el servicio
+  
+  // Datos del Servicio
+  cantidad                Decimal               @db.Decimal(18, 4)
+  valorVentaUnitario      Decimal               @db.Decimal(18, 4)
+  incluyeLuz              Boolean               @default(false)
+  
+  // Auditoría
+  creadoPor               BigInt?
+  creadoEn                DateTime              @default(now())
+  actualizadoPor          BigInt?
+  actualizadoEn           DateTime              @updatedAt
+  
+  // Relaciones
+  contratoServicio        ContratoServicio      @relation(fields: [contratoServicioId], references: [id], onDelete: Cascade)
+  productoServicio        Producto              @relation("ServicioContrato", fields: [productoServicioId], references: [id])
+  
+  @@index([contratoServicioId])
+  @@index([productoServicioId])
 }
