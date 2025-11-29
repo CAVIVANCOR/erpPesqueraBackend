@@ -85,7 +85,11 @@ import saldosDetProductoClienteRoutes from '../routes/Almacen/saldosDetProductoC
 import generarKardexRoutes from '../routes/Almacen/generarKardex.routes.js';
 import entregaARendirMovAlmacenRoutes from '../routes/Almacen/entregaARendirMovAlmacen.routes.js';
 import detMovsEntregaRendirMovAlmacenRoutes from '../routes/Almacen/detMovsEntregaRendirMovAlmacen.routes.js';
+import detMovsEntregaRendirMovAlmacenPdfRoutes from '../routes/Almacen/detMovsEntregaRendirMovAlmacenPdf.routes.js';
 import entregaARendirMovAlmacenImpresionRoutes from '../routes/Almacen/entregaARendirMovAlmacenImpresion.routes.js';
+import entregaARendirOTMantenimientoRoutes from '../routes/Mantenimiento/entregaARendirOTMantenimiento.routes.js';
+import detMovsEntregaRendirOTMantenimientoRoutes from '../routes/Mantenimiento/detMovsEntregaRendirOTMantenimiento.routes.js';
+import detMovsEntregaRendirOTMantenimientoPdfRoutes from '../routes/Mantenimiento/detMovsEntregaRendirOTMantenimientoPdf.routes.js';
 import tipoMantenimientoRoutes from '../routes/Mantenimiento/tipoMantenimiento.routes.js';
 import otMantenimientoRoutes from '../routes/Mantenimiento/otMantenimiento.routes.js';
 import motivoOriginoOTRoutes from '../routes/Mantenimiento/motivoOriginoOT.routes.js';
@@ -105,6 +109,7 @@ import detCotizacionVentasRoutes from '../routes/Ventas/detCotizacionVentas.rout
 import contratoServicioRoutes from '../routes/ContratoServicio/contratoServicio.routes.js';
 import detServicioContratoRoutes from '../routes/ContratoServicio/detServicioContrato.routes.js';
 import contratoServicioPdfRoutes from '../routes/ContratoServicio/contratoServicioPdf.routes.js';
+import detMovsEntregaRendirContratoPdfRoutes from '../routes/ContratoServicio/detMovsEntregaRendirContratoPdf.routes.js';
 import entregaARendirContratoServiciosRoutes from '../routes/ContratoServicio/entregaARendirContratoServicios.routes.js';
 import detMovsEntregaRendirContratoServiciosRoutes from '../routes/ContratoServicio/detMovsEntregaRendirContratoServicios.routes.js';
 import tipoProductoRoutes from '../routes/Ventas/tipoProducto.routes.js';
@@ -359,8 +364,14 @@ router.use('/entregas-rendir-mov-almacen', entregaARendirMovAlmacenImpresionRout
 router.use('/entregas-rendir-mov-almacen', entregaARendirMovAlmacenRoutes);
 // Rutas para DetMovsEntregaRendirMovAlmacen
 router.use('/det-movs-entrega-rendir-mov-almacen', detMovsEntregaRendirMovAlmacenRoutes);
+router.use('/det-movs-entrega-rendir-mov-almacen-pdf', detMovsEntregaRendirMovAlmacenPdfRoutes);
 // Rutas para OTMantenimiento
 router.use('/ot-mantenimiento', otMantenimientoRoutes);
+// Rutas para EntregaARendirOTMantenimiento
+router.use('/entregas-rendir-ot-mantenimiento', entregaARendirOTMantenimientoRoutes);
+// Rutas para DetMovsEntregaRendirOTMantenimiento
+router.use('/det-movs-entrega-rendir-ot-mantenimiento', detMovsEntregaRendirOTMantenimientoRoutes);
+router.use('/det-movs-entrega-rendir-ot-mantenimiento-pdf', detMovsEntregaRendirOTMantenimientoPdfRoutes);
 // Rutas para TipoMantenimiento
 router.use('/tipos-mantenimiento', tipoMantenimientoRoutes);
 // Rutas para MotivoOriginoOT
@@ -406,10 +417,14 @@ router.use('/contratos-servicio', contratoServicioRoutes);
 router.use('/detalles-servicio-contrato', detServicioContratoRoutes);
 // Rutas para PDFs de ContratoServicio (upload y serving)
 router.use('/contrato-servicio-pdf', contratoServicioPdfRoutes);
+// Rutas para PDFs de DetMovsEntregaRendirContratoServicios (upload y serving)
+router.use('/detmovs-entrega-rendir-contrato-pdf', detMovsEntregaRendirContratoPdfRoutes);
 // Rutas para EntregaARendirContratoServicios
 router.use('/entregas-rendir-contrato-servicios', entregaARendirContratoServiciosRoutes);
 // Rutas para DetMovsEntregaRendirContratoServicios
 router.use('/det-movs-entrega-rendir-contrato-servicios', detMovsEntregaRendirContratoServiciosRoutes);
+router.use('/det-movs-entrega-rendir-contrato-pdf', detMovsEntregaRendirContratoPdfRoutes);
+
 // Rutas para TipoProducto
 router.use('/tipos-producto', tipoProductoRoutes);
 // Rutas para TipoEstadoProducto

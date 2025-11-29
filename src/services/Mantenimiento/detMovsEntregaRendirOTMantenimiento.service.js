@@ -2,19 +2,19 @@ import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 
 /**
- * Servicio CRUD para DetMovsEntregaRendirMovAlmacen
- * Replicado fielmente del patrón de DetMovsEntregaRendirContratoServicios
+ * Servicio CRUD para DetMovsEntregaRendirOTMantenimiento
+ * Replicado fielmente del patrón de DetMovsEntregaRendirMovAlmacen
  * Documentado en español.
  */
 
 async function validarClavesForaneas(data) {
   const [entrega, responsable, tipoMov, centroCosto] = await Promise.all([
-    prisma.entregaARendirMovAlmacen.findUnique({ where: { id: data.entregaARendirMovAlmacenId } }),
+    prisma.entregaARendirOTMantenimiento.findUnique({ where: { id: data.entregaARendirOTMantenimientoId } }),
     prisma.personal ? prisma.personal.findUnique({ where: { id: data.responsableId } }) : Promise.resolve(true),
     prisma.tipoMovEntregaRendir.findUnique({ where: { id: data.tipoMovimientoId } }),
     prisma.centroCosto ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }) : Promise.resolve(true)
   ]);
-  if (!entrega) throw new ValidationError('El entregaARendirMovAlmacenId no existe.');
+  if (!entrega) throw new ValidationError('El entregaARendirOTMantenimientoId no existe.');
   if (prisma.personal && !responsable) throw new ValidationError('El responsableId no existe.');
   if (!tipoMov) throw new ValidationError('El tipoMovimientoId no existe.');
   if (prisma.centroCosto && !centroCosto) throw new ValidationError('El centroCostoId no existe.');
@@ -22,13 +22,13 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.detMovsEntregaRendirMovAlmacen.findMany({
+    return await prisma.detMovsEntregaRendirOTMantenimiento.findMany({
       include: {
-        entregaARendirMovAlmacen: {
+        entregaARendirOTMantenimiento: {
           include: {
-            movimientoAlmacen: {
+            otMantenimiento: {
               include: {
-                entidadComercial: true,
+                activo: true,
                 empresa: true
               }
             }
@@ -52,14 +52,14 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const det = await prisma.detMovsEntregaRendirMovAlmacen.findUnique({ 
+    const det = await prisma.detMovsEntregaRendirOTMantenimiento.findUnique({ 
       where: { id },
       include: {
-        entregaARendirMovAlmacen: {
+        entregaARendirOTMantenimiento: {
           include: {
-            movimientoAlmacen: {
+            otMantenimiento: {
               include: {
-                entidadComercial: true,
+                activo: true,
                 empresa: true
               }
             }
@@ -74,7 +74,7 @@ const obtenerPorId = async (id) => {
         centroCosto: true
       }
     });
-    if (!det) throw new NotFoundError('DetMovsEntregaRendirMovAlmacen no encontrado');
+    if (!det) throw new NotFoundError('DetMovsEntregaRendirOTMantenimiento no encontrado');
     return det;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -82,10 +82,10 @@ const obtenerPorId = async (id) => {
   }
 };
 
-const obtenerPorEntrega = async (entregaARendirMovAlmacenId) => {
+const obtenerPorEntrega = async (entregaARendirOTMantenimientoId) => {
   try {
-    return await prisma.detMovsEntregaRendirMovAlmacen.findMany({
-      where: { entregaARendirMovAlmacenId },
+    return await prisma.detMovsEntregaRendirOTMantenimiento.findMany({
+      where: { entregaARendirOTMantenimientoId },
       include: {
         tipoMovimiento: true,
         responsable: true,
@@ -105,8 +105,8 @@ const obtenerPorEntrega = async (entregaARendirMovAlmacenId) => {
 
 const crear = async (data) => {
   try {
-    if (!data.entregaARendirMovAlmacenId || !data.responsableId || !data.fechaMovimiento || !data.tipoMovimientoId || !data.centroCostoId || data.monto === undefined || !data.monedaId) {
-      throw new ValidationError('Todos los campos obligatorios deben estar presentes: entregaARendirMovAlmacenId, responsableId, fechaMovimiento, tipoMovimientoId, centroCostoId, monto, monedaId.');
+    if (!data.entregaARendirOTMantenimientoId || !data.responsableId || !data.fechaMovimiento || !data.tipoMovimientoId || !data.centroCostoId || data.monto === undefined || !data.monedaId) {
+      throw new ValidationError('Todos los campos obligatorios deben estar presentes: entregaARendirOTMantenimientoId, responsableId, fechaMovimiento, tipoMovimientoId, centroCostoId, monto, monedaId.');
     }
     await validarClavesForaneas(data);
     
@@ -125,14 +125,14 @@ const crear = async (data) => {
       actualizadoEn: data.actualizadoEn || new Date(),
     };
     
-    return await prisma.detMovsEntregaRendirMovAlmacen.create({ 
+    return await prisma.detMovsEntregaRendirOTMantenimiento.create({ 
       data: datosConAuditoria,
       include: {
-        entregaARendirMovAlmacen: {
+        entregaARendirOTMantenimiento: {
           include: {
-            movimientoAlmacen: {
+            otMantenimiento: {
               include: {
-                entidadComercial: true,
+                activo: true,
                 empresa: true
               }
             }
@@ -156,10 +156,10 @@ const crear = async (data) => {
 
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.detMovsEntregaRendirMovAlmacen.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('DetMovsEntregaRendirMovAlmacen no encontrado');
+    const existente = await prisma.detMovsEntregaRendirOTMantenimiento.findUnique({ where: { id } });
+    if (!existente) throw new NotFoundError('DetMovsEntregaRendirOTMantenimiento no encontrado');
     // Validar claves foráneas si cambian
-    const claves = ['entregaARendirMovAlmacenId','responsableId','tipoMovimientoId','centroCostoId'];
+    const claves = ['entregaARendirOTMantenimientoId','responsableId','tipoMovimientoId','centroCostoId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
@@ -171,15 +171,15 @@ const actualizar = async (id, data) => {
       actualizadoEn: data.actualizadoEn || new Date(),
     };
     
-    return await prisma.detMovsEntregaRendirMovAlmacen.update({ 
+    return await prisma.detMovsEntregaRendirOTMantenimiento.update({ 
       where: { id }, 
       data: datosConAuditoria,
       include: {
-        entregaARendirMovAlmacen: {
+        entregaARendirOTMantenimiento: {
           include: {
-            movimientoAlmacen: {
+            otMantenimiento: {
               include: {
-                entidadComercial: true,
+                activo: true,
                 empresa: true
               }
             }
@@ -203,9 +203,9 @@ const actualizar = async (id, data) => {
 
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.detMovsEntregaRendirMovAlmacen.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('DetMovsEntregaRendirMovAlmacen no encontrado');
-    await prisma.detMovsEntregaRendirMovAlmacen.delete({ where: { id } });
+    const existente = await prisma.detMovsEntregaRendirOTMantenimiento.findUnique({ where: { id } });
+    if (!existente) throw new NotFoundError('DetMovsEntregaRendirOTMantenimiento no encontrado');
+    await prisma.detMovsEntregaRendirOTMantenimiento.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;

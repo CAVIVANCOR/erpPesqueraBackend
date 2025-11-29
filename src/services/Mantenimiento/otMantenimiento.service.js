@@ -26,21 +26,11 @@ async function validarForaneas(data) {
 }
 
 /**
- * Valida unicidad de código antes de crear o actualizar.
- * @param {string} codigo - Código a validar
- * @param {BigInt} [id] - ID a excluir (para update)
- */
-async function validarUnicidadCodigo(codigo, id = null) {
-  const existe = await prisma.oTMantenimiento.findFirst({ where: id ? { codigo, NOT: { id } } : { codigo } });
-  if (existe) throw new ConflictError('El código ya está registrado para otra orden de trabajo.');
-}
-
-/**
  * Lista todas las órdenes de trabajo de mantenimiento con relaciones completas.
  */
 const listar = async () => {
   try {
-    return await prisma.oTMantenimiento.findMany({
+    const result = await prisma.oTMantenimiento.findMany({
       include: {
         empresa: { select: { id: true, razonSocial: true, ruc: true } },
         sede: { select: { id: true, nombre: true } },
@@ -67,6 +57,8 @@ const listar = async () => {
       },
       orderBy: { fechaDocumento: 'desc' }
     });
+    console.log(`[OT Service] Listado: ${result.length} registros encontrados`);
+    return result;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -100,9 +92,9 @@ const obtenerPorId = async (id) => {
             personalValida: { select: { id: true, nombres: true, apellidos: true } },
             contratista: { select: { id: true, razonSocial: true } },
             estadoTarea: { select: { id: true, descripcion: true, severityColor: true } },
-            insumosOT: {
+            insumos: {
               include: {
-                producto: { select: { id: true, codigo: true, descripcion: true } },
+                producto: { select: { id: true, codigo: true, descripcionBase: true } },
                 estadoInsumo: { select: { id: true, descripcion: true, severityColor: true } }
               }
             }
@@ -120,16 +112,24 @@ const obtenerPorId = async (id) => {
 };
 
 /**
- * Crea una OT validando unicidad de código y existencia de claves foráneas.
+ * Crea una OT validando campos obligatorios y existencia de claves foráneas.
  */
 const crear = async (data) => {
   try {
-    if (!data.codigo || !data.empresaId || !data.tipoMantenimientoId || !data.motivoOriginoId || !data.estadoId) {
-      throw new ValidationError('Los campos codigo, empresaId, tipoMantenimientoId, motivoOriginoId y estadoId son obligatorios.');
+    if (!data.empresaId || !data.tipoDocumentoId || !data.serieDocId || !data.activoId || !data.tipoMantenimientoId || !data.motivoOriginoId || !data.estadoId || !data.monedaId) {
+      throw new ValidationError('Los campos empresaId, tipoDocumentoId, serieDocId, activoId, tipoMantenimientoId, motivoOriginoId, estadoId y monedaId son obligatorios.');
     }
     await validarForaneas(data);
-    await validarUnicidadCodigo(data.codigo);
-    return await prisma.oTMantenimiento.create({ data });
+    
+    // Limpiar data: eliminar id, campos null y strings vacíos opcionales
+    const { id, ...dataLimpia } = data;
+    Object.keys(dataLimpia).forEach(key => {
+      if (dataLimpia[key] === null || dataLimpia[key] === '') {
+        delete dataLimpia[key];
+      }
+    });
+    
+    return await prisma.oTMantenimiento.create({ data: dataLimpia });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -146,11 +146,36 @@ const actualizar = async (id, data) => {
     if (!existente) throw new NotFoundError('OTMantenimiento no encontrada');
     // Validar foráneas si se modifican
     await validarForaneas({ ...existente, ...data });
-    // Validar unicidad de código si se modifica
-    if (data.codigo && data.codigo !== existente.codigo) {
-      await validarUnicidadCodigo(data.codigo, id);
+    
+    // Validar campos obligatorios
+    if (data.tipoDocumentoId === undefined || data.tipoDocumentoId === null) {
+      throw new ValidationError('El campo tipoDocumentoId es obligatorio.');
     }
-    return await prisma.oTMantenimiento.update({ where: { id }, data });
+    if (data.serieDocId === undefined || data.serieDocId === null) {
+      throw new ValidationError('El campo serieDocId es obligatorio.');
+    }
+    if (data.numeroSerie === undefined || data.numeroSerie === null) {
+      throw new ValidationError('El campo numeroSerie es obligatorio.');
+    }
+    if (data.numeroCorrelativo === undefined || data.numeroCorrelativo === null) {
+      throw new ValidationError('El campo numeroCorrelativo es obligatorio.');
+    }
+    if (data.numeroCompleto === undefined || data.numeroCompleto === null) {
+      throw new ValidationError('El campo numeroCompleto es obligatorio.');
+    }
+    if (data.monedaId === undefined || data.monedaId === null) {
+      throw new ValidationError('El campo monedaId es obligatorio.');
+    }
+    
+    // Limpiar data: eliminar campos null y strings vacíos opcionales
+    const dataLimpia = { ...data };
+    Object.keys(dataLimpia).forEach(key => {
+      if (dataLimpia[key] === null || dataLimpia[key] === '') {
+        delete dataLimpia[key];
+      }
+    });
+    
+    return await prisma.oTMantenimiento.update({ where: { id }, data: dataLimpia });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

@@ -1,5 +1,6 @@
 import otMantenimientoService from '../../services/Mantenimiento/otMantenimiento.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
+import prisma from '../../config/prismaClient.js';
 
 /**
  * Controlador para OTMantenimiento
@@ -48,6 +49,27 @@ export async function eliminar(req, res, next) {
     const id = Number(req.params.id);
     await otMantenimientoService.eliminar(id);
     res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getSeriesDoc(req, res, next) {
+  try {
+    const { empresaId, tipoDocumentoId } = req.query;
+    
+    const where = {
+      activo: true,
+      ...(empresaId && { empresaId: BigInt(empresaId) }),
+      ...(tipoDocumentoId && { tipoDocumentoId: BigInt(tipoDocumentoId) })
+    };
+
+    const series = await prisma.serieDoc.findMany({
+      where,
+      orderBy: { serie: 'asc' }
+    });
+
+    res.json(toJSONBigInt(series));
   } catch (err) {
     next(err);
   }

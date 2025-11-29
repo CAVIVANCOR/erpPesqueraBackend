@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para OTMantenimiento
 router.get('/', otMantenimientoController.listar);
+router.get('/series-doc', otMantenimientoController.getSeriesDoc);
 router.get('/:id', otMantenimientoController.obtenerPorId);
 router.post('/', otMantenimientoController.crear);
 router.put('/:id', otMantenimientoController.actualizar);

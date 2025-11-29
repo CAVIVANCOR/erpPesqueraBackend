@@ -34,6 +34,12 @@ app.use('/uploads/movimientos-almacen', express.static(path.join(process.cwd(), 
 app.use('/uploads/requerimientos-compra', express.static(path.join(process.cwd(), 'uploads/requerimientos-compra')));
 // Middleware para servir PDFs de órdenes de compra
 app.use('/uploads/ordenes-compra', express.static(path.join(process.cwd(), 'uploads/ordenes-compra')));
+// Middleware para servir PDFs de contratos de servicio
+app.use('/uploads/contratos-servicio', express.static(path.join(process.cwd(), 'uploads/contratos-servicio')));
+// Middleware para servir PDFs de entregas a rendir de Contratos de Servicio
+app.use('/uploads/det-movs-entrega-rendir-contrato', express.static(path.join(process.cwd(), 'uploads/det-movs-entrega-rendir-contrato')));
+// Middleware para servir PDFs de entregas a rendir de OT Mantenimiento
+app.use('/uploads/det-movs-entrega-rendir-ot-mantenimiento', express.static(path.join(process.cwd(), 'uploads/det-movs-entrega-rendir-ot-mantenimiento')));
 
 // Middlewares globales
 app.use(express.json());

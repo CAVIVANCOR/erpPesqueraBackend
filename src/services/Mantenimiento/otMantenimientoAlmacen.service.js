@@ -24,7 +24,7 @@ export const validarStockInsumosTarea = async (tareaId, empresaId, almacenId) =>
           select: {
             id: true,
             codigo: true,
-            descripcion: true,
+            descripcionBase: true,
             descripcionArmada: true
           }
         }
@@ -173,7 +173,7 @@ export const generarSalidaInsumosTarea = async (tareaId, empresaId, almacenId, c
         otMantenimiento: {
           select: {
             id: true,
-            codigo: true,
+            numeroCompleto: true,
             descripcion: true
           }
         }
@@ -194,7 +194,7 @@ export const generarSalidaInsumosTarea = async (tareaId, empresaId, almacenId, c
         empresaId: BigInt(empresaId),
         conceptoMovAlmacenId: BigInt(conceptoMovAlmacenId),
         fecha: new Date(),
-        glosa: `Salida para OT ${tarea.otMantenimiento.codigo} - Tarea ${tarea.numeroTarea}: ${tarea.descripcion}`,
+        glosa: `Salida para OT ${tarea.otMantenimiento.numeroCompleto} - Tarea ${tarea.numeroTarea}: ${tarea.descripcion}`,
         observaciones: `Generado automáticamente desde OT Mantenimiento`,
         estadoDocumentoId: BigInt(1), // Estado inicial
         creadoPor: BigInt(usuarioId),

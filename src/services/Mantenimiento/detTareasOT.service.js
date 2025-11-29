@@ -27,7 +27,7 @@ const listar = async () => {
   try {
     return await prisma.detTareasOT.findMany({
       include: {
-        otMantenimiento: { select: { id: true, codigo: true } },
+        otMantenimiento: { select: { id: true, numeroCompleto: true } },
         responsable: { select: { id: true, nombres: true, apellidos: true } },
         personalValida: { select: { id: true, nombres: true, apellidos: true } },
         contratista: { select: { id: true, razonSocial: true } },
@@ -54,11 +54,12 @@ const listarPorOT = async (otMantenimientoId) => {
         personalValida: { select: { id: true, nombres: true, apellidos: true } },
         contratista: { select: { id: true, razonSocial: true } },
         estadoTarea: { select: { id: true, descripcion: true, severityColor: true } },
-        insumosOT: {
+        insumos: {
           select: {
             id: true,
-            producto: { select: { id: true, codigo: true, descripcion: true } },
-            cantidad: true,
+            producto: { select: { id: true, codigo: true, descripcionBase: true } },
+            cantidadRequerida: true,
+            cantidadConsumida: true,
             estadoInsumo: { select: { id: true, descripcion: true, severityColor: true } }
           }
         }
@@ -84,7 +85,7 @@ const obtenerPorId = async (id) => {
         personalValida: true,
         contratista: true,
         estadoTarea: true,
-        insumosOT: {
+        insumos: {
           include: {
             producto: true,
             estadoInsumo: true
