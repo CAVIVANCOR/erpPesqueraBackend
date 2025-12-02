@@ -17,6 +17,13 @@ prisma/dev.db-journal
 # Prisma migrations (opcional, si no quieres versionar migraciones locales)
 # prisma/migrations/
 
+# Database dumps and backups
+*.sql
+*.dump
+*.backup
+backups/
+temp_dump.sql
+
 # OS files
 .DS_Store
 Thumbs.db

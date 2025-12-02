@@ -260,7 +260,6 @@ const crear = async (data) => {
         if (parametroAprobador) {
           autorizaVentaId = parametroAprobador.personalRespId;
         } else {
-          console.log(`[CotizacionVentas] No se encontró ParametroAprobador para empresaId=${data.empresaId}, moduloSistemaId=5, cesado=false`);
         }
       }
 

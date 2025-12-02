@@ -57,7 +57,6 @@ const listar = async () => {
       },
       orderBy: { fechaDocumento: 'desc' }
     });
-    console.log(`[OT Service] Listado: ${result.length} registros encontrados`);
     return result;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

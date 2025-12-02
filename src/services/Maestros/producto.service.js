@@ -228,23 +228,17 @@ const obtenerPorEntidadYEmpresa = async (entidadComercialId, empresaId) => {
  * Hereda automáticamente los márgenes de utilidad de la Empresa si no se especifican.
  */
 const crear = async (data) => {
-  try {
-    console.log('📦 Iniciando creación de producto con datos:', JSON.stringify(data, null, 2));
-    
+  try {    
     // Normalizar campos de texto a mayúsculas
-    const dataNormalizada = normalizarDatosProducto(data);
-    console.log('✅ Datos normalizados correctamente');
-    
+    const dataNormalizada = normalizarDatosProducto(data);    
     // Si no hay código, generar uno automático basado en familia y timestamp
     if (!dataNormalizada.codigo) {
       const timestamp = Date.now().toString().slice(-6);
       const familiaPrefix = dataNormalizada.familiaId ? `F${dataNormalizada.familiaId}` : 'PROD';
       dataNormalizada.codigo = `${familiaPrefix}-${timestamp}`;
-      console.log('📝 Código generado automáticamente:', dataNormalizada.codigo);
     }
     
     await validarProducto(dataNormalizada);
-    console.log('✅ Validaciones completadas correctamente');
     
     // Heredar márgenes de la Empresa si no se especificaron
     let dataConMargenes = { ...dataNormalizada };
@@ -269,7 +263,6 @@ const crear = async (data) => {
       }
     }
     
-    console.log('📝 Intentando crear producto en BD con datos finales:', JSON.stringify(dataConMargenes, null, 2));
     
     // Eliminar el campo 'id' si existe para evitar conflictos con autoincrement
     const { id, ...dataParaCrear } = dataConMargenes;
@@ -286,7 +279,6 @@ const crear = async (data) => {
       include: includeRelaciones
     });
     
-    console.log('✅ Producto creado exitosamente con ID:', producto.id);
     return producto;
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;

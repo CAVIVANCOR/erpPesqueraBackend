@@ -186,7 +186,6 @@ async function calcularCostoUnitario(tx, temporadaPescaId, descargas) {
     });
 
     if (!entregaRendir || !entregaRendir.movimientos || entregaRendir.movimientos.length === 0) {
-      console.log('⚠️ No se encontraron egresos en entrega a rendir, costo unitario = 0');
       return 0;
     }
 
@@ -201,14 +200,11 @@ async function calcularCostoUnitario(tx, temporadaPescaId, descargas) {
     }, 0);
 
     if (totalToneladas === 0) {
-      console.log('⚠️ Total de toneladas es 0, costo unitario = 0');
       return 0;
     }
 
     // Calcular costo unitario prorrateado
     const costoUnitario = totalEgresos / totalToneladas;
-    
-    console.log(`✅ Costo unitario calculado: ${costoUnitario} (Total egresos: ${totalEgresos} / Total toneladas: ${totalToneladas})`);
     
     return costoUnitario;
   } catch (error) {
@@ -225,7 +221,6 @@ async function calcularPrecioUnitario(tx, empresaId, proveedorMeguiId, clienteId
     // Obtener el primer producto de las descargas para buscar precio
     const primeraDescarga = descargas[0];
     if (!primeraDescarga) {
-      console.log('⚠️ No hay descargas, precio unitario = 0');
       return 0;
     }
 
@@ -240,7 +235,6 @@ async function calcularPrecioUnitario(tx, empresaId, proveedorMeguiId, clienteId
     });
 
     if (!producto) {
-      console.log('⚠️ No se encontró producto, precio unitario = 0');
       return 0;
     }
 
@@ -262,7 +256,6 @@ async function calcularPrecioUnitario(tx, empresaId, proveedorMeguiId, clienteId
     });
 
     if (precioEspecial) {
-      console.log(`✅ Precio especial del cliente encontrado: ${precioEspecial.precio}`);
       return Number(precioEspecial.precio);
     }
 
@@ -282,11 +275,9 @@ async function calcularPrecioUnitario(tx, empresaId, proveedorMeguiId, clienteId
     });
 
     if (precioEstandar) {
-      console.log(`✅ Precio estándar encontrado: ${precioEstandar.precio}`);
       return Number(precioEstandar.precio);
     }
 
-    console.log('⚠️ No se encontró precio (ni especial ni estándar), precio unitario = 0');
     return 0;
   } catch (error) {
     console.error('❌ Error calculando precio unitario:', error);
@@ -342,7 +333,6 @@ async function generarMovimientoIngreso(
 
     // Si no se encuentra, buscar solo por empresa y especie (sin cliente específico)
     if (!producto) {
-      console.log(`⚠️ No se encontró producto con cliente ${descarga.clienteId}, buscando sin cliente específico...`);
       producto = await tx.producto.findFirst({
         where: {
           empresaId: temporada.empresaId,
@@ -358,8 +348,6 @@ async function generarMovimientoIngreso(
         `Por favor, configure un producto para esta combinación.`
       );
     }
-
-    console.log(`✅ Producto INGRESO encontrado: ID ${producto.id}`);
 
     // Calcular fecha de vencimiento (30 días después de la fecha de inicio de descarga)
     const fechaVencimiento = new Date(descarga.fechaHoraInicioDescarga);
@@ -472,8 +460,6 @@ async function generarMovimientoIngreso(
     }
   });
 
-  console.log(`✅ Movimiento INGRESO ${movimientoCreado.numeroDocumento} cambiado a estado CERRADO (31)`);
-
   // 6. Generar kardex usando la función genérica (pasando la transacción)
   const kardexGenerado = await generarKardexService.generarKardexMovimiento(movimientoCreado.id, tx);
 
@@ -485,8 +471,6 @@ async function generarMovimientoIngreso(
       actualizadoEn: new Date()
     }
   });
-
-  console.log(`✅ Movimiento INGRESO ${movimientoCreado.numeroDocumento} cambiado a estado KARDEX GENERADO (33)`);
 
   return {
     movimiento: movimientoCreado,
@@ -542,7 +526,6 @@ async function generarMovimientoSalida(
 
     // Si no se encuentra, buscar solo por empresa y especie (sin cliente específico)
     if (!producto) {
-      console.log(`⚠️ No se encontró producto con cliente ${descarga.clienteId}, buscando sin cliente específico...`);
       producto = await tx.producto.findFirst({
         where: {
           empresaId: temporada.empresaId,
@@ -558,8 +541,6 @@ async function generarMovimientoSalida(
         `Por favor, configure un producto para esta combinación.`
       );
     }
-
-    console.log(`✅ Producto SALIDA encontrado: ID ${producto.id}`);
 
     // Calcular fecha de vencimiento (30 días después de la fecha de inicio de descarga)
     const fechaVencimiento = new Date(descarga.fechaHoraInicioDescarga);
@@ -672,8 +653,6 @@ async function generarMovimientoSalida(
     }
   });
 
-  console.log(`✅ Movimiento SALIDA ${movimientoCreado.numeroDocumento} cambiado a estado CERRADO (31)`);
-
   // 6. Generar kardex usando la función genérica (pasando la transacción)
   const kardexGenerado = await generarKardexService.generarKardexMovimiento(movimientoCreado.id, tx);
 
@@ -685,8 +664,6 @@ async function generarMovimientoSalida(
       actualizadoEn: new Date()
     }
   });
-
-  console.log(`✅ Movimiento SALIDA ${movimientoCreado.numeroDocumento} cambiado a estado KARDEX GENERADO (33)`);
 
   return {
     movimiento: movimientoCreado,
