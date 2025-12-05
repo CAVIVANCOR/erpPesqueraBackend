@@ -359,8 +359,6 @@ async function calcularSaldosProducto(
 }
 
 async function actualizarSaldos(tx, movimiento) {
-  let saldosDetActualizados = 0,
-    saldosGenActualizados = 0;
   const empresa = await tx.empresa.findUnique({
     where: { id: movimiento.empresaId },
     select: { entidadComercialId: true },
@@ -386,6 +384,9 @@ async function actualizarSaldos(tx, movimiento) {
     },
   });
 
+  // Usar Sets para contar combinaciones únicas
+  const saldosDetUnicos = new Set();
+  const saldosGenUnicos = new Set();
 
   for (const combo of combinaciones) {
     const clienteIdCorrecto = combo.esCustodia
@@ -435,12 +436,30 @@ async function actualizarSaldos(tx, movimiento) {
       nroSerie: nroSerieNormalizado,
     };
 
+    // Crear clave única para SaldoDet (convertir BigInt a string)
+    const keyDet = JSON.stringify([
+      combo.empresaId?.toString(),
+      combo.almacenId?.toString(),
+      combo.productoId?.toString(),
+      clienteIdCorrecto?.toString(),
+      combo.esCustodia,
+      loteNormalizado,
+      fechaIngresoNormalizada?.toISOString(),
+      fechaProduccionNormalizada?.toISOString(),
+      fechaVencimientoNormalizada?.toISOString(),
+      estadoIdNormalizado?.toString(),
+      estadoCalidadIdNormalizado?.toString(),
+      numContenedorNormalizado,
+      nroSerieNormalizado
+    ]);
+    
+    saldosDetUnicos.add(keyDet);
+
     await upsertConReintentos(tx, "saldosDetProductoCliente", whereDet, {
       saldoCantidad: saldoDet.saldoCantidad,
       saldoPeso: saldoDet.saldoPeso,
       actualizadoEn: new Date(),
     });
-    saldosDetActualizados++;
 
     const saldoGen = await recalcularSaldoGeneralCompleto(tx, {
       empresaId: combo.empresaId,
@@ -457,16 +476,29 @@ async function actualizarSaldos(tx, movimiento) {
       custodia: combo.esCustodia,
     };
 
+    // Crear clave única para SaldoGen (convertir BigInt a string)
+    const keyGen = JSON.stringify([
+      combo.empresaId?.toString(),
+      combo.almacenId?.toString(),
+      combo.productoId?.toString(),
+      clienteIdCorrecto?.toString(),
+      combo.esCustodia
+    ]);
+    
+    saldosGenUnicos.add(keyGen);
+
     await upsertConReintentos(tx, "saldosProductoCliente", whereGen, {
       saldoCantidad: saldoGen.saldoCantidad,
       saldoPeso: saldoGen.saldoPeso,
       costoUnitarioPromedio: saldoGen.costoUnitarioPromedio,
       actualizadoEn: new Date(),
     });
-    saldosGenActualizados++;
   }
 
-  return { saldosDetActualizados, saldosGenActualizados };
+  return { 
+    saldosDetActualizados: saldosDetUnicos.size, 
+    saldosGenActualizados: saldosGenUnicos.size 
+  };
 }
 
 async function upsertConReintentos(tx, tabla, where, data, maxIntentos = 3) {

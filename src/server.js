@@ -42,8 +42,8 @@ app.use('/uploads/det-movs-entrega-rendir-contrato', express.static(path.join(pr
 app.use('/uploads/det-movs-entrega-rendir-ot-mantenimiento', express.static(path.join(process.cwd(), 'uploads/det-movs-entrega-rendir-ot-mantenimiento')));
 
 // Middlewares globales
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors());
 app.use(helmet());
 app.use(hpp());

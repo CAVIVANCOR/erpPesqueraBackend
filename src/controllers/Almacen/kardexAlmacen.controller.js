@@ -26,14 +26,19 @@ export async function obtenerKardexPorProducto(req, res, next) {
       throw new ValidationError('empresaId, almacenId y productoId son requeridos');
     }
 
+    // Soporte para múltiples almacenes (separados por coma)
+    const almacenIds = almacenId.includes(',') 
+      ? almacenId.split(',').map(id => BigInt(id.trim()))
+      : [BigInt(almacenId)];
+
     const where = {
       empresaId: BigInt(empresaId),
-      almacenId: BigInt(almacenId),
+      almacenId: almacenIds.length > 1 ? { in: almacenIds } : almacenIds[0],
       productoId: BigInt(productoId),
       esCustodia: esCustodia === 'true'
     };
 
-    // Solo agregar clienteId si es custodia
+    // Solo agregar clienteId cuando es custodia
     if (esCustodia === 'true' && clienteId) {
       where.clienteId = BigInt(clienteId);
     }
@@ -45,21 +50,22 @@ export async function obtenerKardexPorProducto(req, res, next) {
       if (fechaHasta) where.fechaMovimientoAlmacen.lte = new Date(fechaHasta);
     }
 
-    // Ordenamiento profesional: fecha ASC, INGRESOS primero, variables de trazabilidad, id ASC
+    // Ordenamiento profesional WMS: almacén primero, luego fecha, tipo, variables de trazabilidad
     const kardex = await prisma.kardexAlmacen.findMany({
       where,
       orderBy: [
-        { fechaMovimientoAlmacen: 'asc' },
-        { esIngresoEgreso: 'desc' }, // INGRESOS (true) antes que EGRESOS (false)
-        { lote: 'asc' },
-        { fechaIngreso: 'asc' },
-        { fechaProduccion: 'asc' },
-        { fechaVencimiento: 'asc' },
-        { numContenedor: 'asc' },
-        { nroSerie: 'asc' },
-        { estadoId: 'asc' },
-        { estadoCalidadId: 'asc' },
-        { id: 'asc' }
+        { almacenId: 'asc' },            // 1. Almacén (WMS estándar)
+        { fechaMovimientoAlmacen: 'asc' }, // 2. Fecha
+        { esIngresoEgreso: 'desc' },     // 3. INGRESOS primero
+        { lote: 'asc' },                 // 4. Lote
+        { fechaIngreso: 'asc' },         // 5. Fecha ingreso (FIFO)
+        { fechaProduccion: 'asc' },      // 6. Fecha producción
+        { fechaVencimiento: 'asc' },     // 7. Fecha vencimiento (FEFO)
+        { numContenedor: 'asc' },        // 8. Contenedor
+        { nroSerie: 'asc' },             // 9. Serie
+        { estadoId: 'asc' },             // 10. Estado mercadería
+        { estadoCalidadId: 'asc' },      // 11. Estado calidad
+        { id: 'asc' }                    // 12. ID
       ],
       include: {
         producto: {
@@ -79,11 +85,22 @@ export async function obtenerKardexPorProducto(req, res, next) {
           select: {
             id: true,
             descripcion: true,
-            descripcionArmada: true
+            descripcionArmada: true,
+            almacenOrigenId: true,
+            almacenDestinoId: true
           }
         }
       }
     });
+
+    // Obtener IDs únicos de almacenes desde el kardex
+    const almacenIdsUnicos = [...new Set(kardex.map(k => k.almacenId))];
+    
+    // Buscar descripciones de almacenes
+    const almacenes = almacenIdsUnicos.length > 0 ? await prisma.almacen.findMany({
+      where: { id: { in: almacenIdsUnicos } },
+      select: { id: true, descripcion: true }
+    }) : [];
 
     // Obtener IDs únicos de estados
     const estadoIds = [...new Set(kardex.map(k => k.estadoId).filter(Boolean))];
@@ -101,17 +118,19 @@ export async function obtenerKardexPorProducto(req, res, next) {
     }) : [];
 
     // Crear mapas para búsqueda rápida
+    const almacenMap = new Map(almacenes.map(a => [a.id.toString(), a]));
     const estadoMap = new Map(estados.map(e => [e.id.toString(), e]));
     const estadoCalidadMap = new Map(estadosCalidad.map(e => [e.id.toString(), e]));
 
     // Agregar descripciones al kardex
-    const kardexConEstados = kardex.map(k => ({
+    const kardexCompleto = kardex.map(k => ({
       ...k,
+      almacen: almacenMap.get(k.almacenId.toString()) || null,
       estado: k.estadoId ? estadoMap.get(k.estadoId.toString()) : null,
       estadoCalidad: k.estadoCalidadId ? estadoCalidadMap.get(k.estadoCalidadId.toString()) : null
     }));
 
-    res.json(toJSONBigInt(kardexConEstados));
+    res.json(toJSONBigInt(kardexCompleto));
   } catch (err) {
     next(err);
   }
