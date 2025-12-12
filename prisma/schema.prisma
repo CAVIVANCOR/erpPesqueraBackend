@@ -219,30 +219,54 @@ model Cala {
   updatedAt           DateTime
   temporadaPescaId    BigInt
 
-  faenaPesca            FaenaPesca @relation(fields: [faenaPescaId], references: [id])
-  especiesPescadas      DetalleCalaEspecie[]
+  // Relaciones
+  faenaPesca       FaenaPesca         @relation(fields: [faenaPescaId], references: [id])
+  bahia            Personal           @relation("Cala_Bahia", fields: [bahiaId], references: [id])
+  motorista        Personal           @relation("Cala_Motorista", fields: [motoristaId], references: [id])
+  patron           Personal           @relation("Cala_Patron", fields: [patronId], references: [id])
+  embarcacion      Embarcacion        @relation(fields: [embarcacionId], references: [id])
+  especiesPescadas DetalleCalaEspecie[]
+
+  @@index([bahiaId])
+  @@index([motoristaId])
+  @@index([patronId])
+  @@index([embarcacionId])
+  @@index([faenaPescaId])
+  @@index([temporadaPescaId])
 }
 
 model CalaFaenaConsumo {
-  id                  BigInt                @id @default(autoincrement())
-  bahiaId             BigInt
-  motoristaId         BigInt
-  patronId            BigInt
-  embarcacionId       BigInt
-  faenaPescaConsumoId BigInt
-  fechaHoraInicio     DateTime?
-  fechaHoraFin        DateTime?
-  latitud             Decimal?
-  longitud            Decimal?
-  profundidadM        Decimal?
-  toneladasCapturadas Decimal?
-  observaciones       String?
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime
-  novedadPescaConsumoId          BigInt
+  id                     BigInt                @id @default(autoincrement())
+  bahiaId                BigInt
+  motoristaId            BigInt
+  patronId               BigInt
+  embarcacionId          BigInt
+  faenaPescaConsumoId    BigInt
+  fechaHoraInicio        DateTime?
+  fechaHoraFin           DateTime?
+  latitud                Decimal?
+  longitud               Decimal?
+  profundidadM           Decimal?
+  toneladasCapturadas    Decimal?
+  observaciones          String?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime
+  novedadPescaConsumoId  BigInt
 
-  faenaPescaConsumo     FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
-  especiesPescadas DetCalaPescaConsumo[]
+  // Relaciones
+  faenaPescaConsumo  FaenaPescaConsumo   @relation(fields: [faenaPescaConsumoId], references: [id])
+  bahia              Personal            @relation("CalaFaenaConsumo_Bahia", fields: [bahiaId], references: [id])
+  motorista          Personal            @relation("CalaFaenaConsumo_Motorista", fields: [motoristaId], references: [id])
+  patron             Personal            @relation("CalaFaenaConsumo_Patron", fields: [patronId], references: [id])
+  embarcacion        Embarcacion         @relation("CalaFaenaConsumo_Embarcacion", fields: [embarcacionId], references: [id])
+  especiesPescadas   DetCalaPescaConsumo[]
+
+  @@index([bahiaId])
+  @@index([motoristaId])
+  @@index([patronId])
+  @@index([embarcacionId])
+  @@index([faenaPescaConsumoId])
+  @@index([novedadPescaConsumoId])
 }
 
 model CargosPersonal {
@@ -1006,19 +1030,19 @@ model Departamento {
 }
 
 model DescargaFaenaConsumo {
-  id                           BigInt                    @id @default(autoincrement())
-  faenaPescaConsumoId          BigInt                    @unique
+  id                           BigInt                 @id @default(autoincrement())
+  faenaPescaConsumoId          BigInt                 @unique
   puertoDescargaId             BigInt?
   fechaHoraArriboPuerto        DateTime?
   fechaHoraLlegadaPuerto       DateTime?
   clienteId                    BigInt?
-  numPlataformaDescarga        String?                   @db.VarChar(20)
-  turnoPlataformaDescarga      String?                   @db.VarChar(20)
+  numPlataformaDescarga        String?                @db.VarChar(20)
+  turnoPlataformaDescarga      String?                @db.VarChar(20)
   fechaHoraInicioDescarga      DateTime?
   fechaHoraFinDescarga         DateTime?
-  numWinchaPesaje              String?                   @db.VarChar(20)
+  numWinchaPesaje              String?                @db.VarChar(20)
   urlComprobanteWincha         String?
-  patronId                      BigInt
+  patronId                     BigInt
   motoristaId                  BigInt
   bahiaId                      BigInt
   latitud                      Decimal?
@@ -1027,20 +1051,37 @@ model DescargaFaenaConsumo {
   urlValeAbastecimiento        String?
   urlInformeDescargaProduce    String?
   observaciones                String?
-  creadoEn                     DateTime                  @default(now())
+  creadoEn                     DateTime               @default(now())
   actualizadoEn                DateTime
   movIngresoAlmacenId          BigInt?
-  especieId              BigInt?
-  toneladas              Decimal?
-  porcentajeJuveniles    Decimal?
-  fechaHoraFondeo     DateTime?
-  latitudFondeo       Decimal?
-  longitudFondeo      Decimal?
-  puertoFondeoId      BigInt?
+  especieId                    BigInt?
+  toneladas                    Decimal?
+  porcentajeJuveniles          Decimal?
+  fechaHoraFondeo              DateTime?
+  latitudFondeo                Decimal?
+  longitudFondeo               Decimal?
+  puertoFondeoId               BigInt?
 
-  faenaPescaConsumo            FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
+  // Relaciones
+  faenaPescaConsumo  FaenaPescaConsumo  @relation(fields: [faenaPescaConsumoId], references: [id])
+  puertoDescarga     PuertoPesca?       @relation("DescargaFaenaConsumo_PuertoDescarga", fields: [puertoDescargaId], references: [id])
+  puertoFondeo       PuertoPesca?       @relation("DescargaFaenaConsumo_PuertoFondeo", fields: [puertoFondeoId], references: [id])
+  patron             Personal           @relation("DescargaFaenaConsumo_Patron", fields: [patronId], references: [id])
+  motorista          Personal           @relation("DescargaFaenaConsumo_Motorista", fields: [motoristaId], references: [id])
+  bahia              Personal           @relation("DescargaFaenaConsumo_Bahia", fields: [bahiaId], references: [id])
+  cliente            EntidadComercial?  @relation(fields: [clienteId], references: [id])
+  especie            Especie?           @relation(fields: [especieId], references: [id])
+  movIngresoAlmacen  MovimientoAlmacen? @relation(fields: [movIngresoAlmacenId], references: [id])
 
   @@index([movIngresoAlmacenId])
+  @@index([puertoDescargaId])
+  @@index([puertoFondeoId])
+  @@index([patronId])
+  @@index([motoristaId])
+  @@index([bahiaId])
+  @@index([clienteId])
+  @@index([especieId])
+  @@index([faenaPescaConsumoId])
 }
 
 
@@ -1057,7 +1098,7 @@ model DescargaFaenaPesca {
   fechaHoraFinDescarga         DateTime?
   numWinchaPesaje              String?                @db.VarChar(20)
   urlComprobanteWincha         String?
-  patronId                      BigInt
+  patronId                     BigInt
   motoristaId                  BigInt
   bahiaId                      BigInt
   latitud                      Decimal?
@@ -1068,21 +1109,39 @@ model DescargaFaenaPesca {
   creadoEn                     DateTime               @default(now())
   actualizadoEn                DateTime
   clienteId                    BigInt?
-  temporadaPescaId             BigInt
+  temporadaPescaId             BigInt                 // Opcional: puedes quitarlo si prefieres acceder vía faenaPesca
   urlInformeDescargaProduce    String?
   movIngresoAlmacenId          BigInt?
-  especieId           BigInt?
-  toneladas           Decimal?
-  porcentajeJuveniles Decimal?
-  numReporteRecepcion String? @db.VarChar(20)
-  fechaHoraFondeo     DateTime?
-  latitudFondeo       Decimal?
-  longitudFondeo      Decimal?
-  puertoFondeoId      BigInt?
+  especieId                    BigInt?
+  toneladas                    Decimal?
+  porcentajeJuveniles          Decimal?
+  numReporteRecepcion          String?                @db.VarChar(20)
+  fechaHoraFondeo              DateTime?
+  latitudFondeo                Decimal?
+  longitudFondeo               Decimal?
+  puertoFondeoId               BigInt?
 
-faenaPesca FaenaPesca @relation(fields: [faenaPescaId], references: [id])
+  // Relaciones
+  faenaPesca         FaenaPesca         @relation(fields: [faenaPescaId], references: [id])
+  puertoDescarga     PuertoPesca?       @relation("DescargaFaenaPesca_PuertoDescarga", fields: [puertoDescargaId], references: [id])
+  puertoFondeo       PuertoPesca?       @relation("DescargaFaenaPesca_PuertoFondeo", fields: [puertoFondeoId], references: [id])
+  patron             Personal           @relation("DescargaFaenaPesca_Patron", fields: [patronId], references: [id])
+  motorista          Personal           @relation("DescargaFaenaPesca_Motorista", fields: [motoristaId], references: [id])
+  bahia              Personal           @relation("DescargaFaenaPesca_Bahia", fields: [bahiaId], references: [id])
+  cliente            EntidadComercial?  @relation(fields: [clienteId], references: [id])
+  especie            Especie?           @relation(fields: [especieId], references: [id])
+  movIngresoAlmacen  MovimientoAlmacen? @relation(fields: [movIngresoAlmacenId], references: [id])
 
   @@index([movIngresoAlmacenId])
+  @@index([puertoDescargaId])
+  @@index([puertoFondeoId])
+  @@index([patronId])
+  @@index([motoristaId])
+  @@index([bahiaId])
+  @@index([clienteId])
+  @@index([temporadaPescaId])
+  @@index([especieId])
+  @@index([faenaPescaId])
 }
 
 
@@ -1316,6 +1375,8 @@ model Especie {
 
   calaEspecie DetalleCalaEspecie[]
   calaFaenaConsumo DetCalaPescaConsumo[]
+  descargasFaenaPesca DescargaFaenaPesca[]
+    descargasFaenaConsumo   DescargaFaenaConsumo[] 
 }
 
 
@@ -1629,6 +1690,8 @@ model Embarcacion {
   faenas FaenaPesca[] @relation("EmbarcacionFaenas")
   faenasConsumo FaenaPescaConsumo[] @relation("EmbarcacionFaenasConsumo")
   activo            Activo          @relation(fields: [activoId], references: [id])
+  calas                Cala[]
+calasFaenaConsumo    CalaFaenaConsumo[] @relation("CalaFaenaConsumo_Embarcacion")
 }
 
 model Empresa {
@@ -1776,6 +1839,8 @@ model EntidadComercial {
   contratosServicioCliente  ContratoServicio[]  @relation("ContratoServicioCliente")
   movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[] @relation("ProveedorMovContratoServicio")
 detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("ProveedorMovOTMantenimiento")
+descargasFaenaPesca   DescargaFaenaPesca[]
+descargasFaenaConsumo DescargaFaenaConsumo[]
 }
 
 model LineaCreditoEntidad {
@@ -2556,6 +2621,8 @@ model MovimientoAlmacen {
   preFacturas PreFactura[] @relation("MovimientoAlmacenToPreFactura")
   entregaARendirMovAlmacen EntregaARendirMovAlmacen?
   insumosOT  DetInsumosTareaOT[] @relation("MovAlmacenInsumoOT")
+  descargasFaenaPesca   DescargaFaenaPesca[]
+descargasFaenaConsumo DescargaFaenaConsumo[]
 
 }
 
@@ -2804,6 +2871,18 @@ faenasPescaConsumoComoBahia       FaenaPescaConsumo[]  @relation("FaenaPescaCons
 faenasPescaConsumoComoMotorista   FaenaPescaConsumo[]  @relation("FaenaPescaConsumoMotorista")
 faenasPescaConsumoComoPatron      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPatron")
 detallesCuotaPescaActualizados  DetCuotaPesca[]  @relation("DetCuotaPescaActualizador")
+descargasFaenaPescaPatron       DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Patron")
+descargasFaenaPescaMotorista    DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Motorista")
+descargasFaenaPescaBahia        DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Bahia")
+descargasFaenaConsumoPatron     DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Patron")
+descargasFaenaConsumoMotorista  DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Motorista")
+descargasFaenaConsumoBahia      DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Bahia")
+calasPatron                     Cala[]                 @relation("Cala_Patron")
+calasMotorista                  Cala[]                 @relation("Cala_Motorista")
+calasBahia                      Cala[]                 @relation("Cala_Bahia")
+calasFaenaConsumoPatron         CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Patron")
+calasFaenaConsumoMotorista      CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Motorista")
+calasFaenaConsumoBahia          CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Bahia")
 }
 
 model Producto {
@@ -2910,6 +2989,7 @@ model PuertoPesca {
   activo              Boolean  @default(true)
   fecha_creacion      DateTime @default(now())
   fecha_actualizacion DateTime
+  esPuertoOtroPais    Boolean @default(false)
 
   faenasPescaComoDescarga           FaenaPesca[]         @relation("FaenaPescaPuertoDescarga")
 faenasPescaComoSalida             FaenaPesca[]         @relation("FaenaPescaPuertoSalida")
@@ -2917,6 +2997,10 @@ faenasPescaComoFondeo             FaenaPesca[]         @relation("FaenaPescaPuer
 faenasPescaConsumoComoDescarga    FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPuertoDescarga")
 faenasPescaConsumoComoSalida      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPuertoSalida")
 faenasPescaConsumoComoFondeo      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPuertoFondeo")
+descargasFaenaPescaDescarga   DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_PuertoDescarga")
+descargasFaenaPescaFondeo     DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_PuertoFondeo")
+descargasFaenaConsumoDescarga DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_PuertoDescarga")
+descargasFaenaConsumoFondeo   DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_PuertoFondeo")
 }
 
 model RefreshToken {

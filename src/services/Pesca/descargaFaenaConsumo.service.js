@@ -112,7 +112,18 @@ async function actualizarFaenaPescaConsumo(faenaPescaConsumoId, descargaActual) 
 
 const listar = async () => {
   try {
-    return await prisma.descargaFaenaConsumo.findMany();
+    return await prisma.descargaFaenaConsumo.findMany({
+      include: {
+        faenaPescaConsumo: true,
+        cliente: true,
+        especie: true,
+        puertoDescarga: true,
+        puertoFondeo: true,
+        patron: true,
+        motorista: true,
+        bahia: true
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -121,7 +132,19 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const descarga = await prisma.descargaFaenaConsumo.findUnique({ where: { id } });
+    const descarga = await prisma.descargaFaenaConsumo.findUnique({ 
+      where: { id },
+      include: {
+        faenaPescaConsumo: true,
+        cliente: true,
+        especie: true,
+        puertoDescarga: true,
+        puertoFondeo: true,
+        patron: true,
+        motorista: true,
+        bahia: true
+      }
+    });
     if (!descarga) throw new NotFoundError('DescargaFaenaConsumo no encontrada');
     return descarga;
   } catch (err) {
@@ -210,7 +233,18 @@ const eliminar = async (id) => {
 const obtenerPorFaena = async (faenaPescaConsumoId) => {
   try {
     return await prisma.descargaFaenaConsumo.findMany({
-      where: { faenaPescaConsumoId }
+      where: { faenaPescaConsumoId },
+      include: {
+        faenaPescaConsumo: true,
+        cliente: true,
+        especie: true,
+        puertoDescarga: true,
+        puertoFondeo: true,
+        patron: true,
+        motorista: true,
+        bahia: true
+      },
+      orderBy: { id: 'desc' }
     });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

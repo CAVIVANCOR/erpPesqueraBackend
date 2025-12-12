@@ -108,7 +108,14 @@ const listar = async () => {
   try {
     return await prisma.descargaFaenaPesca.findMany({
       include: {
-        faenaPesca: true
+        faenaPesca: true,
+        cliente: true,
+        especie: true,
+        puertoDescarga: true,
+        puertoFondeo: true,
+        patron: true,
+        motorista: true,
+        bahia: true
       }
     });
   } catch (err) {
@@ -122,7 +129,14 @@ const obtenerPorId = async (id) => {
     const descarga = await prisma.descargaFaenaPesca.findUnique({ 
       where: { id },
       include: {
-        faenaPesca: true
+        faenaPesca: true,
+        cliente: true,
+        especie: true,
+        puertoDescarga: true,
+        puertoFondeo: true,
+        patron: true,
+        motorista: true,
+        bahia: true
       }
     });
     if (!descarga) throw new NotFoundError('DescargaFaenaPesca no encontrada');
@@ -143,7 +157,14 @@ const obtenerPorFaena = async (faenaPescaId) => {
     const result = await prisma.descargaFaenaPesca.findMany({
       where: { faenaPescaId },
       include: {
-        faenaPesca: true
+        faenaPesca: true,
+        cliente: true,
+        especie: true,
+        puertoDescarga: true,
+        puertoFondeo: true,
+        patron: true,
+        motorista: true,
+        bahia: true
       },
       orderBy: { id: 'desc' }
     });

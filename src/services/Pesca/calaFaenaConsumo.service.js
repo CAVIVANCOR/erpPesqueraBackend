@@ -80,6 +80,10 @@ const listar = async () => {
     const calas = await prisma.calaFaenaConsumo.findMany({
       include: {
         faenaPescaConsumo: true,
+        bahia: true,
+        motorista: true,
+        patron: true,
+        embarcacion: true,
         especiesPescadas: {
           include: {
             especie: true
@@ -107,6 +111,11 @@ const obtenerPorId = async (id) => {
     const cala = await prisma.calaFaenaConsumo.findUnique({ 
       where: { id },
       include: {
+        faenaPescaConsumo: true,
+        bahia: true,
+        motorista: true,
+        patron: true,
+        embarcacion: true,
         especiesPescadas: {
           include: {
             especie: true
@@ -135,6 +144,11 @@ const obtenerPorFaena = async (faenaId) => {
     const calas = await prisma.calaFaenaConsumo.findMany({
       where: { faenaPescaConsumoId: Number(faenaId) },
       include: {
+        faenaPescaConsumo: true,
+        bahia: true,
+        motorista: true,
+        patron: true,
+        embarcacion: true,
         especiesPescadas: {
           include: {
             especie: true,
