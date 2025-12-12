@@ -170,6 +170,7 @@ import detMovsEntregaRendirRoutes from '../routes/Pesca/detMovsEntregaRendir.rou
 import tipoMovEntregaRendirRoutes from '../routes/Pesca/tipoMovEntregaRendir.routes.js';
 import recalcularToneladasRoutes from '../routes/Pesca/recalcularToneladas.routes.js';
 import testRecalculoRoutes from '../routes/Pesca/testRecalculo.routes.js';
+import detCuotaPescaRoutes from '../routes/Pesca/detCuotaPesca.routes.js';
 import empresaReporteRoutes from '../routes/Maestros/empresa.reporte.routes.js';
 import productoRoutes from '../routes/Maestros/producto.routes.js';
 import centrosAlmacenRoutes from './Almacen/centrosAlmacen.routes.js';
@@ -539,6 +540,8 @@ router.use('/det-movs-entrega-rendir', detMovsEntregaRendirRoutes);
 router.use('/tipos-mov-entrega-rendir', tipoMovEntregaRendirRoutes);
 router.use('/recalcular-toneladas', recalcularToneladasRoutes);
 router.use('/test-recalculo', testRecalculoRoutes);
+// Rutas para DetCuotaPesca
+router.use('/pesca/detalles-cuota-pesca', detCuotaPescaRoutes);
 router.use('/movimientos-caja', movimientoCajaRoutes);
 router.use('/cuentas-corrientes', cuentaCorrienteRoutes);
 router.use('/asientos-contables-interfaz', asientoContableInterfazRoutes);

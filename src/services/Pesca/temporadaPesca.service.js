@@ -7,6 +7,42 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  * Documentado en español.
  */
 
+/**
+ * Calcula las cuotas propia y alquilada basándose en los detalles de cuota de pesca.
+ * @param {BigInt} empresaId - ID de la empresa
+ * @param {Decimal} limiteMaximoCapturaTn - Límite máximo de captura en toneladas
+ * @returns {Promise<Object>} { cuotaPropiaTon, cuotaAlquiladaTon }
+ */
+async function calcularCuotasPorEmpresa(empresaId, limiteMaximoCapturaTn) {
+  // Obtener detalles de cuota activos de la empresa
+  const detalles = await prisma.detCuotaPesca.findMany({
+    where: {
+      empresaId,
+      activo: true
+    }
+  });
+
+  // Sumar porcentajes de cuotas propias
+  const totalPropiaPorcentaje = detalles
+    .filter(d => d.cuotaPropia)
+    .reduce((sum, d) => sum + Number(d.porcentajeCuota), 0);
+
+  // Sumar porcentajes de cuotas alquiladas
+  const totalAlquiladaPorcentaje = detalles
+    .filter(d => !d.cuotaPropia)
+    .reduce((sum, d) => sum + Number(d.porcentajeCuota), 0);
+
+  // Calcular toneladas
+  const limite = Number(limiteMaximoCapturaTn);
+  const cuotaPropiaTon = limite * (totalPropiaPorcentaje / 100);
+  const cuotaAlquiladaTon = limite * (totalAlquiladaPorcentaje / 100);
+
+  return {
+    cuotaPropiaTon,
+    cuotaAlquiladaTon
+  };
+}
+
 async function validarClavesForaneas(data) {
   const [empresa, personal] = await Promise.all([
     prisma.empresa.findUnique({ where: { id: data.empresaId } }),
@@ -32,12 +68,76 @@ async function validarSolapamiento(data, id = null) {
   if (existe) throw new ConflictError('Ya existe una temporada con el mismo nombre, empresa y estado en fechas que se superponen. Por favor, verifique las fechas o cambie el nombre.');
 }
 
-const listar = async () => {
+/**
+ * Lista temporadas de pesca con filtros opcionales
+ * @param {Object} filtros - Filtros opcionales para la consulta
+ * @param {number} [filtros.empresaId] - ID de la empresa
+ * @param {number} [filtros.estadoTemporadaId] - ID del estado de temporada
+ * @param {number} [filtros.bahiaId] - ID de la bahía
+ * @param {string} [filtros.fechaDesde] - Fecha de inicio desde (YYYY-MM-DD)
+ * @param {string} [filtros.fechaHasta] - Fecha de inicio hasta (YYYY-MM-DD)
+ * @returns {Promise<Array>} Lista de temporadas con toneladas calculadas
+ * @throws {DatabaseError} Si hay error en la base de datos
+ */
+const listar = async (filtros = {}) => {
   try {
-    const temporadas = await prisma.temporadaPesca.findMany({
-      include: {
-        faenas: true
+    // Construir cláusula WHERE de forma profesional
+    const where = {};
+    
+    // Filtro por empresa (validado)
+    if (filtros.empresaId !== undefined && filtros.empresaId !== null) {
+      const empresaId = Number(filtros.empresaId);
+      if (!isNaN(empresaId) && empresaId > 0) {
+        where.empresaId = empresaId;
       }
+    }
+    
+    // Filtro por estado de temporada (validado)
+    if (filtros.estadoTemporadaId !== undefined && filtros.estadoTemporadaId !== null) {
+      const estadoId = Number(filtros.estadoTemporadaId);
+      if (!isNaN(estadoId) && estadoId > 0) {
+        where.estadoTemporadaId = estadoId;
+      }
+    }
+    
+    // Filtro por bahía (validado)
+    if (filtros.bahiaId !== undefined && filtros.bahiaId !== null) {
+      const bahiaId = Number(filtros.bahiaId);
+      if (!isNaN(bahiaId) && bahiaId > 0) {
+        where.BahiaId = bahiaId;
+      }
+    }
+    
+    // Filtro por rango de fechas (validado)
+    if (filtros.fechaDesde || filtros.fechaHasta) {
+      where.fechaInicio = {};
+      
+      if (filtros.fechaDesde) {
+        // Fecha de inicio >= fechaDesde
+        where.fechaInicio.gte = new Date(filtros.fechaDesde);
+      }
+      
+      if (filtros.fechaHasta) {
+        // Fecha de inicio <= fechaHasta (fin del día)
+        const fechaHastaFin = new Date(filtros.fechaHasta);
+        fechaHastaFin.setHours(23, 59, 59, 999);
+        where.fechaInicio.lte = fechaHastaFin;
+      }
+    }
+    
+    // Consulta con ordenamiento profesional y relaciones
+    const temporadas = await prisma.temporadaPesca.findMany({
+      where,
+      include: {
+        faenas: true,
+        empresa: true,
+        bahiaComercial: true,
+        estadoTemporada: true
+      },
+      orderBy: [
+        { fechaInicio: 'desc' },
+        { id: 'desc' }
+      ]
     });
 
     // Calcular toneladas capturadas dinámicamente
@@ -48,7 +148,9 @@ const listar = async () => {
       )
     }));
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al listar temporadas de pesca', err.message);
+    }
     throw err;
   }
 };
@@ -58,7 +160,10 @@ const obtenerPorId = async (id) => {
     const temp = await prisma.temporadaPesca.findUnique({ 
       where: { id },
       include: {
-        faenas: true
+        faenas: true,
+        empresa: true,
+        bahiaComercial: true,
+        estadoTemporada: true
       }
     });
     if (!temp) throw new NotFoundError('TemporadaPesca no encontrada');
@@ -83,6 +188,14 @@ const crear = async (data) => {
     }
     await validarClavesForaneas(data);
     await validarSolapamiento(data);
+
+    // Calcular cuotas automáticamente si se proporciona limiteMaximoCapturaTn
+    if (data.limiteMaximoCapturaTn) {
+      const cuotas = await calcularCuotasPorEmpresa(data.empresaId, data.limiteMaximoCapturaTn);
+      data.cuotaPropiaTon = cuotas.cuotaPropiaTon;
+      data.cuotaAlquiladaTon = cuotas.cuotaAlquiladaTon;
+    }
+
     return await prisma.temporadaPesca.create({ data });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
@@ -104,6 +217,19 @@ const actualizar = async (id, data) => {
     if (data.nombre || data.fechaInicio || data.fechaFin || data.empresaId || data.estadoTemporadaId) {
       await validarSolapamiento({ ...existente, ...data }, id);
     }
+
+    // Recalcular cuotas si cambia limiteMaximoCapturaTn o empresaId
+    if (data.limiteMaximoCapturaTn || data.empresaId) {
+      const empresaId = data.empresaId || existente.empresaId;
+      const limiteMaximo = data.limiteMaximoCapturaTn || existente.limiteMaximoCapturaTn;
+      
+      if (limiteMaximo) {
+        const cuotas = await calcularCuotasPorEmpresa(empresaId, limiteMaximo);
+        data.cuotaPropiaTon = cuotas.cuotaPropiaTon;
+        data.cuotaAlquiladaTon = cuotas.cuotaAlquiladaTon;
+      }
+    }
+
     return await prisma.temporadaPesca.update({ where: { id }, data });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;

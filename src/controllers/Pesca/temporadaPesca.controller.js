@@ -6,9 +6,42 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  * Controlador para TemporadaPesca
  * Documentado en español.
  */
+/**
+ * Lista temporadas de pesca con filtros opcionales
+ * @route GET /api/pesca/temporadas-pesca
+ * @queryparam {number} [empresaId] - Filtrar por empresa
+ * @queryparam {number} [estadoTemporadaId] - Filtrar por estado
+ * @queryparam {number} [bahiaId] - Filtrar por bahía
+ * @queryparam {string} [fechaDesde] - Filtrar por fecha de inicio desde (YYYY-MM-DD)
+ * @queryparam {string} [fechaHasta] - Filtrar por fecha de inicio hasta (YYYY-MM-DD)
+ * @returns {Array} Lista de temporadas de pesca
+ */
 export async function listar(req, res, next) {
   try {
-    const temps = await temporadaPescaService.listar();
+    // Extraer y sanitizar filtros de query params
+    const filtros = {};
+    
+    if (req.query.empresaId) {
+      filtros.empresaId = req.query.empresaId;
+    }
+    
+    if (req.query.estadoTemporadaId) {
+      filtros.estadoTemporadaId = req.query.estadoTemporadaId;
+    }
+    
+    if (req.query.bahiaId) {
+      filtros.bahiaId = req.query.bahiaId;
+    }
+    
+    if (req.query.fechaDesde) {
+      filtros.fechaDesde = req.query.fechaDesde;
+    }
+    
+    if (req.query.fechaHasta) {
+      filtros.fechaHasta = req.query.fechaHasta;
+    }
+    
+    const temps = await temporadaPescaService.listar(filtros);
     res.json(toJSONBigInt(temps));
   } catch (err) {
     next(err);
