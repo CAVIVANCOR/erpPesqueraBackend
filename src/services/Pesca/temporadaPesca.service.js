@@ -242,11 +242,11 @@ const eliminar = async (id) => {
   try {
     const existente = await prisma.temporadaPesca.findUnique({
       where: { id },
-      include: { faenas: true, entregasARendir: true, liquidacionTemporada: true }
+      include: { faenas: true, entregasARendir: true }
     });
     if (!existente) throw new NotFoundError('TemporadaPesca no encontrada');
-    if ((existente.faenas && existente.faenas.length > 0) || (existente.entregasARendir && existente.entregasARendir.length > 0) || existente.liquidacionTemporada) {
-      throw new ConflictError('No se puede eliminar porque tiene faenas, entregas o liquidación asociada. Por favor, elimine o desasocie estos registros antes de intentar eliminar la temporada.');
+    if ((existente.faenas && existente.faenas.length > 0) || (existente.entregasARendir && existente.entregasARendir.length > 0)) {
+      throw new ConflictError('No se puede eliminar porque tiene faenas o entregas asociadas. Por favor, elimine o desasocie estos registros antes de intentar eliminar la temporada.');
     }
     await prisma.temporadaPesca.delete({ where: { id } });
     return true;
