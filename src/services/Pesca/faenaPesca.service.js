@@ -163,7 +163,6 @@ const eliminar = async (id) => {
         tripulantes: true,
         detalleDocsTripulantes: true,
         calas: true,
-        calasProduce: true,
         accionesPrevias: true,
         descargaFaena: true
       }
@@ -174,7 +173,6 @@ const eliminar = async (id) => {
       (existente.tripulantes && existente.tripulantes.length > 0) ||
       (existente.detalleDocsTripulantes && existente.detalleDocsTripulantes.length > 0) ||
       (existente.calas && existente.calas.length > 0) ||
-      (existente.calasProduce && existente.calasProduce.length > 0) ||
       (existente.accionesPrevias && existente.accionesPrevias.length > 0) ||
       existente.descargaFaena
     ) {
