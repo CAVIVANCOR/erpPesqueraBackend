@@ -10,6 +10,8 @@ import { errorHandler } from './middlewares/errorHandler.js';
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1); // Confiar en el primer proxy (nginx/apache)
+
 
 import path from 'path';
 // Middleware para servir archivos de logo de empresa de forma pública y segura

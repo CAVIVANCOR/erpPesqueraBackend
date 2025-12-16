@@ -1,6 +1,7 @@
 import faenaPescaService from '../../services/Pesca/faenaPesca.service.js';
 import wmsService from '../../services/Almacen/wms.service.js';
-import finalizarFaenaService from '../../services/Pesca/finalizarFaenaConMovimientos.service.js';
+import finalizarFaenaConMovimientosService from '../../services/Pesca/finalizarFaenaConMovimientos.service.js';
+import finalizarFaenaSimpleService from '../../services/Pesca/finalizarFaena.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import multer from 'multer';
 import path from 'path';
@@ -412,35 +413,25 @@ export async function servirArchivoDeclaracionDesembarque(req, res) {
 }
 
 /**
- * Finaliza una faena de pesca y genera automáticamente DOS movimientos de almacén:
- * 1. INGRESO (Concepto 1): De Proveedor MEGUI a Almacén MP Recurso Hidrobiológico
- * 2. SALIDA (Concepto 3): De Almacén MP Recurso Hidrobiológico a Cliente MEGUI
+ * Finaliza una faena de pesca (SOLO actualiza el estado a FINALIZADA)
  * 
- * Utiliza las funciones genéricas del módulo de Inventarios para garantizar
- * consistencia con el resto del sistema.
+ * IMPORTANTE: Este endpoint ahora SOLO actualiza el estado de la faena.
+ * Los movimientos de almacén (ingreso y salida) se generan desde cada descarga individual
+ * mediante el botón "Finalizar Descarga" en el componente DescargaFaenaPescaForm.
+ * 
+ * Flujo actualizado:
+ * 1. Usuario hace clic en "Fin de Faena" → Cambia estado a FINALIZADA
+ * 2. Usuario hace clic en "Finalizar Descarga" (por cada descarga) → Genera movimientos de almacén
  * 
  * @param {Object} req.params.id - ID de la faena de pesca
- * @param {Object} req.body.temporadaPescaId - ID de la temporada de pesca
- * @param {Object} req.user.id - ID del usuario logueado (desde middleware de autenticación)
+ * @param {Object} req.body.temporadaPescaId - ID de la temporada de pesca (ya no se usa, pero se mantiene por compatibilidad)
  */
 export async function finalizarFaenaConMovimientoAlmacen(req, res, next) {
   try {
     const faenaPescaId = BigInt(req.params.id);
-    const { temporadaPescaId } = req.body;
-    const usuarioId = BigInt(req.user?.id || 1); // ID del usuario logueado
 
-    if (!temporadaPescaId) {
-      return res.status(400).json({
-        error: 'El ID de la temporada de pesca es requerido',
-      });
-    }
-
-    // Ejecutar el proceso completo de finalización con movimientos de almacén
-    const resultado = await finalizarFaenaService.finalizarFaenaConMovimientosAlmacen(
-      faenaPescaId,
-      BigInt(temporadaPescaId),
-      usuarioId
-    );
+    // Ejecutar el proceso simplificado de finalización (solo actualiza estado)
+    const resultado = await finalizarFaenaSimpleService.finalizarFaena(faenaPescaId);
 
     res.json(toJSONBigInt(resultado));
   } catch (err) {

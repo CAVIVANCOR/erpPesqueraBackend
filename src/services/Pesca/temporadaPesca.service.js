@@ -557,6 +557,19 @@ const iniciar = async (id) => {
         detalleDocEmbarcacion.push(detalleDocEmb);
       }
 
+      // Calcular estadísticas para el informe
+      const docTripulantesVencidos = detalleDocTripulantes.filter(d => d.docVencido).length;
+      const docTripulantesVigentes = detalleDocTripulantes.length - docTripulantesVencidos;
+      const docEmbarcacionVencidos = detalleDocEmbarcacion.filter(d => d.docVencido).length;
+      const docEmbarcacionVigentes = detalleDocEmbarcacion.length - docEmbarcacionVencidos;
+      
+      // Contar tripulantes por cargo (convertir a Number para comparación)
+      const tripulantesPorCargo = {
+        tripulantes: tripulantesFaena.filter(t => Number(t.cargoId) === 21).length,
+        patrones: tripulantesFaena.filter(t => Number(t.cargoId) === 22).length,
+        motoristas: tripulantesFaena.filter(t => Number(t.cargoId) === 14).length
+      };
+
       return {
         temporadaActualizada,
         entregaARendir,
@@ -565,7 +578,30 @@ const iniciar = async (id) => {
         detAcciones,
         detalleDocTripulantes,
         detalleDocEmbarcacion,
-        mensaje: 'Temporada iniciada exitosamente y estado cambiado a EN PROCESO'
+        mensaje: 'Temporada iniciada exitosamente y estado cambiado a EN PROCESO',
+        // Resumen para el modal informativo
+        resumen: {
+          temporadaId: temporadaActualizada.id,
+          numeroResolucion: temporadaActualizada.numeroResolucion,
+          estadoNuevo: estadoEnProceso.descripcion,
+          entregaARendirCreada: true,
+          faenaId: faenaPesca.id,
+          embarcacionNombre: embarcacionId ? embarcaciones[0]?.nombre : null,
+          patronNombre: patronId ? patrones[0]?.nombreCompleto : null,
+          motoristaNombre: motoristaId ? motoristas[0]?.nombreCompleto : null,
+          bahiaNombre: bahiaId ? bahias[0]?.nombreCompleto : null,
+          tripulantesRegistrados: tripulantesFaena.length,
+          tripulantesPorCargo,
+          accionesPreviasAsignadas: detAcciones.length,
+          docTripulantesTotal: detalleDocTripulantes.length,
+          docTripulantesVigentes,
+          docTripulantesVencidos,
+          docEmbarcacionTotal: detalleDocEmbarcacion.length,
+          docEmbarcacionVigentes,
+          docEmbarcacionVencidos,
+          tieneAdvertencias: (docTripulantesVencidos + docEmbarcacionVencidos) > 0,
+          totalDocumentosVencidos: docTripulantesVencidos + docEmbarcacionVencidos
+        }
       };
 
     });

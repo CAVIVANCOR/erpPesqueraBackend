@@ -11,4 +11,7 @@ router.post('/', descargaFaenaPescaController.crear);
 router.put('/:id', descargaFaenaPescaController.actualizar);
 router.delete('/:id', descargaFaenaPescaController.eliminar);
 
+// Ruta para finalizar descarga con movimientos de almacén
+router.post('/:id/finalizar-con-movimientos', descargaFaenaPescaController.finalizarDescargaConMovimientos);
+
 export default router;

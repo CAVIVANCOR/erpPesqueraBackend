@@ -72,3 +72,34 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Finaliza una descarga y genera movimientos de almacén (ingreso y salida)
+ * @param {Object} req.params.id - ID de la descarga de faena pesca
+ * @param {Object} req.body.temporadaPescaId - ID de la temporada de pesca
+ * @param {Object} req.user.id - ID del usuario logueado (desde middleware de autenticación)
+ */
+export async function finalizarDescargaConMovimientos(req, res, next) {
+  try {
+    const descargaId = BigInt(req.params.id);
+    const { temporadaPescaId } = req.body;
+    const usuarioId = BigInt(req.user?.id || 1);
+
+    if (!temporadaPescaId) {
+      return res.status(400).json({
+        error: 'El ID de la temporada de pesca es requerido',
+      });
+    }
+
+    // Ejecutar el proceso completo de finalización con movimientos de almacén
+    const resultado = await finalizarDescargaService.finalizarDescargaConMovimientos(
+      descargaId,
+      BigInt(temporadaPescaId),
+      usuarioId
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
