@@ -1,4 +1,5 @@
 import descargaFaenaPescaService from '../../services/Pesca/descargaFaenaPesca.service.js';
+import finalizarDescargaService from '../../services/Pesca/finalizarDescargaConMovimientos.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
 /**

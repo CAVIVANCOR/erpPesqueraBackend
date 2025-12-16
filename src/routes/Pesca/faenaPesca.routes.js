@@ -11,6 +11,9 @@ router.post('/', faenaPescaController.crear);
 router.put('/:id', faenaPescaController.actualizar);
 router.delete('/:id', faenaPescaController.eliminar);
 
+// Ruta para crear faena completa con todos sus registros asociados
+router.post('/crear-completa', faenaPescaController.crearFaenaCompleta);
+
 // Ruta para finalizar faena con movimiento de almacén
 router.post('/:id/finalizar-con-almacen', faenaPescaController.finalizarFaenaConMovimientoAlmacen);
 

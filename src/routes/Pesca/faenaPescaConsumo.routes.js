@@ -11,6 +11,9 @@ router.post('/', faenaPescaConsumoController.crear);
 router.put('/:id', faenaPescaConsumoController.actualizar);
 router.delete('/:id', faenaPescaConsumoController.eliminar);
 
+// Ruta para crear faena consumo completa con todos sus registros asociados
+router.post('/crear-completa', faenaPescaConsumoController.crearFaenaConsumoCompleta);
+
 // Ruta para upload de informe (protegida con JWT)
 router.post('/upload-informe-faena', autenticarJWT, faenaPescaConsumoController.uploadInformeFaena[0], faenaPescaConsumoController.uploadInformeFaena[1]);
 

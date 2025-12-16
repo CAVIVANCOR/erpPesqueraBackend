@@ -110,10 +110,43 @@ const crear = async (data) => {
       throw new ValidationError('Los campos otMantenimientoId y descripcion son obligatorios.');
     }
     await validarForaneas(data);
-    return await prisma.detTareasOT.create({ data });
+    
+    // Auto-calcular numeroTarea si no se proporciona
+    let numeroTarea = data.numeroTarea;
+    if (!numeroTarea) {
+      const maxTarea = await prisma.detTareasOT.findFirst({
+        where: { otMantenimientoId: data.otMantenimientoId },
+        orderBy: { numeroTarea: 'desc' },
+        select: { numeroTarea: true }
+      });
+      numeroTarea = maxTarea ? maxTarea.numeroTarea + 1 : 1;
+    }
+    
+    // Filtrar solo los campos que existen en el schema de Prisma
+    const datosValidos = {
+      otMantenimientoId: data.otMantenimientoId,
+      numeroTarea: numeroTarea,
+      descripcion: data.descripcion,
+      responsableId: data.responsableId || null,
+      personalValidaId: data.personalValidaId || null,
+      contratistaId: data.contratistaId || null,
+      fechaProgramada: data.fechaProgramada || null,
+      fechaInicio: data.fechaInicio || null,
+      fechaFin: data.fechaFin || null,
+      estadoTareaId: data.estadoTareaId,
+      realizado: data.realizado || false,
+      observaciones: data.observaciones || null,
+      creadoPor: data.creadoPor || null,
+      actualizadoPor: data.actualizadoPor || null,
+    };
+    
+    return await prisma.detTareasOT.create({ data: datosValidos });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith('P')) {
+      console.error('Error Prisma detallado:', err);
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
     throw err;
   }
 };
@@ -127,7 +160,23 @@ const actualizar = async (id, data) => {
     if (!existente) throw new NotFoundError('DetTareasOT no encontrada');
     // Validar foráneas si se modifican
     await validarForaneas({ ...existente, ...data });
-    return await prisma.detTareasOT.update({ where: { id }, data });
+    
+    // Filtrar solo los campos que existen en el schema de Prisma
+    const datosValidos = {};
+    if (data.numeroTarea !== undefined) datosValidos.numeroTarea = data.numeroTarea;
+    if (data.descripcion !== undefined) datosValidos.descripcion = data.descripcion;
+    if (data.responsableId !== undefined) datosValidos.responsableId = data.responsableId;
+    if (data.personalValidaId !== undefined) datosValidos.personalValidaId = data.personalValidaId;
+    if (data.contratistaId !== undefined) datosValidos.contratistaId = data.contratistaId;
+    if (data.fechaProgramada !== undefined) datosValidos.fechaProgramada = data.fechaProgramada;
+    if (data.fechaInicio !== undefined) datosValidos.fechaInicio = data.fechaInicio;
+    if (data.fechaFin !== undefined) datosValidos.fechaFin = data.fechaFin;
+    if (data.estadoTareaId !== undefined) datosValidos.estadoTareaId = data.estadoTareaId;
+    if (data.realizado !== undefined) datosValidos.realizado = data.realizado;
+    if (data.observaciones !== undefined) datosValidos.observaciones = data.observaciones;
+    if (data.actualizadoPor !== undefined) datosValidos.actualizadoPor = data.actualizadoPor;
+    
+    return await prisma.detTareasOT.update({ where: { id }, data: datosValidos });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

@@ -2,6 +2,7 @@ import faenaPescaService from '../../services/Pesca/faenaPesca.service.js';
 import wmsService from '../../services/Almacen/wms.service.js';
 import finalizarFaenaConMovimientosService from '../../services/Pesca/finalizarFaenaConMovimientos.service.js';
 import finalizarFaenaSimpleService from '../../services/Pesca/finalizarFaena.service.js';
+import crearFaenaCompletaService from '../../services/Pesca/crearFaenaCompleta.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import multer from 'multer';
 import path from 'path';
@@ -54,6 +55,30 @@ export async function eliminar(req, res, next) {
     const id = Number(req.params.id);
     await faenaPescaService.eliminar(id);
     res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Crear una faena completa con todos sus registros asociados
+ * Replica la lógica de creación de faena del proceso "Iniciar Temporada"
+ * @route POST /api/pesca/faenas-pesca/crear-completa
+ * @body {number} temporadaId - ID de la temporada de pesca
+ * @returns {Object} Resultado con faena y todos los registros creados
+ */
+export async function crearFaenaCompleta(req, res, next) {
+  try {
+    const { temporadaId } = req.body;
+    
+    if (!temporadaId) {
+      return res.status(400).json({ 
+        error: 'El campo temporadaId es requerido' 
+      });
+    }
+    
+    const resultado = await crearFaenaCompletaService.crearFaenaCompleta(temporadaId);
+    res.status(201).json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }

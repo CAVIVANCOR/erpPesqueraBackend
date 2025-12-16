@@ -1,4 +1,5 @@
 import faenaPescaConsumoService from '../../services/Pesca/faenaPescaConsumo.service.js';
+import crearFaenaConsumoCompletaService from '../../services/Pesca/crearFaenaConsumoCompleta.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import multer from 'multer';
 import path from 'path';
@@ -116,6 +117,30 @@ export async function eliminar(req, res, next) {
     const id = Number(req.params.id);
     await faenaPescaConsumoService.eliminar(id);
     res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Crear una faena de pesca consumo completa con todos sus registros asociados
+ * Replica la lógica de creación de faena del proceso "Iniciar Novedad Pesca Consumo"
+ * @route POST /api/pesca/faenas-pesca-consumo/crear-completa
+ * @body {number} novedadPescaConsumoId - ID de la novedad de pesca consumo
+ * @returns {Object} Resultado con faena y todos los registros creados
+ */
+export async function crearFaenaConsumoCompleta(req, res, next) {
+  try {
+    const { novedadPescaConsumoId } = req.body;
+    
+    if (!novedadPescaConsumoId) {
+      return res.status(400).json({ 
+        error: 'El campo novedadPescaConsumoId es requerido' 
+      });
+    }
+    
+    const resultado = await crearFaenaConsumoCompletaService.crearFaenaConsumoCompleta(novedadPescaConsumoId);
+    res.status(201).json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }
