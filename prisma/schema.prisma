@@ -1061,6 +1061,10 @@ model DescargaFaenaConsumo {
   latitudFondeo                Decimal?
   longitudFondeo               Decimal?
   puertoFondeoId               BigInt?
+  nroCubetas                   Decimal? @default(0.00) @db.Decimal(7,2)
+  precioPorKgEspecie           Decimal? @default(0.00) @db.Decimal(7,2)
+  precioTotal                  Decimal? @default(0.00) @db.Decimal(18,2)
+  katanaTripulacionId          BigInt?
 
   // Relaciones
   faenaPescaConsumo  FaenaPescaConsumo  @relation(fields: [faenaPescaConsumoId], references: [id])
@@ -1072,6 +1076,7 @@ model DescargaFaenaConsumo {
   cliente            EntidadComercial?  @relation(fields: [clienteId], references: [id])
   especie            Especie?           @relation(fields: [especieId], references: [id])
   movIngresoAlmacen  MovimientoAlmacen? @relation(fields: [movIngresoAlmacenId], references: [id])
+  katanaTripulacion  KatanaTripulacion? @relation("DescargaFaenaConsumo_KatanaTripulacion", fields: [katanaTripulacionId], references: [id])
 
   @@index([movIngresoAlmacenId])
   @@index([puertoDescargaId])
@@ -1082,6 +1087,8 @@ model DescargaFaenaConsumo {
   @@index([clienteId])
   @@index([especieId])
   @@index([faenaPescaConsumoId])
+  @@index([katanaTripulacionId])
+
 }
 
 
@@ -1120,6 +1127,7 @@ model DescargaFaenaPesca {
   latitudFondeo                Decimal?
   longitudFondeo               Decimal?
   puertoFondeoId               BigInt?
+
 
   // Relaciones
   faenaPesca         FaenaPesca         @relation(fields: [faenaPescaId], references: [id])
@@ -1258,6 +1266,8 @@ model DetMovsEntRendirPescaConsumo {
   tipoDocumentoId        BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
   numeroSerieComprobante        String?                              // Número Serie del comprobante
   numeroCorrelativoComprobante String?                               // Número Correlativo del comprobante
+  formaParteCalculoLiquidacionTripulantes Boolean? @default(false)
+  formaParteCalculoEntregaARendir Boolean? @default(false)
 
   entregaARendirPescaConsumo EntregaARendirPescaConsumo @relation(fields: [entregaARendirPescaConsumoId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1293,6 +1303,8 @@ model DetMovsEntregaRendir {
   tipoDocumentoId        BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
   numeroSerieComprobante        String?                              // Número Serie del comprobante
   numeroCorrelativoComprobante String?                               // Número Correlativo del comprobante
+  formaParteCalculoLiquidacionTripulantes Boolean? @default(false)
+  formaParteCalculoEntregaARendir Boolean? @default(false)
 
   entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1372,11 +1384,13 @@ model Especie {
   id BigInt @id @default(autoincrement())
   nombre String @db.VarChar(100)
   nombreCientifico String @db.VarChar(100)
+  cubetaPesoKg Decimal? @default(0.00) @db.Decimal(7,2)
+  precioPorKg Decimal? @default(0.00) @db.Decimal(7,2)
 
   calaEspecie DetalleCalaEspecie[]
   calaFaenaConsumo DetCalaPescaConsumo[]
   descargasFaenaPesca DescargaFaenaPesca[]
-    descargasFaenaConsumo   DescargaFaenaConsumo[] 
+  descargasFaenaConsumo   DescargaFaenaConsumo[] 
 }
 
 
@@ -1719,6 +1733,14 @@ model Empresa {
   margenMinimoPermitido Decimal?            @default(20.00) @db.Decimal(5, 2)  // % mínimo de margen (ej: 20.00%)
   margenUtilidadObjetivo Decimal?           @default(50.00) @db.Decimal(5, 2)  // % objetivo de margen (ej: 50.00%)
 
+  porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
+  porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
+  cantPersonalCalcComisionMotorista Decimal? @default(0.00) @db.Decimal(7,2)
+  cantDivisoriaCalcComisionMotorista Decimal? @default(0.00) @db.Decimal(7,2)
+  porcentajeCalcComisionPanguero Decimal? @default(0.00) @db.Decimal(7,2)
+  monedaCalculosLiqId BigInt? @default(1)
+
+
   sedes SedesEmpresa[]
   centrosCosto EmpresaCentroCosto[]
   movimientosAlmacen MovimientoAlmacen[]
@@ -1735,6 +1757,25 @@ model Empresa {
   ordenesMantenimiento OTMantenimiento[]
   contratosServicio       ContratoServicio[]    @relation("ContratoServicioEmpresa")
   detallesCuotaPesca  DetCuotaPesca[]
+  monedaCalculosLiq Moneda? @relation("EmpresaMonedaCalculosLiq", fields: [monedaCalculosLiqId], references: [id])
+  katanasTripulacion KatanaTripulacion[]
+
+@@index([monedaCalculosLiqId])
+
+}
+
+model KatanaTripulacion {
+  id                BigInt         @id @default(autoincrement())
+  empresaId	        BigInt
+  rangoInicialTn    Decimal? 	@default(0.00) @db.Decimal(7, 3) 
+  rangoFinaTn       Decimal? 	@default(0.00) @db.Decimal(7, 3) 
+  kgOtorgadoCalculo Decimal? 	@default(0.00) @db.Decimal(10, 3)
+
+  empresa           Empresa   @relation(fields: [empresaId], references: [id])
+  descargasFaenaConsumo DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_KatanaTripulacion")
+
+  @@index([empresaId])
+
 }
 
 model DetCuotaPesca {
@@ -1747,6 +1788,7 @@ model DetCuotaPesca {
   fechaActualizacion  DateTime  @default(now())
   idPersonaActualiza  BigInt
   cuotaPropia  Boolean @default(false)
+  precioPorTonDolares Decimal? @default(0) @db.Decimal(10,2) 
 
   // Relaciones
   empresa             Empresa   @relation(fields: [empresaId], references: [id])
@@ -2556,6 +2598,7 @@ model Moneda {
   contratosServicio       ContratoServicio[]    @relation("ContratoServicioMoneda")
   movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
   detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[]
+  empresasCalculosLiq Empresa[] @relation("EmpresaMonedaCalculosLiq")
 }
 
 model MotivoAcceso {
@@ -2654,6 +2697,7 @@ model MovimientoCaja {
   urlDocumentoMovCaja                     String?
   cuentaDestinoEntidadComercialId         BigInt?
   productoId                              BigInt?
+  origenReferenciaIngresoMovCajaId    BigInt? 
 
   cuentaCorrienteOrigen     CuentaCorriente @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
   cuentaCorrienteDestino    CuentaCorriente? @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
@@ -2688,7 +2732,19 @@ model NovedadPescaConsumo {
   limiteMaximoCapturaTn           Decimal?       @db.Decimal(12, 3)
   numeroResolucion                String?
   referenciaExtra                 String?
- 
+
+  porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
+  porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
+  cantPersonalCalcComisionMotorista Decimal? @default(0.00) @db.Decimal(7,2)
+  cantDivisoriaCalcComisionMotorista Decimal? @default(0.00) @db.Decimal(7,2)
+  porcentajeCalcComisionPanguero Decimal? @default(0.00) @db.Decimal(7,2)
+  liqComisionAlquilerCuota Decimal? @default(0.00) @db.Decimal(10,2)
+  liqTripulantesPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionPatronReal Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionMotoristaReal Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionPangueroReal Decimal? @default(0.00) @db.Decimal(10,2)
+  liqTotalPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
+
   // Relaciones
   empresa                         Empresa            @relation(fields: [empresaId], references: [id])
   bahiaComercial                  Personal           @relation("NovedadPescaConsumoBahia", fields: [BahiaId], references: [id])
@@ -3175,6 +3231,23 @@ model TemporadaPesca {
   estadoTemporadaId            BigInt
   toneladasCapturadasTemporada Decimal?
   temporadaPescaIniciada       Boolean        @default(false)
+
+  porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
+  porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
+  cantPersonalCalcComisionMotorista Decimal? @default(0.00) @db.Decimal(7,2)
+  cantDivisoriaCalcComisionMotorista Decimal? @default(0.00) @db.Decimal(7,2)
+  porcentajeCalcComisionPanguero Decimal? @default(0.00) @db.Decimal(7,2)
+  liqTripulantesPescaEstimado Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionPatronEstimado Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionMotoristaEstimado Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionPangueroEstimado Decimal? @default(0.00) @db.Decimal(10,2)
+  liqTotalPescaEstimada Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionAlquilerCuota Decimal? @default(0.00) @db.Decimal(10,2)
+  liqTripulantesPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionPatronReal Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionMotoristaReal Decimal? @default(0.00) @db.Decimal(10,2)
+  liqComisionPangueroReal Decimal? @default(0.00) @db.Decimal(10,2)
+  liqTotalPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
 
   // Relaciones
   empresa                      Empresa            @relation(fields: [empresaId], references: [id])
