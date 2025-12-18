@@ -42,6 +42,14 @@ async function validarDetCuotaPesca(data) {
   if (data.nombre !== undefined && (!data.nombre || data.nombre.trim() === '')) {
     throw new ValidationError('El nombre del detalle de cuota es obligatorio');
   }
+
+  // Validar precio por tonelada en dólares
+  if (data.precioPorTonDolares !== undefined && data.precioPorTonDolares !== null) {
+    const precio = Number(data.precioPorTonDolares);
+    if (precio < 0) {
+      throw new ValidationError('El precio por tonelada no puede ser negativo');
+    }
+  }
 }
 
 /**
@@ -132,6 +140,7 @@ const crear = async (data) => {
       porcentajeCuota: data.porcentajeCuota,
       activo: data.activo !== undefined ? data.activo : true,
       cuotaPropia: data.cuotaPropia !== undefined ? data.cuotaPropia : false,
+      precioPorTonDolares: data.precioPorTonDolares !== undefined ? data.precioPorTonDolares : 0,
       idPersonaActualiza: data.idPersonaActualiza,
       fechaCreacion: new Date(),
       fechaActualizacion: new Date()

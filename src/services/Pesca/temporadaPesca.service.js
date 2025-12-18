@@ -328,17 +328,37 @@ const iniciar = async (id) => {
     const patronId = patrones.length === 1 ? patrones[0].id : null;
     const bahiaId = bahias.length === 1 ? bahias[0].id : null;
 
+    // Obtener datos de liquidación de la empresa para cargarlos en la temporada
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: temporada.empresaId },
+      select: {
+        porcentajeBaseLiqPesca: true,
+        porcentajeComisionPatron: true,
+        cantPersonalCalcComisionMotorista: true,
+        cantDivisoriaCalcComisionMotorista: true,
+        porcentajeCalcComisionPanguero: true
+      }
+    });
+
+
     const resultado = await prisma.$transaction(async (tx) => {
 
-      // 1. Actualizar el estado de la temporada a "EN PROCESO"
+      // 1. Actualizar el estado de la temporada a "EN PROCESO" y cargar datos de liquidación
       const temporadaActualizada = await tx.temporadaPesca.update({
         where: { id: Number(temporada.id) },
         data: {
           estadoTemporadaId: Number(estadoEnProceso.id),
           temporadaPescaIniciada: true,
+          // Cargar parámetros de liquidación desde la empresa
+          porcentajeBaseLiqPesca: empresa?.porcentajeBaseLiqPesca || null,
+          porcentajeComisionPatron: empresa?.porcentajeComisionPatron || null,
+          cantPersonalCalcComisionMotorista: empresa?.cantPersonalCalcComisionMotorista || null,
+          cantDivisoriaCalcComisionMotorista: empresa?.cantDivisoriaCalcComisionMotorista || null,
+          porcentajeCalcComisionPanguero: empresa?.porcentajeCalcComisionPanguero || null,
           fechaActualizacion: new Date()
         }
       });
+      
       // 2. Crear EntregaARendir
       const entregaARendir = await tx.entregaARendir.create({
         data: {

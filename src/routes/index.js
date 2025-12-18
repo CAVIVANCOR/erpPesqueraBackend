@@ -39,6 +39,7 @@ import marcaRoutes from './Maestros/marca.routes.js';
 import tipoAlmacenamientoRoutes from './Maestros/tipoAlmacenamiento.routes.js';
 import empresaRoutes from './Maestros/empresa.routes.js';
 import empresaLogoRoutes from './Maestros/empresa.logo.routes.js';
+import katanaTripulacionRoutes from './Maestros/katanaTripulacion.routes.js';
 import personalFotoRoutes from './Usuarios/personal.foto.routes.js'; // Rutas de manejo de foto de personal
 import productoFotoRoutes from './Maestros/producto.foto.routes.js'; // Rutas de manejo de foto de producto
 import productoFichaTecnicaRoutes from './Maestros/producto.ficha-tecnica.routes.js';
@@ -282,6 +283,8 @@ router.use('/marcas', marcaRoutes);
 router.use('/tipos-almacenamiento', tipoAlmacenamientoRoutes);
 // Rutas para Empresa
 router.use('/empresas', empresaRoutes);
+// Rutas para KatanaTripulacion
+router.use('/katanas-tripulacion', katanaTripulacionRoutes);
 // Rutas para SedesEmpresa
 router.use('/sedes-empresa', sedesEmpresaRoutes);
 // Rutas para AreaFisicaSede

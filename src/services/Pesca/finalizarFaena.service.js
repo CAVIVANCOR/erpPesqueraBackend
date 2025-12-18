@@ -26,19 +26,11 @@ const finalizarFaena = async (faenaPescaId) => {
         throw new ValidationError('Faena de pesca no encontrada');
       }
 
-      console.log('🔍 Estado actual de la faena:', {
-        faenaId: faena.id,
-        estadoFaenaId: faena.estadoFaenaId,
-        estadoFaenaIdNumber: Number(faena.estadoFaenaId),
-        estadoFaenaIdType: typeof faena.estadoFaenaId
-      });
-
       // Validar que la faena está en estado EN PROCESO (18)
       if (Number(faena.estadoFaenaId) !== 18) {
         throw new ValidationError(`La faena está en estado ${faena.estadoFaenaId}, solo se pueden finalizar faenas en estado EN PROCESO (18)`);
       }
 
-      console.log('📝 Intentando actualizar estado de la faena a FINALIZADA (19)...');
       
       // Actualizar estado de la faena a FINALIZADA (19)
       const faenaActualizada = await tx.faenaPesca.update({
@@ -50,12 +42,6 @@ const finalizarFaena = async (faenaPescaId) => {
         include: {
           embarcacion: true
         }
-      });
-
-      console.log('✅ Faena actualizada exitosamente:', {
-        id: faenaActualizada.id,
-        estadoFaenaId: faenaActualizada.estadoFaenaId,
-        estadoFaenaIdNumber: Number(faenaActualizada.estadoFaenaId)
       });
 
       return {

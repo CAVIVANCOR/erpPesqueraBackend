@@ -145,17 +145,16 @@ const actualizar = async (id, data) => {
     await validarUsuario(data, id);
     let usuarioData = { ...data };
     
-    // Eliminar campos que no se pueden actualizar directamente
-    delete usuarioData.empresaId;
-    delete usuarioData.personalId;
+    // Eliminar campos que no se pueden actualizar directamente o que se manejan por separado
     delete usuarioData.cesado; // Campo obsoleto
     delete usuarioData.accesosUsuario; // Se maneja por separado
     
     // Si se recibe una nueva contraseña, hashearla
-    if (data.password) {
-      usuarioData.passwordHash = await bcrypt.default.hash(data.password, 10);
-      delete usuarioData.password;
+    if (usuarioData.password && usuarioData.password.trim() !== '') {
+      usuarioData.passwordHash = await bcrypt.default.hash(usuarioData.password, 10);
     }
+    // SIEMPRE eliminar password (no existe en el modelo Prisma)
+    delete usuarioData.password;
     
     return await prisma.usuario.update({ where: { id }, data: usuarioData });
   } catch (err) {

@@ -172,6 +172,8 @@ const actualizar = async (id, data) => {
       tipoDocumentoId: data.tipoDocumentoId,
       numeroSerieComprobante: data.numeroSerieComprobante,
       numeroCorrelativoComprobante: data.numeroCorrelativoComprobante,
+      formaParteCalculoLiquidacionTripulantes: data.formaParteCalculoLiquidacionTripulantes,
+      formaParteCalculoEntregaARendir: data.formaParteCalculoEntregaARendir,
     };
     
     return await prisma.detMovsEntregaRendir.update({ where: { id }, data: datosActualizacion });

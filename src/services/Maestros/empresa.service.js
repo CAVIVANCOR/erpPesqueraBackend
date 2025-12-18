@@ -25,6 +25,46 @@ async function validarEmpresa(data) {
     if (!existe) throw new ValidationError('Entidad comercial no existente para el campo entidadComercialId.');
   }
 
+  // Validar campos de liquidación
+  if (data.porcentajeBaseLiqPesca !== undefined && data.porcentajeBaseLiqPesca !== null) {
+    const valor = Number(data.porcentajeBaseLiqPesca);
+    if (valor < 0) {
+      throw new ValidationError('El porcentaje base de liquidación no puede ser negativo');
+    }
+  }
+  if (data.porcentajeComisionPatron !== undefined && data.porcentajeComisionPatron !== null) {
+    const valor = Number(data.porcentajeComisionPatron);
+    if (valor < 0) {
+      throw new ValidationError('El porcentaje de comisión del patrón no puede ser negativo');
+    }
+  }
+  if (data.cantPersonalCalcComisionMotorista !== undefined && data.cantPersonalCalcComisionMotorista !== null) {
+    const valor = Number(data.cantPersonalCalcComisionMotorista);
+    if (valor < 0) {
+      throw new ValidationError('La cantidad de personal para cálculo de comisión del motorista no puede ser negativa');
+    }
+  }
+  if (data.cantDivisoriaCalcComisionMotorista !== undefined && data.cantDivisoriaCalcComisionMotorista !== null) {
+    const valor = Number(data.cantDivisoriaCalcComisionMotorista);
+    if (valor < 0) {
+      throw new ValidationError('La cantidad divisoria para cálculo de comisión del motorista no puede ser negativa');
+    }
+  }
+  if (data.porcentajeCalcComisionPanguero !== undefined && data.porcentajeCalcComisionPanguero !== null) {
+    const valor = Number(data.porcentajeCalcComisionPanguero);
+    if (valor < 0) {
+      throw new ValidationError('El porcentaje de cálculo de comisión del panguero no puede ser negativo');
+    }
+  }
+
+  // Validar monedaCalculosLiqId
+  if (data.monedaCalculosLiqId !== undefined && data.monedaCalculosLiqId !== null) {
+    const existe = await prisma.moneda.findUnique({ where: { id: BigInt(data.monedaCalculosLiqId) } });
+    if (!existe) {
+      throw new ValidationError('La moneda seleccionada no existe');
+    }
+  }
+
   // Validar márgenes de utilidad
   if (data.margenMinimoPermitido !== undefined && data.margenMinimoPermitido !== null) {
     const margenMinimo = Number(data.margenMinimoPermitido);
@@ -58,11 +98,14 @@ async function validarEmpresa(data) {
 }
 
 /**
- * Lista todas las empresas.
+ * Lista todas las empresas ordenadas por ID descendente (más recientes primero).
  */
 const listar = async () => {
   try {
-    return await prisma.empresa.findMany({ include: { sedes: true, centrosCosto: true } });
+    return await prisma.empresa.findMany({ 
+      include: { sedes: true, centrosCosto: true },
+      orderBy: { id: 'desc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -89,7 +132,14 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarEmpresa(data);
-    return await prisma.empresa.create({ data });
+    
+    // Agregar fechaActualizacion automáticamente
+    const empresaData = {
+      ...data,
+      fechaActualizacion: new Date()
+    };
+    
+    return await prisma.empresa.create({ data: empresaData });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -105,8 +155,20 @@ const actualizar = async (id, data) => {
     const existente = await prisma.empresa.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Empresa no encontrada');
     await validarEmpresa(data);
-    return await prisma.empresa.update({ where: { id }, data });
+    
+    // Agregar fechaActualizacion automáticamente
+    const empresaData = {
+      ...data,
+      fechaActualizacion: new Date()
+    };
+    
+    
+    const resultado = await prisma.empresa.update({ where: { id }, data: empresaData });
+    
+    
+    return resultado;
   } catch (err) {
+    console.error("❌ BACKEND - Error al actualizar empresa:", err);
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

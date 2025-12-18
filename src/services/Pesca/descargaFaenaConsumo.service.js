@@ -48,7 +48,13 @@ async function validarClavesForaneas(data) {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
   
-  const [faena, patron, motorista, puerto, puertoFondeo, cliente, movIngreso, especie] = await Promise.all(validaciones);
+  if (data.katanaTripulacionId) {
+    validaciones.push(prisma.katanaTripulacion.findUnique({ where: { id: data.katanaTripulacionId } }));
+  } else {
+    validaciones.push(Promise.resolve(true)); // placeholder
+  }
+  
+  const [faena, patron, motorista, puerto, puertoFondeo, cliente, movIngreso, especie, katanaTripulacion] = await Promise.all(validaciones);
   
   // Validar campos obligatorios
   if (!faena) throw new ValidationError('El faenaPescaConsumoId no existe.');
@@ -61,6 +67,7 @@ async function validarClavesForaneas(data) {
   if (data.clienteId && !cliente) throw new ValidationError('El clienteId no existe.');
   if (data.movIngresoAlmacenId && !movIngreso) throw new ValidationError('El movIngresoAlmacenId no existe.');
   if (data.especieId && !especie) throw new ValidationError('El especieId no existe.');
+  if (data.katanaTripulacionId && !katanaTripulacion) throw new ValidationError('El katanaTripulacionId no existe.');
 }
 
 async function tieneDetalles(id) {

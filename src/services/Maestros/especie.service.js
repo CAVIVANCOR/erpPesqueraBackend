@@ -46,10 +46,26 @@ const crear = async (data) => {
       throw new ValidationError('El campo nombre científico es obligatorio.');
     }
     
+    // Validar campos numéricos
+    if (data.cubetaPesoKg !== undefined && data.cubetaPesoKg !== null) {
+      const peso = Number(data.cubetaPesoKg);
+      if (peso < 0) {
+        throw new ValidationError('El peso de la cubeta no puede ser negativo');
+      }
+    }
+    if (data.precioPorKg !== undefined && data.precioPorKg !== null) {
+      const precio = Number(data.precioPorKg);
+      if (precio < 0) {
+        throw new ValidationError('El precio por kg no puede ser negativo');
+      }
+    }
+    
     // Convertir a mayúsculas
     const dataToSave = {
       nombre: data.nombre.toUpperCase(),
-      nombreCientifico: data.nombreCientifico.toUpperCase()
+      nombreCientifico: data.nombreCientifico.toUpperCase(),
+      cubetaPesoKg: data.cubetaPesoKg !== undefined ? data.cubetaPesoKg : 0,
+      precioPorKg: data.precioPorKg !== undefined ? data.precioPorKg : 0
     };
     
     return await prisma.especie.create({ data: dataToSave });
@@ -76,10 +92,26 @@ const actualizar = async (id, data) => {
       throw new ValidationError('El campo nombre científico es obligatorio.');
     }
     
+    // Validar campos numéricos
+    if (data.cubetaPesoKg !== undefined && data.cubetaPesoKg !== null) {
+      const peso = Number(data.cubetaPesoKg);
+      if (peso < 0) {
+        throw new ValidationError('El peso de la cubeta no puede ser negativo');
+      }
+    }
+    if (data.precioPorKg !== undefined && data.precioPorKg !== null) {
+      const precio = Number(data.precioPorKg);
+      if (precio < 0) {
+        throw new ValidationError('El precio por kg no puede ser negativo');
+      }
+    }
+    
     // Convertir a mayúsculas y procesar IDs
     const dataToSave = {
       nombre: data.nombre ? data.nombre.toUpperCase() : existente.nombre,
       nombreCientifico: data.nombreCientifico ? data.nombreCientifico.toUpperCase() : existente.nombreCientifico,
+      cubetaPesoKg: data.cubetaPesoKg !== undefined ? data.cubetaPesoKg : existente.cubetaPesoKg,
+      precioPorKg: data.precioPorKg !== undefined ? data.precioPorKg : existente.precioPorKg,
       enlacePescaIndustrialProductoMateriaPrimaId: data.enlacePescaIndustrialProductoMateriaPrimaId !== undefined
         ? (data.enlacePescaIndustrialProductoMateriaPrimaId ? BigInt(data.enlacePescaIndustrialProductoMateriaPrimaId) : null)
         : existente.enlacePescaIndustrialProductoMateriaPrimaId,
