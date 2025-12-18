@@ -51,7 +51,12 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarSede(data);
-    return await prisma.sedesEmpresa.create({ data });
+    return await prisma.sedesEmpresa.create({ 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -67,7 +72,13 @@ const actualizar = async (id, data) => {
     const existente = await prisma.sedesEmpresa.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Sede de empresa no encontrada');
     await validarSede(data);
-    return await prisma.sedesEmpresa.update({ where: { id }, data });
+    return await prisma.sedesEmpresa.update({ 
+      where: { id }, 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

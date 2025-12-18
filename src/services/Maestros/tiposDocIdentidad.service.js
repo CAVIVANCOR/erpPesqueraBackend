@@ -56,7 +56,12 @@ const crear = async (data) => {
       throw new ValidationError('Los campos codigo, codSunat y nombre son obligatorios.');
     }
     await validarTipoDocIdentidad(data);
-    return await prisma.tiposDocIdentidad.create({ data });
+    return await prisma.tiposDocIdentidad.create({ 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -81,7 +86,13 @@ const actualizar = async (id, data) => {
       throw new ValidationError('El campo nombre es obligatorio.');
     }
     await validarTipoDocIdentidad(data, id);
-    return await prisma.tiposDocIdentidad.update({ where: { id }, data });
+    return await prisma.tiposDocIdentidad.update({ 
+      where: { id }, 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

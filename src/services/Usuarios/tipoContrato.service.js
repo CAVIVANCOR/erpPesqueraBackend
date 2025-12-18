@@ -39,7 +39,12 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarTipoContrato(data);
-    return await prisma.tipoContrato.create({ data });
+    return await prisma.tipoContrato.create({ 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -55,7 +60,13 @@ const actualizar = async (id, data) => {
     const existente = await prisma.tipoContrato.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Tipo de contrato no encontrado');
     await validarTipoContrato(data, id);
-    return await prisma.tipoContrato.update({ where: { id }, data });
+    return await prisma.tipoContrato.update({ 
+      where: { id }, 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof ConflictError || err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

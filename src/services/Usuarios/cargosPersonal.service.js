@@ -53,7 +53,12 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarCargo(data);
-    return await prisma.cargosPersonal.create({ data });
+    return await prisma.cargosPersonal.create({ 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -69,7 +74,13 @@ const actualizar = async (id, data) => {
     const existente = await prisma.cargosPersonal.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Cargo no encontrado');
     await validarCargo(data, id);
-    return await prisma.cargosPersonal.update({ where: { id }, data });
+    return await prisma.cargosPersonal.update({ 
+      where: { id }, 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof ConflictError || err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

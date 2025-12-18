@@ -118,7 +118,12 @@ const obtenerPorEmpresaYTipo = async (empresaId, tipoId) => {
 const crear = async (data) => {
   try {
     await validarActivo(data);
-    return await prisma.activo.create({ data });
+    return await prisma.activo.create({ 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -134,7 +139,13 @@ const actualizar = async (id, data) => {
     const existente = await prisma.activo.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Activo no encontrado');
     await validarActivo(data);
-    return await prisma.activo.update({ where: { id }, data });
+    return await prisma.activo.update({ 
+      where: { id }, 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

@@ -51,7 +51,12 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarAreaFisica(data);
-    return await prisma.areaFisicaSede.create({ data });
+    return await prisma.areaFisicaSede.create({ 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -67,7 +72,13 @@ const actualizar = async (id, data) => {
     const existente = await prisma.areaFisicaSede.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Área física de sede no encontrada');
     await validarAreaFisica(data);
-    return await prisma.areaFisicaSede.update({ where: { id }, data });
+    return await prisma.areaFisicaSede.update({ 
+      where: { id }, 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

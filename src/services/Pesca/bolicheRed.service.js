@@ -43,7 +43,12 @@ const crear = async (data) => {
       throw new ValidationError('El campo activoId es obligatorio.');
     }
     await validarActivoId(data.activoId);
-    return await prisma.bolicheRed.create({ data });
+    return await prisma.bolicheRed.create({ 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -58,7 +63,13 @@ const actualizar = async (id, data) => {
     if (data.activoId && data.activoId !== existente.activoId) {
       await validarActivoId(data.activoId, id);
     }
-    return await prisma.bolicheRed.update({ where: { id }, data });
+    return await prisma.bolicheRed.update({ 
+      where: { id }, 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
