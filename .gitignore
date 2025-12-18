@@ -27,3 +27,6 @@ temp_dump.sql
 # OS files
 .DS_Store
 Thumbs.db
+
+# Uploads (archivos subidos por usuarios)
+uploads/
