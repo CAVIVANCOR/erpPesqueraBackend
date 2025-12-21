@@ -50,6 +50,34 @@ async function validarEntidadComercial(data, excluirId = null) {
 }
 
 /**
+ * Función auxiliar para merge inteligente de campos
+ * Si ambos tienen valor y son diferentes, concatena con " + "
+ */
+function mergeInteligente(valorOrigen, valorDestino) {
+  const esVacioOrigen = !valorOrigen || (typeof valorOrigen === 'string' && valorOrigen.trim() === '');
+  const esVacioDestino = !valorDestino || (typeof valorDestino === 'string' && valorDestino.trim() === '');
+  
+  if (!esVacioOrigen && esVacioDestino) {
+    return valorOrigen;
+  }
+  
+  if (esVacioOrigen && !esVacioDestino) {
+    return valorDestino;
+  }
+  
+  if (!esVacioOrigen && !esVacioDestino) {
+    const strOrigen = valorOrigen.toString().trim();
+    const strDestino = valorDestino.toString().trim();
+    if (strOrigen === strDestino) {
+      return valorDestino;
+    }
+    return `${valorDestino} + ${valorOrigen}`;
+  }
+  
+  return valorDestino;
+}
+
+/**
  * Lista todas las entidades comerciales, incluyendo relaciones principales.
  */
 const listar = async () => {
@@ -72,7 +100,6 @@ const listar = async () => {
       }
     });
 
-    // Agregar manualmente las relaciones con Personal para auditoría
     const entidadesConAuditoria = await Promise.all(
       entidades.map(async (entidad) => {
         const personalCreador = entidad.creadoPor
@@ -89,10 +116,18 @@ const listar = async () => {
             })
           : null;
 
+        const empresa = entidad.empresaId
+          ? await prisma.empresa.findUnique({
+              where: { id: entidad.empresaId },
+              select: { id: true, razonSocial: true, nombreComercial: true }
+            })
+          : null;
+
         return {
           ...entidad,
           personalCreador,
-          personalActualizador
+          personalActualizador,
+          empresa
         };
       })
     );
@@ -274,13 +309,13 @@ const eliminar = async (id) => {
         kardexAlmacenes: true,
         requerimientosCompra: true,
         ordenesCompra: true,
-        preFacturasCliente: true
+        preFacturas: true
       }
     });
     if (!existente) throw new NotFoundError('Entidad comercial no encontrada');
     const dependientes = [
       'contactos', 'direcciones', 'precios', 'vehiculos', 'lineasCredito',
-      'movimientosAlmacen', 'kardexAlmacenes', 'requerimientosCompra', 'ordenesCompra', 'preFacturasCliente'
+      'movimientosAlmacen', 'kardexAlmacenes', 'requerimientosCompra', 'ordenesCompra', 'preFacturas'
     ];
     for (const rel of dependientes) {
       if (Array.isArray(existente[rel]) && existente[rel].length > 0) {
@@ -366,6 +401,274 @@ const obtenerProveedoresGps = async () => {
   }
 };
 
+/**
+ * Clona una EntidadComercial y sus tablas relacionadas a todas las demás empresas del grupo
+ * @param {BigInt} entidadId - ID de la entidad comercial a clonar
+ * @returns {Object} Resumen de operaciones realizadas
+ */
+const clonarAEmpresas = async (entidadId) => {
+  try {
+    const entidadOrigen = await prisma.entidadComercial.findUnique({
+      where: { id: entidadId },
+      include: {
+        direcciones: { include: { ubigeo: true } },
+        contactos: true,
+        ctaCteEntidad: { include: { banco: true, moneda: true } }
+      }
+    });
+
+    if (!entidadOrigen) {
+      throw new NotFoundError('Entidad comercial no encontrada');
+    }
+
+    const todasEmpresas = await prisma.empresa.findMany({
+      where: {
+        id: { not: entidadOrigen.empresaId }
+      }
+    });
+
+    const resumen = {
+      empresasProcesadas: 0,
+      entidadesCreadas: 0,
+      entidadesActualizadas: 0,
+      direccionesCreadas: 0,
+      direccionesActualizadas: 0,
+      contactosCreados: 0,
+      contactosActualizados: 0,
+      ctaCteCreadas: 0,
+      ctaCteActualizadas: 0,
+      errores: []
+    };
+
+    for (const empresaDestino of todasEmpresas) {
+      try {
+        resumen.empresasProcesadas++;
+
+        const entidadDestino = await prisma.entidadComercial.findFirst({
+          where: {
+            empresaId: empresaDestino.id,
+            numeroDocumento: entidadOrigen.numeroDocumento
+          },
+          include: {
+            direcciones: true,
+            contactos: true,
+            ctaCteEntidad: true
+          }
+        });
+
+        let entidadDestinoId;
+
+        if (!entidadDestino) {
+          const { id, empresaId, creadoEn, actualizadoEn, creadoPor, actualizadoPor, 
+                  direcciones, contactos, ctaCteEntidad, 
+                  tipoDocumento, tipoEntidad, formaPago, agrupacionEntidad,
+                  ...datosEntidad } = entidadOrigen;
+
+          const nuevaEntidad = await prisma.entidadComercial.create({
+            data: {
+              ...datosEntidad,
+              empresaId: empresaDestino.id,
+              creadoEn: new Date(),
+              actualizadoEn: new Date()
+            }
+          });
+
+          entidadDestinoId = nuevaEntidad.id;
+          resumen.entidadesCreadas++;
+        } else {
+          const camposTexto = ['nombreComercial', 'observaciones', 'codigoErpFinanciero'];
+          const dataActualizar = {};
+
+          for (const campo of camposTexto) {
+            if (entidadOrigen[campo] !== undefined) {
+              dataActualizar[campo] = mergeInteligente(entidadOrigen[campo], entidadDestino[campo]);
+            }
+          }
+
+          const camposBooleanos = ['esCliente', 'esProveedor', 'esCorporativo', 'custodiaStock', 
+                                   'controlLote', 'controlFechaVenc', 'controlFechaProd', 
+                                   'controlFechaIngreso', 'controlSerie', 'controlEnvase',
+                                   'sujetoRetencion', 'sujetoPercepcion', 'esAgenteRetencion',
+                                   'condicionHabidoSUNAT', 'estadoActivoSUNAT'];
+
+          for (const campo of camposBooleanos) {
+            if (!entidadDestino[campo] && entidadOrigen[campo]) {
+              dataActualizar[campo] = entidadOrigen[campo];
+            }
+          }
+
+          if (Object.keys(dataActualizar).length > 0) {
+            await prisma.entidadComercial.update({
+              where: { id: entidadDestino.id },
+              data: {
+                ...dataActualizar,
+                actualizadoEn: new Date()
+              }
+            });
+            resumen.entidadesActualizadas++;
+          }
+
+          entidadDestinoId = entidadDestino.id;
+        }
+
+        for (const direccionOrigen of entidadOrigen.direcciones) {
+          const direccionDestino = entidadDestino?.direcciones.find(d => 
+            d.direccion === direccionOrigen.direccion && 
+            Number(d.ubigeoId) === Number(direccionOrigen.ubigeoId)
+          );
+
+          if (!direccionDestino) {
+            const { id, entidadComercialId, fechaCreacion, fechaActualizacion, 
+                    creadoPor, actualizadoPor, ubigeo, ...datosDireccion } = direccionOrigen;
+
+            await prisma.direccionEntidad.create({
+              data: {
+                ...datosDireccion,
+                entidadComercialId: entidadDestinoId,
+                fechaCreacion: new Date()
+              }
+            });
+            resumen.direccionesCreadas++;
+          } else {
+            const camposTexto = ['referencia', 'telefono', 'correo'];
+            const dataActualizar = {};
+
+            for (const campo of camposTexto) {
+              if (direccionOrigen[campo] !== undefined) {
+                dataActualizar[campo] = mergeInteligente(direccionOrigen[campo], direccionDestino[campo]);
+              }
+            }
+
+            if (!direccionDestino.fiscal && direccionOrigen.fiscal) {
+              dataActualizar.fiscal = direccionOrigen.fiscal;
+            }
+            if (!direccionDestino.almacenPrincipal && direccionOrigen.almacenPrincipal) {
+              dataActualizar.almacenPrincipal = direccionOrigen.almacenPrincipal;
+            }
+
+            if (Object.keys(dataActualizar).length > 0) {
+              await prisma.direccionEntidad.update({
+                where: { id: direccionDestino.id },
+                data: {
+                  ...dataActualizar,
+                  fechaActualizacion: new Date()
+                }
+              });
+              resumen.direccionesActualizadas++;
+            }
+          }
+        }
+
+        for (const contactoOrigen of entidadOrigen.contactos) {
+          const contactoDestino = entidadDestino?.contactos.find(c => 
+            c.nombres === contactoOrigen.nombres && 
+            Number(c.cargoId) === Number(contactoOrigen.cargoId)
+          );
+
+          if (!contactoDestino) {
+            const { id, entidadComercialId, fechaCreacion, fechaActualizacion, 
+                    creadoPor, actualizadoPor, ...datosContacto } = contactoOrigen;
+
+            await prisma.contactoEntidad.create({
+              data: {
+                ...datosContacto,
+                entidadComercialId: entidadDestinoId,
+                fechaCreacion: new Date()
+              }
+            });
+            resumen.contactosCreados++;
+          } else {
+            const camposTexto = ['telefono', 'correoCorportivo', 'correoPersonal', 'observaciones'];
+            const dataActualizar = {};
+
+            for (const campo of camposTexto) {
+              if (contactoOrigen[campo] !== undefined) {
+                dataActualizar[campo] = mergeInteligente(contactoOrigen[campo], contactoDestino[campo]);
+              }
+            }
+
+            const camposBooleanos = ['compras', 'ventas', 'finanzas', 'logistica', 'representanteLegal'];
+            for (const campo of camposBooleanos) {
+              if (!contactoDestino[campo] && contactoOrigen[campo]) {
+                dataActualizar[campo] = contactoOrigen[campo];
+              }
+            }
+
+            if (Object.keys(dataActualizar).length > 0) {
+              await prisma.contactoEntidad.update({
+                where: { id: contactoDestino.id },
+                data: {
+                  ...dataActualizar,
+                  fechaActualizacion: new Date()
+                }
+              });
+              resumen.contactosActualizados++;
+            }
+          }
+        }
+
+        for (const ctaCteOrigen of entidadOrigen.ctaCteEntidad) {
+          const ctaCteDestino = entidadDestino?.ctaCteEntidad.find(c => 
+            Number(c.bancoId) === Number(ctaCteOrigen.bancoId) && 
+            c.numeroCuenta === ctaCteOrigen.numeroCuenta
+          );
+
+          if (!ctaCteDestino) {
+            const { id, entidadComercialId, fechaCreacion, fechaActualizacion, 
+                    creadoPor, actualizadoPor, banco, moneda, ...datosCtaCte } = ctaCteOrigen;
+
+            await prisma.ctaCteEntidad.create({
+              data: {
+                ...datosCtaCte,
+                entidadComercialId: entidadDestinoId,
+                fechaCreacion: new Date()
+              }
+            });
+            resumen.ctaCteCreadas++;
+          } else {
+            const camposTexto = ['numeroCuentaCCI', 'numeroTelefonoBilletera'];
+            const dataActualizar = {};
+
+            for (const campo of camposTexto) {
+              if (ctaCteOrigen[campo] !== undefined) {
+                dataActualizar[campo] = mergeInteligente(ctaCteOrigen[campo], ctaCteDestino[campo]);
+              }
+            }
+
+            if (!ctaCteDestino.BilleteraDigital && ctaCteOrigen.BilleteraDigital) {
+              dataActualizar.BilleteraDigital = ctaCteOrigen.BilleteraDigital;
+            }
+
+            if (Object.keys(dataActualizar).length > 0) {
+              await prisma.ctaCteEntidad.update({
+                where: { id: ctaCteDestino.id },
+                data: {
+                  ...dataActualizar,
+                  fechaActualizacion: new Date()
+                }
+              });
+              resumen.ctaCteActualizadas++;
+            }
+          }
+        }
+
+      } catch (error) {
+        resumen.errores.push({
+          empresaId: empresaDestino.id,
+          empresaNombre: empresaDestino.razonSocial,
+          error: error.message
+        });
+      }
+    }
+
+    return resumen;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -373,5 +676,6 @@ export default {
   actualizar,
   eliminar,
   obtenerAgenciasEnvio,
-  obtenerProveedoresGps
+  obtenerProveedoresGps,
+  clonarAEmpresas
 };

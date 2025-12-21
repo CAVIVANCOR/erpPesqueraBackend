@@ -9,6 +9,7 @@ router.get('/agencias-envio', entidadComercialController.obtenerAgenciasEnvio);
 router.get('/proveedores-gps', entidadComercialController.obtenerProveedoresGps);
 router.get('/:id', entidadComercialController.obtenerPorId);
 router.post('/', entidadComercialController.crear);
+router.post('/:id/clonar-a-empresas', entidadComercialController.clonarAEmpresas);
 router.put('/:id', entidadComercialController.actualizar);
 router.delete('/:id', entidadComercialController.eliminar);
 

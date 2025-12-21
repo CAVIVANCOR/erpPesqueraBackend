@@ -76,3 +76,16 @@ export async function obtenerProveedoresGps(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Clona una EntidadComercial y sus tablas relacionadas a todas las demás empresas del grupo
+ */
+export async function clonarAEmpresas(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resumen = await entidadComercialService.clonarAEmpresas(id);
+    res.json(toJSONBigInt(resumen));
+  } catch (err) {
+    next(err);
+  }
+}
