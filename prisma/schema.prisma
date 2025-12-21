@@ -2939,6 +2939,9 @@ calasBahia                      Cala[]                 @relation("Cala_Bahia")
 calasFaenaConsumoPatron         CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Patron")
 calasFaenaConsumoMotorista      CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Motorista")
 calasFaenaConsumoBahia          CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Bahia")
+
+videoconferenciasOrganizadas  Videoconferencia[]  @relation("OrganizadorReunion")
+participacionesReunion        ParticipanteReunion[]
 }
 
 model Producto {
@@ -3862,4 +3865,95 @@ model DetServicioContrato {
   
   @@index([contratoServicioId])
   @@index([productoServicioId])
+}
+
+model Videoconferencia {
+  id                BigInt      @id @default(autoincrement())
+  
+  // Campos propios
+  titulo            String
+  descripcion       String?
+  salaId            String      @unique
+  fechaInicio       DateTime
+  duracionMinutos   Int
+  estado            EstadoReunion @default(PROGRAMADA)
+  grabarSesion      Boolean     @default(false)
+  salaEspera        Boolean     @default(true)
+  permitirPantalla  Boolean     @default(true)
+  
+  // Auditoría
+  fechaCreacion     DateTime    @default(now())
+  fechaActualizacion DateTime?  @updatedAt
+  creadoPor         BigInt?
+  actualizadoPor    BigInt?
+  
+  // Claves foráneas
+  organizadorId     BigInt
+  
+  // Relaciones
+  organizador       Personal    @relation("OrganizadorReunion", fields: [organizadorId], references: [id])
+  participantes     ParticipanteReunion[]
+  grabaciones       GrabacionReunion[]
+  
+  // Índices
+  @@index([organizadorId])
+  @@index([fechaInicio])
+  @@index([estado])
+}
+
+model ParticipanteReunion {
+  id                BigInt      @id @default(autoincrement())
+  
+  // Campos propios
+  rol               RolParticipante @default(PARTICIPANTE)
+  confirmado        Boolean     @default(false)
+  asistio           Boolean     @default(false)
+  horaIngreso       DateTime?
+  horaSalida        DateTime?
+  
+  // Claves foráneas
+  videoconferenciaId BigInt
+  personalId        BigInt
+  
+  // Relaciones
+  videoconferencia  Videoconferencia @relation(fields: [videoconferenciaId], references: [id])
+  personal          Personal    @relation(fields: [personalId], references: [id])
+  
+  // Índices y restricciones
+  @@unique([videoconferenciaId, personalId])
+  @@index([videoconferenciaId])
+  @@index([personalId])
+}
+
+model GrabacionReunion {
+  id                BigInt      @id @default(autoincrement())
+  
+  // Campos propios
+  nombreArchivo     String
+  rutaArchivo       String
+  duracionSegundos  Int
+  tamanoBytes       BigInt
+  fechaGrabacion    DateTime    @default(now())
+  
+  // Claves foráneas
+  videoconferenciaId BigInt
+  
+  // Relaciones
+  videoconferencia  Videoconferencia @relation(fields: [videoconferenciaId], references: [id])
+  
+  // Índices
+  @@index([videoconferenciaId])
+}
+
+enum EstadoReunion {
+  PROGRAMADA
+  EN_CURSO
+  FINALIZADA
+  CANCELADA
+}
+
+enum RolParticipante {
+  MODERADOR
+  PARTICIPANTE
+  INVITADO
 }
