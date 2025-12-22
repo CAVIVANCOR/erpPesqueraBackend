@@ -184,6 +184,9 @@ import requerimientoCompraImpresionRoutes from '../routes/Compras/requerimientoC
 import ordenCompraImpresionRoutes from '../routes/Compras/ordenCompraImpresion.routes.js';
 import movimientoAlmacenImpresionRoutes from '../routes/Almacen/movimientoAlmacenImpresion.routes.js';
 import cotizacionVentasImpresionRoutes from '../routes/Ventas/cotizacionVentasImpresion.routes.js';
+import videoconferenciaRoutes from '../routes/Videoconferencia/videoconferencia.routes.js';
+import participanteReunionRoutes from '../routes/Videoconferencia/participanteReunion.routes.js';
+import grabacionReunionRoutes from '../routes/Videoconferencia/grabacionReunion.routes.js';
 
 
 
@@ -554,5 +557,11 @@ router.use('/tipos-referencia-movimiento-caja', tipoReferenciaMovimientoCajaRout
 router.use('/bancos', bancoRoutes);
 router.use('/tipos-cuenta-corriente', tipoCuentaCorrienteRoutes);
 
+// Rutas para Videoconferencias (Jitsi Meet)
+router.use('/videoconferencias', videoconferenciaRoutes);
+// Rutas para ParticipanteReunion
+router.use('/participantes-reunion', participanteReunionRoutes);
+// Rutas para GrabacionReunion
+router.use('/grabaciones-reunion', grabacionReunionRoutes);
 
 export default router;
