@@ -19,6 +19,7 @@ prisma/dev.db-journal
 
 # Database dumps and backups
 *.sql
+!prisma/migrations/**/*.sql
 *.dump
 *.backup
 backups/

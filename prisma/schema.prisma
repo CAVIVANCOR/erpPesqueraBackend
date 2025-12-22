@@ -3763,6 +3763,8 @@ model Usuario {
   empresa           Empresa @relation(fields: [empresaId], references: [id])
   accesosUsuario    AccesosUsuario[]
   refreshTokens     RefreshToken[]
+  notificaciones        Notificacion[]
+
   
   @@index([empresaId])
   @@index([personalId])
@@ -3956,4 +3958,49 @@ enum RolParticipante {
   MODERADOR
   PARTICIPANTE
   INVITADO
+}
+
+// ============================================
+// SISTEMA DE NOTIFICACIONES
+// ============================================
+
+model Notificacion {
+  id                    BigInt   @id @default(autoincrement())
+  usuarioId             BigInt
+  tipo                  TipoNotificacion
+  titulo                String   @db.VarChar(200)
+  mensaje               String   @db.Text
+  leida                 Boolean  @default(false)
+  fechaLeida            DateTime?
+  
+  // Datos de referencia (para navegación)
+  referenciaId          BigInt?
+  referenciaTabla       String?  @db.VarChar(50)
+  urlDestino            String?  @db.VarChar(500)
+  
+  // Metadata adicional (JSON)
+  metadata              Json?
+  
+  // Auditoría
+  fechaCreacion         DateTime @default(now())
+  fechaExpiracion       DateTime?
+  
+  // Relaciones
+  usuario               Usuario  @relation(fields: [usuarioId], references: [id])
+  
+  @@index([usuarioId, leida])
+  @@index([fechaCreacion])
+  @@map("notificacion")
+}
+
+enum TipoNotificacion {
+  VIDEOCONFERENCIA_INVITACION
+  VIDEOCONFERENCIA_RECORDATORIO_24H
+  VIDEOCONFERENCIA_RECORDATORIO_1H
+  VIDEOCONFERENCIA_INICIADA
+  VIDEOCONFERENCIA_CANCELADA
+  SISTEMA_GENERAL
+  APROBACION_PENDIENTE
+  DOCUMENTO_APROBADO
+  DOCUMENTO_RECHAZADO
 }
