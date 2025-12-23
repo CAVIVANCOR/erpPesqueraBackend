@@ -1,5 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import notificacionService from '../Notificacion/notificacion.service.js';
+import emailService from '../Email/email.service.js';
 
 /**
  * Servicio CRUD para ParticipanteReunion
@@ -119,18 +121,71 @@ const crear = async (data) => {
             id: true,
             nombres: true,
             apellidos: true,
-            correo: true
+            correo: true,
+            usuario: {
+              select: {
+                id: true
+              }
+            }
           }
         },
         videoconferencia: {
           select: {
             id: true,
             titulo: true,
-            fechaInicio: true
+            descripcion: true,
+            fechaInicio: true,
+            duracionMinutos: true,
+            salaId: true,
+            organizador: {
+              select: {
+                nombres: true,
+                apellidos: true
+              }
+            }
           }
         }
       }
     });
+    
+    // Enviar notificación in-app si el personal tiene usuario
+    if (nuevo.personal.usuario?.id) {
+      try {
+        await notificacionService.crear({
+          usuarioId: nuevo.personal.usuario.id,
+          tipo: 'VIDEOCONFERENCIA_INVITACION',
+          titulo: `Invitación: ${nuevo.videoconferencia.titulo}`,
+          mensaje: `Has sido invitado a participar en la videoconferencia "${nuevo.videoconferencia.titulo}"`,
+          referenciaId: nuevo.videoconferenciaId,
+          referenciaTabla: 'videoconferencia',
+          urlDestino: `/videoconferencia/${nuevo.videoconferenciaId}`,
+          metadata: {
+            participanteId: nuevo.id.toString(),
+            rol: nuevo.rol
+          }
+        });
+      } catch (error) {
+        console.error('Error al crear notificación:', error);
+      }
+    }
+    
+    // Enviar email de invitación
+    if (nuevo.personal.correo) {
+      try {
+        const participanteEmail = {
+          nombres: nuevo.personal.nombres,
+          apellidos: nuevo.personal.apellidos,
+          email: nuevo.personal.correo
+        };
+        
+        await emailService.enviarInvitacionVideoconferencia(
+          participanteEmail,
+          nuevo.videoconferencia
+        );
+      } catch (error) {
+        console.error('Error al enviar email:', error);
+      }
+    }
     
     return nuevo;
   } catch (err) {

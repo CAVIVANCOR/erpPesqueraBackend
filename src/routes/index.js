@@ -187,6 +187,7 @@ import cotizacionVentasImpresionRoutes from '../routes/Ventas/cotizacionVentasIm
 import videoconferenciaRoutes from '../routes/Videoconferencia/videoconferencia.routes.js';
 import participanteReunionRoutes from '../routes/Videoconferencia/participanteReunion.routes.js';
 import grabacionReunionRoutes from '../routes/Videoconferencia/grabacionReunion.routes.js';
+import notificacionRoutes from '../routes/Notificacion/notificacion.routes.js';
 
 
 
@@ -563,5 +564,7 @@ router.use('/videoconferencias', videoconferenciaRoutes);
 router.use('/participantes-reunion', participanteReunionRoutes);
 // Rutas para GrabacionReunion
 router.use('/grabaciones-reunion', grabacionReunionRoutes);
+// Rutas para Notificaciones
+router.use('/notificaciones', notificacionRoutes);
 
 export default router;

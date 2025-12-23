@@ -70,7 +70,7 @@ const listar = async (filtros = {}) => {
       where.esVendedor = filtros.esVendedor;
     }
     
-    return await prisma.personal.findMany({
+    const personal = await prisma.personal.findMany({
       where,
       include: {
         usuario: true,
@@ -78,6 +78,29 @@ const listar = async (filtros = {}) => {
         ubigeo: true
       }
     });
+
+    // Obtener empresas únicas
+    const empresaIds = [...new Set(personal.map(p => p.empresaId))];
+    const empresas = await prisma.empresa.findMany({
+      where: {
+        id: { in: empresaIds }
+      },
+      select: {
+        id: true,
+        razonSocial: true
+      }
+    });
+
+    // Crear un mapa de empresas para acceso rápido
+    const empresaMap = new Map(empresas.map(e => [e.id.toString(), e]));
+
+    // Agregar empresa a cada personal
+    const personalConEmpresa = personal.map(p => ({
+      ...p,
+      empresa: empresaMap.get(p.empresaId.toString()) || null
+    }));
+
+    return personalConEmpresa;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
