@@ -173,6 +173,7 @@ const crear = async (data) => {
     if (nuevo.personal.correo) {
       try {
         const participanteEmail = {
+          id: nuevo.id,
           nombres: nuevo.personal.nombres,
           apellidos: nuevo.personal.apellidos,
           email: nuevo.personal.correo
@@ -316,6 +317,60 @@ const registrarSalida = async (id) => {
   }
 };
 
+/**
+ * Confirma la asistencia y devuelve información completa para unirse
+ */
+const confirmarYObtenerInfo = async (id) => {
+  try {
+    const existe = await prisma.participanteReunion.findUnique({ 
+      where: { id },
+      include: {
+        videoconferencia: true,
+        personal: true
+      }
+    });
+    
+    if (!existe) throw new NotFoundError('Participante no encontrado');
+    
+    // Confirmar asistencia si no está confirmado
+    if (!existe.confirmado) {
+      await prisma.participanteReunion.update({
+        where: { id },
+        data: { confirmado: true }
+      });
+    }
+    
+    // Construir URL de Jitsi
+    const jitsiUrl = process.env.JITSI_URL || 'https://meet.megui.com.pe';
+    const urlReunion = `${jitsiUrl}/${existe.videoconferencia.salaId}`;
+    
+    return {
+      participante: {
+        id: existe.id,
+        confirmado: true,
+        rol: existe.rol
+      },
+      videoconferencia: {
+        id: existe.videoconferencia.id,
+        titulo: existe.videoconferencia.titulo,
+        descripcion: existe.videoconferencia.descripcion,
+        fechaInicio: existe.videoconferencia.fechaInicio,
+        duracionMinutos: existe.videoconferencia.duracionMinutos,
+        salaId: existe.videoconferencia.salaId,
+        urlReunion
+      },
+      personal: {
+        nombres: existe.personal.nombres,
+        apellidos: existe.personal.apellidos
+      }
+    };
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listarPorVideoconferencia,
   obtenerPorId,
@@ -324,5 +379,6 @@ export default {
   eliminar,
   confirmar,
   registrarIngreso,
-  registrarSalida
+  registrarSalida,
+  confirmarYObtenerInfo
 };

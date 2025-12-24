@@ -85,3 +85,99 @@ export async function registrarSalida(req, res, next) {
     next(err);
   }
 }
+
+export async function confirmarYObtenerInfo(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const info = await participanteReunionService.confirmarYObtenerInfo(id);
+    
+    // Si es una petición desde el navegador (email), redirigir a Jitsi con página de confirmación
+    if (req.headers.accept?.includes('text/html')) {
+      const htmlResponse = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Confirmación de Asistencia</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              min-height: 100vh;
+              margin: 0;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            }
+            .container {
+              background: white;
+              padding: 40px;
+              border-radius: 10px;
+              box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+              text-align: center;
+              max-width: 500px;
+            }
+            .icon {
+              font-size: 64px;
+              margin-bottom: 20px;
+            }
+            h1 {
+              color: #667eea;
+              margin-bottom: 10px;
+            }
+            p {
+              color: #6b7280;
+              margin-bottom: 30px;
+            }
+            .info {
+              background: #f9fafb;
+              padding: 20px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+              text-align: left;
+            }
+            .spinner {
+              border: 4px solid #f3f4f6;
+              border-top: 4px solid #667eea;
+              border-radius: 50%;
+              width: 40px;
+              height: 40px;
+              animation: spin 1s linear infinite;
+              margin: 20px auto;
+            }
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="icon">✅</div>
+            <h1>¡Asistencia Confirmada!</h1>
+            <p>Tu asistencia ha sido confirmada exitosamente.</p>
+            <div class="info">
+              <strong>Reunión:</strong> ${info.videoconferencia.titulo}<br>
+              <strong>Participante:</strong> ${info.personal.nombres} ${info.personal.apellidos}
+            </div>
+            <div class="spinner"></div>
+            <p>Redirigiendo a la videoconferencia...</p>
+          </div>
+          <script>
+            setTimeout(() => {
+              window.location.href = '${info.videoconferencia.urlReunion}';
+            }, 2000);
+          </script>
+        </body>
+        </html>
+      `;
+      return res.send(htmlResponse);
+    }
+    
+    // Si es una petición API (desde el frontend), devolver JSON
+    res.json(toJSONBigInt(info));
+  } catch (err) {
+    next(err);
+  }
+}

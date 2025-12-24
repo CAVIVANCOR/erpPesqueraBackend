@@ -108,6 +108,7 @@ function generarHTMLInvitacion(participante, videoconferencia) {
   });
 
   const urlReunion = `${process.env.JITSI_URL || 'https://meet.megui.com.pe'}/${videoconferencia.salaId}`;
+  const urlConfirmar = `${process.env.BACKEND_URL || 'https://erp.megui.com.pe/api'}/participante-reunion/${participante.id}/confirmar-y-obtener-info`;
 
   return `
     <!DOCTYPE html>
@@ -121,7 +122,10 @@ function generarHTMLInvitacion(participante, videoconferencia) {
         .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
         .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
         .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea; }
-        .button { display: inline-block; padding: 15px 30px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
+        .button { display: inline-block; padding: 15px 30px; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 10px 5px; }
+        .button-primary { background: #667eea; }
+        .button-success { background: #10b981; }
+        .button-container { text-align: center; margin: 20px 0; }
         .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 30px; }
       </style>
     </head>
@@ -144,12 +148,13 @@ function generarHTMLInvitacion(participante, videoconferencia) {
             <p><strong>👤 Organizador:</strong> ${videoconferencia.organizador.nombres} ${videoconferencia.organizador.apellidos}</p>
           </div>
           
-          <div style="text-align: center;">
-            <a href="${urlReunion}" class="button">🎥 Unirse a la Reunión</a>
+          <div class="button-container">
+            <a href="${urlConfirmar}" class="button button-primary">🎥 Confirmar y Unirse a la Reunión</a>
           </div>
           
           <p style="font-size: 14px; color: #6b7280;">
-            <strong>Nota:</strong> Puedes unirte a la reunión haciendo clic en el botón de arriba o copiando este enlace en tu navegador:<br>
+            <strong>Nota:</strong> Al hacer clic en el botón, confirmarás tu asistencia y accederás automáticamente a la videoconferencia.<br><br>
+            También puedes copiar este enlace en tu navegador para unirte directamente:<br>
             <a href="${urlReunion}">${urlReunion}</a>
           </p>
         </div>

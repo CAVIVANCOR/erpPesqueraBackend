@@ -14,6 +14,7 @@ router.delete('/:id', participanteReunionController.eliminar);
 
 // Rutas para operaciones de participante
 router.post('/:id/confirmar', participanteReunionController.confirmar);
+router.get('/:id/confirmar-y-obtener-info', participanteReunionController.confirmarYObtenerInfo);
 router.post('/:id/registrar-ingreso', participanteReunionController.registrarIngreso);
 router.post('/:id/registrar-salida', participanteReunionController.registrarSalida);
 
