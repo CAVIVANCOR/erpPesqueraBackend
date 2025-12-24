@@ -97,6 +97,29 @@ const incluirRelaciones = {
       descripcionArmada: true,
       codigo: true
     }
+  },
+  centroCosto: true,
+  personalAprobador: {
+    select: {
+      id: true,
+      nombres: true,
+      apellidos: true,
+    }
+  },
+  personalRechazador: {
+    select: {
+      id: true,
+      nombres: true,
+      apellidos: true,
+    }
+  },
+  movimientoOriginal: {
+    select: {
+      id: true,
+      monto: true,
+      descripcion: true,
+      fechaOperacionMovCaja: true,
+    }
   }
 };
 
@@ -579,11 +602,155 @@ const validarMovimiento = async (id) => {
   }
 };
 
+/**
+ * Aprueba un movimiento de caja
+ * @param {BigInt|number} id - ID del movimiento
+ * @param {BigInt|number} aprobadoPorId - ID del personal que aprueba
+ * @returns {Promise<Object>} - Movimiento aprobado
+ */
+const aprobar = async (id, aprobadoPorId) => {
+  try {
+    const movimiento = await prisma.movimientoCaja.findUnique({ where: { id } });
+    if (!movimiento) throw new NotFoundError('Movimiento de caja no encontrado');
+
+    if (movimiento.aprobadoPorId) {
+      throw new ValidationError('El movimiento ya fue aprobado anteriormente');
+    }
+
+    if (movimiento.rechazadoPorId) {
+      throw new ValidationError('No se puede aprobar un movimiento rechazado');
+    }
+
+    const actualizado = await prisma.movimientoCaja.update({
+      where: { id },
+      data: {
+        aprobadoPorId,
+        fechaAprobacion: new Date(),
+        fechaActualizacion: new Date(),
+      },
+      include: incluirRelaciones,
+    });
+
+    return actualizado;
+  } catch (err) {
+    if (err.code === 'P2025') throw new NotFoundError('Movimiento de caja no encontrado');
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Rechaza un movimiento de caja
+ * @param {BigInt|number} id - ID del movimiento
+ * @param {BigInt|number} rechazadoPorId - ID del personal que rechaza
+ * @param {string} motivoRechazo - Motivo del rechazo
+ * @returns {Promise<Object>} - Movimiento rechazado
+ */
+const rechazar = async (id, rechazadoPorId, motivoRechazo) => {
+  try {
+    const movimiento = await prisma.movimientoCaja.findUnique({ where: { id } });
+    if (!movimiento) throw new NotFoundError('Movimiento de caja no encontrado');
+
+    if (movimiento.aprobadoPorId) {
+      throw new ValidationError('No se puede rechazar un movimiento ya aprobado');
+    }
+
+    if (!motivoRechazo || motivoRechazo.trim() === '') {
+      throw new ValidationError('El motivo de rechazo es obligatorio');
+    }
+
+    const actualizado = await prisma.movimientoCaja.update({
+      where: { id },
+      data: {
+        rechazadoPorId,
+        fechaRechazo: new Date(),
+        motivoRechazo: motivoRechazo.trim(),
+        fechaActualizacion: new Date(),
+      },
+      include: incluirRelaciones,
+    });
+
+    return actualizado;
+  } catch (err) {
+    if (err.code === 'P2025') throw new NotFoundError('Movimiento de caja no encontrado');
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Revierte un movimiento de caja creando un movimiento inverso
+ * @param {BigInt|number} id - ID del movimiento a revertir
+ * @param {string} motivoReversion - Motivo de la reversión
+ * @param {BigInt|number} usuarioId - ID del usuario que revierte
+ * @returns {Promise<Object>} - Movimiento de reversión creado
+ */
+const revertir = async (id, motivoReversion, usuarioId) => {
+  try {
+    const movimientoOriginal = await prisma.movimientoCaja.findUnique({
+      where: { id },
+      include: incluirRelaciones,
+    });
+
+    if (!movimientoOriginal) throw new NotFoundError('Movimiento de caja no encontrado');
+
+    const yaRevertido = await prisma.movimientoCaja.findFirst({
+      where: {
+        movimientoRevertidoId: id,
+        esReversion: true,
+      },
+    });
+
+    if (yaRevertido) {
+      throw new ValidationError('Este movimiento ya fue revertido anteriormente');
+    }
+
+    if (!motivoReversion || motivoReversion.trim() === '') {
+      throw new ValidationError('El motivo de reversión es obligatorio');
+    }
+
+    const datosReversion = {
+      empresaOrigenId: movimientoOriginal.empresaDestinoId || movimientoOriginal.empresaOrigenId,
+      empresaDestinoId: movimientoOriginal.empresaOrigenId,
+      tipoMovimientoId: movimientoOriginal.tipoMovimientoId,
+      entidadComercialId: movimientoOriginal.entidadComercialId,
+      monto: movimientoOriginal.monto,
+      monedaId: movimientoOriginal.monedaId,
+      descripcion: `REVERSIÓN: ${movimientoOriginal.descripcion || ''}`,
+      cuentaCorrienteOrigenId: movimientoOriginal.cuentaCorrienteDestinoId || movimientoOriginal.cuentaCorrienteOrigenId,
+      cuentaCorrienteDestinoId: movimientoOriginal.cuentaCorrienteOrigenId,
+      estadoId: movimientoOriginal.estadoId,
+      centroCostoId: movimientoOriginal.centroCostoId,
+      usuarioId,
+      esReversion: true,
+      movimientoRevertidoId: id,
+      motivoReversion: motivoReversion.trim(),
+      fechaOperacionMovCaja: new Date(),
+      fechaCreacion: new Date(),
+      fechaActualizacion: new Date(),
+    };
+
+    const movimientoReversion = await prisma.movimientoCaja.create({
+      data: datosReversion,
+      include: incluirRelaciones,
+    });
+
+    return movimientoReversion;
+  } catch (err) {
+    if (err.code === 'P2025') throw new NotFoundError('Movimiento de caja no encontrado');
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
-  validarMovimiento
+  validarMovimiento,
+  aprobar,
+  rechazar,
+  revertir,
 };

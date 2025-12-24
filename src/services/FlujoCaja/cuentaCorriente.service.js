@@ -12,9 +12,24 @@ import {
 const incluirRelaciones = {
   banco: true,
   tipoCuentaCorriente: true,
-  moneda: true, // Agregar esta línea
+  moneda: true,
+  empresa: true,
   movimientosOrigen: true,
   movimientosDestino: true,
+  personalCreador: {
+    select: {
+      id: true,
+      nombres: true,
+      apellidos: true,
+    }
+  },
+  personalActualizador: {
+    select: {
+      id: true,
+      nombres: true,
+      apellidos: true,
+    }
+  },
 };
 
 /**
@@ -131,9 +146,34 @@ const crear = async (data) => {
       );
     }
 
+    // Validar saldoMinimo si se proporciona
+    if (data.saldoMinimo !== undefined && data.saldoMinimo !== null) {
+      const saldoMin = Number(data.saldoMinimo);
+      if (saldoMin < 0) {
+        throw new ValidationError("El saldo mínimo no puede ser negativo");
+      }
+    }
+
+    // Validar fechas de apertura y cierre
+    if (data.fechaApertura && data.fechaCierre) {
+      const apertura = new Date(data.fechaApertura);
+      const cierre = new Date(data.fechaCierre);
+      if (cierre < apertura) {
+        throw new ValidationError("La fecha de cierre no puede ser anterior a la fecha de apertura");
+      }
+    }
+
     await validarReferencias(data);
     await validarDuplicado(data);
-    const resultado = await prisma.cuentaCorriente.create({ data });
+    
+    // Preparar datos con auditoría automática
+    const datosConAuditoria = {
+      ...data,
+      creadoEn: new Date(),
+      actualizadoEn: new Date(),
+    };
+    
+    const resultado = await prisma.cuentaCorriente.create({ data: datosConAuditoria });
     return resultado;
   } catch (err) {
     // Manejar error de restricción única específicamente
@@ -182,14 +222,37 @@ const actualizar = async (id, data) => {
     });
     if (!existente) throw new NotFoundError("ID de Cuenta Corriente No existe");
 
+    // Validar saldoMinimo si se proporciona
+    if (data.saldoMinimo !== undefined && data.saldoMinimo !== null) {
+      const saldoMin = Number(data.saldoMinimo);
+      if (saldoMin < 0) {
+        throw new ValidationError("El saldo mínimo no puede ser negativo");
+      }
+    }
+
+    // Validar fechas de apertura y cierre
+    if (data.fechaApertura && data.fechaCierre) {
+      const apertura = new Date(data.fechaApertura);
+      const cierre = new Date(data.fechaCierre);
+      if (cierre < apertura) {
+        throw new ValidationError("La fecha de cierre no puede ser anterior a la fecha de apertura");
+      }
+    }
+
     // Luego valida referencias y duplicados
     await validarReferencias(data);
     await validarDuplicado(data, id);
 
+    // Preparar datos con auditoría automática
+    const datosConAuditoria = {
+      ...data,
+      actualizadoEn: new Date(),
+    };
+
     // Realiza la actualización
     const actualizada = await prisma.cuentaCorriente.update({
       where: { id },
-      data,
+      data: datosConAuditoria,
     });
     return actualizada;
   } catch (err) {

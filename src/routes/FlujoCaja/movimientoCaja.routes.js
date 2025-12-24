@@ -27,4 +27,9 @@ router.delete('/:id', movimientoCajaController.eliminar);
 // Ruta de validación
 router.post('/:id/validar', movimientoCajaController.validarMovimiento);
 
+// Rutas de workflow
+router.post('/:id/aprobar', movimientoCajaController.aprobar);
+router.post('/:id/rechazar', movimientoCajaController.rechazar);
+router.post('/:id/revertir', movimientoCajaController.revertir);
+
 export default router;

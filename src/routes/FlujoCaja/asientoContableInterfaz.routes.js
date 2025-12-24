@@ -19,4 +19,10 @@ router.put('/:id', controller.actualizar);
 // DELETE /api/asientos-contables-interfaz/:id
 router.delete('/:id', controller.eliminar);
 
+// POST /api/asientos-contables-interfaz/:id/enviar
+router.post('/:id/enviar', controller.enviar);
+
+// POST /api/asientos-contables-interfaz/:id/registrar-error
+router.post('/:id/registrar-error', controller.registrarError);
+
 export default router;

@@ -64,3 +64,41 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Envía un asiento contable a contabilidad
+ */
+export async function enviar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const { enviadoPorId } = req.body;
+    
+    if (!enviadoPorId) {
+      return res.status(400).json({ error: 'El ID del personal que envía es requerido' });
+    }
+    
+    const asientoEnviado = await servicio.enviar(id, Number(enviadoPorId));
+    res.json(toJSONBigInt(asientoEnviado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Registra un error en el envío de un asiento contable
+ */
+export async function registrarError(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const { mensajeError } = req.body;
+    
+    if (!mensajeError) {
+      return res.status(400).json({ error: 'El mensaje de error es requerido' });
+    }
+    
+    const asientoConError = await servicio.registrarError(id, mensajeError);
+    res.json(toJSONBigInt(asientoConError));
+  } catch (err) {
+    next(err);
+  }
+}

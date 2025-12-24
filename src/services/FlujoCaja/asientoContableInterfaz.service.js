@@ -5,7 +5,14 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 // Define las relaciones que se incluirán al consultar asientos contables interfaz
 const incluirRelaciones = {
-  movimientoCaja: true
+  movimientoCaja: true,
+  personalEnviador: {
+    select: {
+      id: true,
+      nombres: true,
+      apellidos: true,
+    }
+  }
 };
 
 /**
@@ -57,7 +64,14 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarReferencias(data);
-    return await prisma.asientoContableInterfaz.create({ data });
+    
+    // Preparar datos con auditoría automática
+    const datosConAuditoria = {
+      ...data,
+      creadoEn: new Date(),
+    };
+    
+    return await prisma.asientoContableInterfaz.create({ data: datosConAuditoria });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -100,10 +114,74 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Envía un asiento contable a contabilidad
+ * @param {BigInt|number} id - ID del asiento
+ * @param {BigInt|number} enviadoPorId - ID del personal que envía
+ * @returns {Promise<Object>} - Asiento enviado
+ */
+const enviar = async (id, enviadoPorId) => {
+  try {
+    const asiento = await prisma.asientoContableInterfaz.findUnique({ where: { id } });
+    if (!asiento) throw new NotFoundError('Asiento contable no encontrado');
+
+    // Validar que no esté ya enviado
+    if (asiento.estado === 'ENVIADO') {
+      throw new ValidationError('El asiento ya fue enviado anteriormente');
+    }
+
+    const actualizado = await prisma.asientoContableInterfaz.update({
+      where: { id },
+      data: {
+        estado: 'ENVIADO',
+        fechaEnvio: new Date(),
+        enviadoPorId,
+      },
+      include: incluirRelaciones,
+    });
+
+    return actualizado;
+  } catch (err) {
+    if (err.code === 'P2025') throw new NotFoundError('Asiento contable no encontrado');
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Registra un error en el envío de un asiento contable
+ * @param {BigInt|number} id - ID del asiento
+ * @param {string} mensajeError - Mensaje de error
+ * @returns {Promise<Object>} - Asiento actualizado
+ */
+const registrarError = async (id, mensajeError) => {
+  try {
+    const asiento = await prisma.asientoContableInterfaz.findUnique({ where: { id } });
+    if (!asiento) throw new NotFoundError('Asiento contable no encontrado');
+
+    const actualizado = await prisma.asientoContableInterfaz.update({
+      where: { id },
+      data: {
+        estado: 'ERROR',
+        mensajeError: mensajeError.trim(),
+      },
+      include: incluirRelaciones,
+    });
+
+    return actualizado;
+  } catch (err) {
+    if (err.code === 'P2025') throw new NotFoundError('Asiento contable no encontrado');
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  enviar,
+  registrarError,
 };

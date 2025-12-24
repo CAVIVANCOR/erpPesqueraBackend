@@ -321,6 +321,63 @@ export async function servirArchivoDocumento(req, res) {
   }
 }
 
+/**
+ * Aprueba un movimiento de caja
+ */
+const aprobar = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { aprobadoPorId } = req.body;
+    
+    if (!aprobadoPorId) {
+      return res.status(400).json({ error: 'El ID del aprobador es requerido' });
+    }
+    
+    const movimientoAprobado = await movimientoCajaService.aprobar(id, Number(aprobadoPorId));
+    res.json(toJSONBigInt(movimientoAprobado));
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Rechaza un movimiento de caja
+ */
+const rechazar = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { rechazadoPorId, motivoRechazo } = req.body;
+    
+    if (!rechazadoPorId || !motivoRechazo) {
+      return res.status(400).json({ error: 'El ID del rechazador y el motivo son requeridos' });
+    }
+    
+    const movimientoRechazado = await movimientoCajaService.rechazar(id, Number(rechazadoPorId), motivoRechazo);
+    res.json(toJSONBigInt(movimientoRechazado));
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Revierte un movimiento de caja
+ */
+const revertir = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { motivoReversion, usuarioId } = req.body;
+    
+    if (!motivoReversion || !usuarioId) {
+      return res.status(400).json({ error: 'El motivo de reversión y el ID del usuario son requeridos' });
+    }
+    
+    const movimientoReversion = await movimientoCajaService.revertir(id, motivoReversion, Number(usuarioId));
+    res.json(toJSONBigInt(movimientoReversion));
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -328,6 +385,9 @@ export default {
   actualizar,
   eliminar,
   validarMovimiento,
+  aprobar,
+  rechazar,
+  revertir,
   subirComprobante,
   subirDocumento,
   servirArchivoComprobante,
