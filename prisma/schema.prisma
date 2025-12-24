@@ -163,7 +163,29 @@ model AsientoContableInterfaz {
   estado           String
   fechaEnvio       DateTime?
 
+  // ========================================
+  // 🆕 CAMPOS NUEVOS (TODOS OPCIONALES)
+  // ========================================
+  creadoEn              DateTime?       @default(now())
+  enviadoPorId          BigInt?
+  mensajeError          String?         @db.Text
+
+  // ========================================
+  // RELACIONES EXISTENTES
+  // ========================================
   movimientoCaja      MovimientoCaja @relation(fields: [movimientoCajaId], references: [id])
+
+  // ========================================
+  // 🆕 RELACIONES NUEVAS
+  // ========================================
+  personalEnviador    Personal?      @relation("AsientoContableEnviadoPorId", fields: [enviadoPorId], references: [id])
+
+  // ========================================
+  // 🆕 ÍNDICES NUEVOS
+  // ========================================
+  @@index([estado])
+  @@index([fechaContable])
+  @@index([enviadoPorId])
 }
 
 model Banco {
@@ -310,6 +332,10 @@ model CentroCosto {
   detMovsInventario DetMovsEntregaRendirMovAlmacen[] @relation("DetMovInventario")
 entregasRendirOTMantenimiento  EntregaARendirOTMantenimiento[] @relation("EntregaRendirOTMantenimiento")
 detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("DetMovOTMantenimiento")
+  movimientosCaja        MovimientoCaja[]  @relation("MovimientoCajaCentroCosto")
+    saldosCuentaCorriente  SaldoCuentaCorriente[]  @relation("SaldoCuentaCorrienteCentroCosto")
+
+
 }
 
 model Color {
@@ -995,7 +1021,6 @@ model DetallePreFactura {
   @@index([preFacturaId])
 }
 
-
 model CuentaCorriente {
   id                                                                      BigInt              @id @default(autoincrement())
   empresaId                                                               BigInt
@@ -1008,15 +1033,156 @@ model CuentaCorriente {
   codigoSwift                                                             String?
   numeroCuentaCCI                                                         String?
 
+  // ========================================
+  // 🆕 CAMPOS NUEVOS (TODOS OPCIONALES)
+  // ========================================
+  saldoMinimo             Decimal?            @db.Decimal(18, 2)
+  fechaApertura           DateTime?
+  fechaCierre             DateTime?
+  creadoEn                DateTime?           @default(now())
+  actualizadoEn           DateTime?           @updatedAt
+  creadoPorId             BigInt?             // ✅ CORREGIDO: Termina en Id
+  actualizadoPorId        BigInt?             // ✅ CORREGIDO: Termina en Id
+
+  // ========================================
+  // RELACIONES EXISTENTES
+  // ========================================
   banco                  Banco    @relation(fields: [bancoId], references: [id])
   tipoCuentaCorriente    TipoCuentaCorriente @relation(fields: [tipoCuentaCorrienteId], references: [id])
   moneda                 Moneda   @relation(fields: [monedaId], references: [id])
   movimientosOrigen      MovimientoCaja[] @relation("CuentaCorrienteOrigen")
   movimientosDestino     MovimientoCaja[] @relation("CuentaCorrienteDestino")
 
-    @@unique([numeroCuenta, bancoId, empresaId], name: "unique_cuenta_banco_empresa")
+  // ========================================
+  // 🆕 RELACIONES NUEVAS
+  // ========================================
+  empresa                Empresa             @relation("CuentaCorrienteEmpresa", fields: [empresaId], references: [id])
+  saldos                 SaldoCuentaCorriente[]
+  personalCreador        Personal?           @relation("CuentaCorrienteCreadorId", fields: [creadoPorId], references: [id])  // ✅ CORREGIDO: Personal
+  personalActualizador   Personal?           @relation("CuentaCorrienteActualizadorId", fields: [actualizadoPorId], references: [id])  // ✅ CORREGIDO: Personal
 
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@unique([numeroCuenta, bancoId, empresaId], name: "unique_cuenta_banco_empresa")
+  
+  // 🆕 ÍNDICES NUEVOS
+  @@index([empresaId])
+  @@index([activa])
+  @@index([fechaCierre])
 }
+
+
+model SaldoCuentaCorriente {
+  // ========================================
+  // IDENTIFICADORES
+  // ========================================
+  id                    BigInt          @id @default(autoincrement())
+  cuentaCorrienteId     BigInt
+  empresaId             BigInt
+  
+  // ========================================
+  // INFORMACIÓN DEL SALDO
+  // ========================================
+  fecha                 DateTime        @default(now())
+  saldoAnterior         Decimal         @db.Decimal(18, 2)
+  ingresos              Decimal         @db.Decimal(18, 2)
+  egresos               Decimal         @db.Decimal(18, 2)
+  saldoActual           Decimal         @db.Decimal(18, 2)
+  
+  // ========================================
+  // REFERENCIA AL MOVIMIENTO
+  // ========================================
+  movimientoCajaId      BigInt?
+  
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  saldoContable         Decimal?        @db.Decimal(18, 2)
+  diferencia            Decimal?        @db.Decimal(18, 2)
+  conciliado            Boolean?        @default(false)
+  fechaConciliacion     DateTime?
+  
+  // ========================================
+  // CENTRO DE COSTO
+  // ========================================
+  centroCostoId         BigInt?
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime?       @default(now())
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  cuentaCorriente       CuentaCorriente @relation(fields: [cuentaCorrienteId], references: [id])
+  empresa               Empresa         @relation("SaldoCuentaCorrienteEmpresa", fields: [empresaId], references: [id])
+  movimientoCaja        MovimientoCaja? @relation(fields: [movimientoCajaId], references: [id])
+  centroCosto           CentroCosto?    @relation("SaldoCuentaCorrienteCentroCosto", fields: [centroCostoId], references: [id])
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([cuentaCorrienteId, fecha])
+  @@index([empresaId])
+  @@index([fecha])
+  @@index([conciliado])
+  @@index([centroCostoId])
+}
+
+
+model ConfiguracionCuentaContable {
+  // ========================================
+  // IDENTIFICADORES
+  // ========================================
+  id                      BigInt    @id @default(autoincrement())
+  empresaId               BigInt
+  tipoMovimientoId        BigInt
+  tipoReferenciaId        BigInt?
+  
+  // ========================================
+  // CUENTAS CONTABLES (Partida Doble)
+  // ========================================
+  cuentaContableDebe      String    @db.VarChar(20)
+  cuentaContableHaber     String    @db.VarChar(20)
+  
+  // ========================================
+  // PLANTILLA DE DESCRIPCIÓN
+  // ========================================
+  descripcionPlantilla    String?   @db.VarChar(200)
+  
+  // ========================================
+  // CONTROL
+  // ========================================
+  activo                  Boolean?  @default(true)
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn                DateTime? @default(now())
+  actualizadoEn           DateTime? @updatedAt
+  creadoPorId             BigInt?
+  actualizadoPorId        BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  empresa                 Empresa                      @relation("ConfiguracionCuentaContableEmpresa", fields: [empresaId], references: [id])
+  tipoMovimiento          TipoMovEntregaRendir         @relation("ConfiguracionCuentaContableTipoMov", fields: [tipoMovimientoId], references: [id])
+  tipoReferencia          TipoReferenciaMovimientoCaja? @relation("ConfiguracionCuentaContableTipoRef", fields: [tipoReferenciaId], references: [id])
+  personalCreador         Personal?                    @relation("ConfiguracionCuentaContableCreadorId", fields: [creadoPorId], references: [id])
+  personalActualizador    Personal?                    @relation("ConfiguracionCuentaContableActualizadorId", fields: [actualizadoPorId], references: [id])
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([empresaId])
+  @@index([tipoMovimientoId, tipoReferenciaId])
+  @@unique([empresaId, tipoMovimientoId, tipoReferenciaId], name: "unique_config_cuenta")
+}
+
+
 
 model Departamento {
   id        BigInt      @id @default(autoincrement())
@@ -1759,6 +1925,11 @@ model Empresa {
   detallesCuotaPesca  DetCuotaPesca[]
   monedaCalculosLiq Moneda? @relation("EmpresaMonedaCalculosLiq", fields: [monedaCalculosLiqId], references: [id])
   katanasTripulacion KatanaTripulacion[]
+  cuentasCorrientes      CuentaCorriente[]  @relation("CuentaCorrienteEmpresa")
+    saldosCuentaCorriente  SaldoCuentaCorriente[]  @relation("SaldoCuentaCorrienteEmpresa")
+  configuracionesCuentaContable  ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableEmpresa")
+
+
 
 @@index([monedaCalculosLiqId])
 
@@ -2691,27 +2862,73 @@ model MovimientoCaja {
   origenMotivoOperacionId                 BigInt?
   fechaMotivoOperacion                    DateTime?
   usuarioMotivoOperacionId                BigInt?
-  fechaOperacionMovCaja                   DateTime? @default(now())
-  operacionSinFactura                     Boolean @default(false)
+  fechaOperacionMovCaja                   DateTime?                      @default(now())
+  operacionSinFactura                     Boolean                        @default(false)
   urlComprobanteOperacionMovCaja          String?
   urlDocumentoMovCaja                     String?
   cuentaDestinoEntidadComercialId         BigInt?
   productoId                              BigInt?
-  origenReferenciaIngresoMovCajaId    BigInt? 
+  origenReferenciaIngresoMovCajaId        BigInt?
 
-  cuentaCorrienteOrigen     CuentaCorriente @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
-  cuentaCorrienteDestino    CuentaCorriente? @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
+  // ========================================
+  // 🆕 CAMPOS NUEVOS (TODOS OPCIONALES)
+  // ========================================
+  
+  // Workflow de Aprobación
+  aprobadoPorId                           BigInt?
+  fechaAprobacion                         DateTime?
+  rechazadoPorId                          BigInt?
+  fechaRechazo                            DateTime?
+  motivoRechazo                           String?                       @db.Text
+  
+  // Reversión
+  esReversion                             Boolean?                      @default(false)
+  movimientoRevertidoId                   BigInt?
+  motivoReversion                         String?                       @db.Text
+  
+  // Integración Contable
+  generarAsientoContable                  Boolean?                      @default(true)
+  asientosGenerados                       Boolean?                      @default(false)
+  
+  // Doble Vista
+  incluirEnReporteFiscal                  Boolean?                      @default(true)
+  motivoSinFactura                        String?                       @db.Text
+
+  // ========================================
+  // RELACIONES EXISTENTES
+  // ========================================
+  cuentaCorrienteOrigen     CuentaCorriente           @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
+  cuentaCorrienteDestino    CuentaCorriente?          @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
   tipoReferencia            TipoReferenciaMovimientoCaja? @relation(fields: [tipoReferenciaId], references: [id])
   asientosContables         AsientoContableInterfaz[]
-  entidadComercial          EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
-  estadoMovimientoCaja      EstadoMultiFuncion @relation(fields: [estadoId], references: [id])
-  empresaOrigen             Empresa @relation("EmpresaOrigenMovCaja", fields: [empresaOrigenId], references: [id])
-  empresaDestino            Empresa? @relation("EmpresaDestinoMovCaja", fields: [empresaDestinoId], references: [id])
-  moneda                    Moneda @relation(fields: [monedaId], references: [id])
-  tipoMovimiento            TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
-  ctaCteEntidad             CtaCteEntidad? @relation(fields: [cuentaDestinoEntidadComercialId], references: [id])
-  producto                  Producto? @relation(fields: [productoId], references: [id])
+  entidadComercial          EntidadComercial?         @relation(fields: [entidadComercialId], references: [id])
+  estadoMovimientoCaja      EstadoMultiFuncion        @relation(fields: [estadoId], references: [id])
+  empresaOrigen             Empresa                   @relation("EmpresaOrigenMovCaja", fields: [empresaOrigenId], references: [id])
+  empresaDestino            Empresa?                  @relation("EmpresaDestinoMovCaja", fields: [empresaDestinoId], references: [id])
+  moneda                    Moneda                    @relation(fields: [monedaId], references: [id])
+  tipoMovimiento            TipoMovEntregaRendir      @relation(fields: [tipoMovimientoId], references: [id])
+  ctaCteEntidad             CtaCteEntidad?            @relation(fields: [cuentaDestinoEntidadComercialId], references: [id])
+  producto                  Producto?                 @relation(fields: [productoId], references: [id])
 
+  // ========================================
+  // 🆕 RELACIONES NUEVAS
+  // ========================================
+  centroCosto               CentroCosto?              @relation("MovimientoCajaCentroCosto", fields: [centroCostoId], references: [id])
+  personalAprobador         Personal?                 @relation("MovimientoCajaAprobadorId", fields: [aprobadoPorId], references: [id])
+  personalRechazador        Personal?                 @relation("MovimientoCajaRechazadorId", fields: [rechazadoPorId], references: [id])
+  movimientoOriginal        MovimientoCaja?           @relation("MovimientoReversion", fields: [movimientoRevertidoId], references: [id])
+  reversiones               MovimientoCaja[]          @relation("MovimientoReversion")
+  saldos                    SaldoCuentaCorriente[]
+
+  // ========================================
+  // 🆕 ÍNDICES NUEVOS
+  // ========================================
+  @@index([esReversion])
+  @@index([movimientoRevertidoId])
+  @@index([asientosGenerados])
+  @@index([incluirEnReporteFiscal])
+  @@index([aprobadoPorId])
+  @@index([rechazadoPorId])
 }
 
 model NovedadPescaConsumo {
@@ -2942,6 +3159,13 @@ calasFaenaConsumoBahia          CalaFaenaConsumo[]     @relation("CalaFaenaConsu
 
 videoconferenciasOrganizadas  Videoconferencia[]  @relation("OrganizadorReunion")
 participacionesReunion        ParticipanteReunion[]
+  cuentasCorrientesCreadas      CuentaCorriente[]  @relation("CuentaCorrienteCreadorId")
+  cuentasCorrientesActualizadas CuentaCorriente[]  @relation("CuentaCorrienteActualizadorId")
+    movimientosAprobados   MovimientoCaja[]  @relation("MovimientoCajaAprobadorId")
+  movimientosRechazados  MovimientoCaja[]  @relation("MovimientoCajaRechazadorId")
+    asientosContablesEnviados  AsientoContableInterfaz[]  @relation("AsientoContableEnviadoPorId")
+  configuracionesCuentaContableCreadas      ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableCreadorId")
+  configuracionesCuentaContableActualizadas ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableActualizadorId")
 }
 
 model Producto {
@@ -3418,6 +3642,8 @@ model TipoMovEntregaRendir {
   detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[]
   movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
 detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[]
+  configuracionesCuentaContable  ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableTipoMov")
+
 }
 
 model TipoMovimientoAcceso {
@@ -3533,6 +3759,8 @@ model TipoReferenciaMovimientoCaja {
   activo         Boolean          @default(true)
 
   movimientos MovimientoCaja[]
+    configuracionesCuentaContable  ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableTipoRef")
+
 }
 
 model TipoVehiculo {
