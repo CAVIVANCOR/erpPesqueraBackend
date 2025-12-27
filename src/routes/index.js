@@ -7,6 +7,22 @@ import asientoContableInterfazRoutes from './FlujoCaja/asientoContableInterfaz.r
 import tipoReferenciaMovimientoCajaRoutes from './FlujoCaja/tipoReferenciaMovimientoCaja.routes.js';
 import bancoRoutes from './FlujoCaja/banco.routes.js';
 import tipoCuentaCorrienteRoutes from './FlujoCaja/tipoCuentaCorriente.routes.js';
+import planCuentasContableRoutes from './Contabilidad/planCuentasContable.routes.js';
+import periodoContableRoutes from './Contabilidad/periodoContable.routes.js';
+import asientoContableRoutes from './Contabilidad/asientoContable.routes.js';
+import configuracionCuentaContableContabilidadRoutes from './Contabilidad/configuracionCuentaContable.routes.js';
+import enumsContabilidadRoutes from './Contabilidad/enumsContabilidad.routes.js';
+import tipoAfectacionIGVRoutes from './FacturacionElectronica/tipoAfectacionIGV.routes.js';
+import comprobanteElectronicoRoutes from './FacturacionElectronica/comprobanteElectronico.routes.js';
+import cuentaPorCobrarRoutes from './CuentasPorCobrarPagar/cuentaPorCobrar.routes.js';
+import cuentaPorPagarRoutes from './CuentasPorCobrarPagar/cuentaPorPagar.routes.js';
+import pagoRoutes from './CuentasPorCobrarPagar/pago.routes.js';
+import flujoCajaRoutes from './Tesoreria/flujoCaja.routes.js';
+import conciliacionBancariaRoutes from './Tesoreria/conciliacionBancaria.routes.js';
+import letraCambioRoutes from './LetrasCambio/letraCambio.routes.js';
+import retencionRoutes from './RetencionesPercepciones/retencion.routes.js';
+import percepcionRoutes from './RetencionesPercepciones/percepcion.routes.js';
+import presupuestoRoutes from './Presupuestos/presupuesto.routes.js';
 import usuarioRoutes from './Usuarios/usuario.routes.js';
 import authRoutes from './Usuarios/auth.routes.js'; // Rutas de autenticación de usuarios
 import personalRoutes from './Usuarios/personal.routes.js';
@@ -561,6 +577,29 @@ router.use('/tipos-contrato', tipoContratoRoutes);
 router.use('/tipos-referencia-movimiento-caja', tipoReferenciaMovimientoCajaRoutes);
 router.use('/bancos', bancoRoutes);
 router.use('/tipos-cuenta-corriente', tipoCuentaCorrienteRoutes);
+// Rutas para Contabilidad - Plan de Cuentas Contable
+router.use('/contabilidad/plan-cuentas-contable', planCuentasContableRoutes);
+router.use('/contabilidad/periodo-contable', periodoContableRoutes);
+router.use('/contabilidad/asiento-contable', asientoContableRoutes);
+router.use('/contabilidad/configuracion-cuenta-contable', configuracionCuentaContableContabilidadRoutes);
+router.use('/contabilidad/enums', enumsContabilidadRoutes);
+// Rutas para Facturación Electrónica
+router.use('/facturacion-electronica/tipo-afectacion-igv', tipoAfectacionIGVRoutes);
+router.use('/facturacion-electronica/comprobante-electronico', comprobanteElectronicoRoutes);
+// Rutas para Cuentas Por Cobrar/Pagar
+router.use('/cuentas-por-cobrar-pagar/cuenta-por-cobrar', cuentaPorCobrarRoutes);
+router.use('/cuentas-por-cobrar-pagar/cuenta-por-pagar', cuentaPorPagarRoutes);
+router.use('/cuentas-por-cobrar-pagar/pago', pagoRoutes);
+// Rutas para Tesorería
+router.use('/tesoreria/flujo-caja', flujoCajaRoutes);
+router.use('/tesoreria/conciliacion-bancaria', conciliacionBancariaRoutes);
+// Rutas para Letras de Cambio
+router.use('/letras-cambio', letraCambioRoutes);
+// Rutas para Retenciones y Percepciones
+router.use('/retenciones-percepciones/retencion', retencionRoutes);
+router.use('/retenciones-percepciones/percepcion', percepcionRoutes);
+// Rutas para Presupuestos
+router.use('/presupuestos', presupuestoRoutes);
 
 // Rutas para Videoconferencias (Jitsi Meet)
 router.use('/videoconferencias', videoconferenciaRoutes);
