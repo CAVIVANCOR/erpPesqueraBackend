@@ -7,6 +7,9 @@ const router = Router();
 router.get('/organizador/:organizadorId', videoconferenciaController.obtenerPorOrganizador);
 router.get('/estado/:estado', videoconferenciaController.obtenerPorEstado);
 
+// AGREGADO: Ruta para verificar estado de reunión
+router.get('/:id/verificar-estado', videoconferenciaController.verificarEstadoReunion);
+
 // Rutas CRUD para Videoconferencia
 router.get('/', videoconferenciaController.listar);
 router.get('/:id', videoconferenciaController.obtenerPorId);

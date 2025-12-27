@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 import crypto from 'crypto';
+import notificacionService from '../Notificacion/notificacion.service.js'; // AGREGADO
 
 /**
  * Servicio CRUD para Videoconferencia
@@ -158,7 +159,12 @@ const crear = async (data) => {
             id: true,
             nombres: true,
             apellidos: true,
-            correo: true
+            correo: true,
+            usuario: {
+              select: {
+                id: true
+              }
+            }
           }
         },
         participantes: {
@@ -175,6 +181,38 @@ const crear = async (data) => {
         }
       }
     });
+    
+    // AGREGADO: Crear notificación para el moderador (organizador)
+    try {
+      if (nueva.organizador?.usuario?.id) {
+        const fechaFormateada = new Date(nueva.fechaInicio).toLocaleDateString('es-PE', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+
+        await notificacionService.crear({
+          usuarioId: nueva.organizador.usuario.id,
+          tipo: 'VIDEOCONFERENCIA_INVITACION',
+          titulo: `Eres moderador de: ${nueva.titulo}`,
+          mensaje: `Has creado una videoconferencia programada para el ${fechaFormateada}. Como moderador, debes iniciar la reunión.`,
+          referenciaId: nueva.id,
+          referenciaTabla: 'videoconferencia',
+          urlDestino: `/videoconferencia`,
+          metadata: {
+            videoconferenciaId: nueva.id.toString(),
+            salaId: nueva.salaId,
+            esModerador: true,
+            rol: 'MODERADOR'
+          }
+        });
+      }
+    } catch (notifError) {
+      console.error('Error al crear notificación para moderador:', notifError);
+      // No lanzar error, la videoconferencia ya fue creada exitosamente
+    }
     
     return nueva;
   } catch (err) {
@@ -468,6 +506,49 @@ const obtenerPorEstado = async (estado) => {
   }
 };
 
+// AGREGADO: Verificar estado de reunión y obtener información para unirse
+const verificarEstadoReunion = async (videoconferenciaId) => {
+  try {
+    const videoconferencia = await prisma.videoconferencia.findUnique({
+      where: { id: BigInt(videoconferenciaId) },
+      select: {
+        id: true,
+        titulo: true,
+        estado: true,
+        salaId: true,
+        fechaInicio: true,
+        organizador: {
+          select: {
+            nombres: true,
+            apellidos: true
+          }
+        }
+      }
+    });
+
+    if (!videoconferencia) {
+      throw new NotFoundError('Videoconferencia no encontrada');
+    }
+
+    const jitsiUrl = `${process.env.JITSI_URL || 'https://meet.megui.com.pe'}/${videoconferencia.salaId}`;
+
+    return {
+      id: videoconferencia.id.toString(),
+      titulo: videoconferencia.titulo,
+      estado: videoconferencia.estado,
+      moderadorInicio: videoconferencia.estado === 'EN_CURSO',
+      urlReunion: jitsiUrl,
+      salaId: videoconferencia.salaId,
+      fechaInicio: videoconferencia.fechaInicio,
+      organizador: `${videoconferencia.organizador.nombres} ${videoconferencia.organizador.apellidos}`
+    };
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -478,5 +559,6 @@ export default {
   finalizar,
   cancelar,
   obtenerPorOrganizador,
-  obtenerPorEstado
+  obtenerPorEstado,
+  verificarEstadoReunion // AGREGADO
 };

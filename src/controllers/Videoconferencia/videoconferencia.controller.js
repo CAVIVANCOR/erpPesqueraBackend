@@ -119,3 +119,14 @@ export async function obtenerPorEstado(req, res, next) {
     next(err);
   }
 }
+
+// AGREGADO: Verificar estado de reunión antes de unirse
+export async function verificarEstadoReunion(req, res, next) {
+  try {
+    const videoconferenciaId = Number(req.params.id);
+    const info = await videoconferenciaService.verificarEstadoReunion(videoconferenciaId);
+    res.json(toJSONBigInt(info));
+  } catch (err) {
+    next(err);
+  }
+}
