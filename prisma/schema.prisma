@@ -1126,8 +1126,13 @@ model CuentaCorriente {
   fechaCierre             DateTime?
   creadoEn                DateTime?           @default(now())
   actualizadoEn           DateTime?           @updatedAt
-  creadoPorId             BigInt?             // ✅ CORREGIDO: Termina en Id
-  actualizadoPorId        BigInt?             // ✅ CORREGIDO: Termina en Id
+  creadoPorId             BigInt?
+  actualizadoPorId        BigInt?
+
+  // ========================================
+  // 🆕 CAMPO PARA VINCULAR CON PLAN CONTABLE
+  // ========================================
+  cuentaContableId        BigInt?             // Vincula esta cuenta bancaria con el Plan Contable (ej: 1041)
 
   // ========================================
   // RELACIONES EXISTENTES
@@ -1143,8 +1148,13 @@ model CuentaCorriente {
   // ========================================
   empresa                Empresa             @relation("CuentaCorrienteEmpresa", fields: [empresaId], references: [id])
   saldos                 SaldoCuentaCorriente[]
-  personalCreador        Personal?           @relation("CuentaCorrienteCreadorId", fields: [creadoPorId], references: [id])  // ✅ CORREGIDO: Personal
-  personalActualizador   Personal?           @relation("CuentaCorrienteActualizadorId", fields: [actualizadoPorId], references: [id])  // ✅ CORREGIDO: Personal
+  personalCreador        Personal?           @relation("CuentaCorrienteCreadorId", fields: [creadoPorId], references: [id])
+  personalActualizador   Personal?           @relation("CuentaCorrienteActualizadorId", fields: [actualizadoPorId], references: [id])
+
+  // ========================================
+  // 🆕 RELACIÓN CON PLAN CONTABLE
+  // ========================================
+  cuentaContable         PlanCuentasContable? @relation("CuentaCorrientePlanContable", fields: [cuentaContableId], references: [id])
 
   // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
@@ -1163,6 +1173,7 @@ model CuentaCorriente {
   @@index([empresaId])
   @@index([activa])
   @@index([fechaCierre])
+  @@index([cuentaContableId])
 }
 
 
@@ -4435,6 +4446,8 @@ model PlanCuentasContable {
   ejecucionesPresupuestales EjecucionPresupuestal[]
     configuracionesDebe           ConfiguracionCuentaContable[]  @relation("CuentaDebe")
   configuracionesHaber          ConfiguracionCuentaContable[]  @relation("CuentaHaber")
+  cuentasCorrientes     CuentaCorriente[]       @relation("CuentaCorrientePlanContable")
+
   // ========================================
   // ÍNDICES
   // ========================================
