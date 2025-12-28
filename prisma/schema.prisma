@@ -207,6 +207,11 @@ model Banco {
   pagosLetra                      PagoLetraCambio[]
   preFacturas                     PreFactura[]
 
+  // Nuevas relaciones con Tesorería Avanzada
+prestamos             PrestamoBancario[]
+lineasCredito         LineaCredito[]
+inversiones           InversionFinanciera[]
+
 }
 
 model BolicheRed {
@@ -1163,6 +1168,8 @@ model CuentaCorriente {
   pagosCobrar                     PagoCuentaPorCobrar[]
   pagosPagar                      PagoCuentaPorPagar[]
 
+// Relaciones con Tesorería Avanzada
+prestamos             PrestamoBancario[]
 
   // ========================================
   // ÍNDICES
@@ -1998,6 +2005,11 @@ model Empresa {
   presupuestosAnuales             PresupuestoAnual[]
   ejecucionesPresupuestales       EjecucionPresupuestal[]
 
+// Relaciones con Tesorería Avanzada
+prestamos             PrestamoBancario[]
+lineasCredito         LineaCredito[]
+inversiones           InversionFinanciera[]
+
 @@index([monedaCalculosLiqId])
 
 }
@@ -2601,6 +2613,11 @@ faenasPescaConsumo                FaenaPescaConsumo[]  @relation("FaenaPescaCons
   retenciones                     Retencion[]
   percepciones                    Percepcion[]
   presupuestosAnuales             PresupuestoAnual[]
+
+  // Relaciones con Tesorería Avanzada
+prestamos             PrestamoBancario[]
+lineasCredito         LineaCredito[]
+inversiones           InversionFinanciera[]
 }
 
 model FaenaPesca {
@@ -2874,6 +2891,11 @@ model Moneda {
   percepciones                    Percepcion[]
   presupuestosAnuales             PresupuestoAnual[]
 
+  // Relaciones con Tesorería Avanzada
+  prestamosBancarios    PrestamoBancario[]
+  lineasCreditoBancario LineaCredito[]
+  inversionesFinancieras InversionFinanciera[]
+
 }
 
 model MotivoAcceso {
@@ -3031,6 +3053,14 @@ model MovimientoCaja {
   pagosCuentaPorPagar             PagoCuentaPorPagar[]
   pagosLetra                      PagoLetraCambio[]
   retenciones                     Retencion[]
+
+  // Nuevas relaciones con Tesorería Avanzada
+cuotasPrestamo        CuotaPrestamo[]
+desembolsosPrestamo   DesembolsoPrestamo[]
+utilizacionesLinea    UtilizacionLineaCredito[] @relation("UtilizacionLinea")
+devolucionesLinea     UtilizacionLineaCredito[] @relation("DevolucionLinea")
+inversionesLiquidadas InversionFinanciera[]
+movimientosInversion  MovimientoInversion[]
 
   // ========================================
   // 🆕 ÍNDICES NUEVOS
@@ -3253,6 +3283,16 @@ participacionesReunion        ParticipanteReunion[]
   presupuestosAprobados           PresupuestoAnual[]
   preFacturasRespVentas           PreFactura[]            @relation("RespVentas")
   preFacturasAutoriza             PreFactura[]            @relation("AutorizaVenta")
+
+  // Nuevas relaciones con Tesorería Avanzada
+prestamosCreados      PrestamoBancario[]       @relation("PrestamoCreador")
+prestamosActualizados PrestamoBancario[]       @relation("PrestamoActualizador")
+desembolsosCreados    DesembolsoPrestamo[]
+lineasCreditoCreadas  LineaCredito[]           @relation("LineaCreditoCreador")
+lineasCreditoActualizadas LineaCredito[]       @relation("LineaCreditoActualizador")
+inversionesCreadas    InversionFinanciera[]    @relation("InversionCreador")
+inversionesActualizadas InversionFinanciera[]  @relation("InversionActualizador")
+movimientosInversionCreados MovimientoInversion[]
 
 }
 
@@ -4671,6 +4711,12 @@ model AsientoContable {
   detalles              DetalleAsientoContable[]
     comprobantesElectronicos ComprobanteElectronico[]
 
+// Nuevas relaciones con Tesorería Avanzada
+cuotasPrestamo        CuotaPrestamo[]
+desembolsosPrestamo   DesembolsoPrestamo[]
+utilizacionesLinea    UtilizacionLineaCredito[]
+inversionesLiquidadas InversionFinanciera[]
+movimientosInversion  MovimientoInversion[]
   // ========================================
   // ÍNDICES - CRÍTICO: índice en tipoLibro para filtrado rápido
   // ========================================
@@ -6207,5 +6253,741 @@ model ConfiguracionCuentaContable {
   @@index([cuentaContableDebeId])
   @@index([cuentaContableHaberId])
   @@unique([empresaId, tipoMovimientoId, tipoReferenciaId], name: "unique_config_cuenta")
+}
+
+// ============================================
+// MÓDULO FINANCIERO - TESORERÍA AVANZADA
+// MODELO 2.1: Préstamo Bancario
+// ============================================
+
+model PrestamoBancario {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // IDENTIFICACIÓN
+  // ========================================
+  empresaId             BigInt
+  bancoId               BigInt
+  cuentaCorrienteId     BigInt?                                      // Cuenta donde se desembolsa/paga
+  
+  // ========================================
+  // NUMERACIÓN Y CONTRATO
+  // ========================================
+  numeroPrestamo        String                  @db.VarChar(50)      // Número interno del préstamo
+  numeroContrato        String?                 @db.VarChar(50)      // Número de contrato del banco
+  
+  // ========================================
+  // FECHAS CLAVE
+  // ========================================
+  fechaContrato         DateTime                                     // Fecha de firma del contrato
+  fechaDesembolso       DateTime                                     // Fecha de desembolso real
+  fechaVencimiento      DateTime                                     // Fecha de vencimiento final
+  
+  // ========================================
+  // MONTOS PRINCIPALES
+  // ========================================
+  montoAprobado         Decimal                 @db.Decimal(18, 2)   // Monto aprobado por el banco
+  montoDesembolsado     Decimal                 @db.Decimal(18, 2)   // Monto realmente desembolsado
+  monedaId              BigInt
+  
+  // ========================================
+  // CONDICIONES FINANCIERAS
+  // ========================================
+  tasaInteresAnual      Decimal                 @db.Decimal(7, 4)    // Tasa de interés anual (ej: 12.5000)
+  tasaInteresEfectiva   Decimal?                @db.Decimal(7, 4)    // TEA (Tasa Efectiva Anual)
+  tasaMoratoria         Decimal?                @db.Decimal(7, 4)    // Tasa de mora por atraso
+  comisionInicial       Decimal?                @db.Decimal(18, 2)   // Comisión de apertura
+  comisionMantenimiento Decimal?                @db.Decimal(18, 2)   // Comisión mensual de mantenimiento
+  seguroDesgravamen     Decimal?                @db.Decimal(18, 2)   // Seguro de desgravamen mensual
+  
+  // ========================================
+  // PLAZO Y ESTRUCTURA DE PAGOS
+  // ========================================
+  plazoMeses            Int                                          // Plazo total en meses
+  numeroCuotas          Int                                          // Número total de cuotas
+  frecuenciaPago        FrecuenciaPago                               // MENSUAL | TRIMESTRAL | SEMESTRAL | ANUAL
+  diaPago               Int?                                         // Día del mes para pago (1-31)
+  periodoGracia         Int?                                         // Meses de gracia (solo intereses)
+  
+  // ========================================
+  // TIPO Y CLASIFICACIÓN
+  // ========================================
+  tipoPrestamo          TipoPrestamo                                 // CAPITAL_TRABAJO | ACTIVO_FIJO | HIPOTECARIO | VEHICULAR
+  tipoAmortizacion      TipoAmortizacion                             // FRANCES | ALEMAN | AMERICANO
+  destinoFondos         String?                 @db.Text             // Descripción del destino de los fondos
+  
+  // ========================================
+  // GARANTÍAS
+  // ========================================
+  tipoGarantia          TipoGarantia?                                // HIPOTECARIA | PRENDARIA | FIANZA | SIN_GARANTIA
+  descripcionGarantia   String?                 @db.Text             // Descripción detallada de la garantía
+  valorGarantia         Decimal?                @db.Decimal(18, 2)   // Valor tasado de la garantía
+  
+  // ========================================
+  // SALDOS ACTUALES (Actualizados automáticamente)
+  // ========================================
+  saldoCapital          Decimal                 @db.Decimal(18, 2)   // Saldo pendiente de capital
+  saldoInteres          Decimal                 @db.Decimal(18, 2)   // Intereses devengados pendientes
+  capitalPagado         Decimal                 @default(0.00) @db.Decimal(18, 2)  // Capital ya pagado
+  interesPagado         Decimal                 @default(0.00) @db.Decimal(18, 2)  // Intereses ya pagados
+  
+  // ========================================
+  // ESTADO (EstadoMultiFuncion)
+  // Valores posibles:
+  // 70 = APROBADO (aprobado pero no desembolsado)
+  // 71 = DESEMBOLSADO (desembolsado, en proceso de pago)
+  // 72 = VIGENTE (en pagos normales)
+  // 73 = PAGADO (totalmente cancelado)
+  // 74 = VENCIDO (con cuotas vencidas)
+  // 75 = REFINANCIADO (refinanciado por otro préstamo)
+  // 76 = ANULADO (cancelado antes de desembolso)
+  // ========================================
+  estadoId              BigInt
+  
+  // ========================================
+  // REFINANCIAMIENTO
+  // ========================================
+  esRefinanciamiento    Boolean                 @default(false)      // true si refinancia otro préstamo
+  prestamoRefinanciadoId BigInt?                                     // ID del préstamo que refinancia
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
+  banco                 Banco                   @relation(fields: [bancoId], references: [id])
+  cuentaCorriente       CuentaCorriente?        @relation(fields: [cuentaCorrienteId], references: [id])
+  moneda                Moneda                  @relation(fields: [monedaId], references: [id])
+  estado                EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
+  personalCreador       Personal?               @relation("PrestamoCreador", fields: [creadoPor], references: [id])
+  personalActualizador  Personal?               @relation("PrestamoActualizador", fields: [actualizadoPor], references: [id])
+  prestamoRefinanciado  PrestamoBancario?       @relation("RefinanciamientoPrestamo", fields: [prestamoRefinanciadoId], references: [id])
+  prestamosRefinanciadores PrestamoBancario[]   @relation("RefinanciamientoPrestamo")
+  
+  cuotas                CuotaPrestamo[]
+  desembolsos           DesembolsoPrestamo[]
+  garantias             GarantiaPrestamo[]
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@unique([empresaId, numeroPrestamo])
+  @@index([empresaId])
+  @@index([bancoId])
+  @@index([estadoId])
+  @@index([fechaVencimiento])
+  @@index([empresaId, estadoId])
+  @@index([cuentaCorrienteId])
+}
+
+
+// ============================================
+// MODELO 2.2: Cuota de Préstamo
+// ============================================
+
+model CuotaPrestamo {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // RELACIÓN CON PRÉSTAMO
+  // ========================================
+  prestamoBancarioId    BigInt
+  
+  // ========================================
+  // IDENTIFICACIÓN DE CUOTA
+  // ========================================
+  numeroCuota           Int                                          // 1, 2, 3, ..., n
+  fechaVencimiento      DateTime                                     // Fecha de vencimiento de la cuota
+  
+  // ========================================
+  // COMPOSICIÓN DE LA CUOTA
+  // ========================================
+  montoCapital          Decimal                 @db.Decimal(18, 2)   // Amortización de capital
+  montoInteres          Decimal                 @db.Decimal(18, 2)   // Interés del período
+  montoComision         Decimal?                @db.Decimal(18, 2)   // Comisión de mantenimiento
+  montoSeguro           Decimal?                @db.Decimal(18, 2)   // Seguro de desgravamen
+  montoTotal            Decimal                 @db.Decimal(18, 2)   // Total de la cuota
+  
+  // ========================================
+  // SALDOS ANTES Y DESPUÉS DE LA CUOTA
+  // ========================================
+  saldoCapitalAntes     Decimal                 @db.Decimal(18, 2)   // Saldo de capital antes de pagar
+  saldoCapitalDespues   Decimal                 @db.Decimal(18, 2)   // Saldo de capital después de pagar
+  
+  // ========================================
+  // INFORMACIÓN DE PAGO
+  // ========================================
+  fechaPago             DateTime?                                    // Fecha real de pago
+  montoPagado           Decimal?                @db.Decimal(18, 2)   // Monto realmente pagado
+  montoMora             Decimal?                @db.Decimal(18, 2)   // Monto de mora por atraso
+  movimientoCajaId      BigInt?                                      // Relación con MovimientoCaja
+  asientoContableId     BigInt?                                      // Asiento contable generado
+  
+  // ========================================
+  // ESTADO DE PAGO
+  // ========================================
+  estadoPago            EstadoPagoCuota                              // PENDIENTE | PAGADO | VENCIDO | PARCIAL
+  diasMora              Int?                                         // Días de atraso
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  actualizadoEn         DateTime                @updatedAt
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  prestamo              PrestamoBancario        @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
+  movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
+  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@unique([prestamoBancarioId, numeroCuota])
+  @@index([prestamoBancarioId])
+  @@index([fechaVencimiento])
+  @@index([estadoPago])
+  @@index([fechaPago])
+}
+
+
+// ============================================
+// MODELO 2.3: Desembolso de Préstamo
+// ============================================
+
+model DesembolsoPrestamo {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // RELACIÓN CON PRÉSTAMO
+  // ========================================
+  prestamoBancarioId    BigInt
+  
+  // ========================================
+  // IDENTIFICACIÓN
+  // ========================================
+  numeroDesembolso      Int                                          // 1, 2, 3 (si hay desembolsos parciales)
+  fechaDesembolso       DateTime                                     // Fecha real del desembolso
+  
+  // ========================================
+  // MONTO
+  // ========================================
+  monto                 Decimal                 @db.Decimal(18, 2)   // Monto desembolsado
+  
+  // ========================================
+  // INTEGRACIÓN
+  // ========================================
+  movimientoCajaId      BigInt                                       // Movimiento de ingreso a caja/banco
+  asientoContableId     BigInt?                                      // Asiento contable generado
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  prestamo              PrestamoBancario        @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
+  movimientoCaja        MovimientoCaja          @relation(fields: [movimientoCajaId], references: [id])
+  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
+  personalCreador       Personal?               @relation(fields: [creadoPor], references: [id])
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([prestamoBancarioId])
+  @@index([fechaDesembolso])
+  @@index([movimientoCajaId])
+}
+
+
+// ============================================
+// MODELO 2.4: Garantía de Préstamo
+// ============================================
+
+model GarantiaPrestamo {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // RELACIÓN CON PRÉSTAMO
+  // ========================================
+  prestamoBancarioId    BigInt
+  
+  // ========================================
+  // TIPO DE GARANTÍA
+  // ========================================
+  tipoGarantia          TipoGarantia                                 // HIPOTECARIA | PRENDARIA | FIANZA
+  
+  // ========================================
+  // DESCRIPCIÓN
+  // ========================================
+  descripcion           String                  @db.Text             // Descripción detallada del bien
+  valorTasacion         Decimal                 @db.Decimal(18, 2)   // Valor de tasación
+  
+  // ========================================
+  // DATOS ESPECÍFICOS HIPOTECA
+  // ========================================
+  direccionInmueble     String?                 @db.VarChar(500)     // Dirección del inmueble
+  partidaRegistral      String?                 @db.VarChar(100)     // Partida registral
+  
+  // ========================================
+  // DATOS ESPECÍFICOS PRENDA
+  // ========================================
+  descripcionBien       String?                 @db.Text             // Descripción del bien prendado
+  numeroSerie           String?                 @db.VarChar(100)     // Número de serie (vehículo, maquinaria)
+  
+  // ========================================
+  // DATOS ESPECÍFICOS FIANZA
+  // ========================================
+  nombreFiador          String?                 @db.VarChar(200)     // Nombre del fiador
+  documentoFiador       String?                 @db.VarChar(20)      // DNI/RUC del fiador
+  
+  // ========================================
+  // ESTADO
+  // ========================================
+  activo                Boolean                 @default(true)       // true = vigente, false = liberada
+  fechaLiberacion       DateTime?                                    // Fecha de liberación de garantía
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  actualizadoEn         DateTime                @updatedAt
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  prestamo              PrestamoBancario        @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([prestamoBancarioId])
+  @@index([tipoGarantia])
+  @@index([activo])
+}
+
+
+// ============================================
+// MODELO 2.5: Línea de Crédito
+// ============================================
+
+model LineaCredito {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // IDENTIFICACIÓN
+  // ========================================
+  empresaId             BigInt
+  bancoId               BigInt
+  numeroLinea           String                  @db.VarChar(50)      // Número de línea de crédito
+  
+  // ========================================
+  // TIPO DE LÍNEA
+  // ========================================
+  tipoLinea             TipoLineaCredito                             // REVOLVENTE | CARTA_CREDITO | GARANTIA_BANCARIA
+  
+  // ========================================
+  // MONTOS
+  // ========================================
+  montoAprobado         Decimal                 @db.Decimal(18, 2)   // Monto total aprobado
+  monedaId              BigInt
+  
+  // ========================================
+  // CONDICIONES FINANCIERAS
+  // ========================================
+  tasaInteres           Decimal                 @db.Decimal(7, 4)    // Tasa de interés anual
+  comisionMantenimiento Decimal?                @db.Decimal(18, 2)   // Comisión mensual
+  comisionUtilizacion   Decimal?                @db.Decimal(7, 4)    // % sobre monto utilizado
+  
+  // ========================================
+  // VIGENCIA
+  // ========================================
+  fechaAprobacion       DateTime                                     // Fecha de aprobación
+  fechaVencimiento      DateTime                                     // Fecha de vencimiento
+  
+  // ========================================
+  // SALDOS (Actualizados automáticamente)
+  // ========================================
+  montoUtilizado        Decimal                 @default(0.00) @db.Decimal(18, 2)  // Monto actualmente utilizado
+  montoDisponible       Decimal                 @db.Decimal(18, 2)   // Monto disponible (aprobado - utilizado)
+  
+  // ========================================
+  // ESTADO (EstadoMultiFuncion)
+  // Valores posibles:
+  // 80 = APROBADA (aprobada pero no utilizada)
+  // 81 = VIGENTE (en uso)
+  // 82 = VENCIDA (fecha vencida)
+  // 83 = CANCELADA (cancelada voluntariamente)
+  // 84 = SUSPENDIDA (suspendida por el banco)
+  // ========================================
+  estadoId              BigInt
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
+  banco                 Banco                   @relation(fields: [bancoId], references: [id])
+  moneda                Moneda                  @relation(fields: [monedaId], references: [id])
+  estado                EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
+  personalCreador       Personal?               @relation("LineaCreditoCreador", fields: [creadoPor], references: [id])
+  personalActualizador  Personal?               @relation("LineaCreditoActualizador", fields: [actualizadoPor], references: [id])
+  
+  utilizaciones         UtilizacionLineaCredito[]
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@unique([empresaId, numeroLinea])
+  @@index([empresaId])
+  @@index([bancoId])
+  @@index([estadoId])
+  @@index([fechaVencimiento])
+  @@index([empresaId, estadoId])
+}
+
+
+// ============================================
+// MODELO 2.6: Utilización de Línea de Crédito
+// ============================================
+
+model UtilizacionLineaCredito {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // RELACIÓN CON LÍNEA
+  // ========================================
+  lineaCreditoId        BigInt
+  
+  // ========================================
+  // IDENTIFICACIÓN
+  // ========================================
+  numeroUtilizacion     Int                                          // 1, 2, 3, ...
+  fechaUtilizacion      DateTime                                     // Fecha de utilización
+  
+  // ========================================
+  // MONTO
+  // ========================================
+  montoUtilizado        Decimal                 @db.Decimal(18, 2)   // Monto de esta utilización
+  
+  // ========================================
+  // DEVOLUCIÓN
+  // ========================================
+  fechaDevolucion       DateTime?                                    // Fecha de devolución
+  montoDevuelto         Decimal?                @db.Decimal(18, 2)   // Monto devuelto
+  interesesPagados      Decimal?                @db.Decimal(18, 2)   // Intereses pagados
+  
+  // ========================================
+  // INTEGRACIÓN
+  // ========================================
+  movimientoCajaUtilizacionId BigInt?                                // Movimiento de ingreso
+  movimientoCajaDevolucionId  BigInt?                                // Movimiento de egreso
+  asientoContableId     BigInt?                                      // Asiento contable
+  
+  // ========================================
+  // ESTADO
+  // ========================================
+  estadoUtilizacion     EstadoUtilizacionLinea                       // VIGENTE | DEVUELTO | VENCIDO
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  actualizadoEn         DateTime                @updatedAt
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  lineaCredito          LineaCredito            @relation(fields: [lineaCreditoId], references: [id], onDelete: Cascade)
+  movimientoCajaUtilizacion MovimientoCaja?     @relation("UtilizacionLinea", fields: [movimientoCajaUtilizacionId], references: [id])
+  movimientoCajaDevolucion  MovimientoCaja?     @relation("DevolucionLinea", fields: [movimientoCajaDevolucionId], references: [id])
+  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([lineaCreditoId])
+  @@index([fechaUtilizacion])
+  @@index([estadoUtilizacion])
+}
+
+
+// ============================================
+// MODELO 2.7: Inversión Financiera
+// ============================================
+
+model InversionFinanciera {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // IDENTIFICACIÓN
+  // ========================================
+  empresaId             BigInt
+  bancoId               BigInt?                                      // Banco (si aplica)
+  numeroInversion       String                  @db.VarChar(50)      // Número de inversión
+  
+  // ========================================
+  // TIPO DE INVERSIÓN
+  // ========================================
+  tipoInversion         TipoInversion                                // PLAZO_FIJO | FONDO_MUTUO | BONOS | ACCIONES
+  
+  // ========================================
+  // DESCRIPCIÓN
+  // ========================================
+  descripcion           String                  @db.VarChar(200)     // Descripción de la inversión
+  
+  // ========================================
+  // FECHAS
+  // ========================================
+  fechaInversion        DateTime                                     // Fecha de inversión
+  fechaVencimiento      DateTime?                                    // Fecha de vencimiento (si aplica)
+  
+  // ========================================
+  // MONTOS
+  // ========================================
+  montoInvertido        Decimal                 @db.Decimal(18, 2)   // Monto inicial invertido
+  monedaId              BigInt
+  
+  // ========================================
+  // RENTABILIDAD
+  // ========================================
+  tasaRendimiento       Decimal?                @db.Decimal(7, 4)    // Tasa de rendimiento anual
+  valorActual           Decimal                 @db.Decimal(18, 2)   // Valor actual de la inversión
+  rendimientoAcumulado  Decimal                 @default(0.00) @db.Decimal(18, 2)  // Rendimiento acumulado
+  
+  // ========================================
+  // ESTADO (EstadoMultiFuncion)
+  // Valores posibles:
+  // 90 = VIGENTE (inversión activa)
+  // 91 = VENCIDA (plazo cumplido, pendiente de cobro)
+  // 92 = LIQUIDADA (cobrada/vendida)
+  // 93 = CANCELADA (cancelada antes de vencimiento)
+  // ========================================
+  estadoId              BigInt
+  
+  // ========================================
+  // LIQUIDACIÓN
+  // ========================================
+  fechaLiquidacion      DateTime?                                    // Fecha de liquidación
+  montoLiquidado        Decimal?                @db.Decimal(18, 2)   // Monto total liquidado
+  movimientoCajaId      BigInt?                                      // Movimiento de liquidación
+  asientoContableId     BigInt?                                      // Asiento de liquidación
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
+  banco                 Banco?                  @relation(fields: [bancoId], references: [id])
+  moneda                Moneda                  @relation(fields: [monedaId], references: [id])
+  estado                EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
+  movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
+  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
+  personalCreador       Personal?               @relation("InversionCreador", fields: [creadoPor], references: [id])
+  personalActualizador  Personal?               @relation("InversionActualizador", fields: [actualizadoPor], references: [id])
+  
+  movimientos           MovimientoInversion[]
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@unique([empresaId, numeroInversion])
+  @@index([empresaId])
+  @@index([bancoId])
+  @@index([estadoId])
+  @@index([tipoInversion])
+  @@index([fechaVencimiento])
+  @@index([empresaId, estadoId])
+}
+
+
+// ============================================
+// MODELO 2.8: Movimiento de Inversión
+// ============================================
+
+model MovimientoInversion {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // RELACIÓN CON INVERSIÓN
+  // ========================================
+  inversionFinancieraId BigInt
+  
+  // ========================================
+  // TIPO DE MOVIMIENTO
+  // ========================================
+  tipoMovimiento        TipoMovimientoInversion                      // INVERSION | RENDIMIENTO | RETIRO | AJUSTE
+  
+  // ========================================
+  // FECHA Y MONTO
+  // ========================================
+  fechaMovimiento       DateTime                                     // Fecha del movimiento
+  monto                 Decimal                 @db.Decimal(18, 2)   // Monto del movimiento
+  
+  // ========================================
+  // DESCRIPCIÓN
+  // ========================================
+  descripcion           String                  @db.Text             // Descripción del movimiento
+  
+  // ========================================
+  // INTEGRACIÓN
+  // ========================================
+  movimientoCajaId      BigInt?                                      // Movimiento de caja asociado
+  asientoContableId     BigInt?                                      // Asiento contable generado
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  inversion             InversionFinanciera     @relation(fields: [inversionFinancieraId], references: [id], onDelete: Cascade)
+  movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
+  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
+  personalCreador       Personal?               @relation(fields: [creadoPor], references: [id])
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([inversionFinancieraId])
+  @@index([fechaMovimiento])
+  @@index([tipoMovimiento])
+}
+
+
+// ============================================
+// ENUMS PARA TESORERÍA AVANZADA
+// ============================================
+
+enum FrecuenciaPago {
+  MENSUAL              // Pagos mensuales
+  BIMESTRAL            // Cada 2 meses
+  TRIMESTRAL           // Cada 3 meses
+  CUATRIMESTRAL        // Cada 4 meses
+  SEMESTRAL            // Cada 6 meses
+  ANUAL                // Anual
+}
+
+enum TipoPrestamo {
+  CAPITAL_TRABAJO      // Para capital de trabajo
+  ACTIVO_FIJO          // Para compra de activos fijos
+  HIPOTECARIO          // Préstamo hipotecario
+  VEHICULAR            // Para compra de vehículos
+  EQUIPAMIENTO         // Para equipamiento
+  EXPANSION            // Para expansión del negocio
+  REFINANCIAMIENTO     // Refinanciamiento de deudas
+}
+
+enum TipoAmortizacion {
+  FRANCES              // Cuotas fijas (más común)
+  ALEMAN               // Amortización constante
+  AMERICANO            // Solo intereses, capital al final
+}
+
+enum TipoGarantia {
+  HIPOTECARIA          // Garantía hipotecaria
+  PRENDARIA            // Garantía prendaria (vehículos, maquinaria)
+  FIANZA               // Fianza personal o solidaria
+  SIN_GARANTIA         // Sin garantía específica
+}
+
+enum EstadoPagoCuota {
+  PENDIENTE            // Cuota pendiente de pago
+  PAGADO               // Cuota pagada completamente
+  VENCIDO              // Cuota vencida no pagada
+  PARCIAL              // Cuota pagada parcialmente
+}
+
+enum TipoLineaCredito {
+  REVOLVENTE           // Línea revolvente (se puede usar y devolver)
+  CARTA_CREDITO        // Carta de crédito (comercio exterior)
+  GARANTIA_BANCARIA    // Garantía bancaria
+  SOBREGIRO            // Sobregiro bancario
+}
+
+enum EstadoUtilizacionLinea {
+  VIGENTE              // Utilización vigente
+  DEVUELTO             // Ya devuelto
+  VENCIDO              // Vencido sin devolver
+}
+
+enum TipoInversion {
+  PLAZO_FIJO           // Depósito a plazo fijo
+  FONDO_MUTUO          // Fondo mutuo
+  BONOS                // Bonos corporativos o soberanos
+  ACCIONES             // Acciones en bolsa
+  CTS                  // CTS empresarial
+}
+
+enum TipoMovimientoInversion {
+  INVERSION            // Inversión inicial o adicional
+  RENDIMIENTO          // Rendimiento generado
+  RETIRO               // Retiro parcial
+  AJUSTE               // Ajuste de valor
+  LIQUIDACION          // Liquidación total
 }
 
