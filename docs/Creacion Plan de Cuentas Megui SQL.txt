@@ -1,0 +1,607 @@
+-- ============================================
+-- PLAN CONTABLE GENERAL EMPRESARIAL (PCGE)
+-- MEGUI INVESTMENT SAC - GRUPO EMPRESARIAL
+-- VERSIÓN COMPLETA CON TODAS LAS CUENTAS FALTANTES
+-- ============================================
+-- INSTRUCCIONES:
+-- 1. Limpiar la tabla: DELETE FROM "PlanCuentasContable";
+-- 2. Ejecutar este script completo
+-- 3. Luego ejecutar el script de relaciones padre-hijo
+-- ============================================
+
+-- PASO 1: CUENTAS (Nivel 1)
+INSERT INTO "PlanCuentasContable" ("codigoCuenta", "nombreCuenta", descripcion, nivel, naturaleza, "tipoCuenta", "esImputable", activo, "creadoEn", "actualizadoEn") VALUES
+('10', 'EFECTIVO Y EQUIVALENTES DE EFECTIVO', 'Agrupa las subcuentas que representan medios de pago', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('12', 'CUENTAS POR COBRAR COMERCIALES - TERCEROS', 'Agrupa las subcuentas que representan los derechos de cobro', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('20', 'MERCADERÍAS', 'Bienes adquiridos para la venta', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('21', 'PRODUCTOS TERMINADOS', 'Productos fabricados listos para la venta', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('24', 'MATERIAS PRIMAS', 'Insumos para la producción', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('25', 'MATERIALES AUXILIARES, SUMINISTROS Y REPUESTOS', 'Materiales auxiliares y suministros', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('26', 'ENVASES Y EMBALAJES', 'Envases y embalajes para productos', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('28', 'EXISTENCIAS POR RECIBIR', 'Mercaderías, materias primas y suministros en tránsito', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('29', 'DESVALORIZACIÓN DE EXISTENCIAS', 'Provisión por desvalorización, mermas y desmedros', 'CUENTA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('32', 'ACTIVOS ADQUIRIDOS EN ARRENDAMIENTO FINANCIERO', 'Activos en leasing', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('33', 'INMUEBLES, MAQUINARIA Y EQUIPO', 'Activos fijos', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('34', 'INTANGIBLES', 'Software, licencias, patentes y marcas', 'CUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('39', 'DEPRECIACIÓN, AMORTIZACIÓN Y AGOTAMIENTO ACUMULADOS', 'Depreciación acumulada', 'CUENTA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('40', 'TRIBUTOS, CONTRAPRESTACIONES Y APORTES AL SISTEMA DE PENSIONES Y DE SALUD POR PAGAR', 'Tributos por pagar', 'CUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('41', 'REMUNERACIONES Y PARTICIPACIONES POR PAGAR', 'Planillas, beneficios sociales y costos del personal por pagar', 'CUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('42', 'CUENTAS POR PAGAR COMERCIALES - TERCEROS', 'Cuentas por pagar proveedores', 'CUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('43', 'CUENTAS POR PAGAR COMERCIALES - RELACIONADAS', 'Transacciones entre empresas del grupo', 'CUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('44', 'CUENTAS POR PAGAR A LOS ACCIONISTAS, DIRECTORES Y GERENTES', 'Cuentas por pagar a accionistas y gerentes', 'CUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('45', 'OBLIGACIONES FINANCIERAS', 'Préstamos, pagarés, leasing, factoring y letras con bancos', 'CUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('46', 'CUENTAS POR PAGAR DIVERSAS - TERCEROS', 'Otras cuentas por pagar', 'CUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('47', 'CUENTAS POR PAGAR DIVERSAS - RELACIONADAS', 'Préstamos entre empresas del grupo', 'CUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('50', 'CAPITAL', 'Capital social', 'CUENTA', 'ACREEDORA', 'PATRIMONIO', false, true, NOW(), NOW()),
+('59', 'RESULTADOS ACUMULADOS', 'Resultados acumulados', 'CUENTA', 'ACREEDORA', 'PATRIMONIO', false, true, NOW(), NOW()),
+('60', 'COMPRAS', 'Compras', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('61', 'VARIACIÓN DE EXISTENCIAS', 'Variación de existencias', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('62', 'GASTOS DE PERSONAL, DIRECTORES Y GERENTES', 'Gastos de personal', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('63', 'GASTOS DE SERVICIOS PRESTADOS POR TERCEROS', 'Servicios de terceros', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('64', 'GASTOS POR TRIBUTOS', 'Tributos', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('65', 'OTROS GASTOS DE GESTIÓN', 'Otros gastos', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('67', 'GASTOS FINANCIEROS', 'Intereses, comisiones y gastos bancarios', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('68', 'VALUACIÓN Y DETERIORO DE ACTIVOS Y PROVISIONES', 'Depreciación y provisiones', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('69', 'COSTO DE VENTAS', 'Costo de las mercaderías y productos vendidos', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('70', 'VENTAS', 'Ventas', 'CUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+('71', 'VARIACIÓN DE LA PRODUCCIÓN ALMACENADA', 'Variación producción', 'CUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+('75', 'OTROS INGRESOS DE GESTIÓN', 'Otros ingresos', 'CUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+('77', 'INGRESOS FINANCIEROS', 'Intereses, comisiones y diferencias de cambio a favor', 'CUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+('79', 'CARGAS IMPUTABLES A CUENTAS DE COSTOS Y GASTOS', 'Registro de cargas de centros de costos clase 9', 'CUENTA', 'ACREEDORA', 'GASTO', false, true, NOW(), NOW()),
+('91', 'COSTOS POR DISTRIBUIR', 'Costos por distribuir', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('92', 'COSTO DE PRODUCCIÓN', 'Costo de producción', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('93', 'COSTO DE SERVICIOS', 'Costo de servicios prestados', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('94', 'GASTOS ADMINISTRATIVOS', 'Gastos administrativos', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('95', 'GASTOS DE VENTAS', 'Gastos de ventas', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('97', 'GASTOS FINANCIEROS', 'Gastos financieros clase 9', 'CUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW());
+
+-- PASO 2: SUBCUENTAS (Nivel 2)
+INSERT INTO "PlanCuentasContable" ("codigoCuenta", "nombreCuenta", descripcion, nivel, naturaleza, "tipoCuenta", "esImputable", activo, "creadoEn", "actualizadoEn") VALUES
+-- Cuenta 10
+('101', 'Caja', 'Efectivo en caja', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('104', 'Cuentas corrientes en instituciones financieras', 'Cuentas corrientes bancarias', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('106', 'Depósitos en instituciones financieras', 'Depósitos a plazo', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 12
+('121', 'Facturas, boletas y otros comprobantes por cobrar', 'Comprobantes por cobrar', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('122', 'Anticipos de clientes', 'Anticipos recibidos', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 20
+('201', 'Mercaderías manufacturadas', 'Mercaderías manufacturadas', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 21
+('211', 'Productos manufacturados', 'Productos manufacturados', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 24
+('241', 'Materias primas para productos manufacturados', 'Materias primas', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 25
+('252', 'Suministros', 'Suministros diversos', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('253', 'Repuestos', 'Repuestos', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 26 - ENVASES Y EMBALAJES
+('261', 'Envases', 'Envases para productos', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('262', 'Embalajes', 'Embalajes para transporte', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 28 - EXISTENCIAS POR RECIBIR
+('281', 'Mercaderías', 'Mercaderías en tránsito', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('284', 'Materias primas', 'Materias primas en tránsito', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('285', 'Materiales auxiliares, suministros y repuestos', 'Suministros en tránsito', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 29 - DESVALORIZACIÓN DE EXISTENCIAS
+('291', 'Mercaderías', 'Provisión desvalorización mercaderías', 'SUBCUENTA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('292', 'Productos terminados', 'Provisión desvalorización productos', 'SUBCUENTA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('294', 'Materias primas', 'Provisión desvalorización materias primas', 'SUBCUENTA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 32 - ACTIVOS EN ARRENDAMIENTO FINANCIERO
+('322', 'Inmuebles, maquinaria y equipo', 'Activos fijos en leasing', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 33
+('331', 'Terrenos', 'Terrenos', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('332', 'Edificaciones', 'Edificaciones', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('333', 'Maquinarias y equipos de explotación', 'Maquinaria y equipos', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('334', 'Unidades de transporte', 'Vehículos y embarcaciones', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('335', 'Muebles y enseres', 'Muebles y enseres', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('336', 'Equipos diversos', 'Equipos diversos', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 34 - INTANGIBLES
+('341', 'Concesiones, licencias y otros derechos', 'Licencias de software', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('343', 'Programas de computadora (software)', 'Software', 'SUBCUENTA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 39
+('391', 'Depreciación acumulada', 'Depreciación acumulada', 'SUBCUENTA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('392', 'Amortización acumulada', 'Amortización de intangibles', 'SUBCUENTA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- Cuenta 40
+('401', 'Gobierno central', 'Tributos gobierno central', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('403', 'Instituciones públicas', 'Aportes instituciones públicas', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- Cuenta 41 - REMUNERACIONES Y PARTICIPACIONES POR PAGAR
+('411', 'Remuneraciones por pagar', 'Sueldos y salarios por pagar', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('415', 'Beneficios sociales de los trabajadores por pagar', 'CTS, vacaciones, gratificaciones', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- Cuenta 42
+('421', 'Facturas, boletas y otros comprobantes por pagar', 'Comprobantes por pagar', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- Cuenta 43 - CUENTAS POR PAGAR COMERCIALES - RELACIONADAS
+('431', 'Facturas, boletas y otros comprobantes por pagar', 'Comprobantes por pagar relacionadas', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- Cuenta 44 - CUENTAS POR PAGAR A ACCIONISTAS
+('441', 'Accionistas (o socios)', 'Préstamos de accionistas', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- Cuenta 45 - OBLIGACIONES FINANCIERAS
+('451', 'Préstamos de instituciones financieras y otras entidades', 'Préstamos bancarios', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('452', 'Contratos de arrendamiento financiero', 'Leasing', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- Cuenta 46
+('469', 'Otras cuentas por pagar diversas', 'Otras cuentas por pagar', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- Cuenta 47 - CUENTAS POR PAGAR DIVERSAS - RELACIONADAS
+('471', 'Préstamos', 'Préstamos entre empresas del grupo', 'SUBCUENTA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- Cuenta 50
+('501', 'Capital social', 'Capital social', 'SUBCUENTA', 'ACREEDORA', 'PATRIMONIO', false, true, NOW(), NOW()),
+-- Cuenta 59
+('591', 'Utilidades no distribuidas', 'Utilidades acumuladas', 'SUBCUENTA', 'ACREEDORA', 'PATRIMONIO', false, true, NOW(), NOW()),
+('592', 'Pérdidas acumuladas', 'Pérdidas acumuladas', 'SUBCUENTA', 'DEUDORA', 'PATRIMONIO', false, true, NOW(), NOW()),
+-- Cuenta 60
+('601', 'Mercaderías', 'Compras de mercaderías', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('602', 'Materias primas', 'Compras de materias primas', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('603', 'Materiales auxiliares, suministros y repuestos', 'Compras de suministros', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 61
+('611', 'Mercaderías', 'Variación mercaderías', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('612', 'Materias primas', 'Variación materias primas', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 62
+('621', 'Remuneraciones', 'Remuneraciones', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('627', 'Seguridad, previsión social y otras contribuciones', 'Seguridad social', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('629', 'Beneficios sociales de los trabajadores', 'Beneficios sociales', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 63
+('631', 'Transporte, correos y gastos de viaje', 'Transporte', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('634', 'Mantenimiento y reparaciones', 'Mantenimiento', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('636', 'Servicios básicos', 'Servicios básicos', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('637', 'Publicidad, publicaciones, relaciones públicas', 'Publicidad', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('638', 'Servicios de producción', 'Servicios de producción', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('639', 'Otros servicios prestados por terceros', 'Otros servicios', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 64
+('641', 'Gobierno central', 'Tributos gobierno central', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('642', 'Gobierno regional', 'Tributos gobierno regional', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('643', 'Gobierno local', 'Tributos gobierno local', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 65
+('651', 'Seguros', 'Seguros', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('659', 'Otros gastos de gestión', 'Otros gastos', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 67 - GASTOS FINANCIEROS
+('671', 'Gastos en operaciones de endeudamiento y otros', 'Intereses de préstamos', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('673', 'Intereses por préstamos y otras obligaciones', 'Intereses bancarios', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('679', 'Otros gastos financieros', 'Comisiones y otros gastos bancarios', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 68
+('681', 'Depreciación', 'Depreciación', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('685', 'Deterioro del valor de los activos', 'Deterioro de activos', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 69 - COSTO DE VENTAS
+('691', 'Mercaderías', 'Costo de ventas mercaderías', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('692', 'Productos terminados', 'Costo de ventas productos', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 70
+('701', 'Mercaderías', 'Ventas de mercaderías', 'SUBCUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+('704', 'Prestación de servicios', 'Servicios', 'SUBCUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+-- Cuenta 71
+('711', 'Variación de productos terminados', 'Variación productos terminados', 'SUBCUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+-- Cuenta 75
+('759', 'Otros ingresos de gestión', 'Otros ingresos', 'SUBCUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+-- Cuenta 77 - INGRESOS FINANCIEROS
+('771', 'Ganancia por instrumento financiero derivado', 'Ganancias financieras', 'SUBCUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+('772', 'Rendimientos ganados', 'Intereses ganados', 'SUBCUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+('779', 'Otros ingresos financieros', 'Otros ingresos financieros', 'SUBCUENTA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+-- Cuenta 79 - CARGAS IMPUTABLES
+('791', 'Cargas imputables a cuentas de costos y gastos', 'Cargas imputables', 'SUBCUENTA', 'ACREEDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 91
+('911', 'Costos de producción no aplicados', 'Costos no aplicados', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 92
+('921', 'Costos de producción', 'Costos de producción', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 93 - COSTO DE SERVICIOS
+('931', 'Costo de servicios', 'Costo de servicios prestados', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 94 - GASTOS ADMINISTRATIVOS
+('941', 'Gastos administrativos', 'Gastos administrativos', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 95 - GASTOS DE VENTAS
+('951', 'Gastos de ventas', 'Gastos de ventas', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- Cuenta 97 - GASTOS FINANCIEROS CLASE 9
+('971', 'Gastos financieros', 'Gastos financieros clase 9', 'SUBCUENTA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW());
+
+-- PASO 3: DIVISIONARIAS (Nivel 3)
+INSERT INTO "PlanCuentasContable" ("codigoCuenta", "nombreCuenta", descripcion, nivel, naturaleza, "tipoCuenta", "esImputable", activo, "creadoEn", "actualizadoEn") VALUES
+-- 10 - Efectivo
+('1011', 'Caja MN', 'Caja en moneda nacional', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('1041', 'Cuentas corrientes operativas', 'Cuentas corrientes operativas', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('1061', 'Depósitos de ahorro', 'Cuentas de ahorro', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 12 - Cuentas por cobrar
+('1211', 'No emitidas', 'Facturas no emitidas', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('1212', 'Emitidas en cartera', 'Facturas emitidas pendientes de cobro', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('1213', 'Ventas diversas', 'Ventas diversas', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('1214', 'Servicios prestados', 'Servicios prestados', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('1221', 'Anticipos recibidos', 'Anticipos de clientes', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 20 - Mercaderías
+('2011', 'Mercaderías manufacturadas', 'Mercaderías manufacturadas', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 21 - Productos terminados
+('2111', 'Pota congelada', 'Pota congelada', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2112', 'Frutas procesadas', 'Frutas procesadas', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2113', 'Harina de pescado', 'Harina de pescado', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2114', 'Aceite de pescado', 'Aceite de pescado', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2115', 'Conservas de pescado', 'Conservas de pescado', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 24 - Materias primas
+('2411', 'Pota fresca', 'Pota fresca', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2412', 'Frutas frescas', 'Frutas frescas', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2413', 'Anchoveta fresca', 'Anchoveta fresca', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2414', 'Pescado fresco para conservas', 'Pescado fresco para conservas', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 25 - Suministros
+('2521', 'Combustibles', 'Combustibles', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2522', 'Lubricantes', 'Lubricantes', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2523', 'Hielo', 'Hielo industrial', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2524', 'Insumos para procesamiento', 'Insumos para procesamiento', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2531', 'Repuestos de embarcaciones', 'Repuestos embarcaciones', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2532', 'Repuestos de planta', 'Repuestos planta', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 26 - Envases y embalajes
+('2611', 'Envases', 'Envases', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2621', 'Embalajes', 'Embalajes', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 28 - Existencias por recibir
+('2811', 'Mercaderías', 'Mercaderías en tránsito', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2841', 'Materias primas', 'Materias primas en tránsito', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 29 - Desvalorización
+('2911', 'Mercaderías manufacturadas', 'Provisión mercaderías', 'DIVISIONARIA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('2921', 'Productos manufacturados', 'Provisión productos', 'DIVISIONARIA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 32 - Leasing
+('3221', 'Maquinarias y equipos de explotación', 'Maquinaria en leasing', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 33 - Activos fijos
+('3311', 'Terrenos', 'Terrenos', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3321', 'Edificaciones administrativas', 'Edificios administrativos', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3322', 'Almacenes', 'Almacenes', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3331', 'Maquinarias y equipos de explotación', 'Maquinaria', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3341', 'Vehículos motorizados', 'Vehículos', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3342', 'Embarcaciones pesqueras', 'Embarcaciones', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3351', 'Muebles', 'Muebles', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3352', 'Enseres', 'Enseres', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3361', 'Equipo para procesamiento de información', 'Equipos de cómputo', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3362', 'Muebles y enseres', 'Muebles y enseres', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 34 - Intangibles
+('3411', 'Licencias y derechos', 'Licencias', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3431', 'Programas de computadora', 'Software', 'DIVISIONARIA', 'DEUDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 39 - Depreciación
+('3913', 'Inmuebles, maquinaria y equipo - Costo', 'Depreciación IME', 'DIVISIONARIA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+('3923', 'Intangibles - Costo', 'Amortización intangibles', 'DIVISIONARIA', 'ACREEDORA', 'ACTIVO', false, true, NOW(), NOW()),
+-- 40 - Tributos
+('4011', 'Impuesto general a las ventas', 'IGV por pagar', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('4017', 'Impuesto a la renta', 'Impuesto a la renta', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('4031', 'ESSALUD', 'ESSALUD', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('4032', 'ONP', 'ONP', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- 41 - Remuneraciones por pagar
+('4111', 'Sueldos y salarios por pagar', 'Sueldos por pagar', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('4151', 'Compensación por tiempo de servicios', 'CTS por pagar', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('4152', 'Vacaciones por pagar', 'Vacaciones por pagar', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- 42 - Cuentas por pagar
+('4211', 'No emitidas', 'Facturas no emitidas', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('4212', 'Emitidas', 'Facturas emitidas', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('4213', 'Compras diversas', 'Compras diversas', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- 43 - Cuentas por pagar relacionadas
+('4311', 'Facturas por pagar', 'Facturas relacionadas', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- 44 - Cuentas por pagar accionistas
+('4411', 'Préstamos', 'Préstamos de accionistas', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- 45 - Obligaciones financieras
+('4511', 'Instituciones financieras', 'Préstamos bancarios', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+('4521', 'Contratos de arrendamiento financiero', 'Leasing', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- 46 - Otras cuentas por pagar
+('4699', 'Otras cuentas por pagar', 'Otras cuentas por pagar', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- 47 - Cuentas por pagar diversas relacionadas
+('4711', 'Préstamos', 'Préstamos entre empresas', 'DIVISIONARIA', 'ACREEDORA', 'PASIVO', false, true, NOW(), NOW()),
+-- 50 - Capital
+('5011', 'Acciones', 'Acciones', 'DIVISIONARIA', 'ACREEDORA', 'PATRIMONIO', false, true, NOW(), NOW()),
+-- 59 - Resultados
+('5911', 'Utilidades acumuladas', 'Utilidades acumuladas', 'DIVISIONARIA', 'ACREEDORA', 'PATRIMONIO', false, true, NOW(), NOW()),
+('5921', 'Pérdidas acumuladas', 'Pérdidas acumuladas', 'DIVISIONARIA', 'DEUDORA', 'PATRIMONIO', false, true, NOW(), NOW()),
+-- 60 - Compras
+('6011', 'Mercaderías manufacturadas', 'Mercaderías manufacturadas', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6021', 'Materias primas para productos manufacturados', 'Materias primas', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6031', 'Materiales auxiliares', 'Materiales auxiliares', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6032', 'Suministros', 'Suministros', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6033', 'Repuestos', 'Repuestos', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 61 - Variación
+('6111', 'Mercaderías manufacturadas', 'Variación mercaderías', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6121', 'Materias primas para productos manufacturados', 'Variación materias primas', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 62 - Personal
+('6211', 'Sueldos y salarios', 'Sueldos y salarios', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6213', 'Otras remuneraciones', 'Otras remuneraciones', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6271', 'Régimen de prestaciones de salud', 'ESSALUD', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6291', 'Compensación por tiempo de servicios', 'CTS', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 63 - Servicios
+('6311', 'Transporte', 'Transporte', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6343', 'Inmuebles, maquinaria y equipo', 'Mantenimiento IME', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6361', 'Energía eléctrica', 'Energía eléctrica', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6362', 'Gas', 'Gas', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6363', 'Agua', 'Agua', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6371', 'Publicidad', 'Publicidad', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6381', 'Servicios de procesamiento', 'Servicios de procesamiento', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6391', 'Gastos bancarios', 'Gastos bancarios', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 64 - Tributos
+('6411', 'Impuesto general a las ventas y selectivo al consumo', 'IGV', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6421', 'Impuestos regionales', 'Impuestos regionales', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6431', 'Impuesto predial', 'Impuesto predial', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6432', 'Arbitrios municipales y seguridad ciudadana', 'Arbitrios', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 65 - Otros gastos
+('6511', 'Seguros', 'Seguros', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6591', 'Donaciones', 'Donaciones', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 67 - Gastos financieros
+('6711', 'Gastos en operaciones de endeudamiento', 'Gastos de endeudamiento', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6731', 'Intereses por préstamos', 'Intereses préstamos', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6791', 'Comisiones bancarias', 'Comisiones bancarias', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 68 - Depreciación
+('6814', 'Depreciación de inmuebles, maquinaria y equipo - Costo', 'Depreciación IME', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6851', 'Desvalorización de existencias', 'Desvalorización existencias', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 69 - Costo de ventas
+('6911', 'Mercaderías manufacturadas', 'Costo ventas mercaderías', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+('6921', 'Productos manufacturados', 'Costo ventas productos', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 70 - Ventas
+('7011', 'Mercaderías manufacturadas', 'Ventas mercaderías', 'DIVISIONARIA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+('7041', 'Terceros', 'Servicios a terceros', 'DIVISIONARIA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+-- 71 - Variación producción
+('7111', 'Productos manufacturados', 'Productos manufacturados', 'DIVISIONARIA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+-- 75 - Otros ingresos
+('7591', 'Subsidios gubernamentales', 'Subsidios', 'DIVISIONARIA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+-- 77 - Ingresos financieros
+('7721', 'Intereses ganados', 'Intereses ganados', 'DIVISIONARIA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+('7791', 'Otros ingresos financieros', 'Otros ingresos financieros', 'DIVISIONARIA', 'ACREEDORA', 'INGRESO', false, true, NOW(), NOW()),
+-- 79 - Cargas imputables
+('7911', 'Cargas imputables', 'Cargas imputables', 'DIVISIONARIA', 'ACREEDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 91 - Costos por distribuir
+('9111', 'Costos de producción no aplicados', 'Costos no aplicados', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 92 - Costo de producción
+('9211', 'Costos de producción', 'Costos de producción', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 93 - Costo de servicios
+('9311', 'Costo de servicios', 'Costo de servicios', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 94 - Gastos administrativos
+('9411', 'Gastos administrativos', 'Gastos administrativos', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 95 - Gastos de ventas
+('9511', 'Gastos de ventas', 'Gastos de ventas', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW()),
+-- 97 - Gastos financieros clase 9
+('9711', 'Gastos financieros', 'Gastos financieros', 'DIVISIONARIA', 'DEUDORA', 'GASTO', false, true, NOW(), NOW());
+
+
+
+
+
+-- ============================================
+-- SCRIPT DE RELACIONES PADRE-HIJO
+-- PLAN CONTABLE GENERAL EMPRESARIAL (PCGE)
+-- ============================================
+-- INSTRUCCIONES:
+-- Ejecutar DESPUÉS del script de inserciones
+-- ============================================
+
+-- PASO 1: Actualizar SUBCUENTAS con su cuenta padre (Nivel 2 -> Nivel 1)
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '10') WHERE "codigoCuenta" IN ('101', '104', '106');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '12') WHERE "codigoCuenta" IN ('121', '122');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '20') WHERE "codigoCuenta" IN ('201');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '21') WHERE "codigoCuenta" IN ('211');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '24') WHERE "codigoCuenta" IN ('241');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '25') WHERE "codigoCuenta" IN ('252', '253');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '26') WHERE "codigoCuenta" IN ('261', '262');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '28') WHERE "codigoCuenta" IN ('281', '284', '285');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '29') WHERE "codigoCuenta" IN ('291', '292', '294');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '32') WHERE "codigoCuenta" IN ('322');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '33') WHERE "codigoCuenta" IN ('331', '332', '333', '334', '335', '336');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '34') WHERE "codigoCuenta" IN ('341', '343');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '39') WHERE "codigoCuenta" IN ('391', '392');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '40') WHERE "codigoCuenta" IN ('401', '403');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '41') WHERE "codigoCuenta" IN ('411', '415');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '42') WHERE "codigoCuenta" IN ('421');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '43') WHERE "codigoCuenta" IN ('431');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '44') WHERE "codigoCuenta" IN ('441');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '45') WHERE "codigoCuenta" IN ('451', '452');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '46') WHERE "codigoCuenta" IN ('469');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '47') WHERE "codigoCuenta" IN ('471');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '50') WHERE "codigoCuenta" IN ('501');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '59') WHERE "codigoCuenta" IN ('591', '592');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '60') WHERE "codigoCuenta" IN ('601', '602', '603');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '61') WHERE "codigoCuenta" IN ('611', '612');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '62') WHERE "codigoCuenta" IN ('621', '627', '629');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '63') WHERE "codigoCuenta" IN ('631', '634', '636', '637', '638', '639');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '64') WHERE "codigoCuenta" IN ('641', '642', '643');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '65') WHERE "codigoCuenta" IN ('651', '659');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '67') WHERE "codigoCuenta" IN ('671', '673', '679');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '68') WHERE "codigoCuenta" IN ('681', '685');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '69') WHERE "codigoCuenta" IN ('691', '692');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '70') WHERE "codigoCuenta" IN ('701', '704');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '71') WHERE "codigoCuenta" IN ('711');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '75') WHERE "codigoCuenta" IN ('759');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '77') WHERE "codigoCuenta" IN ('771', '772', '779');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '79') WHERE "codigoCuenta" IN ('791');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '91') WHERE "codigoCuenta" IN ('911');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '92') WHERE "codigoCuenta" IN ('921');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '93') WHERE "codigoCuenta" IN ('931');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '94') WHERE "codigoCuenta" IN ('941');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '95') WHERE "codigoCuenta" IN ('951');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '97') WHERE "codigoCuenta" IN ('971');
+
+-- PASO 2: Actualizar DIVISIONARIAS con su subcuenta padre (Nivel 3 -> Nivel 2)
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '101') WHERE "codigoCuenta" IN ('1011');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '104') WHERE "codigoCuenta" IN ('1041');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '106') WHERE "codigoCuenta" IN ('1061');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '121') WHERE "codigoCuenta" IN ('1211', '1212', '1213', '1214');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '122') WHERE "codigoCuenta" IN ('1221');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '201') WHERE "codigoCuenta" IN ('2011');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '211') WHERE "codigoCuenta" IN ('2111', '2112', '2113', '2114', '2115');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '241') WHERE "codigoCuenta" IN ('2411', '2412', '2413', '2414');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '252') WHERE "codigoCuenta" IN ('2521', '2522', '2523', '2524');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '253') WHERE "codigoCuenta" IN ('2531', '2532');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '261') WHERE "codigoCuenta" IN ('2611');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '262') WHERE "codigoCuenta" IN ('2621');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '281') WHERE "codigoCuenta" IN ('2811');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '284') WHERE "codigoCuenta" IN ('2841');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '291') WHERE "codigoCuenta" IN ('2911');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '292') WHERE "codigoCuenta" IN ('2921');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '322') WHERE "codigoCuenta" IN ('3221');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '331') WHERE "codigoCuenta" IN ('3311');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '332') WHERE "codigoCuenta" IN ('3321', '3322');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '333') WHERE "codigoCuenta" IN ('3331');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '334') WHERE "codigoCuenta" IN ('3341', '3342');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '335') WHERE "codigoCuenta" IN ('3351', '3352');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '336') WHERE "codigoCuenta" IN ('3361', '3362');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '341') WHERE "codigoCuenta" IN ('3411');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '343') WHERE "codigoCuenta" IN ('3431');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '391') WHERE "codigoCuenta" IN ('3913');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '392') WHERE "codigoCuenta" IN ('3923');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '401') WHERE "codigoCuenta" IN ('4011', '4017');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '403') WHERE "codigoCuenta" IN ('4031', '4032');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '411') WHERE "codigoCuenta" IN ('4111');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '415') WHERE "codigoCuenta" IN ('4151', '4152');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '421') WHERE "codigoCuenta" IN ('4211', '4212', '4213');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '431') WHERE "codigoCuenta" IN ('4311');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '441') WHERE "codigoCuenta" IN ('4411');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '451') WHERE "codigoCuenta" IN ('4511');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '452') WHERE "codigoCuenta" IN ('4521');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '469') WHERE "codigoCuenta" IN ('4699');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '471') WHERE "codigoCuenta" IN ('4711');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '501') WHERE "codigoCuenta" IN ('5011');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '591') WHERE "codigoCuenta" IN ('5911');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '592') WHERE "codigoCuenta" IN ('5921');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '601') WHERE "codigoCuenta" IN ('6011');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '602') WHERE "codigoCuenta" IN ('6021');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '603') WHERE "codigoCuenta" IN ('6031', '6032', '6033');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '611') WHERE "codigoCuenta" IN ('6111');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '612') WHERE "codigoCuenta" IN ('6121');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '621') WHERE "codigoCuenta" IN ('6211', '6213');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '627') WHERE "codigoCuenta" IN ('6271');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '629') WHERE "codigoCuenta" IN ('6291');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '631') WHERE "codigoCuenta" IN ('6311');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '634') WHERE "codigoCuenta" IN ('6343');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '636') WHERE "codigoCuenta" IN ('6361', '6362', '6363');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '637') WHERE "codigoCuenta" IN ('6371');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '638') WHERE "codigoCuenta" IN ('6381');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '639') WHERE "codigoCuenta" IN ('6391');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '641') WHERE "codigoCuenta" IN ('6411');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '642') WHERE "codigoCuenta" IN ('6421');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '643') WHERE "codigoCuenta" IN ('6431', '6432');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '651') WHERE "codigoCuenta" IN ('6511');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '659') WHERE "codigoCuenta" IN ('6591');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '671') WHERE "codigoCuenta" IN ('6711');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '673') WHERE "codigoCuenta" IN ('6731');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '679') WHERE "codigoCuenta" IN ('6791');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '681') WHERE "codigoCuenta" IN ('6814');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '685') WHERE "codigoCuenta" IN ('6851');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '691') WHERE "codigoCuenta" IN ('6911');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '692') WHERE "codigoCuenta" IN ('6921');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '701') WHERE "codigoCuenta" IN ('7011');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '704') WHERE "codigoCuenta" IN ('7041');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '711') WHERE "codigoCuenta" IN ('7111');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '759') WHERE "codigoCuenta" IN ('7591');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '772') WHERE "codigoCuenta" IN ('7721');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '779') WHERE "codigoCuenta" IN ('7791');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '791') WHERE "codigoCuenta" IN ('7911');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '911') WHERE "codigoCuenta" IN ('9111');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '921') WHERE "codigoCuenta" IN ('9211');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '931') WHERE "codigoCuenta" IN ('9311');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '941') WHERE "codigoCuenta" IN ('9411');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '951') WHERE "codigoCuenta" IN ('9511');
+UPDATE "PlanCuentasContable" SET "cuentaPadreId" = (SELECT id FROM "PlanCuentasContable" WHERE "codigoCuenta" = '971') WHERE "codigoCuenta" IN ('9711');
+
+
+-- ============================================
+-- CONSULTA PLAN CONTABLE CON DATOS DE CUENTA PADRE
+-- ============================================
+SELECT 
+    pc.id,
+    pc."codigoCuenta",
+    pc."nombreCuenta",
+    pc.descripcion,
+    pc.nivel,
+    pc."cuentaPadreId",
+    padre."codigoCuenta" AS "codigoCuentaPadre",
+    padre."nombreCuenta" AS "nombreCuentaPadre",
+    pc.naturaleza,
+    pc."esImputable",
+    pc."requiereCentroCosto",
+    pc."requiereEntidad",
+    pc."requiereProyecto",
+    pc."tipoCuenta",
+    pc."esActivoCorriente",
+    pc."esActivoNoCorriente",
+    pc."esPasivoCorriente",
+    pc."esPasivoNoCorriente",
+    pc.activo,
+    pc."creadoEn",
+    pc."creadoPor",
+    pc."actualizadoEn",
+    pc."actualizadoPor"
+FROM 
+    "PlanCuentasContable" pc
+LEFT JOIN 
+    "PlanCuentasContable" padre ON pc."cuentaPadreId" = padre.id
+ORDER BY 
+    pc."codigoCuenta" ASC;
+
+
+
+
+-- ============================================
+-- SCRIPT MEJORADO PARA MAYÚSCULAS SIN ACENTOS
+-- PLAN CONTABLE GENERAL EMPRESARIAL (PCGE)
+-- ============================================
+
+UPDATE "PlanCuentasContable"
+SET 
+    "nombreCuenta" = UPPER(
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE("nombreCuenta", '[áàâãäå]', 'a', 'gi'),
+                    '[éèêë]', 'e', 'gi'),
+                '[íìîï]', 'i', 'gi'),
+            '[óòôõö]', 'o', 'gi'),
+        '[úùûü]', 'u', 'gi')
+    ),
+    descripcion = UPPER(
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE(descripcion, '[áàâãäå]', 'a', 'gi'),
+                    '[éèêë]', 'e', 'gi'),
+                '[íìîï]', 'i', 'gi'),
+            '[óòôõö]', 'o', 'gi'),
+        '[úùûü]', 'u', 'gi')
+    ),
+    "actualizadoEn" = NOW()
+WHERE activo = true;
+
+
+
+-- Encontrar registros con problemas de encoding
+SELECT id, "codigoCuenta", "nombreCuenta", descripcion
+FROM "PlanCuentasContable"
+WHERE "nombreCuenta" !~ '^[\x00-\x7F]*$' 
+   OR descripcion !~ '^[\x00-\x7F]*$'
+LIMIT 20;
+
+
+-- Corregir los registros con caracteres problemáticos
+UPDATE "PlanCuentasContable" SET "nombreCuenta" = 'MERCADERIAS' WHERE "codigoCuenta" = '20';
+UPDATE "PlanCuentasContable" SET "nombreCuenta" = 'DESVALORIZACION DE EXISTENCIAS', descripcion = 'PROVISION POR DESVALORIZACION, MERMAS Y DESMEDROS' WHERE "codigoCuenta" = '29';
+UPDATE "PlanCuentasContable" SET "nombreCuenta" = 'DEPRECIACION, AMORTIZACION Y AGOTAMIENTO ACUMULADOS', descripcion = 'DEPRECIACION ACUMULADA' WHERE "codigoCuenta" = '39';
+UPDATE "PlanCuentasContable" SET "nombreCuenta" = 'VARIACION DE EXISTENCIAS', descripcion = 'VARIACION DE EXISTENCIAS' WHERE "codigoCuenta" = '61';
+UPDATE "PlanCuentasContable" SET "nombreCuenta" = 'OTROS GASTOS DE GESTION' WHERE "codigoCuenta" = '65';
+UPDATE "PlanCuentasContable" SET "nombreCuenta" = 'VALUACION Y DETERIORO DE ACTIVOS Y PROVISIONES', descripcion = 'DEPRECIACION Y PROVISIONES' WHERE "codigoCuenta" = '68';
+UPDATE "PlanCuentasContable" SET "nombreCuenta" = 'VARIACION DE LA PRODUCCION ALMACENADA', descripcion = 'VARIACION PRODUCCION' WHERE "codigoCuenta" = '71';
+UPDATE "PlanCuentasContable" SET "nombreCuenta" = 'OTROS INGRESOS DE GESTION' WHERE "codigoCuenta" = '75';
+UPDATE "PlanCuentasContable" SET "nombreCuenta" = 'COSTO DE PRODUCCION', descripcion = 'COSTO DE PRODUCCION' WHERE "codigoCuenta" = '92';
+
+
+
+
+
+-- ============================================
+-- ACTUALIZAR CUENTAS CORRIENTES CON SU CUENTA CONTABLE
+-- ============================================
+
+-- Asignar todas las cuentas corrientes a la cuenta contable 1041 (Cuentas corrientes operativas)
+UPDATE "CuentaCorriente"
+SET "cuentaContableId" = (
+    SELECT id 
+    FROM "PlanCuentasContable" 
+    WHERE "codigoCuenta" = '1041'
+)
+WHERE "cuentaContableId" IS NULL;
+
+
+-- Verificar que se actualizaron correctamente
+SELECT 
+    cc.id,
+    cc."numeroCuenta",
+    b."nombreBanco",
+    e."razonSocial",
+    pc."codigoCuenta",
+    pc."nombreCuenta"
+FROM "CuentaCorriente" cc
+INNER JOIN "Banco" b ON cc."bancoId" = b.id
+INNER JOIN "Empresa" e ON cc."empresaId" = e.id
+LEFT JOIN "PlanCuentasContable" pc ON cc."cuentaContableId" = pc.id
+WHERE cc.activa = true;
+
+
+
+
+
