@@ -3073,6 +3073,7 @@ model NovedadPescaConsumo {
   liqComisionMotoristaReal Decimal? @default(0.00) @db.Decimal(10,2)
   liqComisionPangueroReal Decimal? @default(0.00) @db.Decimal(10,2)
   liqTotalPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
+  precioxKgCalculoComisionPatron Decimal? @default(0.00) @db.Decimal(10,2)
 
   // Relaciones
   empresa                         Empresa            @relation(fields: [empresaId], references: [id])
@@ -5161,17 +5162,11 @@ model EnvioOSE {
 
 
 
-// ============================================
-// CuentaPorCobrar
-// Control de saldos por cobrar desde PreFactura
-// Los totales se CALCULAN desde PreFactura y PagoCuentaPorCobrar
-// ============================================
-
 model CuentaPorCobrar {
   id                        BigInt      @id @default(autoincrement())
   
-  // Origen obligatorio
-  preFacturaId              BigInt      @unique
+  // 🆕 CAMBIO: Ahora opcional para permitir saldos iniciales
+  preFacturaId              BigInt?     @unique
   empresaId                 BigInt
   clienteId                 BigInt
   
@@ -5180,7 +5175,15 @@ model CuentaPorCobrar {
   fechaEmision              DateTime
   fechaVencimiento          DateTime
   
-  // Referencia a moneda (para cálculos)
+  // 🆕 NUEVO: Montos almacenados (estilo SAP FI)
+  montoTotal                Decimal     @db.Decimal(18, 2)      // Total de la deuda original
+  montoPagado               Decimal     @default(0.00) @db.Decimal(18, 2)  // Se actualiza con cada pago
+  saldoPendiente            Decimal     @db.Decimal(18, 2)      // montoTotal - montoPagado
+  
+  // 🆕 NUEVO: Flag para saldos iniciales (migración)
+  esSaldoInicial            Boolean     @default(false)
+  
+  // Referencia a moneda
   monedaId                  BigInt
   
   // Tipo de venta
@@ -5196,14 +5199,15 @@ model CuentaPorCobrar {
   actualizadoEn             DateTime    @updatedAt
   
   // Relaciones
-  preFactura                PreFactura              @relation(fields: [preFacturaId], references: [id])
+  // 🆕 CAMBIO: Ahora opcional (puede no existir en saldos iniciales)
+  preFactura                PreFactura?             @relation(fields: [preFacturaId], references: [id])
   empresa                   Empresa                 @relation(fields: [empresaId], references: [id])
   cliente                   EntidadComercial        @relation(fields: [clienteId], references: [id])
   moneda                    Moneda                  @relation(fields: [monedaId], references: [id])
   estado                    EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
   
   pagos                     PagoCuentaPorCobrar[]
-    detallesFlujoCaja         DetalleFlujoCajaProyectado[]
+  detallesFlujoCaja         DetalleFlujoCajaProyectado[]
   letrasCambio              LetraCambio[]
   
   @@index([empresaId, fechaVencimiento])
@@ -5211,6 +5215,8 @@ model CuentaPorCobrar {
   @@index([estadoId])
   @@index([fechaVencimiento])
   @@index([esContado])
+  @@index([esSaldoInicial])      // 🆕 NUEVO: Para filtrar saldos iniciales
+  @@index([saldoPendiente])      // 🆕 NUEVO: Para reportes de cobranza
 }
 
 
@@ -5258,19 +5264,11 @@ model PagoCuentaPorCobrar {
   @@index([movimientoCajaId])
 }
 
-
-
-// ============================================
-// CuentaPorPagar
-// Control de saldos por pagar desde OrdenCompra
-// Los totales se CALCULAN desde OrdenCompra y PagoCuentaPorPagar
-// ============================================
-
 model CuentaPorPagar {
   id                    BigInt      @id @default(autoincrement())
   
-  // Origen obligatorio
-  ordenCompraId         BigInt      @unique
+  // 🆕 CAMBIO: Ahora opcional para permitir saldos iniciales
+  ordenCompraId         BigInt?     @unique
   empresaId             BigInt
   proveedorId           BigInt
   
@@ -5279,11 +5277,19 @@ model CuentaPorPagar {
   fechaEmision          DateTime
   fechaVencimiento      DateTime
   
-  // Factura del proveedor (opcional)
+  // Factura del proveedor
   numeroFacturaProveedor String?    @db.VarChar(50)
   fechaFacturaProveedor  DateTime?
   
-  // Referencia a moneda (para cálculos)
+  // 🆕 NUEVO: Montos almacenados (estilo SAP FI)
+  montoTotal            Decimal     @db.Decimal(18, 2)      // Total de la deuda original
+  montoPagado           Decimal     @default(0.00) @db.Decimal(18, 2)  // Se actualiza con cada pago
+  saldoPendiente        Decimal     @db.Decimal(18, 2)      // montoTotal - montoPagado
+  
+  // 🆕 NUEVO: Flag para saldos iniciales (migración)
+  esSaldoInicial        Boolean     @default(false)
+  
+  // Referencia a moneda
   monedaId              BigInt
   
   // Tipo de compra
@@ -5299,14 +5305,15 @@ model CuentaPorPagar {
   actualizadoEn         DateTime    @updatedAt
   
   // Relaciones
-  ordenCompra           OrdenCompra         @relation(fields: [ordenCompraId], references: [id])
+  // 🆕 CAMBIO: Ahora opcional (puede no existir en saldos iniciales)
+  ordenCompra           OrdenCompra?        @relation(fields: [ordenCompraId], references: [id])
   empresa               Empresa             @relation(fields: [empresaId], references: [id])
   proveedor             EntidadComercial    @relation(fields: [proveedorId], references: [id])
   moneda                Moneda              @relation(fields: [monedaId], references: [id])
   estado                EstadoMultiFuncion  @relation(fields: [estadoId], references: [id])
   
   pagos                 PagoCuentaPorPagar[]
-    detallesFlujoCaja     DetalleFlujoCajaProyectado[]
+  detallesFlujoCaja     DetalleFlujoCajaProyectado[]
   letrasCambio          LetraCambio[]
   retenciones           Retencion[]
   percepciones          Percepcion[]
@@ -5316,8 +5323,9 @@ model CuentaPorPagar {
   @@index([estadoId])
   @@index([fechaVencimiento])
   @@index([esContado])
+  @@index([esSaldoInicial])      // 🆕 NUEVO: Para filtrar saldos iniciales
+  @@index([saldoPendiente])      // 🆕 NUEVO: Para reportes de tesorería
 }
-
 
 
 // ============================================
