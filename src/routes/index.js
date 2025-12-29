@@ -19,6 +19,10 @@ import cuentaPorPagarRoutes from './CuentasPorCobrarPagar/cuentaPorPagar.routes.
 import pagoRoutes from './CuentasPorCobrarPagar/pago.routes.js';
 import flujoCajaRoutes from './Tesoreria/flujoCaja.routes.js';
 import conciliacionBancariaRoutes from './Tesoreria/conciliacionBancaria.routes.js';
+import prestamoBancarioRoutes from './Tesoreria/prestamoBancario.routes.js';
+import cuotaPrestamoRoutes from './Tesoreria/cuotaPrestamo.routes.js';
+import lineaCreditoRoutes from './Tesoreria/lineaCredito.routes.js';
+import inversionFinancieraRoutes from './Tesoreria/inversionFinanciera.routes.js';
 import letraCambioRoutes from './LetrasCambio/letraCambio.routes.js';
 import retencionRoutes from './RetencionesPercepciones/retencion.routes.js';
 import percepcionRoutes from './RetencionesPercepciones/percepcion.routes.js';
@@ -593,6 +597,10 @@ router.use('/cuentas-por-cobrar-pagar/pago', pagoRoutes);
 // Rutas para Tesorería
 router.use('/tesoreria/flujo-caja', flujoCajaRoutes);
 router.use('/tesoreria/conciliacion-bancaria', conciliacionBancariaRoutes);
+router.use('/tesoreria/prestamos-bancarios', prestamoBancarioRoutes);
+router.use('/tesoreria/cuotas-prestamo', cuotaPrestamoRoutes);
+router.use('/tesoreria/lineas-credito', lineaCreditoRoutes);
+router.use('/tesoreria/inversiones-financieras', inversionFinancieraRoutes);
 // Rutas para Letras de Cambio
 router.use('/letras-cambio', letraCambioRoutes);
 // Rutas para Retenciones y Percepciones

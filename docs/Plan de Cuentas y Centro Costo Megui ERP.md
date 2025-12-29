@@ -10,11 +10,10 @@
 3. [Estrategia de Operaciones Blancas y Negras](#3-estrategia-de-operaciones-blancas-y-negras)
 4. [Centro de Costos](#4-centro-de-costos)
 5. [Integracion Plan de Cuentas y Centro de Costos](#5-integracion-plan-de-cuentas-y-centro-de-costos)
-6. [Vinculacion de Cuentas Corrientes con Plan Contable](#6-vinculacion-de-cuentas-corrientes-con-plan-contable)
+6. [Asientos Contables - Flujo y Estados](#6-asientos-contables-flujo-y-estados)
 7. [Ejemplos Practicos de Registro](#7-ejemplos-practicos-de-registro)
-8. [Asientos Contables - Flujo y Estados](#8-asientos-contables-flujo-y-estados)
-9. [Preparacion para Auditoria SUNAT](#9-preparacion-para-auditoria-sunat)
-10. [Guias de Uso Rapido](#10-guias-de-uso-rapido)
+8. [Preparacion para Auditoria SUNAT](#8-preparacion-para-auditoria-sunat)
+9. [Guias de Uso Rapido](#9-guias-de-uso-rapido)
 
 ---
 
@@ -485,438 +484,9 @@ if (planCuenta.requiereCentroCosto === true) {
 
 ---
 
-## 6. VINCULACION DE CUENTAS CORRIENTES CON PLAN CONTABLE
+## 6. EJEMPLOS PRACTICOS DE REGISTRO
 
-### 6.1 Concepto Fundamental
-
-El **Plan Contable es único y general** para todo el grupo empresarial, pero las **cuentas bancarias son específicas** de cada empresa. La solución profesional es vincular cada cuenta bancaria física (Cuenta Corriente) con su cuenta contable correspondiente del Plan de Cuentas.
-
-### 6.2 Problema a Resolver
-
-#### Situación Actual
-
-En el Plan Contable tienes:
-
-```
-104 - CUENTAS CORRIENTES EN INSTITUCIONES FINANCIERAS
-  1041 - Cuentas Corrientes Operativas
-    10411 - Banco BBVA
-    10412 - Banco BCP
-    10413 - Banco Scotiabank
-    10414 - Banco Interbank
-```
-
-#### El Problema
-
-Si tienes **3 empresas** del grupo:
-
-| Empresa | Banco | Número de Cuenta |
-|---------|-------|------------------|
-| CAVIVANCOR SAC | BBVA | 0011-0272-0100018314 |
-| MEGUI INVESTMENT SAC | BBVA | 0011-0272-0100025678 |
-| PESQUERA DEL SUR SAC | BCP | 193-2345678-0-99 |
-
-**¿Cómo diferencias qué cuenta `10411` (BBVA) pertenece a cada empresa?**
-
-### 6.3 Solución Profesional: Campo `cuentaContableId`
-
-Agregar un campo en la tabla `CuentaCorriente` que vincule cada cuenta bancaria física con su cuenta contable del Plan de Cuentas.
-
-#### Modificación del Schema
-
-```prisma
-model CuentaCorriente {
-  id                    BigInt              @id @default(autoincrement())
-  empresaId             BigInt
-  bancoId               BigInt
-  numeroCuenta          String
-  tipoCuentaCorrienteId BigInt
-  monedaId              BigInt
-  descripcion           String?
-  activa                Boolean             @default(true)
-  codigoSwift           String?
-  numeroCuentaCCI       String?
-  
-  // Campos de auditoría
-  saldoMinimo           Decimal?            @db.Decimal(18, 2)
-  fechaApertura         DateTime?
-  fechaCierre           DateTime?
-  creadoEn              DateTime?           @default(now())
-  actualizadoEn         DateTime?           @updatedAt
-  creadoPorId           BigInt?
-  actualizadoPorId      BigInt?
-  
-  // ========================================
-  // 🆕 CAMPO NUEVO: VINCULACION CON PLAN CONTABLE
-  // ========================================
-  cuentaContableId      BigInt?             // Vincula con PlanCuentasContable (ej: 10411 - BBVA)
-  
-  // Relaciones existentes
-  banco                 Banco               @relation(fields: [bancoId], references: [id])
-  tipoCuentaCorriente   TipoCuentaCorriente @relation(fields: [tipoCuentaCorrienteId], references: [id])
-  moneda                Moneda              @relation(fields: [monedaId], references: [id])
-  empresa               Empresa             @relation("CuentaCorrienteEmpresa", fields: [empresaId], references: [id])
-  
-  // ========================================
-  // 🆕 RELACION NUEVA: CON PLAN CONTABLE
-  // ========================================
-  cuentaContable        PlanCuentasContable? @relation("CuentaCorrientePlanContable", fields: [cuentaContableId], references: [id])
-  
-  // Otras relaciones
-  movimientosOrigen     MovimientoCaja[]    @relation("CuentaCorrienteOrigen")
-  movimientosDestino    MovimientoCaja[]    @relation("CuentaCorrienteDestino")
-  saldos                SaldoCuentaCorriente[]
-  personalCreador       Personal?           @relation("CuentaCorrienteCreadorId", fields: [creadoPorId], references: [id])
-  personalActualizador  Personal?           @relation("CuentaCorrienteActualizadorId", fields: [actualizadoPorId], references: [id])
-  
-  // Índices
-  @@unique([numeroCuenta, bancoId, empresaId], name: "unique_cuenta_banco_empresa")
-  @@index([empresaId])
-  @@index([activa])
-  @@index([cuentaContableId])  // 🆕 Índice para consultas contables
-}
-```
-
-#### Modificación en PlanCuentasContable
-
-```prisma
-model PlanCuentasContable {
-  id                    BigInt                  @id @default(autoincrement())
-  codigoCuenta          String                  @db.VarChar(20)
-  nombreCuenta          String                  @db.VarChar(255)
-  // ... otros campos existentes ...
-  
-  // Relaciones existentes
-  cuentaPadre           PlanCuentasContable?    @relation("CuentasHijas", fields: [cuentaPadreId], references: [id])
-  cuentasHijas          PlanCuentasContable[]   @relation("CuentasHijas")
-  
-  // ========================================
-  // 🆕 RELACION NUEVA: CON CUENTAS CORRIENTES
-  // ========================================
-  cuentasCorrientes     CuentaCorriente[]       @relation("CuentaCorrientePlanContable")
-  
-  // ... resto del modelo ...
-}
-```
-
-### 6.4 Ejemplo Práctico de Datos
-
-#### Tabla: PlanCuentasContable
-
-| id | codigoCuenta | nombreCuenta | nivel |
-|----|--------------|--------------|-------|
-| 45 | 104 | CUENTAS CORRIENTES EN INSTITUCIONES FINANCIERAS | SUBCUENTA |
-| 128 | 1041 | CUENTAS CORRIENTES OPERATIVAS | DIVISIONARIA |
-| 256 | 10411 | BANCO BBVA | SUBDIVISIONARIA |
-| 257 | 10412 | BANCO BCP | SUBDIVISIONARIA |
-| 258 | 10413 | BANCO SCOTIABANK | SUBDIVISIONARIA |
-
-#### Tabla: CuentaCorriente (CON vinculación)
-
-| id | empresaId | bancoId | numeroCuenta | cuentaContableId | Empresa | Banco | Cuenta Contable |
-|----|-----------|---------|--------------|------------------|---------|-------|-----------------|
-| 1 | 1 | 5 | 0011-0272-0100018314 | 256 | CAVIVANCOR SAC | BBVA | 10411 - BANCO BBVA |
-| 2 | 2 | 5 | 0011-0272-0100025678 | 256 | MEGUI INVESTMENT SAC | BBVA | 10411 - BANCO BBVA |
-| 3 | 3 | 3 | 193-2345678-0-99 | 257 | PESQUERA DEL SUR SAC | BCP | 10412 - BANCO BCP |
-| 4 | 1 | 3 | 193-9876543-0-11 | 257 | CAVIVANCOR SAC | BCP | 10412 - BANCO BCP |
-| 5 | 2 | 8 | 000-5432109-0-22 | 258 | MEGUI INVESTMENT SAC | SCOTIABANK | 10413 - BANCO SCOTIABANK |
-
-### 6.5 Cómo Funciona en la Práctica
-
-#### Ejemplo 1: Registrar un Movimiento de Caja
-
-Cuando registras un ingreso/egreso en el sistema:
-
-```javascript
-// Usuario selecciona:
-// - Empresa: CAVIVANCOR SAC (id: 1)
-// - Cuenta bancaria: BBVA - 0011-0272-0100018314 (id: 1)
-
-const movimiento = {
-  empresaId: 1,
-  cuentaCorrienteId: 1,  // Esta cuenta tiene cuentaContableId = 256
-  monto: 5000,
-  // ...otros datos
-};
-
-// El sistema automáticamente obtiene la cuenta contable:
-const cuentaCorriente = await prisma.cuentaCorriente.findUnique({
-  where: { id: 1 },
-  include: { cuentaContable: true }
-});
-
-// Genera el asiento contable automáticamente:
-const asientoContable = {
-  detalles: [
-    {
-      cuentaContableId: 256,           // Obtenido de cuentaCorriente.cuentaContableId
-      codigoCuenta: "10411",           // Obtenido de cuentaContable.codigoCuenta
-      nombreCuenta: "BANCO BBVA",      // Obtenido de cuentaContable.nombreCuenta
-      debe: 5000,
-      haber: 0
-    }
-  ]
-};
-```
-
-#### Ejemplo 2: Consultar Saldo por Cuenta Contable
-
-```sql
--- Ver todas las cuentas bancarias que usan la cuenta contable 10411 (BBVA)
-SELECT 
-    e."razonSocial" AS empresa,
-    b."nombreBanco" AS banco,
-    cc."numeroCuenta",
-    cc."saldoActual",
-    pc."codigoCuenta",
-    pc."nombreCuenta"
-FROM "CuentaCorriente" cc
-INNER JOIN "Empresa" e ON cc."empresaId" = e.id
-INNER JOIN "Banco" b ON cc."bancoId" = b.id
-INNER JOIN "PlanCuentasContable" pc ON cc."cuentaContableId" = pc.id
-WHERE pc."codigoCuenta" = '10411'
-  AND cc.activa = true
-ORDER BY e."razonSocial";
-```
-
-**Resultado:**
-
-| empresa | banco | numeroCuenta | saldoActual | codigoCuenta | nombreCuenta |
-|---------|-------|--------------|-------------|--------------|--------------|
-| CAVIVANCOR SAC | BBVA | 0011-0272-0100018314 | 50,000.00 | 10411 | BANCO BBVA |
-| MEGUI INVESTMENT SAC | BBVA | 0011-0272-0100025678 | 120,000.00 | 10411 | BANCO BBVA |
-
-#### Ejemplo 3: Balance de Efectivo por Empresa
-
-```sql
--- Consolidar saldos de todas las cuentas corrientes por empresa
-SELECT 
-    e."razonSocial",
-    pc."codigoCuenta",
-    pc."nombreCuenta",
-    COUNT(cc.id) AS num_cuentas,
-    SUM(cc."saldoActual") AS saldo_total
-FROM "CuentaCorriente" cc
-INNER JOIN "Empresa" e ON cc."empresaId" = e.id
-INNER JOIN "PlanCuentasContable" pc ON cc."cuentaContableId" = pc.id
-WHERE pc."codigoCuenta" LIKE '104%'  -- Todas las cuentas corrientes
-  AND cc.activa = true
-GROUP BY e."razonSocial", pc."codigoCuenta", pc."nombreCuenta"
-ORDER BY e."razonSocial", pc."codigoCuenta";
-```
-
-**Resultado:**
-
-| razonSocial | codigoCuenta | nombreCuenta | num_cuentas | saldo_total |
-|-------------|--------------|--------------|-------------|-------------|
-| CAVIVANCOR SAC | 10411 | BANCO BBVA | 1 | 50,000.00 |
-| CAVIVANCOR SAC | 10412 | BANCO BCP | 1 | 35,000.00 |
-| MEGUI INVESTMENT SAC | 10411 | BANCO BBVA | 1 | 120,000.00 |
-| MEGUI INVESTMENT SAC | 10413 | BANCO SCOTIABANK | 1 | 80,000.00 |
-| PESQUERA DEL SUR SAC | 10412 | BANCO BCP | 1 | 95,000.00 |
-
-### 6.6 Ventajas de Esta Solución
-
-| Ventaja | Descripción |
-|---------|-------------|
-| ✅ **Plan Contable Único** | No duplicas cuentas por empresa, mantienes un solo Plan de Cuentas |
-| ✅ **Identificación Clara** | Cada cuenta bancaria física está vinculada a su cuenta contable |
-| ✅ **Reportes Consolidados** | Puedes sumar todos los saldos de la cuenta 10411 (BBVA) de todas las empresas |
-| ✅ **Reportes por Empresa** | Puedes filtrar por empresa específica |
-| ✅ **Flexibilidad** | Una empresa puede tener múltiples cuentas en el mismo banco |
-| ✅ **Estándar ERP** | Es la forma profesional de manejar esto en sistemas empresariales |
-| ✅ **Asientos Automáticos** | El sistema genera asientos contables correctos automáticamente |
-| ✅ **Trazabilidad** | Sabes exactamente qué cuenta bancaria generó cada movimiento contable |
-
-### 6.7 Ejemplo de Reporte Contable Consolidado
-
-```sql
--- Balance General: Efectivo y Equivalentes (Clase 10)
--- Consolidado de todas las empresas del grupo
-SELECT 
-    pc."codigoCuenta",
-    pc."nombreCuenta",
-    COUNT(DISTINCT cc."empresaId") AS num_empresas,
-    COUNT(cc.id) AS num_cuentas_bancarias,
-    SUM(cc."saldoActual") AS saldo_total_grupo
-FROM "CuentaCorriente" cc
-INNER JOIN "PlanCuentasContable" pc ON cc."cuentaContableId" = pc.id
-WHERE pc."codigoCuenta" LIKE '104%'
-  AND cc.activa = true
-GROUP BY pc."codigoCuenta", pc."nombreCuenta"
-ORDER BY pc."codigoCuenta";
-```
-
-**Resultado:**
-
-| codigoCuenta | nombreCuenta | num_empresas | num_cuentas_bancarias | saldo_total_grupo |
-|--------------|--------------|--------------|----------------------|-------------------|
-| 10411 | BANCO BBVA | 2 | 2 | 170,000.00 |
-| 10412 | BANCO BCP | 2 | 2 | 130,000.00 |
-| 10413 | BANCO SCOTIABANK | 1 | 1 | 80,000.00 |
-| **TOTAL** | | | **5** | **380,000.00** |
-
-### 6.8 Flujo de Trabajo: Crear Nueva Cuenta Corriente
-
-```
-PASO 1: REGISTRAR CUENTA BANCARIA
-├─ Módulo: Configuración > Cuentas Corrientes
-├─ Acción: Nuevo
-└─ Datos:
-    ├─ Empresa: CAVIVANCOR SAC
-    ├─ Banco: BBVA
-    ├─ Número Cuenta: 0011-0272-0100018314
-    ├─ Tipo Cuenta: Cuenta Corriente
-    ├─ Moneda: Soles
-    └─ 🆕 Cuenta Contable: 10411 - BANCO BBVA  ← SELECCIONAR DEL PLAN DE CUENTAS
-
-PASO 2: SISTEMA VALIDA
-├─ ✓ Empresa existe
-├─ ✓ Banco existe
-├─ ✓ Cuenta contable existe y está activa
-├─ ✓ Cuenta contable es de tipo ACTIVO
-└─ ✓ Número de cuenta no duplicado
-
-PASO 3: SISTEMA GUARDA
-└─ CuentaCorriente creada con cuentaContableId = 256
-
-PASO 4: USO EN MOVIMIENTOS
-└─ Todos los movimientos de esta cuenta generarán asientos
-    contables usando la cuenta 10411 - BANCO BBVA
-```
-
-### 6.9 Validaciones del Sistema
-
-El sistema debe validar:
-
-```javascript
-// Validación al crear/editar Cuenta Corriente
-if (cuentaContableId) {
-  const cuentaContable = await prisma.planCuentasContable.findUnique({
-    where: { id: cuentaContableId }
-  });
-  
-  // Validar que existe
-  if (!cuentaContable) {
-    throw new Error("La cuenta contable no existe");
-  }
-  
-  // Validar que está activa
-  if (!cuentaContable.activo) {
-    throw new Error("La cuenta contable no está activa");
-  }
-  
-  // Validar que es de tipo ACTIVO
-  if (cuentaContable.tipoCuenta !== 'ACTIVO') {
-    throw new Error("La cuenta contable debe ser de tipo ACTIVO");
-  }
-  
-  // Validar que es de la clase 10 (Efectivo y Equivalentes)
-  if (!cuentaContable.codigoCuenta.startsWith('10')) {
-    throw new Error("La cuenta contable debe ser de la clase 10 (Efectivo)");
-  }
-  
-  // Validar que es imputable (nivel 5)
-  if (!cuentaContable.esImputable) {
-    throw new Error("La cuenta contable debe ser imputable (nivel SUBDIVISIONARIA)");
-  }
-}
-```
-
-### 6.10 Migración de Datos Existentes
-
-Si ya tienes cuentas corrientes sin `cuentaContableId`, debes actualizarlas:
-
-```sql
--- Script de migración: Asignar cuentas contables a cuentas corrientes existentes
-
--- 1. BBVA → 10411
-UPDATE "CuentaCorriente" cc
-SET "cuentaContableId" = (
-  SELECT id FROM "PlanCuentasContable" 
-  WHERE "codigoCuenta" = '10411' 
-  LIMIT 1
-)
-FROM "Banco" b
-WHERE cc."bancoId" = b.id
-  AND b."nombreBanco" ILIKE '%BBVA%'
-  AND cc."cuentaContableId" IS NULL;
-
--- 2. BCP → 10412
-UPDATE "CuentaCorriente" cc
-SET "cuentaContableId" = (
-  SELECT id FROM "PlanCuentasContable" 
-  WHERE "codigoCuenta" = '10412' 
-  LIMIT 1
-)
-FROM "Banco" b
-WHERE cc."bancoId" = b.id
-  AND b."nombreBanco" ILIKE '%BCP%'
-  AND cc."cuentaContableId" IS NULL;
-
--- 3. SCOTIABANK → 10413
-UPDATE "CuentaCorriente" cc
-SET "cuentaContableId" = (
-  SELECT id FROM "PlanCuentasContable" 
-  WHERE "codigoCuenta" = '10413' 
-  LIMIT 1
-)
-FROM "Banco" b
-WHERE cc."bancoId" = b.id
-  AND b."nombreBanco" ILIKE '%SCOTIABANK%'
-  AND cc."cuentaContableId" IS NULL;
-
--- 4. INTERBANK → 10414
-UPDATE "CuentaCorriente" cc
-SET "cuentaContableId" = (
-  SELECT id FROM "PlanCuentasContable" 
-  WHERE "codigoCuenta" = '10414' 
-  LIMIT 1
-)
-FROM "Banco" b
-WHERE cc."bancoId" = b.id
-  AND b."nombreBanco" ILIKE '%INTERBANK%'
-  AND cc."cuentaContableId" IS NULL;
-
--- Verificar cuentas sin asignar
-SELECT 
-  cc.id,
-  e."razonSocial",
-  b."nombreBanco",
-  cc."numeroCuenta"
-FROM "CuentaCorriente" cc
-INNER JOIN "Empresa" e ON cc."empresaId" = e.id
-INNER JOIN "Banco" b ON cc."bancoId" = b.id
-WHERE cc."cuentaContableId" IS NULL;
-```
-
-### 6.11 Resumen de Cambios en el Schema
-
-| Tabla | Cambio | Tipo | Descripción |
-|-------|--------|------|-------------|
-| **CuentaCorriente** | Campo `cuentaContableId` | Nuevo | BigInt? - Vincula con PlanCuentasContable |
-| **CuentaCorriente** | Relación `cuentaContable` | Nueva | Relación con PlanCuentasContable |
-| **CuentaCorriente** | Índice `cuentaContableId` | Nuevo | Mejora performance de consultas |
-| **PlanCuentasContable** | Relación `cuentasCorrientes` | Nueva | Relación inversa con CuentaCorriente |
-
-### 6.12 Comando de Migración
-
-```bash
-# Después de modificar el schema.prisma
-npx prisma migrate dev --name add_cuenta_contable_to_cuenta_corriente
-
-# Verificar la migración
-npx prisma migrate status
-
-# Aplicar en producción
-npx prisma migrate deploy
-```
-
----
-
-## 7. EJEMPLOS PRACTICOS DE REGISTRO
-
-### 7.1 Ejemplo 1: Compra de Pota Fresca CON Factura (BLANCA)
+### 6.1 Ejemplo 1: Compra de Pota Fresca CON Factura (BLANCA)
 
 **Escenario**: Compra de 1000 kg de pota fresca a S/ 10.00/kg con factura 001-1234
 
@@ -962,7 +532,7 @@ AsientoContable {
 
 ---
 
-### 7.2 Ejemplo 2: Compra de Pota Fresca SIN Factura (NEGRA)
+### 6.2 Ejemplo 2: Compra de Pota Fresca SIN Factura (NEGRA)
 
 **Escenario**: Compra de 800 kg de pota fresca a S/ 8.00/kg sin factura, pago en efectivo
 
@@ -1000,7 +570,7 @@ AsientoContable {
 
 ---
 
-### 7.3 Ejemplo 3: Pago de Coima a Supervisor (NEGRA)
+### 6.3 Ejemplo 3: Pago de Coima a Supervisor (NEGRA)
 
 **Escenario**: Pago de S/ 500 a supervisor de SANIPES para agilizar tramite
 
@@ -1039,7 +609,7 @@ AsientoContable {
 
 ---
 
-### 7.4 Ejemplo 4: Servicio de Maquila CON Factura (BLANCA)
+### 6.4 Ejemplo 4: Servicio de Maquila CON Factura (BLANCA)
 
 **Escenario**: Servicio de limpieza y eviscerado de pota con factura 002-5678 por S/ 5000
 
@@ -1085,7 +655,7 @@ AsientoContable {
 
 ---
 
-### 7.5 Ejemplo 5: Servicio de Maquila SIN Factura (NEGRA)
+### 6.5 Ejemplo 5: Servicio de Maquila SIN Factura (NEGRA)
 
 **Escenario**: Servicio de limpieza de pota sin factura por S/ 3000, pago en efectivo
 
@@ -1123,7 +693,7 @@ AsientoContable {
 
 ---
 
-### 7.6 Ejemplo 6: Pago de Planilla Blanca (FISCAL)
+### 6.6 Ejemplo 6: Pago de Planilla Blanca (FISCAL)
 
 **Escenario**: Pago de sueldos de personal formal por S/ 15000
 
@@ -1170,7 +740,7 @@ AsientoContable {
 
 ---
 
-### 7.7 Ejemplo 7: Pago de Planilla Negra (GERENCIAL)
+### 6.7 Ejemplo 7: Pago de Planilla Negra (GERENCIAL)
 
 **Escenario**: Pago de personal eventual sin contrato por S/ 8000
 
@@ -1203,7 +773,7 @@ AsientoContable {
 
 ---
 
-### 7.8 Ejemplo 8: Ingreso por Alquiler de Camara Frigorifica (FISCAL)
+### 6.8 Ejemplo 8: Ingreso por Alquiler de Camara Frigorifica (FISCAL)
 
 **Escenario**: Alquiler de 100 m2 de camara frigorifica a S/ 50/m2 con factura
 
@@ -1244,7 +814,7 @@ AsientoContable {
 
 ---
 
-### 7.9 Ejemplo 9: Compra de Repuesto Informal (NEGRA)
+### 6.9 Ejemplo 9: Compra de Repuesto Informal (NEGRA)
 
 **Escenario**: Compra de repuesto de motor sin factura por S/ 1200
 
@@ -1277,7 +847,7 @@ AsientoContable {
 
 ---
 
-### 7.10 Ejemplo 10: Venta de Pota Congelada (FISCAL)
+### 6.10 Ejemplo 10: Venta de Pota Congelada (FISCAL)
 
 **Escenario**: Venta de 500 kg de pota congelada a S/ 25/kg con factura
 
@@ -1317,9 +887,9 @@ AsientoContable {
 
 ---
 
-## 8. ASIENTOS CONTABLES - FLUJO Y ESTADOS
+## 7. PREPARACION PARA AUDITORIA SUNAT
 
-### 8.1 Tipos de Asientos Contables
+### 7.1 Principios de Auditoria
 
 | Principio | Descripcion |
 |-----------|-------------|
@@ -1328,9 +898,9 @@ AsientoContable {
 | **Documentacion Consistente** | Glosas profesionales y coherentes |
 | **Trazabilidad Completa** | Cada operacion fiscal tiene su comprobante |
 
-### 9.2 Reportes para SUNAT
+### 7.2 Reportes para SUNAT
 
-#### 9.2.1 Libro Diario FISCAL
+#### 7.2.1 Libro Diario FISCAL
 
 ```sql
 -- Generar Libro Diario para SUNAT
@@ -1353,7 +923,7 @@ ORDER BY a.fecha, a.numero, d.id;
 
 **Resultado**: Solo operaciones con comprobante ✅
 
-#### 9.2.2 Registro de Compras FISCAL
+#### 7.2.2 Registro de Compras FISCAL
 
 ```sql
 -- Generar Registro de Compras para SUNAT
@@ -1376,7 +946,7 @@ GROUP BY a.fecha, a.numero, e."razonSocial", e."numeroDocumento"
 ORDER BY a.fecha;
 ```
 
-#### 9.2.3 Registro de Ventas FISCAL
+#### 7.2.3 Registro de Ventas FISCAL
 
 ```sql
 -- Generar Registro de Ventas para SUNAT
@@ -1399,9 +969,9 @@ GROUP BY a.fecha, a.numero, e."razonSocial", e."numeroDocumento"
 ORDER BY a.fecha;
 ```
 
-### 9.3 Reportes Gerenciales (Internos)
+### 7.3 Reportes Gerenciales (Internos)
 
-#### 9.3.1 Libro Diario GERENCIAL Completo
+#### 7.3.1 Libro Diario GERENCIAL Completo
 
 ```sql
 -- Generar Libro Diario Gerencial (todas las operaciones)
@@ -1425,7 +995,7 @@ WHERE a."tipoLibro" = 'GERENCIAL'
 ORDER BY a.fecha, a.numero, d.id;
 ```
 
-#### 9.3.2 Analisis de Costos por Centro de Costo
+#### 7.3.2 Analisis de Costos por Centro de Costo
 
 ```sql
 -- Analisis de gastos por Centro de Costo
@@ -1447,7 +1017,7 @@ GROUP BY cc."Codigo", cc."Nombre", pc."codigoCuenta", pc."nombreCuenta"
 ORDER BY cc."Codigo", total_gasto DESC;
 ```
 
-#### 9.3.3 Comparativo Blanco vs Negro
+#### 7.3.3 Comparativo Blanco vs Negro
 
 ```sql
 -- Comparativo de operaciones FISCAL vs GERENCIAL
@@ -1470,9 +1040,9 @@ HAVING SUM(CASE WHEN a."tipoLibro" = 'GERENCIAL' THEN d.debe ELSE 0 END) >
 ORDER BY diferencia_negro DESC;
 ```
 
-### 9.4 Checklist de Auditoria
+### 7.4 Checklist de Auditoria
 
-#### 9.4.1 Antes de la Auditoria
+#### 7.4.1 Antes de la Auditoria
 
 | # | Tarea | Estado |
 |---|-------|--------|
@@ -1487,7 +1057,7 @@ ORDER BY diferencia_negro DESC;
 | 9 | Backup de base de datos completa | ⬜ |
 | 10 | Preparar documentacion de comprobantes fisicos | ⬜ |
 
-#### 9.4.2 Durante la Auditoria
+#### 7.4.2 Durante la Auditoria
 
 | # | Accion | Descripcion |
 |---|--------|-------------|
@@ -1497,7 +1067,7 @@ ORDER BY diferencia_negro DESC;
 | 4 | **Justificar glosas genericas** | "Politica de confidencialidad empresarial" |
 | 5 | **Tener comprobantes listos** | Todos los asientos FISCALES con sustento |
 
-#### 9.4.3 Despues de la Auditoria
+#### 7.4.3 Despues de la Auditoria
 
 | # | Tarea | Estado |
 |---|-------|--------|
@@ -1506,7 +1076,7 @@ ORDER BY diferencia_negro DESC;
 | 3 | Actualizar procedimientos si es necesario | ⬜ |
 | 4 | Capacitar al personal sobre hallazgos | ⬜ |
 
-### 9.5 Preguntas Frecuentes del Auditor
+### 7.5 Preguntas Frecuentes del Auditor
 
 #### Pregunta 1: "¿Por que usan nombres genericos en las cuentas?"
 
@@ -1526,9 +1096,9 @@ ORDER BY diferencia_negro DESC;
 
 ---
 
-## 9. PREPARACION PARA AUDITORIA SUNAT
+## 8. GUIAS DE USO RAPIDO
 
-### 9.1 Principios de Auditoria
+### 8.1 Guia Rapida: Registrar Compra CON Factura
 
 ```
 1. Crear Asiento Contable
@@ -1550,7 +1120,7 @@ ORDER BY diferencia_negro DESC;
    - Monto: Total con IGV
 ```
 
-### 8.6 Cuadro Comparativo: Automatico vs Manual
+### 8.2 Guia Rapida: Registrar Compra SIN Factura
 
 ```
 1. Crear Asiento Contable
@@ -1567,7 +1137,7 @@ ORDER BY diferencia_negro DESC;
    - Monto: Total
 ```
 
-### 8.7 Validaciones del Sistema
+### 8.3 Guia Rapida: Registrar Gasto sin Comprobante
 
 ```
 1. Crear Asiento Contable
@@ -1584,7 +1154,7 @@ ORDER BY diferencia_negro DESC;
    - Monto: Total
 ```
 
-### 8.8 Proceso de Aprobacion
+### 8.4 Guia Rapida: Registrar Planilla Negra
 
 ```
 1. Crear Asiento Contable
@@ -1601,7 +1171,7 @@ ORDER BY diferencia_negro DESC;
    - Monto: Total
 ```
 
-### 8.9 Anulacion de Asientos
+### 8.5 Guia Rapida: Registrar Venta
 
 ```
 1. Crear Asiento Contable
@@ -1622,7 +1192,7 @@ ORDER BY diferencia_negro DESC;
    - Monto: IGV 18%
 ```
 
-### 8.10 Reportes por Estado
+### 8.6 Matriz de Decision Rapida
 
 | Situacion | tipoLibro | Cuenta | Centro Costo | Glosa |
 |-----------|-----------|--------|--------------|-------|
@@ -1636,7 +1206,7 @@ ORDER BY diferencia_negro DESC;
 | Venta | FISCAL | 70xxx | N/A | "Venta segun factura..." |
 | Alquiler | FISCAL | 70412 | 17xxx | "Ingreso por alquiler..." |
 
-### 8.11 Ejemplo Completo: Mes de Enero 2025
+### 8.7 Reglas de Oro (Resumen)
 
 | # | Regla | Descripcion |
 |---|-------|-------------|
@@ -1651,9 +1221,9 @@ ORDER BY diferencia_negro DESC;
 
 ---
 
-## 10. GUIAS DE USO RAPIDO
+## 6. ASIENTOS CONTABLES - FLUJO Y ESTADOS
 
-### 10.1 Guia Rapida: Registrar Compra CON Factura
+### 6.1 Tipos de Asientos Contables
 
 El sistema maneja dos tipos de asientos:
 
@@ -1662,7 +1232,7 @@ El sistema maneja dos tipos de asientos:
 | **AUTOMATICO** | Modulos operativos | 90% | Generados por Compras, Ventas, Caja, Planilla, Almacen |
 | **MANUAL** | Modulo Contabilidad | 10% | Ajustes, provisiones, depreciaciones, correcciones |
 
-### 10.2 Guia Rapida: Registrar Compra SIN Factura
+### 6.2 Estados del Asiento Contable
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -1690,7 +1260,7 @@ El sistema maneja dos tipos de asientos:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 10.3 Guia Rapida: Registrar Gasto sin Comprobante
+### 6.3 Flujo Mensual de Asientos
 
 #### DURANTE EL MES (Dia 1-30)
 
@@ -1748,7 +1318,7 @@ Paso 3: APROBACION MASIVA
 RESULTADO: 1,520 asientos APROBADOS listos para reportes
 ```
 
-### 10.4 Guia Rapida: Registrar Planilla Negra
+### 6.4 Creacion de Asientos Automaticos
 
 #### Ejemplo: Factura de Compra
 
@@ -1820,7 +1390,7 @@ Asiento Contable:
     Cuadrado: SI ✓
 ```
 
-### 10.5 Guia Rapida: Registrar Venta
+### 6.5 Creacion de Asientos Manuales
 
 #### Ejemplo: Provision de Vacaciones
 
@@ -1855,7 +1425,7 @@ PASOS:
 7. Aprobar (pasa a APROBADO)
 ```
 
-### 10.6 Matriz de Decision Rapida
+### 6.6 Cuadro Comparativo: Automatico vs Manual
 
 | Caracteristica | Asiento AUTOMATICO | Asiento MANUAL |
 |----------------|-------------------|----------------|
@@ -1867,7 +1437,7 @@ PASOS:
 | **Ejemplos** | Compras, Ventas, Pagos | Provisiones, Ajustes |
 | **Aprobacion** | Fin de mes (lote) | Individual o fin de mes |
 
-### 10.7 Reglas de Oro (Resumen)
+### 6.7 Validaciones del Sistema
 
 #### Al Crear Asiento:
 
@@ -1889,20 +1459,7 @@ PASOS:
 | ✓ Periodo ABIERTO | El periodo no debe estar cerrado |
 | ✓ Cuentas validas | Todas las cuentas existen y estan activas |
 
----
-
-## 8. ASIENTOS CONTABLES - FLUJO Y ESTADOS
-
-### 8.1 Tipos de Asientos Contables
-
-El sistema maneja dos tipos de asientos:
-
-| Tipo | Origen | Porcentaje | Descripcion |
-|------|--------|------------|-------------|
-| **AUTOMATICO** | Modulos operativos | 90% | Generados por Compras, Ventas, Caja, Planilla, Almacen |
-| **MANUAL** | Modulo Contabilidad | 10% | Ajustes, provisiones, depreciaciones, correcciones |
-
-### 8.2 Estados del Asiento Contable
+### 6.8 Proceso de Aprobacion
 
 ```
 INDIVIDUAL (Asientos manuales):
@@ -1920,7 +1477,7 @@ EN LOTE (Fin de mes):
 └─ Todos pasan a APROBADO
 ```
 
-### 8.3 Flujo Mensual de Asientos
+### 6.9 Anulacion de Asientos
 
 ```
 CUANDO: Solo asientos APROBADOS
@@ -1937,7 +1494,7 @@ PASOS:
 6. Crear nuevo asiento correcto
 ```
 
-### 8.4 Creacion de Asientos Automaticos
+### 6.10 Reportes por Estado
 
 | Reporte | Estados Incluidos | Uso |
 |---------|-------------------|-----|
@@ -1947,7 +1504,7 @@ PASOS:
 | **Revision Pendientes** | PENDIENTE | Control interno |
 | **Auditoria Anulados** | ANULADO | Control interno |
 
-### 8.5 Creacion de Asientos Manuales
+### 6.11 Ejemplo Completo: Mes de Enero 2025
 
 ```
 DIA 1-30: OPERACIONES DIARIAS
@@ -1986,15 +1543,19 @@ REPORTES GENERADOS:
 
 ### Anexo A: Lista Completa de Cuentas Imputables
 
-Ver archivo: `C:\Proyectos\megui\erp\erp-pesquera-backend\docs\Plan de Cuentas Megui 5 niveles.xlsx`
+Ver archivo: `Plan_Cuentas_Completo.xlsx`
 
 ### Anexo B: Lista Completa de Centros de Costo
 
-Ver archivo: `C:\Proyectos\megui\erp\erp-pesquera-backend\docs\CentroCosto final erp megui.xlsx`
+Ver archivo: `Centros_Costo_Completo.xlsx`
 
-### Anexo D: Scripts SQL Creacion Plan de Cuentas y Enlace con Cuenta Corriente
+### Anexo C: Mapeo Cuenta-Centro de Costo
 
-Ver archivo: `C:\Proyectos\megui\erp\erp-pesquera-backend\docs\Creacion Plan de Cuentas Megui SQL.txt`
+Ver archivo: `Mapeo_Cuenta_CentroCosto.xlsx`
+
+### Anexo D: Scripts SQL de Reportes
+
+Ver archivo: `Scripts_Reportes_SQL.sql`
 
 ---
 
@@ -2003,5 +1564,16 @@ Ver archivo: `C:\Proyectos\megui\erp\erp-pesquera-backend\docs\Creacion Plan de 
 | Version | Fecha | Autor | Cambios |
 |---------|-------|-------|---------|
 | 1.0 | 2024-12-25 | Sistema ERP | Version inicial del manual |
+
+---
+
+## CONTACTO Y SOPORTE
+
+Para consultas sobre el uso del sistema contable:
+- **Departamento**: Contabilidad y Finanzas
+- **Responsable**: Contador General
+- **Email**: contabilidad@meguiinvestment.com
+
+---
 
 **FIN DEL MANUAL**
