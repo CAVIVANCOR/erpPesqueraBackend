@@ -6306,6 +6306,7 @@ model PrestamoBancario {
   plazoMeses            Int                                          // Plazo total en meses
   numeroCuotas          Int                                          // Número total de cuotas
   frecuenciaPago        FrecuenciaPago                               // MENSUAL | TRIMESTRAL | SEMESTRAL | ANUAL
+  numeroDias            Int?                                         // Nuevo: solo cuando frecuenciaPago = DIAS
   diaPago               Int?                                         // Día del mes para pago (1-31)
   periodoGracia         Int?                                         // Meses de gracia (solo intereses)
   
@@ -6379,7 +6380,8 @@ model PrestamoBancario {
   cuotas                CuotaPrestamo[]
   desembolsos           DesembolsoPrestamo[]
   garantias             GarantiaPrestamo[]
-  
+  cronogramas           CronogramaPrestamo[]  // Nuevo
+
   // ========================================
   // ÍNDICES
   // ========================================
@@ -6391,6 +6393,25 @@ model PrestamoBancario {
   @@index([empresaId, estadoId])
   @@index([cuentaCorrienteId])
 }
+
+
+model CronogramaPrestamo {
+  id                  BigInt   @id @default(autoincrement())
+  prestamoBancarioId  BigInt
+  numeroCuota         Int
+  fechaVencimiento    DateTime
+  montoPrincipal      Decimal  @db.Decimal(18, 2)
+  montoInteres        Decimal  @db.Decimal(18, 2)
+  montoTotal          Decimal  @db.Decimal(18, 2)
+  saldoPendiente      Decimal  @db.Decimal(18, 2)
+  pagado              Boolean  @default(false)
+  fechaPago           DateTime?
+  
+  prestamoBancario    PrestamoBancario @relation(fields: [prestamoBancarioId], references: [id])
+  
+  @@index([prestamoBancarioId])
+}
+
 
 
 // ============================================
@@ -6924,6 +6945,7 @@ model MovimientoInversion {
 // ============================================
 
 enum FrecuenciaPago {
+  DIAS                  // Pagos diarios
   MENSUAL              // Pagos mensuales
   BIMESTRAL            // Cada 2 meses
   TRIMESTRAL           // Cada 3 meses
@@ -6933,13 +6955,21 @@ enum FrecuenciaPago {
 }
 
 enum TipoPrestamo {
-  CAPITAL_TRABAJO      // Para capital de trabajo
-  ACTIVO_FIJO          // Para compra de activos fijos
-  HIPOTECARIO          // Préstamo hipotecario
-  VEHICULAR            // Para compra de vehículos
-  EQUIPAMIENTO         // Para equipamiento
-  EXPANSION            // Para expansión del negocio
-  REFINANCIAMIENTO     // Refinanciamiento de deudas
+  CAPITAL_TRABAJO         // Para capital de trabajo operativo de la empresa
+  ACTIVO_FIJO            // Para compra de activos fijos (maquinaria, equipos)
+  HIPOTECARIO            // Préstamo hipotecario para inmuebles
+  VEHICULAR              // Para compra de vehículos
+  EQUIPAMIENTO           // Para equipamiento y herramientas
+  EXPANSION              // Para expansión del negocio
+  REFINANCIAMIENTO       // Refinanciamiento de deudas existentes
+  COMEX_PRE              // Financiamiento por exportaciones pre-embarque (garantía antes de embarcar)
+  COMEX_POST             // Financiamiento por exportaciones post-embarque (garantía ya embarcada)
+  FEC                    // Financiamiento Electrónico de Compras para pagos a proveedores
+  FACTORING              // Adelanto de pago por facturas emitidas a clientes
+  FACTORING_INDIRECTO    // Proveedor usa su línea de crédito para pagar factura que nos emitieron
+  LEASING_VEHICULAR      // Arrendamiento financiero para compra de vehículos
+  LEASING_INMOBILIARIO   // Arrendamiento financiero para compra de propiedades
+  WARRANT                // Financiamiento en base a existencias en almacén como garantía
 }
 
 enum TipoAmortizacion {
