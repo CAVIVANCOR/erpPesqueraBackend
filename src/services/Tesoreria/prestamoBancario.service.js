@@ -89,7 +89,7 @@ async function validarPrestamoBancario(data) {
 
   // Validar frecuencia de pago
   if (data.frecuenciaPago) {
-    const frecuenciasValidas = ['MENSUAL', 'BIMESTRAL', 'TRIMESTRAL', 'CUATRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
+    const frecuenciasValidas = ['DIAS', 'MENSUAL', 'BIMESTRAL', 'TRIMESTRAL', 'CUATRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
     if (!frecuenciasValidas.includes(data.frecuenciaPago)) {
       throw new ValidationError('La frecuencia de pago no es válida.');
     }
@@ -97,7 +97,7 @@ async function validarPrestamoBancario(data) {
 
   // Validar tipo de préstamo
   if (data.tipoPrestamo) {
-    const tiposValidos = ['CAPITAL_TRABAJO', 'ACTIVO_FIJO', 'HIPOTECARIO', 'VEHICULAR', 'EQUIPAMIENTO', 'EXPANSION', 'REFINANCIAMIENTO'];
+    const tiposValidos = ['CAPITAL_TRABAJO', 'ACTIVO_FIJO', 'HIPOTECARIO', 'VEHICULAR', 'EQUIPAMIENTO', 'EXPANSION', 'REFINANCIAMIENTO', 'COMEX_PRE', 'COMEX_POST', 'FEC', 'FACTORING', 'FACTORING_INDIRECTO', 'LEASING_VEHICULAR', 'LEASING_INMOBILIARIO', 'WARRANT'];
     if (!tiposValidos.includes(data.tipoPrestamo)) {
       throw new ValidationError('El tipo de préstamo no es válido.');
     }
@@ -493,6 +493,7 @@ const obtenerCronograma = async (id) => {
     throw err;
   }
 };
+
 
 export default {
   listar,

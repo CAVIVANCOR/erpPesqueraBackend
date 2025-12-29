@@ -1,6 +1,5 @@
 import prestamoBancarioService from '../../services/Tesoreria/prestamoBancario.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
-
 /**
  * Controlador para PrestamoBancario
  * Documentado en español.

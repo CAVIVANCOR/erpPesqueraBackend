@@ -16,7 +16,15 @@ export async function obtenerEnumsTesoreria(req, res, next) {
         { label: 'VEHICULAR', value: 'VEHICULAR' },
         { label: 'EQUIPAMIENTO', value: 'EQUIPAMIENTO' },
         { label: 'EXPANSION', value: 'EXPANSION' },
-        { label: 'REFINANCIAMIENTO', value: 'REFINANCIAMIENTO' }
+        { label: 'REFINANCIAMIENTO', value: 'REFINANCIAMIENTO' },
+        { label: 'COMEX PRE-EMBARQUE', value: 'COMEX_PRE' },
+        { label: 'COMEX POST-EMBARQUE', value: 'COMEX_POST' },
+        { label: 'FINANCIAMIENTO ELECTRONICO COMPRAS', value: 'FEC' },
+        { label: 'FACTORING', value: 'FACTORING' },
+        { label: 'FACTORING INDIRECTO', value: 'FACTORING_INDIRECTO' },
+        { label: 'LEASING VEHICULAR', value: 'LEASING_VEHICULAR' },
+        { label: 'LEASING INMOBILIARIO', value: 'LEASING_INMOBILIARIO' },
+        { label: 'WARRANT', value: 'WARRANT' }
       ],
       tiposAmortizacion: [
         { label: 'FRANCES (CUOTAS FIJAS)', value: 'FRANCES' },
@@ -24,6 +32,7 @@ export async function obtenerEnumsTesoreria(req, res, next) {
         { label: 'AMERICANO (SOLO INTERESES)', value: 'AMERICANO' }
       ],
       frecuenciasPago: [
+        { label: 'DIAS', value: 'DIAS' },
         { label: 'MENSUAL', value: 'MENSUAL' },
         { label: 'BIMESTRAL', value: 'BIMESTRAL' },
         { label: 'TRIMESTRAL', value: 'TRIMESTRAL' },

@@ -20,7 +20,6 @@ import pagoRoutes from './CuentasPorCobrarPagar/pago.routes.js';
 import flujoCajaRoutes from './Tesoreria/flujoCaja.routes.js';
 import conciliacionBancariaRoutes from './Tesoreria/conciliacionBancaria.routes.js';
 import prestamoBancarioRoutes from './Tesoreria/prestamoBancario.routes.js';
-import cuotaPrestamoRoutes from './Tesoreria/cuotaPrestamo.routes.js';
 import lineaCreditoRoutes from './Tesoreria/lineaCredito.routes.js';
 import inversionFinancieraRoutes from './Tesoreria/inversionFinanciera.routes.js';
 import letraCambioRoutes from './LetrasCambio/letraCambio.routes.js';
@@ -211,7 +210,7 @@ import participanteReunionRoutes from '../routes/Videoconferencia/participanteRe
 import grabacionReunionRoutes from '../routes/Videoconferencia/grabacionReunion.routes.js';
 import notificacionRoutes from '../routes/Notificacion/notificacion.routes.js';
 import enumsTesoreriaRoutes from './Tesoreria/enumsTesoreria.routes.js';
-
+import cuotaPrestamoRoutes from './Tesoreria/cuotaPrestamo.routes.js';
 
 const router = express.Router();
 
@@ -602,6 +601,7 @@ router.use('/tesoreria/cuotas-prestamo', cuotaPrestamoRoutes);
 router.use('/tesoreria/lineas-credito', lineaCreditoRoutes);
 router.use('/tesoreria/inversiones-financieras', inversionFinancieraRoutes);
 router.use('/tesoreria/enums', enumsTesoreriaRoutes);
+router.use('/tesoreria/cuotas', cuotaPrestamoRoutes);
 // Rutas para Letras de Cambio
 router.use('/letras-cambio', letraCambioRoutes);
 // Rutas para Retenciones y Percepciones
