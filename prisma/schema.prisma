@@ -6363,6 +6363,8 @@ model PrestamoBancario {
   creadoPor             BigInt?
   actualizadoEn         DateTime                @updatedAt
   actualizadoPor        BigInt?
+  urlDocumentoPDF       String?                 @db.VarChar(500)
+  urlDocAdicionalPDF    String?                 @db.VarChar(500)
   
   // ========================================
   // RELACIONES
@@ -6380,7 +6382,6 @@ model PrestamoBancario {
   cuotas                CuotaPrestamo[]
   desembolsos           DesembolsoPrestamo[]
   garantias             GarantiaPrestamo[]
-  cronogramas           CronogramaPrestamo[]  // Nuevo
 
   // ========================================
   // ÍNDICES
@@ -6393,25 +6394,6 @@ model PrestamoBancario {
   @@index([empresaId, estadoId])
   @@index([cuentaCorrienteId])
 }
-
-
-model CronogramaPrestamo {
-  id                  BigInt   @id @default(autoincrement())
-  prestamoBancarioId  BigInt
-  numeroCuota         Int
-  fechaVencimiento    DateTime
-  montoPrincipal      Decimal  @db.Decimal(18, 2)
-  montoInteres        Decimal  @db.Decimal(18, 2)
-  montoTotal          Decimal  @db.Decimal(18, 2)
-  saldoPendiente      Decimal  @db.Decimal(18, 2)
-  pagado              Boolean  @default(false)
-  fechaPago           DateTime?
-  
-  prestamoBancario    PrestamoBancario @relation(fields: [prestamoBancarioId], references: [id])
-  
-  @@index([prestamoBancarioId])
-}
-
 
 
 // ============================================
@@ -6599,6 +6581,7 @@ model GarantiaPrestamo {
   // OBSERVACIONES
   // ========================================
   observaciones         String?                 @db.Text
+  urlDocumentoPDF       String?                 @db.VarChar(500)    // URL del documento adicional
   
   // ========================================
   // AUDITORÍA
@@ -6679,6 +6662,7 @@ model LineaCredito {
   // OBSERVACIONES
   // ========================================
   observaciones         String?                 @db.Text
+  urlDocumentoPDF       String?                 @db.VarChar(500)    // URL del documento adicional
   
   // ========================================
   // AUDITORÍA
@@ -6847,6 +6831,7 @@ model InversionFinanciera {
   // OBSERVACIONES
   // ========================================
   observaciones         String?                 @db.Text
+  urlDocumentoPDF       String?                 @db.VarChar(500)    // URL del documento adicional
   
   // ========================================
   // AUDITORÍA
@@ -6922,6 +6907,7 @@ model MovimientoInversion {
   // ========================================
   creadoEn              DateTime                @default(now())
   creadoPor             BigInt?
+  urlDocumentoPDF       String?                 @db.VarChar(500)    // URL del documento adicional
   
   // ========================================
   // RELACIONES
