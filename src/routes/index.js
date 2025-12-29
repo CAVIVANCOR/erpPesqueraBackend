@@ -210,7 +210,7 @@ import videoconferenciaRoutes from '../routes/Videoconferencia/videoconferencia.
 import participanteReunionRoutes from '../routes/Videoconferencia/participanteReunion.routes.js';
 import grabacionReunionRoutes from '../routes/Videoconferencia/grabacionReunion.routes.js';
 import notificacionRoutes from '../routes/Notificacion/notificacion.routes.js';
-
+import enumsTesoreriaRoutes from './Tesoreria/enumsTesoreria.routes.js';
 
 
 const router = express.Router();
@@ -601,6 +601,7 @@ router.use('/tesoreria/prestamos-bancarios', prestamoBancarioRoutes);
 router.use('/tesoreria/cuotas-prestamo', cuotaPrestamoRoutes);
 router.use('/tesoreria/lineas-credito', lineaCreditoRoutes);
 router.use('/tesoreria/inversiones-financieras', inversionFinancieraRoutes);
+router.use('/tesoreria/enums', enumsTesoreriaRoutes);
 // Rutas para Letras de Cambio
 router.use('/letras-cambio', letraCambioRoutes);
 // Rutas para Retenciones y Percepciones
