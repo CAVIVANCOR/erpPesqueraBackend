@@ -6991,3 +6991,80 @@ enum TipoMovimientoInversion {
   LIQUIDACION          // Liquidación total
 }
 
+enum TipoTasa {
+  EFECTIVA_ANUAL       // Tasa efectiva anual (TEA)
+  NOMINAL_ANUAL        // Tasa nominal anual (TNA)
+  EFECTIVA_MENSUAL     // Tasa efectiva mensual (TEM)
+  NOMINAL_MENSUAL      // Tasa nominal mensual (TNM)
+  EFECTIVA_DIARIA      // Tasa efectiva diaria (TED)
+}
+
+enum PeriodicidadRendimiento {
+  VENCIMIENTO          // Pago al vencimiento
+  DIARIA               // Capitalizacion diaria
+  SEMANAL              // Capitalizacion semanal
+  QUINCENAL            // Capitalizacion quincenal
+  MENSUAL              // Capitalizacion mensual
+  BIMESTRAL            // Capitalizacion bimestral
+  TRIMESTRAL           // Capitalizacion trimestral
+  CUATRIMESTRAL        // Capitalizacion cuatrimestral
+  SEMESTRAL            // Capitalizacion semestral
+  ANUAL                // Capitalizacion anual
+}
+
+enum TipoDesembolso {
+  TOTAL                // Desembolso total del prestamo
+  PARCIAL              // Desembolso parcial
+  PROGRAMADO           // Desembolso segun cronograma
+}
+
+enum TipoGarantiaReal {
+  INMUEBLE             // Garantia inmobiliaria
+  VEHICULO             // Garantia vehicular
+  MAQUINARIA           // Garantia de maquinaria
+  INVENTARIO           // Garantia de inventario
+  CUENTAS_COBRAR       // Garantia de cuentas por cobrar
+  DEPOSITO_PLAZO       // Garantia de deposito a plazo
+  VALORES              // Garantia de valores mobiliarios
+  OTROS                // Otras garantias reales
+}
+
+enum EstadoGarantia {
+  VIGENTE              // Garantia vigente
+  LIBERADA             // Garantia liberada
+  EJECUTADA            // Garantia ejecutada
+  VENCIDA              // Garantia vencida
+  RENOVADA             // Garantia renovada
+}
+
+enum TipoCobro {
+  CUOTA_NORMAL         // Cobro de cuota normal
+  PREPAGO_PARCIAL      // Prepago parcial del prestamo
+  PREPAGO_TOTAL        // Prepago total del prestamo
+  MORA                 // Cobro de mora
+  COMISION             // Cobro de comision
+  SEGURO               // Cobro de seguro
+}
+
+enum MetodoPago {
+  EFECTIVO             // Pago en efectivo
+  TRANSFERENCIA        // Transferencia bancaria
+  CHEQUE               // Pago con cheque
+  DEBITO_AUTOMATICO    // Debito automatico
+  TARJETA_CREDITO      // Tarjeta de credito
+  TARJETA_DEBITO       // Tarjeta de debito
+}
+
+enum EstadoDesembolso {
+  PENDIENTE            // Desembolso pendiente
+  PROCESADO            // Desembolso procesado
+  CONFIRMADO           // Desembolso confirmado
+  RECHAZADO            // Desembolso rechazado
+  ANULADO              // Desembolso anulado
+}
+
+enum TipoRenovacion {
+  AUTOMATICA           // Renovacion automatica
+  MANUAL               // Renovacion manual
+  SIN_RENOVACION       // Sin renovacion
+}
