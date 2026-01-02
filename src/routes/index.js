@@ -602,6 +602,7 @@ router.use('/tesoreria/lineas-credito', lineaCreditoRoutes);
 router.use('/tesoreria/inversiones-financieras', inversionFinancieraRoutes);
 router.use('/tesoreria/enums', enumsTesoreriaRoutes);
 router.use('/tesoreria/cuotas', cuotaPrestamoRoutes);
+
 // Rutas para Letras de Cambio
 router.use('/letras-cambio', letraCambioRoutes);
 // Rutas para Retenciones y Percepciones

@@ -174,10 +174,14 @@ const obtenerPorId = async (id) => {
  */
 const crear = async (data) => {
   try {
-    // Validar campos obligatorios
-    if (!data.prestamoBancarioId || !data.numeroCuota || !data.fechaVencimiento || 
-        !data.montoCapital || !data.montoInteres || !data.montoTotal || 
-        !data.saldoCapitalAntes || !data.saldoCapitalDespues || !data.estadoPago) {
+    // Validar campos obligatorios (permitir 0 pero no null/undefined)
+    if (!data.prestamoBancarioId || data.numeroCuota === null || data.numeroCuota === undefined || 
+        !data.fechaVencimiento || data.montoCapital === null || data.montoCapital === undefined || 
+        data.montoInteres === null || data.montoInteres === undefined || 
+        data.montoTotal === null || data.montoTotal === undefined || 
+        data.saldoCapitalAntes === null || data.saldoCapitalAntes === undefined || 
+        data.saldoCapitalDespues === null || data.saldoCapitalDespues === undefined || 
+        !data.estadoPago) {
       throw new ValidationError('Faltan campos obligatorios para crear la cuota.');
     }
 

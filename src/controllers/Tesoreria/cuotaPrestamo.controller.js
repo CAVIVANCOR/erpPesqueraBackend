@@ -3,7 +3,8 @@
  * Documentado en español.
  */
 
-import * as cuotaPrestamoService from '../../services/Tesoreria/cuotaPrestamo.service.js';
+import cuotaPrestamoService from '../../services/Tesoreria/cuotaPrestamo.service.js';
+import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
 /**
  * Listar todas las cuotas
@@ -11,7 +12,7 @@ import * as cuotaPrestamoService from '../../services/Tesoreria/cuotaPrestamo.se
 export async function listar(req, res, next) {
   try {
     const cuotas = await cuotaPrestamoService.listar();
-    res.json(cuotas);
+    res.json(toJSONBigInt(cuotas));
   } catch (err) {
     next(err);
   }
@@ -23,7 +24,7 @@ export async function listar(req, res, next) {
 export async function listarPendientes(req, res, next) {
   try {
     const cuotas = await cuotaPrestamoService.listarPendientes();
-    res.json(cuotas);
+    res.json(toJSONBigInt(cuotas));
   } catch (err) {
     next(err);
   }
@@ -35,7 +36,7 @@ export async function listarPendientes(req, res, next) {
 export async function listarVencidas(req, res, next) {
   try {
     const cuotas = await cuotaPrestamoService.listarVencidas();
-    res.json(cuotas);
+    res.json(toJSONBigInt(cuotas));
   } catch (err) {
     next(err);
   }
@@ -48,7 +49,7 @@ export async function listarPorPrestamo(req, res, next) {
   try {
     const { prestamoBancarioId } = req.params;
     const cuotas = await cuotaPrestamoService.listarPorPrestamo(BigInt(prestamoBancarioId));
-    res.json(cuotas);
+    res.json(toJSONBigInt(cuotas));
   } catch (err) {
     next(err);
   }
@@ -61,7 +62,7 @@ export async function obtenerPorId(req, res, next) {
   try {
     const { id } = req.params;
     const cuota = await cuotaPrestamoService.obtenerPorId(BigInt(id));
-    res.json(cuota);
+    res.json(toJSONBigInt(cuota));
   } catch (err) {
     next(err);
   }
@@ -73,7 +74,7 @@ export async function obtenerPorId(req, res, next) {
 export async function crear(req, res, next) {
   try {
     const cuota = await cuotaPrestamoService.crear(req.body);
-    res.status(201).json(cuota);
+    res.status(201).json(toJSONBigInt(cuota));
   } catch (err) {
     next(err);
   }
@@ -86,7 +87,7 @@ export async function actualizar(req, res, next) {
   try {
     const { id } = req.params;
     const cuota = await cuotaPrestamoService.actualizar(BigInt(id), req.body);
-    res.json(cuota);
+    res.json(toJSONBigInt(cuota));
   } catch (err) {
     next(err);
   }
@@ -112,7 +113,7 @@ export async function registrarPago(req, res, next) {
   try {
     const { id } = req.params;
     const cuota = await cuotaPrestamoService.registrarPago(BigInt(id), req.body);
-    res.json(cuota);
+    res.json(toJSONBigInt(cuota));
   } catch (err) {
     next(err);
   }
@@ -124,7 +125,7 @@ export async function registrarPago(req, res, next) {
 export async function actualizarEstadosVencidos(req, res, next) {
   try {
     const resultado = await cuotaPrestamoService.actualizarEstadosVencidos();
-    res.json(resultado);
+    res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }

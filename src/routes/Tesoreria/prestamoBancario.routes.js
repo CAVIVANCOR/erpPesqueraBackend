@@ -247,4 +247,77 @@ router.get('/archivo/*', autenticarJWT, (req, res) => {
   }
 });
 
+
+/**
+ * POST /api/tesoreria/prestamos-bancarios/upload-adicional
+ * Sube un PDF de documentación adicional del préstamo.
+ * Retorna la URL relativa para guardar en PrestamoBancario.urlDocAdicionalPDF
+ */
+router.post('/upload-adicional', autenticarJWT, (req, res, next) => {
+  upload.single('documento')(req, res, function (err) {
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        mensaje: 'El archivo supera el tamaño máximo permitido (15MB).',
+        codigo: 'ERR_TAMANO_ARCHIVO'
+      });
+    } else if (err) {
+      return res.status(400).json({
+        mensaje: err.message,
+        codigo: 'ERR_MULTER'
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const { prestamoBancarioId } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        error: 'No se subió ningún archivo.',
+        codigo: 'ERR_NO_ARCHIVO'
+      });
+    }
+
+    // Construye la ruta relativa para la BD
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    
+    const rutaRelativa = path.join(
+      '/uploads/prestamos-bancarios',
+      String(year),
+      month,
+      req.file.filename
+    ).replace(/\\/g, '/');
+
+    // Si se proporciona prestamoBancarioId, actualiza el registro
+    if (prestamoBancarioId) {
+      const prisma = (await import('../../config/prismaClient.js')).default;
+      await prisma.prestamoBancario.update({
+        where: { id: BigInt(prestamoBancarioId) },
+        data: { 
+          urlDocAdicionalPDF: rutaRelativa,
+          actualizadoEn: new Date()
+        }
+      });
+    }
+
+    // Respuesta exitosa con la URL para el frontend
+    res.json({ 
+      success: true, 
+      urlDocumento: rutaRelativa,
+      nombreArchivo: req.file.filename,
+      mensaje: 'Documento adicional subido exitosamente.'
+    });
+
+  } catch (error) {
+    console.error('[ERP PRESTAMOS BANCARIOS] Error al subir documento adicional:', error);
+    res.status(500).json({ 
+      error: 'Error interno al guardar el documento adicional.',
+      codigo: 'ERR_SERVIDOR'
+    });
+  }
+});
+
 export default router;
