@@ -3057,10 +3057,9 @@ model MovimientoCaja {
   // Nuevas relaciones con Tesorería Avanzada
 cuotasPrestamo        CuotaPrestamo[]
 desembolsosPrestamo   DesembolsoPrestamo[]
-utilizacionesLinea    UtilizacionLineaCredito[] @relation("UtilizacionLinea")
-devolucionesLinea     UtilizacionLineaCredito[] @relation("DevolucionLinea")
 inversionesLiquidadas InversionFinanciera[]
 movimientosInversion  MovimientoInversion[]
+prestamosDesembolso   PrestamoBancario[]    @relation("DesembolsoPrestamo")
 
   // ========================================
   // 🆕 ÍNDICES NUEVOS
@@ -4653,13 +4652,6 @@ model AsientoContable {
   submoduloOrigenId     BigInt?                                      // Si es automático, de qué módulo viene
   procesoOrigenId       BigInt?                                      // ID del registro origen (MovimientoCaja, ComprobanteVenta, etc)
   
-  // ========================================
-  // ESTADO (EstadoMultiFuncion)
-  // Valores posibles:
-  // 60 = BORRADOR (en edición, no afecta reportes)
-  // 61 = APROBADO (validado, afecta reportes)
-  // 62 = ANULADO (cancelado, no afecta reportes)
-  // ========================================
   estadoId              BigInt
   
   // ========================================
@@ -4676,15 +4668,8 @@ model AsientoContable {
   monedaId              BigInt
   tipoCambio            Decimal?                @db.Decimal(10, 4)   // Si es moneda extranjera
   
-  // ========================================
-  // APROBACIÓN
-  // ========================================
   fechaAprobacion       DateTime?
   aprobadoPor           BigInt?
-  
-  // ========================================
-  // ANULACIÓN
-  // ========================================
   fechaAnulacion        DateTime?
   anuladoPor            BigInt?
   motivoAnulacion       String?                 @db.Text
@@ -4714,9 +4699,10 @@ model AsientoContable {
 // Nuevas relaciones con Tesorería Avanzada
 cuotasPrestamo        CuotaPrestamo[]
 desembolsosPrestamo   DesembolsoPrestamo[]
-utilizacionesLinea    UtilizacionLineaCredito[]
 inversionesLiquidadas InversionFinanciera[]
 movimientosInversion  MovimientoInversion[]
+prestamos             PrestamoBancario[]    @relation("AsientoPrestamo")
+
   // ========================================
   // ÍNDICES - CRÍTICO: índice en tipoLibro para filtrado rápido
   // ========================================
@@ -6270,6 +6256,32 @@ model PrestamoBancario {
   bancoId               BigInt
   cuentaCorrienteId     BigInt?                                      // Cuenta donde se desembolsa/paga
   
+    // ========================================
+  // RELACIÓN CON LÍNEA DE CRÉDITO (NUEVO)
+  // ========================================
+  lineaCreditoId        BigInt?                 // FK a LineaCredito (nullable para préstamos directos)
+    // ========================================
+  // INTEGRACIÓN FINANCIERA (migrado de UtilizacionLineaCredito)
+  // ========================================
+  movimientoCajaDesembolsoId  BigInt?           // Movimiento de caja del desembolso
+  asientoContableId           BigInt?           // Asiento contable del préstamo
+  
+    // ========================================
+  // CAMPOS ESPECÍFICOS PARA GARANTÍAS/CARTAS (NUEVOS)
+  // ========================================
+  beneficiario          String?                 @db.VarChar(200)     // Para Garantías y Cartas de Crédito
+  fechaEmision          DateTime?                                    // Para Garantías y Cartas de Crédito
+  fechaExpiracion       DateTime?                                    // Para Garantías y Cartas de Crédito
+  numeroGarantia        String?                 @db.VarChar(50)      // Para Garantías Bancarias
+  numeroCartaCredito    String?                 @db.VarChar(50)      // Para Cartas de Crédito
+  
+  // ========================================
+  // PARA LÍNEAS REVOLVENTES (NUEVO)
+  // ========================================
+  esRevolvente          Boolean                 @default(false)      // true si es línea revolvente
+  permitePagoParcial    Boolean                 @default(false)      // true si permite pagos parciales
+
+
   // ========================================
   // NUMERACIÓN Y CONTRATO
   // ========================================
@@ -6332,17 +6344,6 @@ model PrestamoBancario {
   capitalPagado         Decimal                 @default(0.00) @db.Decimal(18, 2)  // Capital ya pagado
   interesPagado         Decimal                 @default(0.00) @db.Decimal(18, 2)  // Intereses ya pagados
   
-  // ========================================
-  // ESTADO (EstadoMultiFuncion)
-  // Valores posibles:
-  // 70 = APROBADO (aprobado pero no desembolsado)
-  // 71 = DESEMBOLSADO (desembolsado, en proceso de pago)
-  // 72 = VIGENTE (en pagos normales)
-  // 73 = PAGADO (totalmente cancelado)
-  // 74 = VENCIDO (con cuotas vencidas)
-  // 75 = REFINANCIADO (refinanciado por otro préstamo)
-  // 76 = ANULADO (cancelado antes de desembolso)
-  // ========================================
   estadoId              BigInt
   
   // ========================================
@@ -6351,9 +6352,6 @@ model PrestamoBancario {
   esRefinanciamiento    Boolean                 @default(false)      // true si refinancia otro préstamo
   prestamoRefinanciadoId BigInt?                                     // ID del préstamo que refinancia
   
-  // ========================================
-  // OBSERVACIONES
-  // ========================================
   observaciones         String?                 @db.Text
   
   // ========================================
@@ -6378,6 +6376,11 @@ model PrestamoBancario {
   personalActualizador  Personal?               @relation("PrestamoActualizador", fields: [actualizadoPor], references: [id])
   prestamoRefinanciado  PrestamoBancario?       @relation("RefinanciamientoPrestamo", fields: [prestamoRefinanciadoId], references: [id])
   prestamosRefinanciadores PrestamoBancario[]   @relation("RefinanciamientoPrestamo")
+    // NUEVA RELACIÓN:
+  lineaCredito          LineaCredito?           @relation(fields: [lineaCreditoId], references: [id])
+    // AGREGAR ESTAS RELACIONES:
+  movimientoCajaDesembolso  MovimientoCaja?   @relation("DesembolsoPrestamo", fields: [movimientoCajaDesembolsoId], references: [id])
+  asientoContable           AsientoContable?  @relation("AsientoPrestamo", fields: [asientoContableId], references: [id])
   
   cuotas                CuotaPrestamo[]
   desembolsos           DesembolsoPrestamo[]
@@ -6393,6 +6396,10 @@ model PrestamoBancario {
   @@index([fechaVencimiento])
   @@index([empresaId, estadoId])
   @@index([cuentaCorrienteId])
+    // AGREGAR ESTOS ÍNDICES:
+  @@index([lineaCreditoId])
+  @@index([movimientoCajaDesembolsoId])
+  @@index([asientoContableId])
 }
 
 
@@ -6647,20 +6654,8 @@ model LineaCredito {
   montoUtilizado        Decimal                 @default(0.00) @db.Decimal(18, 2)  // Monto actualmente utilizado
   montoDisponible       Decimal                 @db.Decimal(18, 2)   // Monto disponible (aprobado - utilizado)
   
-  // ========================================
-  // ESTADO (EstadoMultiFuncion)
-  // Valores posibles:
-  // 80 = APROBADA (aprobada pero no utilizada)
-  // 81 = VIGENTE (en uso)
-  // 82 = VENCIDA (fecha vencida)
-  // 83 = CANCELADA (cancelada voluntariamente)
-  // 84 = SUSPENDIDA (suspendida por el banco)
-  // ========================================
   estadoId              BigInt
   
-  // ========================================
-  // OBSERVACIONES
-  // ========================================
   observaciones         String?                 @db.Text
   urlDocumentoPDF       String?                 @db.VarChar(500)    // URL del documento adicional
   
@@ -6682,7 +6677,7 @@ model LineaCredito {
   personalCreador       Personal?               @relation("LineaCreditoCreador", fields: [creadoPor], references: [id])
   personalActualizador  Personal?               @relation("LineaCreditoActualizador", fields: [actualizadoPor], references: [id])
   
-  utilizaciones         UtilizacionLineaCredito[]
+  prestamos             PrestamoBancario[]      // Préstamos que consumen esta línea
   
   // ========================================
   // ÍNDICES
@@ -6693,76 +6688,6 @@ model LineaCredito {
   @@index([estadoId])
   @@index([fechaVencimiento])
   @@index([empresaId, estadoId])
-}
-
-
-// ============================================
-// MODELO 2.6: Utilización de Línea de Crédito
-// ============================================
-
-model UtilizacionLineaCredito {
-  id                    BigInt                  @id @default(autoincrement())
-  
-  // ========================================
-  // RELACIÓN CON LÍNEA
-  // ========================================
-  lineaCreditoId        BigInt
-  
-  // ========================================
-  // IDENTIFICACIÓN
-  // ========================================
-  numeroUtilizacion     Int                                          // 1, 2, 3, ...
-  fechaUtilizacion      DateTime                                     // Fecha de utilización
-  
-  // ========================================
-  // MONTO
-  // ========================================
-  montoUtilizado        Decimal                 @db.Decimal(18, 2)   // Monto de esta utilización
-  
-  // ========================================
-  // DEVOLUCIÓN
-  // ========================================
-  fechaDevolucion       DateTime?                                    // Fecha de devolución
-  montoDevuelto         Decimal?                @db.Decimal(18, 2)   // Monto devuelto
-  interesesPagados      Decimal?                @db.Decimal(18, 2)   // Intereses pagados
-  
-  // ========================================
-  // INTEGRACIÓN
-  // ========================================
-  movimientoCajaUtilizacionId BigInt?                                // Movimiento de ingreso
-  movimientoCajaDevolucionId  BigInt?                                // Movimiento de egreso
-  asientoContableId     BigInt?                                      // Asiento contable
-  
-  // ========================================
-  // ESTADO
-  // ========================================
-  estadoUtilizacion     EstadoUtilizacionLinea                       // VIGENTE | DEVUELTO | VENCIDO
-  
-  // ========================================
-  // OBSERVACIONES
-  // ========================================
-  observaciones         String?                 @db.Text
-  
-  // ========================================
-  // AUDITORÍA
-  // ========================================
-  creadoEn              DateTime                @default(now())
-  actualizadoEn         DateTime                @updatedAt
-  
-  // ========================================
-  // RELACIONES
-  // ========================================
-  lineaCredito          LineaCredito            @relation(fields: [lineaCreditoId], references: [id], onDelete: Cascade)
-  movimientoCajaUtilizacion MovimientoCaja?     @relation("UtilizacionLinea", fields: [movimientoCajaUtilizacionId], references: [id])
-  movimientoCajaDevolucion  MovimientoCaja?     @relation("DevolucionLinea", fields: [movimientoCajaDevolucionId], references: [id])
-  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
-  
-  // ========================================
-  // ÍNDICES
-  // ========================================
-  @@index([lineaCreditoId])
-  @@index([fechaUtilizacion])
-  @@index([estadoUtilizacion])
 }
 
 
@@ -6956,6 +6881,9 @@ enum TipoPrestamo {
   LEASING_VEHICULAR      // Arrendamiento financiero para compra de vehículos
   LEASING_INMOBILIARIO   // Arrendamiento financiero para compra de propiedades
   WARRANT                // Financiamiento en base a existencias en almacén como garantía
+  CARTA_CREDITO          // Carta de crédito para importación/exportación
+  GARANTIA_BANCARIA      // Garantía bancaria (fianza) para contratos/licitaciones
+  LINEA_REVOLVENTE       // Línea revolvente de corto plazo
 }
 
 enum TipoAmortizacion {
@@ -6983,12 +6911,6 @@ enum TipoLineaCredito {
   CARTA_CREDITO        // Carta de crédito (comercio exterior)
   GARANTIA_BANCARIA    // Garantía bancaria
   SOBREGIRO            // Sobregiro bancario
-}
-
-enum EstadoUtilizacionLinea {
-  VIGENTE              // Utilización vigente
-  DEVUELTO             // Ya devuelto
-  VENCIDO              // Vencido sin devolver
 }
 
 enum TipoInversion {
