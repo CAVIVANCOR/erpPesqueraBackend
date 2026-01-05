@@ -3,7 +3,7 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Servicio CRUD para LineaCredito
- * Gestiona líneas de crédito bancarias revolventes y sus utilizaciones.
+ * Gestiona líneas de crédito bancarias y sus préstamos vinculados.
  * Documentado en español.
  */
 
@@ -82,18 +82,20 @@ async function validarLineaCredito(data) {
 }
 
 /**
- * Actualiza los saldos de una línea de crédito.
+ * Actualiza los saldos de una línea de crédito basándose en los préstamos vinculados.
  * @param {BigInt} lineaCreditoId - ID de la línea de crédito
  */
 async function actualizarSaldosLinea(lineaCreditoId) {
-  const utilizaciones = await prisma.utilizacionLineaCredito.findMany({
+  // Obtener préstamos vigentes vinculados a esta línea
+  const prestamos = await prisma.prestamoBancario.findMany({
     where: { 
       lineaCreditoId,
-      estadoUtilizacion: 'VIGENTE'
+      estadoId: { in: [80n, 81n] } // 80=DESEMBOLSADO, 81=VIGENTE
     }
   });
 
-  const montoUtilizado = utilizaciones.reduce((sum, u) => sum + parseFloat(u.montoUtilizado), 0);
+  // Sumar el saldo de capital de todos los préstamos vigentes
+  const montoUtilizado = prestamos.reduce((sum, p) => sum + parseFloat(p.saldoCapital), 0);
 
   const linea = await prisma.lineaCredito.findUnique({
     where: { id: lineaCreditoId }
@@ -121,9 +123,16 @@ const listar = async () => {
         banco: true,
         moneda: true,
         estado: true,
-        utilizaciones: {
-          where: { estadoUtilizacion: 'VIGENTE' },
-          orderBy: { fechaUtilizacion: 'desc' }
+        prestamos: {
+          where: { estadoId: { in: [80n, 81n] } },
+          orderBy: { fechaDesembolso: 'desc' },
+          select: {
+            id: true,
+            numeroPrestamo: true,
+            montoDesembolsado: true,
+            saldoCapital: true,
+            fechaDesembolso: true
+          }
         }
       },
       orderBy: { fechaAprobacion: 'desc' }
@@ -148,8 +157,12 @@ const obtenerPorId = async (id) => {
         banco: true,
         moneda: true,
         estado: true,
-        utilizaciones: {
-          orderBy: { fechaUtilizacion: 'desc' }
+        prestamos: {
+          orderBy: { fechaDesembolso: 'desc' },
+          include: {
+            moneda: true,
+            estado: true
+          }
         }
       }
     });
@@ -222,8 +235,8 @@ const actualizar = async (id, data) => {
         banco: true,
         moneda: true,
         estado: true,
-        utilizaciones: {
-          orderBy: { fechaUtilizacion: 'desc' }
+        prestamos: {
+          orderBy: { fechaDesembolso: 'desc' }
         }
       }
     });
@@ -238,166 +251,31 @@ const actualizar = async (id, data) => {
 
 /**
  * Elimina una línea de crédito por ID.
- * Valida que no tenga utilizaciones vigentes.
+ * Valida que no tenga préstamos vigentes.
  */
 const eliminar = async (id) => {
   try {
     const existente = await prisma.lineaCredito.findUnique({
       where: { id },
       include: {
-        utilizaciones: true
+        prestamos: true
       }
     });
 
     if (!existente) throw new NotFoundError('Línea de crédito no encontrada');
 
-    // Validar que no tenga utilizaciones vigentes
-    const utilizacionesVigentes = existente.utilizaciones.filter(u => u.estadoUtilizacion === 'VIGENTE');
-    if (utilizacionesVigentes.length > 0) {
-      throw new ConflictError('No se puede eliminar la línea de crédito porque tiene utilizaciones vigentes.');
+    // Validar que no tenga préstamos vigentes
+    const prestamosVigentes = existente.prestamos.filter(p => 
+      p.estadoId === 80n || p.estadoId === 81n // DESEMBOLSADO o VIGENTE
+    );
+    if (prestamosVigentes.length > 0) {
+      throw new ConflictError('No se puede eliminar la línea de crédito porque tiene préstamos vigentes.');
     }
 
     await prisma.lineaCredito.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
-
-/**
- * Registra una utilización de línea de crédito.
- */
-const registrarUtilizacion = async (lineaCreditoId, dataUtilizacion) => {
-  try {
-    const linea = await prisma.lineaCredito.findUnique({ where: { id: lineaCreditoId } });
-    if (!linea) throw new NotFoundError('Línea de crédito no encontrada');
-
-    const { fechaUtilizacion, montoUtilizado, movimientoCajaUtilizacionId, observaciones } = dataUtilizacion;
-
-    if (!fechaUtilizacion || !montoUtilizado) {
-      throw new ValidationError('Fecha de utilización y monto son obligatorios.');
-    }
-
-    // Validar que haya saldo disponible
-    if (montoUtilizado > linea.montoDisponible) {
-      throw new ValidationError(`Monto insuficiente. Disponible: ${linea.montoDisponible}`);
-    }
-
-    // Obtener número de utilización
-    const ultimaUtilizacion = await prisma.utilizacionLineaCredito.findFirst({
-      where: { lineaCreditoId },
-      orderBy: { numeroUtilizacion: 'desc' }
-    });
-    const numeroUtilizacion = ultimaUtilizacion ? ultimaUtilizacion.numeroUtilizacion + 1 : 1;
-
-    // Crear utilización en una transacción
-    const utilizacion = await prisma.$transaction(async (tx) => {
-      const nueva = await tx.utilizacionLineaCredito.create({
-        data: {
-          lineaCreditoId,
-          numeroUtilizacion,
-          fechaUtilizacion,
-          montoUtilizado,
-          estadoUtilizacion: 'VIGENTE',
-          movimientoCajaUtilizacionId: movimientoCajaUtilizacionId || null,
-          observaciones: observaciones || null
-        }
-      });
-
-      // Actualizar saldos de la línea
-      await actualizarSaldosLinea(lineaCreditoId);
-
-      // Actualizar estado de la línea a VIGENTE (ID 87) si está APROBADA
-      if (linea.estadoId === 86) {
-        await tx.lineaCredito.update({
-          where: { id: lineaCreditoId },
-          data: { estadoId: 87 }
-        });
-      }
-
-      return nueva;
-    });
-
-    return await prisma.utilizacionLineaCredito.findUnique({
-      where: { id: utilizacion.id },
-      include: {
-        lineaCredito: {
-          include: {
-            empresa: true,
-            banco: true,
-            moneda: true
-          }
-        },
-        movimientoCajaUtilizacion: true
-      }
-    });
-  } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
-
-/**
- * Registra la devolución de una utilización.
- */
-const registrarDevolucion = async (utilizacionId, dataDevolucion) => {
-  try {
-    const utilizacion = await prisma.utilizacionLineaCredito.findUnique({
-      where: { id: utilizacionId },
-      include: { lineaCredito: true }
-    });
-
-    if (!utilizacion) throw new NotFoundError('Utilización no encontrada');
-
-    if (utilizacion.estadoUtilizacion !== 'VIGENTE') {
-      throw new ConflictError('La utilización ya fue devuelta o está vencida.');
-    }
-
-    const { fechaDevolucion, montoDevuelto, interesesPagados, movimientoCajaDevolucionId, asientoContableId, observaciones } = dataDevolucion;
-
-    if (!fechaDevolucion || !montoDevuelto) {
-      throw new ValidationError('Fecha de devolución y monto devuelto son obligatorios.');
-    }
-
-    // Actualizar utilización en una transacción
-    const utilizacionActualizada = await prisma.$transaction(async (tx) => {
-      const updated = await tx.utilizacionLineaCredito.update({
-        where: { id: utilizacionId },
-        data: {
-          fechaDevolucion,
-          montoDevuelto,
-          interesesPagados: interesesPagados || null,
-          estadoUtilizacion: 'DEVUELTO',
-          movimientoCajaDevolucionId: movimientoCajaDevolucionId || null,
-          asientoContableId: asientoContableId || null,
-          observaciones: observaciones || null
-        }
-      });
-
-      // Actualizar saldos de la línea
-      await actualizarSaldosLinea(utilizacion.lineaCreditoId);
-
-      return updated;
-    });
-
-    return await prisma.utilizacionLineaCredito.findUnique({
-      where: { id: utilizacionActualizada.id },
-      include: {
-        lineaCredito: true,
-        movimientoCajaUtilizacion: true,
-        movimientoCajaDevolucion: true,
-        asientoContable: true
-      }
-    });
-  } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos', err.message);
     }
@@ -416,8 +294,8 @@ const listarPorEmpresa = async (empresaId) => {
         banco: true,
         moneda: true,
         estado: true,
-        utilizaciones: {
-          where: { estadoUtilizacion: 'VIGENTE' }
+        prestamos: {
+          where: { estadoId: { in: [80n, 81n] } }
         }
       },
       orderBy: { fechaAprobacion: 'desc' }
@@ -435,10 +313,10 @@ const listarPorEmpresa = async (empresaId) => {
  */
 const listarVigentes = async () => {
   try {
-    // Estados: 86=APROBADA, 87=VIGENTE
+    // Estados: 80=APROBADA, 81=VIGENTE
     return await prisma.lineaCredito.findMany({
       where: {
-        estadoId: { in: [86, 87] }
+        estadoId: { in: [86n, 87n] }
       },
       include: {
         empresa: true,
@@ -457,19 +335,92 @@ const listarVigentes = async () => {
 };
 
 /**
- * Lista utilizaciones de una línea de crédito.
+ * Lista préstamos de una línea de crédito.
  */
-const listarUtilizaciones = async (lineaCreditoId) => {
+const listarPrestamos = async (lineaCreditoId) => {
   try {
-    return await prisma.utilizacionLineaCredito.findMany({
+    return await prisma.prestamoBancario.findMany({
       where: { lineaCreditoId },
       include: {
-        movimientoCajaUtilizacion: true,
-        movimientoCajaDevolucion: true,
-        asientoContable: true
+        moneda: true,
+        estado: true,
+        cuotas: {
+          orderBy: { numeroCuota: 'asc' }
+        }
       },
-      orderBy: { fechaUtilizacion: 'desc' }
+      orderBy: { fechaDesembolso: 'desc' }
     });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Obtiene reporte de líneas disponibles por banco.
+ */
+const obtenerReporteLineasDisponibles = async (empresaId) => {
+  try {
+    const lineas = await prisma.lineaCredito.findMany({
+      where: {
+        empresaId,
+        estadoId: { in: [86n, 87n] } // 86=APROBADA, 87=VIGENTE
+      },
+      include: {
+        banco: true,
+        moneda: true,
+        prestamos: {
+          where: {
+            estadoId: { in: [80n, 81n] } // DESEMBOLSADO o VIGENTE
+          }
+        }
+      }
+    });
+
+    // Agrupar por banco y tipo de línea
+    const reporte = {};
+    
+    lineas.forEach(linea => {
+      const key = `${linea.bancoId}-${linea.tipoLinea}`;
+      
+      if (!reporte[key]) {
+        reporte[key] = {
+          banco: linea.banco.nombre,
+          tipoLinea: linea.tipoLinea,
+          moneda: linea.moneda.codigo,
+          limite: 0,
+          utilizado: 0,
+          disponible: 0,
+          porcentajeUtilizado: 0,
+          lineas: []
+        };
+      }
+      
+      const utilizado = linea.prestamos.reduce((sum, p) => sum + parseFloat(p.saldoCapital), 0);
+      const limite = parseFloat(linea.montoAprobado);
+      const disponible = limite - utilizado;
+      
+      reporte[key].limite += limite;
+      reporte[key].utilizado += utilizado;
+      reporte[key].disponible += disponible;
+      reporte[key].lineas.push({
+        numeroLinea: linea.numeroLinea,
+        limite,
+        utilizado,
+        disponible
+      });
+    });
+
+    // Calcular porcentajes
+    Object.values(reporte).forEach(item => {
+      item.porcentajeUtilizado = item.limite > 0 
+        ? ((item.utilizado / item.limite) * 100).toFixed(2)
+        : 0;
+    });
+
+    return Object.values(reporte);
   } catch (err) {
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos', err.message);
@@ -484,9 +435,9 @@ export default {
   crear,
   actualizar,
   eliminar,
-  registrarUtilizacion,
-  registrarDevolucion,
   listarPorEmpresa,
   listarVigentes,
-  listarUtilizaciones
+  listarPrestamos,
+  obtenerReporteLineasDisponibles,
+  actualizarSaldosLinea
 };

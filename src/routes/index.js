@@ -20,7 +20,6 @@ import pagoRoutes from './CuentasPorCobrarPagar/pago.routes.js';
 import flujoCajaRoutes from './Tesoreria/flujoCaja.routes.js';
 import conciliacionBancariaRoutes from './Tesoreria/conciliacionBancaria.routes.js';
 import prestamoBancarioRoutes from './Tesoreria/prestamoBancario.routes.js';
-import lineaCreditoRoutes from './Tesoreria/lineaCredito.routes.js';
 import inversionFinancieraRoutes from './Tesoreria/inversionFinanciera.routes.js';
 import letraCambioRoutes from './LetrasCambio/letraCambio.routes.js';
 import retencionRoutes from './RetencionesPercepciones/retencion.routes.js';
@@ -211,6 +210,10 @@ import grabacionReunionRoutes from '../routes/Videoconferencia/grabacionReunion.
 import notificacionRoutes from '../routes/Notificacion/notificacion.routes.js';
 import enumsTesoreriaRoutes from './Tesoreria/enumsTesoreria.routes.js';
 import cuotaPrestamoRoutes from './Tesoreria/cuotaPrestamo.routes.js';
+import lineaCreditoRoutes from './Tesoreria/lineaCredito.routes.js';
+import desembolsoPrestamoRoutes from './Tesoreria/desembolsoPrestamo.routes.js';
+import garantiaPrestamoRoutes from './Tesoreria/garantiaPrestamo.routes.js';
+import movimientoInversionRoutes from './Tesoreria/movimientoInversion.routes.js';
 
 const router = express.Router();
 
@@ -598,10 +601,12 @@ router.use('/tesoreria/flujo-caja', flujoCajaRoutes);
 router.use('/tesoreria/conciliacion-bancaria', conciliacionBancariaRoutes);
 router.use('/tesoreria/prestamos-bancarios', prestamoBancarioRoutes);
 router.use('/tesoreria/cuotas-prestamo', cuotaPrestamoRoutes);
+router.use('/tesoreria/desembolsos-prestamo', desembolsoPrestamoRoutes);
+router.use('/tesoreria/garantias-prestamo', garantiaPrestamoRoutes);
 router.use('/tesoreria/lineas-credito', lineaCreditoRoutes);
 router.use('/tesoreria/inversiones-financieras', inversionFinancieraRoutes);
+router.use('/tesoreria/movimientos-inversion', movimientoInversionRoutes);
 router.use('/tesoreria/enums', enumsTesoreriaRoutes);
-router.use('/tesoreria/cuotas', cuotaPrestamoRoutes);
 
 // Rutas para Letras de Cambio
 router.use('/letras-cambio', letraCambioRoutes);

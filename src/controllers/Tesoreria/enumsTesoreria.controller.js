@@ -78,6 +78,13 @@ export async function obtenerEnumsTesoreria(req, res, next) {
         { label: 'SEMESTRAL', value: 'SEMESTRAL' },
         { label: 'ANUAL', value: 'ANUAL' }
       ],
+      tiposMovimientoInversion: [
+        { label: 'INVERSION', value: 'INVERSION' },
+        { label: 'RENDIMIENTO', value: 'RENDIMIENTO' },
+        { label: 'RETIRO', value: 'RETIRO' },
+        { label: 'AJUSTE', value: 'AJUSTE' },
+        { label: 'LIQUIDACION', value: 'LIQUIDACION' }
+      ],
       opcionesRenovacion: [
         { label: 'SI', value: true },
         { label: 'NO', value: false }
