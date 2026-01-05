@@ -2892,9 +2892,9 @@ model Moneda {
   presupuestosAnuales             PresupuestoAnual[]
 
   // Relaciones con Tesorería Avanzada
-  prestamosBancarios    PrestamoBancario[]
-  lineasCreditoBancario LineaCredito[]
-  inversionesFinancieras InversionFinanciera[]
+  prestamos    PrestamoBancario[]
+  lineasCreditoBancarias LineaCredito[]
+  inversiones InversionFinanciera[]
 
 }
 
