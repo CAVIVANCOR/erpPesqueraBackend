@@ -110,6 +110,7 @@ router.get('/:id/cronograma', prestamoBancarioController.obtenerCronograma);
 router.post('/', prestamoBancarioController.crear);
 router.put('/:id', prestamoBancarioController.actualizar);
 router.delete('/:id', prestamoBancarioController.eliminar);
+router.post('/:id/recalcular-cuotas', prestamoBancarioController.recalcularCuotas); // ✅ AGREGAR ESTA LÍNEA
 
 /**
  * POST /api/tesoreria/prestamos-bancarios/upload

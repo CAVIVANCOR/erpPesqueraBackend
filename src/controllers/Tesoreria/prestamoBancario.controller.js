@@ -1,4 +1,5 @@
 import prestamoBancarioService from '../../services/Tesoreria/prestamoBancario.service.js';
+import cuotaPrestamoService from '../../services/Tesoreria/cuotaPrestamo.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 /**
  * Controlador para PrestamoBancario
@@ -77,6 +78,16 @@ export async function obtenerCronograma(req, res, next) {
     const id = Number(req.params.id);
     const cronograma = await prestamoBancarioService.obtenerCronograma(id);
     res.json(toJSONBigInt(cronograma));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function recalcularCuotas(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await cuotaPrestamoService.recalcularCuotasPorPrestamo(id);
+    res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }

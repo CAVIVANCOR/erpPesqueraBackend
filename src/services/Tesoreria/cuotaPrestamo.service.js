@@ -59,6 +59,53 @@ async function validarCuotaPrestamo(data) {
 }
 
 /**
+ * Calcula los saldos de capital para una cuota.
+ * @param {BigInt} prestamoBancarioId - ID del préstamo
+ * @param {number} numeroCuota - Número de cuota
+ * @param {number} montoCapital - Monto de capital de la cuota
+ * @returns {Object} { saldoCapitalAntes, saldoCapitalDespues }
+ */
+async function calcularSaldosCapital(prestamoBancarioId, numeroCuota, montoCapital) {
+  // Obtener el préstamo
+  const prestamo = await prisma.prestamoBancario.findUnique({
+    where: { id: prestamoBancarioId }
+  });
+
+  if (!prestamo) {
+    throw new ValidationError('El préstamo bancario no existe.');
+  }
+
+  let saldoCapitalAntes;
+
+  if (numeroCuota === 1) {
+    // Primera cuota: saldo inicial es el monto desembolsado
+    saldoCapitalAntes = parseFloat(prestamo.montoDesembolsado);
+  } else {
+    // Cuotas siguientes: obtener el saldo después de la cuota anterior
+    const cuotaAnterior = await prisma.cuotaPrestamo.findFirst({
+      where: {
+        prestamoBancarioId,
+        numeroCuota: numeroCuota - 1
+      }
+    });
+
+    if (cuotaAnterior) {
+      saldoCapitalAntes = parseFloat(cuotaAnterior.saldoCapitalDespues);
+    } else {
+      // Si no existe cuota anterior, usar monto desembolsado
+      saldoCapitalAntes = parseFloat(prestamo.montoDesembolsado);
+    }
+  }
+
+  const saldoCapitalDespues = saldoCapitalAntes - parseFloat(montoCapital);
+
+  return {
+    saldoCapitalAntes,
+    saldoCapitalDespues
+  };
+}
+
+/**
  * Calcula los días de mora de una cuota.
  * @param {Date} fechaVencimiento - Fecha de vencimiento
  * @param {Date} fechaPago - Fecha de pago (o fecha actual si no está pagada)
@@ -171,6 +218,7 @@ const obtenerPorId = async (id) => {
 
 /**
  * Crea una nueva cuota de préstamo.
+ * Los campos saldoCapitalAntes y saldoCapitalDespues se calculan automáticamente.
  */
 const crear = async (data) => {
   try {
@@ -179,16 +227,28 @@ const crear = async (data) => {
         !data.fechaVencimiento || data.montoCapital === null || data.montoCapital === undefined || 
         data.montoInteres === null || data.montoInteres === undefined || 
         data.montoTotal === null || data.montoTotal === undefined || 
-        data.saldoCapitalAntes === null || data.saldoCapitalAntes === undefined || 
-        data.saldoCapitalDespues === null || data.saldoCapitalDespues === undefined || 
         !data.estadoPago) {
       throw new ValidationError('Faltan campos obligatorios para crear la cuota.');
     }
 
     await validarCuotaPrestamo(data);
 
+    // Calcular saldos de capital automáticamente
+    const { saldoCapitalAntes, saldoCapitalDespues } = await calcularSaldosCapital(
+      data.prestamoBancarioId,
+      data.numeroCuota,
+      data.montoCapital
+    );
+
+    // Crear cuota con saldos calculados (ignorar saldos que vengan en data)
+    const cuotaData = {
+      ...data,
+      saldoCapitalAntes,
+      saldoCapitalDespues
+    };
+
     return await prisma.cuotaPrestamo.create({ 
-      data,
+      data: cuotaData,
       include: {
         prestamo: true
       }
@@ -212,9 +272,21 @@ const actualizar = async (id, data) => {
 
     await validarCuotaPrestamo({ ...data, id });
 
+    // Si se actualiza el montoCapital, recalcular saldos
+    let dataActualizada = { ...data };
+    if (data.montoCapital !== undefined && data.montoCapital !== null) {
+      const { saldoCapitalAntes, saldoCapitalDespues } = await calcularSaldosCapital(
+        existente.prestamoBancarioId,
+        existente.numeroCuota,
+        data.montoCapital
+      );
+      dataActualizada.saldoCapitalAntes = saldoCapitalAntes;
+      dataActualizada.saldoCapitalDespues = saldoCapitalDespues;
+    }
+
     return await prisma.cuotaPrestamo.update({
       where: { id },
-      data,
+      data: dataActualizada,
       include: {
         prestamo: true,
         movimientoCaja: true,
@@ -233,6 +305,8 @@ const actualizar = async (id, data) => {
 /**
  * Elimina una cuota de préstamo por ID.
  * Solo permite eliminar cuotas pendientes.
+ * Después de eliminar, renumera las cuotas restantes ordenadas por fecha de vencimiento
+ * y recalcula los saldos de capital.
  */
 const eliminar = async (id) => {
   try {
@@ -245,7 +319,45 @@ const eliminar = async (id) => {
       throw new ConflictError('Solo se pueden eliminar cuotas pendientes.');
     }
 
-    await prisma.cuotaPrestamo.delete({ where: { id } });
+    const prestamoBancarioId = existente.prestamoBancarioId;
+
+    // Eliminar la cuota, renumerar y recalcular saldos en una transacción
+    await prisma.$transaction(async (tx) => {
+      // Eliminar la cuota
+      await tx.cuotaPrestamo.delete({ where: { id } });
+
+      // Obtener cuotas restantes ordenadas por fecha de vencimiento
+      const cuotasRestantes = await tx.cuotaPrestamo.findMany({
+        where: { prestamoBancarioId },
+        orderBy: { fechaVencimiento: 'asc' }
+      });
+
+      // Obtener el préstamo para saldo inicial
+      const prestamo = await tx.prestamoBancario.findUnique({
+        where: { id: prestamoBancarioId }
+      });
+
+      let saldoCapitalAntes = parseFloat(prestamo.montoDesembolsado);
+
+      // Renumerar y recalcular saldos de las cuotas
+      for (let i = 0; i < cuotasRestantes.length; i++) {
+        const cuota = cuotasRestantes[i];
+        const saldoCapitalDespues = saldoCapitalAntes - parseFloat(cuota.montoCapital);
+
+        await tx.cuotaPrestamo.update({
+          where: { id: cuota.id },
+          data: {
+            numeroCuota: i + 1,
+            saldoCapitalAntes,
+            saldoCapitalDespues
+          }
+        });
+
+        // El saldo después de esta cuota es el saldo antes de la siguiente
+        saldoCapitalAntes = saldoCapitalDespues;
+      }
+    });
+
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
@@ -449,6 +561,204 @@ const actualizarEstadosVencidos = async () => {
     throw err;
   }
 };
+/**
+ * Recalcula todas las cuotas pendientes de un préstamo después de actualizar la cabecera.
+ * Valida que el número de cuotas coincida con PrestamoBancario.numeroCuotas.
+ * Solo recalcula cuotas PENDIENTES y actualiza los saldos de la cabecera.
+ * NO recalcula montoComision ni montoSeguro (vienen de importación).
+ * @param {BigInt} prestamoBancarioId - ID del préstamo
+ */
+const recalcularCuotasPorPrestamo = async (prestamoBancarioId) => {
+  try {
+    // Obtener el préstamo
+    const prestamo = await prisma.prestamoBancario.findUnique({
+      where: { id: prestamoBancarioId }
+    });
+
+    if (!prestamo) {
+      throw new NotFoundError('Préstamo bancario no encontrado');
+    }
+
+    // Obtener todas las cuotas del préstamo ordenadas por número de cuota
+    const todasLasCuotas = await prisma.cuotaPrestamo.findMany({
+      where: { prestamoBancarioId },
+      orderBy: { numeroCuota: 'asc' }
+    });
+
+    // Validar que el número de cuotas coincida
+    if (todasLasCuotas.length !== prestamo.numeroCuotas) {
+      throw new ValidationError(
+        `El número de cuotas en el detalle (${todasLasCuotas.length}) no coincide con el campo numeroCuotas del préstamo (${prestamo.numeroCuotas})`
+      );
+    }
+
+    // Separar cuotas pagadas y pendientes
+    const cuotasPagadas = todasLasCuotas.filter(c => c.estadoPago === 'PAGADO');
+    const cuotasPendientes = todasLasCuotas.filter(c => c.estadoPago === 'PENDIENTE');
+
+    // Calcular capital e interés pagado ANTES del recálculo (de cuotas ya pagadas)
+    const capitalPagadoInicial = cuotasPagadas.reduce(
+      (sum, c) => sum + parseFloat(c.montoCapital || 0),
+      0
+    );
+    
+    const interesPagadoInicial = cuotasPagadas.reduce(
+      (sum, c) => sum + parseFloat(c.montoInteres || 0),
+      0
+    );
+
+    if (cuotasPendientes.length === 0) {
+      // Actualizar saldos de la cabecera aunque no haya cuotas pendientes
+      await prisma.prestamoBancario.update({
+        where: { id: prestamoBancarioId },
+        data: {
+          saldoCapital: 0,
+          saldoInteres: 0,
+          capitalPagado: parseFloat(capitalPagadoInicial.toFixed(2)),
+          interesPagado: parseFloat(interesPagadoInicial.toFixed(2))
+        }
+      });
+      
+      return {
+        mensaje: 'No hay cuotas pendientes para recalcular. Saldos de cabecera actualizados.',
+        cuotasRecalculadas: 0,
+        numeroCuotasTotal: todasLasCuotas.length,
+        numeroCuotasEsperado: prestamo.numeroCuotas,
+        saldosActualizados: {
+          saldoCapital: 0,
+          capitalPagado: capitalPagadoInicial,
+          interesPagado: interesPagadoInicial
+        }
+      };
+    }
+
+    // Saldo de capital inicial para las cuotas pendientes
+    let saldoCapital = parseFloat(prestamo.montoDesembolsado) - capitalPagadoInicial;
+    const tasaInteresMensual = parseFloat(prestamo.tasaInteresAnual) / 100 / 12;
+    const numeroCuotasPendientes = cuotasPendientes.length;
+
+    // Recalcular cada cuota pendiente en una transacción
+    const resultado = await prisma.$transaction(async (tx) => {
+      let saldoInteresPendienteTotal = 0;
+
+      for (let i = 0; i < cuotasPendientes.length; i++) {
+        const cuota = cuotasPendientes[i];
+        
+        const saldoCapitalAntes = saldoCapital;
+        
+        // Calcular montos según tipo de amortización
+        let montoCapital, montoInteres, montoTotal;
+
+        if (prestamo.tipoAmortizacion === 'FRANCES') {
+          // Sistema Francés: cuota fija
+          const cuotaFija =
+            (saldoCapital * tasaInteresMensual * Math.pow(1 + tasaInteresMensual, numeroCuotasPendientes - i)) /
+            (Math.pow(1 + tasaInteresMensual, numeroCuotasPendientes - i) - 1);
+          
+          montoInteres = saldoCapital * tasaInteresMensual;
+          montoCapital = cuotaFija - montoInteres;
+          montoTotal = cuotaFija;
+        } else if (prestamo.tipoAmortizacion === 'ALEMAN') {
+          // Sistema Alemán: capital constante
+          montoCapital = saldoCapital / (numeroCuotasPendientes - i);
+          montoInteres = saldoCapital * tasaInteresMensual;
+          montoTotal = montoCapital + montoInteres;
+        } else {
+          // Sistema Americano o por defecto: solo intereses hasta última cuota
+          if (i === numeroCuotasPendientes - 1) {
+            montoCapital = saldoCapital;
+            montoInteres = saldoCapital * tasaInteresMensual;
+          } else {
+            montoCapital = 0;
+            montoInteres = saldoCapital * tasaInteresMensual;
+          }
+          montoTotal = montoCapital + montoInteres;
+        }
+
+        // IMPORTANTE: NO recalcular comisión ni seguro, mantener valores existentes
+        const montoComision = parseFloat(cuota.montoComision || 0);
+        const montoSeguro = parseFloat(cuota.montoSeguro || 0);
+        montoTotal += montoComision + montoSeguro;
+
+        // Calcular saldo después
+        const saldoCapitalDespues = saldoCapital - montoCapital;
+
+        // Acumular interés pendiente
+        saldoInteresPendienteTotal += montoInteres;
+
+        // Actualizar cuota (NO actualizar montoComision ni montoSeguro)
+        await tx.cuotaPrestamo.update({
+          where: { id: cuota.id },
+          data: {
+            montoCapital: parseFloat(montoCapital.toFixed(2)),
+            montoInteres: parseFloat(montoInteres.toFixed(2)),
+            // NO actualizar montoComision ni montoSeguro
+            montoTotal: parseFloat(montoTotal.toFixed(2)),
+            saldoCapitalAntes: parseFloat(saldoCapitalAntes.toFixed(2)),
+            saldoCapitalDespues: parseFloat(saldoCapitalDespues.toFixed(2))
+          }
+        });
+
+        // Actualizar saldo para siguiente cuota
+        saldoCapital = saldoCapitalDespues;
+      }
+
+      // DESPUÉS de recalcular, obtener TODAS las cuotas actualizadas para calcular totales
+      const todasLasCuotasActualizadas = await tx.cuotaPrestamo.findMany({
+        where: { prestamoBancarioId },
+        orderBy: { numeroCuota: 'asc' }
+      });
+
+      // Calcular capital e interés pagado de cuotas PAGADAS (con valores actualizados)
+      const capitalPagadoFinal = todasLasCuotasActualizadas
+        .filter(c => c.estadoPago === 'PAGADO')
+        .reduce((sum, c) => sum + parseFloat(c.montoCapital || 0), 0);
+
+      const interesPagadoFinal = todasLasCuotasActualizadas
+        .filter(c => c.estadoPago === 'PAGADO')
+        .reduce((sum, c) => sum + parseFloat(c.montoInteres || 0), 0);
+
+      // Calcular saldo de capital e interés pendiente
+      const saldoCapitalFinal = parseFloat(prestamo.montoDesembolsado) - capitalPagadoFinal;
+
+      // Actualizar saldos de la cabecera del préstamo
+      await tx.prestamoBancario.update({
+        where: { id: prestamoBancarioId },
+        data: {
+          saldoCapital: parseFloat(saldoCapitalFinal.toFixed(2)),
+          saldoInteres: parseFloat(saldoInteresPendienteTotal.toFixed(2)),
+          capitalPagado: parseFloat(capitalPagadoFinal.toFixed(2)),
+          interesPagado: parseFloat(interesPagadoFinal.toFixed(2))
+        }
+      });
+
+      return {
+        capitalPagadoFinal,
+        interesPagadoFinal,
+        saldoCapitalFinal,
+        saldoInteresPendienteTotal
+      };
+    });
+
+    return {
+      mensaje: 'Cuotas y saldos recalculados exitosamente',
+      cuotasRecalculadas: cuotasPendientes.length,
+      numeroCuotasTotal: todasLasCuotas.length,
+      numeroCuotasEsperado: prestamo.numeroCuotas,
+      saldosActualizados: {
+        saldoCapital: resultado.saldoCapitalFinal,
+        capitalPagado: resultado.capitalPagadoFinal,
+        interesPagado: resultado.interesPagadoFinal
+      }
+    };
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
 
 export default {
   listar,
@@ -460,5 +770,6 @@ export default {
   listarPorPrestamo,
   listarPendientes,
   listarVencidas,
-  actualizarEstadosVencidos
+  actualizarEstadosVencidos,
+  recalcularCuotasPorPrestamo
 };
