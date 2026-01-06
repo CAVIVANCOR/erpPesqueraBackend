@@ -3,29 +3,13 @@
  * Documentado en español.
  */
 
+
 /**
  * Obtiene todos los enums utilizados en el módulo de tesorería
  */
 export async function obtenerEnumsTesoreria(req, res, next) {
   try {
     const enums = {
-      tiposPrestamo: [
-        { label: 'CAPITAL DE TRABAJO', value: 'CAPITAL_TRABAJO' },
-        { label: 'ACTIVO FIJO', value: 'ACTIVO_FIJO' },
-        { label: 'HIPOTECARIO', value: 'HIPOTECARIO' },
-        { label: 'VEHICULAR', value: 'VEHICULAR' },
-        { label: 'EQUIPAMIENTO', value: 'EQUIPAMIENTO' },
-        { label: 'EXPANSION', value: 'EXPANSION' },
-        { label: 'REFINANCIAMIENTO', value: 'REFINANCIAMIENTO' },
-        { label: 'COMEX PRE-EMBARQUE', value: 'COMEX_PRE' },
-        { label: 'COMEX POST-EMBARQUE', value: 'COMEX_POST' },
-        { label: 'FINANCIAMIENTO ELECTRONICO COMPRAS', value: 'FEC' },
-        { label: 'FACTORING', value: 'FACTORING' },
-        { label: 'FACTORING INDIRECTO', value: 'FACTORING_INDIRECTO' },
-        { label: 'LEASING VEHICULAR', value: 'LEASING_VEHICULAR' },
-        { label: 'LEASING INMOBILIARIO', value: 'LEASING_INMOBILIARIO' },
-        { label: 'WARRANT', value: 'WARRANT' }
-      ],
       tiposAmortizacion: [
         { label: 'FRANCES (CUOTAS FIJAS)', value: 'FRANCES' },
         { label: 'ALEMAN (AMORTIZACION CONSTANTE)', value: 'ALEMAN' },

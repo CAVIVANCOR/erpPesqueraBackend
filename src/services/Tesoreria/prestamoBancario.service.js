@@ -94,12 +94,14 @@ async function validarPrestamoBancario(data) {
       throw new ValidationError('La frecuencia de pago no es válida.');
     }
   }
-
   // Validar tipo de préstamo
-  if (data.tipoPrestamo) {
-    const tiposValidos = ['CAPITAL_TRABAJO', 'ACTIVO_FIJO', 'HIPOTECARIO', 'VEHICULAR', 'EQUIPAMIENTO', 'EXPANSION', 'REFINANCIAMIENTO', 'COMEX_PRE', 'COMEX_POST', 'FEC', 'FACTORING', 'FACTORING_INDIRECTO', 'LEASING_VEHICULAR', 'LEASING_INMOBILIARIO', 'WARRANT'];
-    if (!tiposValidos.includes(data.tipoPrestamo)) {
-      throw new ValidationError('El tipo de préstamo no es válido.');
+  if (data.tipoPrestamoId) {
+    const tipoPrestamo = await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId } });
+    if (!tipoPrestamo) {
+      throw new ValidationError('El tipo de préstamo referenciado no existe.');
+    }
+    if (!tipoPrestamo.activo) {
+      throw new ValidationError('El tipo de préstamo seleccionado no está activo.');
     }
   }
 
@@ -234,6 +236,7 @@ const listar = async () => {
         moneda: true,
         estado: true,
         lineaCredito: true,
+        tipoPrestamo: true,
         cuotas: {
           orderBy: { numeroCuota: 'asc' }
         },
@@ -268,6 +271,7 @@ const obtenerPorId = async (id) => {
         moneda: true,
         estado: true,
         lineaCredito: true,
+        tipoPrestamo: true,
         cuotas: {
           orderBy: { numeroCuota: 'asc' }
         },
@@ -311,7 +315,7 @@ const crear = async (data) => {
     if (!data.plazoMeses) camposFaltantes.push('Plazo en Meses');
     if (!data.numeroCuotas) camposFaltantes.push('Número de Cuotas');
     if (!data.frecuenciaPago) camposFaltantes.push('Frecuencia de Pago');
-    if (!data.tipoPrestamo) camposFaltantes.push('Tipo de Préstamo');
+    if (!data.tipoPrestamoId) camposFaltantes.push('Tipo de Préstamo');
     if (!data.tipoAmortizacion) camposFaltantes.push('Tipo de Amortización');
     if (!data.estadoId) camposFaltantes.push('Estado');
     
@@ -395,7 +399,7 @@ const actualizar = async (id, data) => {
     if (!data.plazoMeses) camposFaltantes.push('Plazo en Meses');
     if (!data.numeroCuotas) camposFaltantes.push('Número de Cuotas');
     if (!data.frecuenciaPago) camposFaltantes.push('Frecuencia de Pago');
-    if (!data.tipoPrestamo) camposFaltantes.push('Tipo de Préstamo');
+    if (!data.tipoPrestamoId) camposFaltantes.push('Tipo de Préstamo');
     if (!data.tipoAmortizacion) camposFaltantes.push('Tipo de Amortización');
     if (!data.estadoId) camposFaltantes.push('Estado');
     

@@ -214,6 +214,7 @@ import lineaCreditoRoutes from './Tesoreria/lineaCredito.routes.js';
 import desembolsoPrestamoRoutes from './Tesoreria/desembolsoPrestamo.routes.js';
 import garantiaPrestamoRoutes from './Tesoreria/garantiaPrestamo.routes.js';
 import movimientoInversionRoutes from './Tesoreria/movimientoInversion.routes.js';
+import tipoPrestamoRoutes from './Tesoreria/tipoPrestamo.routes.js';
 
 const router = express.Router();
 
@@ -604,6 +605,7 @@ router.use('/tesoreria/cuotas-prestamo', cuotaPrestamoRoutes);
 router.use('/tesoreria/desembolsos-prestamo', desembolsoPrestamoRoutes);
 router.use('/tesoreria/garantias-prestamo', garantiaPrestamoRoutes);
 router.use('/tesoreria/lineas-credito', lineaCreditoRoutes);
+router.use('/tesoreria/tipos-prestamo', tipoPrestamoRoutes);
 router.use('/tesoreria/inversiones-financieras', inversionFinancieraRoutes);
 router.use('/tesoreria/movimientos-inversion', movimientoInversionRoutes);
 router.use('/tesoreria/enums', enumsTesoreriaRoutes);
