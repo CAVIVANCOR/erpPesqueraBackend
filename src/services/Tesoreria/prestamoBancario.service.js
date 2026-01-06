@@ -233,6 +233,7 @@ const listar = async () => {
         cuentaCorriente: true,
         moneda: true,
         estado: true,
+        lineaCredito: true,
         cuotas: {
           orderBy: { numeroCuota: 'asc' }
         },
@@ -266,6 +267,7 @@ const obtenerPorId = async (id) => {
         cuentaCorriente: true,
         moneda: true,
         estado: true,
+        lineaCredito: true,
         cuotas: {
           orderBy: { numeroCuota: 'asc' }
         },
@@ -293,13 +295,28 @@ const obtenerPorId = async (id) => {
  */
 const crear = async (data) => {
   try {
-    // Validar campos obligatorios
-    if (!data.empresaId || !data.bancoId || !data.numeroPrestamo || !data.fechaContrato || 
-        !data.fechaDesembolso || !data.fechaVencimiento || !data.montoAprobado || 
-        !data.montoDesembolsado || !data.monedaId || !data.tasaInteresAnual || 
-        !data.plazoMeses || !data.numeroCuotas || !data.frecuenciaPago || 
-        !data.tipoPrestamo || !data.tipoAmortizacion || !data.estadoId) {
-      throw new ValidationError('Faltan campos obligatorios para crear el préstamo.');
+    // Validar campos obligatorios con mensajes específicos
+    const camposFaltantes = [];
+    
+    if (!data.empresaId) camposFaltantes.push('Empresa');
+    if (!data.bancoId) camposFaltantes.push('Banco');
+    if (!data.numeroPrestamo) camposFaltantes.push('Número de Préstamo');
+    if (!data.fechaContrato) camposFaltantes.push('Fecha de Contrato');
+    if (!data.fechaDesembolso) camposFaltantes.push('Fecha de Desembolso');
+    if (!data.fechaVencimiento) camposFaltantes.push('Fecha de Vencimiento');
+    if (!data.montoAprobado) camposFaltantes.push('Monto Aprobado');
+    if (!data.montoDesembolsado) camposFaltantes.push('Monto Desembolsado');
+    if (!data.monedaId) camposFaltantes.push('Moneda');
+    if (!data.tasaInteresAnual) camposFaltantes.push('Tasa de Interés Anual');
+    if (!data.plazoMeses) camposFaltantes.push('Plazo en Meses');
+    if (!data.numeroCuotas) camposFaltantes.push('Número de Cuotas');
+    if (!data.frecuenciaPago) camposFaltantes.push('Frecuencia de Pago');
+    if (!data.tipoPrestamo) camposFaltantes.push('Tipo de Préstamo');
+    if (!data.tipoAmortizacion) camposFaltantes.push('Tipo de Amortización');
+    if (!data.estadoId) camposFaltantes.push('Estado');
+    
+    if (camposFaltantes.length > 0) {
+      throw new ValidationError(`Faltan los siguientes campos obligatorios: ${camposFaltantes.join(', ')}`);
     }
 
     await validarPrestamoBancario(data);
@@ -333,6 +350,14 @@ const crear = async (data) => {
         }))
       });
 
+      // Si es refinanciamiento, actualizar el préstamo original a estado REFINANCIADO (84)
+      if (data.esRefinanciamiento && data.prestamoRefinanciadoId) {
+        await tx.prestamoBancario.update({
+          where: { id: data.prestamoRefinanciadoId },
+          data: { estadoId: BigInt(84) } // Estado REFINANCIADO
+        });
+      }
+
       return nuevoPrestamo;
     });
 
@@ -353,6 +378,30 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.prestamoBancario.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Préstamo bancario no encontrado');
+
+    // Validar campos obligatorios con mensajes específicos
+    const camposFaltantes = [];
+    
+    if (!data.empresaId) camposFaltantes.push('Empresa');
+    if (!data.bancoId) camposFaltantes.push('Banco');
+    if (!data.numeroPrestamo) camposFaltantes.push('Número de Préstamo');
+    if (!data.fechaContrato) camposFaltantes.push('Fecha de Contrato');
+    if (!data.fechaDesembolso) camposFaltantes.push('Fecha de Desembolso');
+    if (!data.fechaVencimiento) camposFaltantes.push('Fecha de Vencimiento');
+    if (!data.montoAprobado) camposFaltantes.push('Monto Aprobado');
+    if (!data.montoDesembolsado) camposFaltantes.push('Monto Desembolsado');
+    if (!data.monedaId) camposFaltantes.push('Moneda');
+    if (!data.tasaInteresAnual) camposFaltantes.push('Tasa de Interés Anual');
+    if (!data.plazoMeses) camposFaltantes.push('Plazo en Meses');
+    if (!data.numeroCuotas) camposFaltantes.push('Número de Cuotas');
+    if (!data.frecuenciaPago) camposFaltantes.push('Frecuencia de Pago');
+    if (!data.tipoPrestamo) camposFaltantes.push('Tipo de Préstamo');
+    if (!data.tipoAmortizacion) camposFaltantes.push('Tipo de Amortización');
+    if (!data.estadoId) camposFaltantes.push('Estado');
+    
+    if (camposFaltantes.length > 0) {
+      throw new ValidationError(`Faltan los siguientes campos obligatorios: ${camposFaltantes.join(', ')}`);
+    }
 
     await validarPrestamoBancario({ ...data, id });
 
