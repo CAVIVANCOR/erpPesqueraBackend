@@ -3292,7 +3292,8 @@ lineasCreditoActualizadas LineaCredito[]       @relation("LineaCreditoActualizad
 inversionesCreadas    InversionFinanciera[]    @relation("InversionCreador")
 inversionesActualizadas InversionFinanciera[]  @relation("InversionActualizador")
 movimientosInversionCreados MovimientoInversion[]
-
+tiposPrestamoCreados      TipoPrestamo[]      @relation("TipoPrestamoCreador")
+tiposPrestamoActualizados TipoPrestamo[]      @relation("TipoPrestamoActualizador")
 }
 
 model Producto {
@@ -6325,10 +6326,11 @@ model PrestamoBancario {
   // ========================================
   // TIPO Y CLASIFICACIÓN
   // ========================================
-  tipoPrestamo          TipoPrestamo                                 // CAPITAL_TRABAJO | ACTIVO_FIJO | HIPOTECARIO | VEHICULAR
+  tipoPrestamoId          BigInt                                 // CAPITAL_TRABAJO | ACTIVO_FIJO | HIPOTECARIO | VEHICULAR
   tipoAmortizacion      TipoAmortizacion                             // FRANCES | ALEMAN | AMERICANO
   destinoFondos         String?                 @db.Text             // Descripción del destino de los fondos
-  
+  refNroProformaVentaExportacion  String?       @db.VarChar(100)   // REFERENCIA A PROFORMA DE VENTA PARA COMERCIO EXTERIOR (GARANTIA)
+
   // ========================================
   // GARANTÍAS
   // ========================================
@@ -6381,7 +6383,8 @@ model PrestamoBancario {
     // AGREGAR ESTAS RELACIONES:
   movimientoCajaDesembolso  MovimientoCaja?   @relation("DesembolsoPrestamo", fields: [movimientoCajaDesembolsoId], references: [id])
   asientoContable           AsientoContable?  @relation("AsientoPrestamo", fields: [asientoContableId], references: [id])
-  
+  tipoPrestamo          TipoPrestamo            @relation("PrestamoBancarioTipoPrestamo", fields: [tipoPrestamoId], references: [id])
+
   cuotas                CuotaPrestamo[]
   desembolsos           DesembolsoPrestamo[]
   garantias             GarantiaPrestamo[]
@@ -6400,6 +6403,8 @@ model PrestamoBancario {
   @@index([lineaCreditoId])
   @@index([movimientoCajaDesembolsoId])
   @@index([asientoContableId])
+  @@index([tipoPrestamoId])
+  @@index([refNroProformaVentaExportacion])
 }
 
 
@@ -6850,6 +6855,60 @@ model MovimientoInversion {
   @@index([tipoMovimiento])
 }
 
+// ============================================
+// MODELO: TIPO DE PRESTAMO
+// ============================================
+
+model TipoPrestamo {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // IDENTIFICACION
+  // ========================================
+  descripcion           String                  @db.VarChar(200)             // DESCRIPCION DEL TIPO DE PRESTAMO
+  descripcionCorta      String?                 @db.VarChar(100)             // DESCRIPCION CORTA PARA INTERFAZ DE USUARIO
+  
+  // ========================================
+  // CARACTERISTICAS
+  // ========================================
+  requiereGarantia      Boolean                 @default(false)              // SI REQUIERE GARANTIA OBLIGATORIA
+  esComercioExterior    Boolean                 @default(false)              // SI ES PARA COMERCIO EXTERIOR (COMEX)
+  esLeasing             Boolean                 @default(false)              // SI ES TIPO LEASING
+  esFactoring           Boolean                 @default(false)              // SI ES FACTORING
+  permiteRefinanciar    Boolean                 @default(true)               // SI PERMITE SER REFINANCIADO
+  
+  // ========================================
+  // CONFIGURACION INTERFAZ DE USUARIO
+  // ========================================
+  severityColor         String?                 @db.VarChar(20)              // COLOR PARA TAG EN INTERFAZ DE USUARIO (INFO, SUCCESS, WARNING, ETCETERA)
+  
+  // ========================================
+  // ESTADO
+  // ========================================
+  activo                Boolean                 @default(true)               // SI ESTA ACTIVO PARA USAR
+  
+  // ========================================
+  // AUDITORIA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  personalCreador       Personal?               @relation("TipoPrestamoCreador", fields: [creadoPor], references: [id])
+  personalActualizador  Personal?               @relation("TipoPrestamoActualizador", fields: [actualizadoPor], references: [id])
+  
+  prestamos             PrestamoBancario[]      @relation("PrestamoBancarioTipoPrestamo")
+  
+  // ========================================
+  // INDICES
+  // ========================================
+  @@index([activo])
+  @@index([esComercioExterior])
+}
 
 // ============================================
 // ENUMS PARA TESORERÍA AVANZADA
@@ -6863,27 +6922,6 @@ enum FrecuenciaPago {
   CUATRIMESTRAL        // Cada 4 meses
   SEMESTRAL            // Cada 6 meses
   ANUAL                // Anual
-}
-
-enum TipoPrestamo {
-  CAPITAL_TRABAJO         // Para capital de trabajo operativo de la empresa
-  ACTIVO_FIJO            // Para compra de activos fijos (maquinaria, equipos)
-  HIPOTECARIO            // Préstamo hipotecario para inmuebles
-  VEHICULAR              // Para compra de vehículos
-  EQUIPAMIENTO           // Para equipamiento y herramientas
-  EXPANSION              // Para expansión del negocio
-  REFINANCIAMIENTO       // Refinanciamiento de deudas existentes
-  COMEX_PRE              // Financiamiento por exportaciones pre-embarque (garantía antes de embarcar)
-  COMEX_POST             // Financiamiento por exportaciones post-embarque (garantía ya embarcada)
-  FEC                    // Financiamiento Electrónico de Compras para pagos a proveedores
-  FACTORING              // Adelanto de pago por facturas emitidas a clientes
-  FACTORING_INDIRECTO    // Proveedor usa su línea de crédito para pagar factura que nos emitieron
-  LEASING_VEHICULAR      // Arrendamiento financiero para compra de vehículos
-  LEASING_INMOBILIARIO   // Arrendamiento financiero para compra de propiedades
-  WARRANT                // Financiamiento en base a existencias en almacén como garantía
-  CARTA_CREDITO          // Carta de crédito para importación/exportación
-  GARANTIA_BANCARIA      // Garantía bancaria (fianza) para contratos/licitaciones
-  LINEA_REVOLVENTE       // Línea revolvente de corto plazo
 }
 
 enum TipoAmortizacion {
