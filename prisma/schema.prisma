@@ -2855,7 +2855,7 @@ model Moneda {
   cotizacionesProveedores CotizacionProveedor[]
   ordenesCompra OrdenCompra[]
   requerimientosCompra RequerimientoCompra[]
-  lineasCredito LineaCreditoEntidad[]
+  lineasCreditoEntidad  LineaCreditoEntidad[]
   ctaCteEntidad CtaCteEntidad[]
 
   cotizacionVentas CotizacionVentas[]
@@ -2893,7 +2893,7 @@ model Moneda {
 
   // Relaciones con Tesorería Avanzada
   prestamos    PrestamoBancario[]
-  lineasCreditoBancarias LineaCredito[]
+  lineasCredito  LineaCredito[]
   inversiones InversionFinanciera[]
 
 }
