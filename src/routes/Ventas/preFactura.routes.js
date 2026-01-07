@@ -6,6 +6,12 @@ const router = Router();
 // Rutas específicas (DEBEN IR ANTES de las rutas con parámetros)
 router.get('/series-doc', preFacturaController.obtenerSeriesDoc);
 
+// ========================================
+// RUTAS DE GENERACIÓN DE COMPROBANTES
+// ========================================
+router.post('/:id/generar-factura', preFacturaController.generarFactura);
+router.post('/:id/generar-boleta', preFacturaController.generarBoleta);
+
 // Rutas CRUD para PreFactura
 router.get('/', preFacturaController.listar);
 router.get('/:id', preFacturaController.obtenerPorId);

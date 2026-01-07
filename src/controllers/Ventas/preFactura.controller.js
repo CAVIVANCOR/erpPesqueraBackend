@@ -83,3 +83,51 @@ export async function obtenerSeriesDoc(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * ========================================
+ * CONTROLADORES DE GENERACIÓN DE COMPROBANTES
+ * ========================================
+ */
+
+/**
+ * Genera una Factura Electrónica desde una PreFactura
+ * POST /api/prefactura/:id/generar-factura
+ */
+export async function generarFactura(req, res, next) {
+  try {
+    const preFacturaId = Number(req.params.id);
+    const datosFactura = req.body;
+    
+    const comprobante = await preFacturaService.generarFacturaDesdePreFactura(preFacturaId, datosFactura);
+    
+    res.status(201).json(toJSONBigInt({
+      success: true,
+      mensaje: 'Factura generada exitosamente',
+      comprobante
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Genera una Boleta Electrónica desde una PreFactura
+ * POST /api/prefactura/:id/generar-boleta
+ */
+export async function generarBoleta(req, res, next) {
+  try {
+    const preFacturaId = Number(req.params.id);
+    const datosBoleta = req.body;
+    
+    const comprobante = await preFacturaService.generarBoletaDesdePreFactura(preFacturaId, datosBoleta);
+    
+    res.status(201).json(toJSONBigInt({
+      success: true,
+      mensaje: 'Boleta generada exitosamente',
+      comprobante
+    }));
+  } catch (err) {
+    next(err);
+  }
+}

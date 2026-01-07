@@ -3,6 +3,14 @@ import * as comprobanteElectronicoController from '../../controllers/Facturacion
 
 const router = Router();
 
+// ========================================
+// RUTAS DE INTEGRACIÓN NUBEFACT
+// ========================================
+router.post('/:id/enviar-sunat', comprobanteElectronicoController.enviarASunat);
+router.get('/:id/consultar-sunat', comprobanteElectronicoController.consultarEnSunat);
+router.post('/:id/anular', comprobanteElectronicoController.anularComprobante);
+router.get('/:id/consultar-anulacion', comprobanteElectronicoController.consultarAnulacion);
+
 // Rutas CRUD básicas
 router.get('/', comprobanteElectronicoController.listar);
 router.get('/:id', comprobanteElectronicoController.obtenerPorId);

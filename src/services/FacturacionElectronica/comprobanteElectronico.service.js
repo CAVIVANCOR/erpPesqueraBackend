@@ -124,15 +124,16 @@ const listar = async () => {
     return await prisma.comprobanteElectronico.findMany({
       include: {
         empresa: true,
-        cliente: true,
+        entidadComercial: true,
         moneda: true,
-        estado: true,
-        comprobanteReferencia: true,
+        tipoComprobante: true,
+        tipoDocumentoCliente: true,
+        estadoOSE: true,
+        estadoSUNAT: true,
+        formaPago: true,
+        preFactura: true,
+        comprobanteModifica: true,
         detalles: {
-          include: {
-            producto: true,
-            tipoAfectacionIGV: true
-          },
           orderBy: { id: 'asc' }
         }
       },
