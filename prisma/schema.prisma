@@ -935,6 +935,7 @@ model DetMovsEntregaRendirPVentas {
   @@index([productoId])
 }
 
+
 // ============================================
 // PreFactura - Nota de Venta Interna
 // Origen de todos los comprobantes electrónicos (Factura/Boleta/NC/ND)
@@ -944,104 +945,106 @@ model PreFactura {
   id                          BigInt      @id @default(autoincrement())
   
   // Documento PreFactura
-  codigo                      String      @unique @db.VarChar(30)
-  empresaId                   BigInt
-  tipoDocumentoId             BigInt
-  serieDocId                  BigInt
-  numeroDocumento             String?     @db.VarChar(40)
-  numSerieDoc                 String?     @db.VarChar(40)
-  numCorreDoc                 String?     @db.VarChar(40)
-  fechaDocumento              DateTime    @default(now())
-  fechaVencimiento            DateTime?
+  codigo                      String      @unique @db.VarChar(30)          // Código único de PreFactura (ej: PF-2024-000001)
+  empresaId                   BigInt                                       // Empresa emisora
+  tipoDocumentoId             BigInt                                       // Tipo de documento interno
+  serieDocId                  BigInt                                       // Serie del documento interno
+  numeroDocumento             String?     @db.VarChar(40)                  // Número completo del documento (ej: "PF01-000123")
+  numSerieDoc                 String?     @db.VarChar(40)                  // Serie (ej: "PF01")
+  numCorreDoc                 String?     @db.VarChar(40)                  // Correlativo (ej: "000123")
+  fechaDocumento              DateTime    @default(now())                  // Fecha de emisión de la PreFactura
+  fechaVencimiento            DateTime?                                    // Fecha de vencimiento del pago
   
   // ========================================
   // ⭐ CAMPOS NUEVOS - DOCUMENTO FINAL (COMPROBANTE ELECTRÓNICO)
   // Define qué comprobante electrónico se generará desde esta PreFactura
   // ========================================
-  tipoDocumentoFinalId        BigInt?                                    // ⭐ NUEVO: Tipo (01=Factura, 03=Boleta)
-  serieDocFinalId             BigInt?                                    // ⭐ NUEVO: Serie del comprobante a generar
-  numeroDocumentoFinal        String?     @db.VarChar(40)                // ⭐ NUEVO: Número completo generado (ej: "F001-00000123")
-  numSerieDocFinal            String?     @db.VarChar(40)                // ⭐ NUEVO: Serie generada (ej: "F001")
-  numCorreDocFinal            String?     @db.VarChar(40)                // ⭐ NUEVO: Correlativo generado (ej: "00000123")
-  facturado                   Boolean?    @default(false)                // ⭐ NUEVO: true = Ya se generó comprobante
-  fechaFacturacion            DateTime?                                  // ⭐ NUEVO: Fecha de generación del comprobante
+  tipoDocumentoFinalId        BigInt?                                      // ⭐ NUEVO: Tipo de comprobante a generar (01=Factura, 03=Boleta)
+  serieDocFinalId             BigInt?                                      // ⭐ NUEVO: Serie del comprobante a generar
+  numeroDocumentoFinal        String?     @db.VarChar(40)                  // ⭐ NUEVO: Número completo generado (ej: "F001-00000123")
+  numSerieDocFinal            String?     @db.VarChar(40)                  // ⭐ NUEVO: Serie generada (ej: "F001")
+  numCorreDocFinal            String?     @db.VarChar(40)                  // ⭐ NUEVO: Correlativo generado (ej: "00000123")
+  facturado                   Boolean?    @default(false)                  // ⭐ NUEVO: true = Ya se generó comprobante o CxC
+  fechaFacturacion            DateTime?                                    // ⭐ NUEVO: Fecha de generación del comprobante o CxC
+  
+  // ========================================
+  // ⭐ CAMPOS NUEVOS - TIPO DE FACTURACIÓN Y PARTICIÓN
+  // ========================================
+  esGerencial                 Boolean?    @default(false)                  // ⭐ NUEVO: true = Facturación Negra (Gerencial/No SUNAT), false = Blanca (Formal/SUNAT)
+  preFacturaOrigenId          BigInt?                                      // ⭐ NUEVO: ID de la PreFactura original si esta fue creada por partición
+  esParticionada              Boolean     @default(false)                  // ⭐ NUEVO: true = Esta PreFactura fue partida en Blanca/Negra (se anula y crea 2 nuevas)
   
   // Cliente
-  clienteId                   BigInt
-  contactoClienteId           BigInt?
-  dirEntregaId                BigInt?
-  dirFiscalId                 BigInt?
+  clienteId                   BigInt                                       // Cliente al que se emite la PreFactura
+  contactoClienteId           BigInt?                                      // Contacto del cliente
+  dirEntregaId                BigInt?                                      // Dirección de entrega
+  dirFiscalId                 BigInt?                                      // Dirección fiscal
   
   // Responsables
-  respVentasId                BigInt
-  autorizaVentaId             BigInt?
-  supervisorVentaCampoId      BigInt?
-  respEmbarqueId              BigInt?
-  respProduccionId            BigInt?
-  respAlmacenId               BigInt?
+  respVentasId                BigInt                                       // Responsable de ventas
+  autorizaVentaId             BigInt?                                      // Quien autoriza la venta
+  supervisorVentaCampoId      BigInt?                                      // Supervisor de venta en campo
+  respEmbarqueId              BigInt?                                      // Responsable de embarque
+  respProduccionId            BigInt?                                      // Responsable de producción
+  respAlmacenId               BigInt?                                      // Responsable de almacén
   
   // Datos comerciales
-  tipoProductoId              BigInt
-  formaPagoId                 BigInt
-  bancoId                     BigInt?
-  monedaId                    BigInt
-  tipoCambio                  Decimal     @db.Decimal(18, 6)
+  tipoProductoId              BigInt                                       // Tipo de producto (CHD, CHI, Conserva, etc.)
+  formaPagoId                 BigInt                                       // Forma de pago (Contado, Crédito, etc.)
+  bancoId                     BigInt?                                      // Banco (si aplica)
+  monedaId                    BigInt                                       // Moneda (PEN, USD, EUR)
+  tipoCambio                  Decimal     @db.Decimal(18, 6)               // Tipo de cambio del día
   
   // Montos (se calculan desde DetallePreFactura)
-  subtotal                    Decimal     @db.Decimal(18, 2)
-  totalDescuentos             Decimal?    @db.Decimal(18, 2)
-  totalIGV                    Decimal     @db.Decimal(18, 2)
-  total                       Decimal     @db.Decimal(18, 2)
+  subtotal                    Decimal     @db.Decimal(18, 2)               // Suma de (cantidad × precio) de todos los detalles
+  totalDescuentos             Decimal?    @db.Decimal(18, 2)               // Total de descuentos aplicados
+  totalIGV                    Decimal     @db.Decimal(18, 2)               // Total de IGV (18%)
+  total                       Decimal     @db.Decimal(18, 2)               // Total final a pagar
   
   // Adelantos
-  montoAdelantadoCliente      Decimal?    @db.Decimal(18, 2)
-  porcentajeAdelanto          Decimal?    @db.Decimal(5, 2)
+  montoAdelantadoCliente      Decimal?    @db.Decimal(18, 2)               // Monto adelantado por el cliente
+  porcentajeAdelanto          Decimal?    @db.Decimal(5, 2)                // Porcentaje de adelanto (0-100)
   
   // Estado y aprobación
-  estadoId                    BigInt
-  motivoRechazo               String?     @db.Text
-  fechaAprobacion             DateTime?
-  aprobadoPorId               BigInt?
+  estadoId                    BigInt                                       // Estado de la PreFactura (ver estados abajo)
+  motivoRechazo               String?     @db.Text                         // Motivo de rechazo si fue rechazada
+  fechaAprobacion             DateTime?                                    // Fecha de aprobación
+  aprobadoPorId               BigInt?                                      // Quién aprobó la PreFactura
   
   // Origen
-  cotizacionVentaId           BigInt?
+  cotizacionVentaId           BigInt?                                      // Cotización de venta origen (si aplica)
   
   // Exportación (si aplica)
-  incotermId                  BigInt?
-  puertoEmbarqueId            BigInt?
-  puertoDestinoId             BigInt?
-  paisDestinoId               BigInt?
-  agenteAduanaId              BigInt?
-  numeroBuque                 String?     @db.VarChar(100)
-  numeroBL                    String?     @db.VarChar(100)
-  numContenedor               String?     @db.VarChar(100)
-  tipoContenedorId            BigInt?
+  incotermId                  BigInt?                                      // Incoterm (FOB, CIF, etc.)
+  puertoEmbarqueId            BigInt?                                      // Puerto de embarque
+  puertoDestinoId             BigInt?                                      // Puerto de destino
+  paisDestinoId               BigInt?                                      // País de destino
+  agenteAduanaId              BigInt?                                      // Agente de aduana
+  numeroBuque                 String?     @db.VarChar(100)                 // Número de buque
+  numeroBL                    String?     @db.VarChar(100)                 // Número de Bill of Lading
+  numContenedor               String?     @db.VarChar(100)                 // Número de contenedor
+  tipoContenedorId            BigInt?                                      // Tipo de contenedor (20', 40', etc.)
   
   // Impuestos
-  exoneradoIgv                Boolean     @default(false)
-  porcentajeIgv               Decimal?    @db.Decimal(5, 2)
+  exoneradoIgv                Boolean     @default(false)                  // true = Exonerado de IGV
+  porcentajeIgv               Decimal?    @db.Decimal(5, 2)                // Porcentaje de IGV (normalmente 18%)
   
   // Factores exportación
-  factorExportacion           Decimal?    @db.Decimal(18, 6)
-  factorExportacionReal       Decimal?    @db.Decimal(18, 6)
+  factorExportacion           Decimal?    @db.Decimal(18, 6)               // Factor de exportación estimado
+  factorExportacionReal       Decimal?    @db.Decimal(18, 6)               // Factor de exportación real
   
   // Otros
-  observaciones               String?     @db.Text
-  urlPreFacturaPdf            String?     @db.VarChar(500)
-  centroCostoId               BigInt?
-  contratoServicioId          BigInt?
-  movSalidaAlmacenId          BigInt?
-  
-  // Transferencia ERP Contable
-  fechaTransfErpContable      DateTime?
-  numIdTransfErpContable      String?     @db.VarChar(100)
-  personaRespTransfErpContable BigInt?
+  observaciones               String?     @db.Text                         // Observaciones generales
+  urlPreFacturaPdf            String?     @db.VarChar(500)                 // URL del PDF de la PreFactura
+  centroCostoId               BigInt?                                      // Centro de costo
+  contratoServicioId          BigInt?                                      // Contrato de servicio relacionado
+  movSalidaAlmacenId          BigInt?                                      // Movimiento de salida de almacén relacionado
   
   // Auditoría
-  fechaCreacion               DateTime    @default(now())
-  fechaActualizacion          DateTime?   @updatedAt
-  creadoPor                   BigInt?
-  actualizadoPor              BigInt?
+  fechaCreacion               DateTime    @default(now())                  // Fecha de creación del registro
+  fechaActualizacion          DateTime?   @updatedAt                       // Fecha de última actualización
+  creadoPor                   BigInt?                                      // Usuario que creó el registro
+  actualizadoPor              BigInt?                                      // Usuario que actualizó el registro
   
   // Relaciones
   empresa                     Empresa                 @relation(fields: [empresaId], references: [id])
@@ -1066,16 +1069,23 @@ model PreFactura {
   // ========================================
   // ⭐ RELACIONES NUEVAS - FACTURACIÓN ELECTRÓNICA
   // ========================================
-  tipoDocumentoFinal          TipoDocumento?          @relation("TipoDocumentoFinal", fields: [tipoDocumentoFinalId], references: [id])  // ⭐ NUEVO
-  serieDocFinal               SerieDoc?               @relation("SerieDocFinal", fields: [serieDocFinalId], references: [id])            // ⭐ NUEVO
-  comprobantesElectronicos    ComprobanteElectronico[]                                                                                   // ⭐ NUEVO: 1:N
+  tipoDocumentoFinal          TipoDocumento?          @relation("TipoDocumentoFinal", fields: [tipoDocumentoFinalId], references: [id])    // ⭐ NUEVO
+  serieDocFinal               SerieDoc?               @relation("SerieDocFinal", fields: [serieDocFinalId], references: [id])              // ⭐ NUEVO
+  comprobantesElectronicos    ComprobanteElectronico[]                                                                                     // ⭐ NUEVO: 1:N - Comprobantes generados
   
-  // Relaciones inversas
-  detalles                    DetallePreFactura[]
-    // ========================================
+  // ========================================
+  // ⭐ RELACIONES NUEVAS - PARTICIÓN
+  // ========================================
+  preFacturaOrigen            PreFactura?             @relation("ParticionPreFactura", fields: [preFacturaOrigenId], references: [id])    // ⭐ NUEVO: PreFactura madre
+  preFacturasHijas            PreFactura[]            @relation("ParticionPreFactura")                                                     // ⭐ NUEVO: PreFacturas hijas (Blanca y Negra)
+  
+  // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
-  cuentaPorCobrar                 CuentaPorCobrar?
+  cuentaPorCobrar             CuentaPorCobrar?                                                                                             // ⭐ NUEVO: 1:1 - Cuenta por cobrar generada
+  
+  // Relaciones inversas
+  detalles                    DetallePreFactura[]                                                                                          // Detalles de productos
   
   // Índices
   @@index([empresaId, fechaDocumento])
@@ -1083,9 +1093,13 @@ model PreFactura {
   @@index([estadoId])
   @@index([cotizacionVentaId])
   @@index([facturado])                                                   // ⭐ NUEVO: Filtrar pendientes de facturar
-  @@index([tipoDocumentoFinalId])                                        // ⭐ NUEVO: Filtrar por tipo
+  @@index([tipoDocumentoFinalId])                                        // ⭐ NUEVO: Filtrar por tipo de comprobante
   @@index([serieDocFinalId])                                             // ⭐ NUEVO: Búsquedas por serie
+  @@index([esGerencial])                                                 // ⭐ NUEVO: Filtrar Gerenciales (Negras) vs Formales (Blancas)
+  @@index([preFacturaOrigenId])                                          // ⭐ NUEVO: Trazabilidad de particiones
+  @@index([esParticionada])                                              // ⭐ NUEVO: Filtrar PreFacturas particionadas
 }
+
 
 // ============================================
 // 12. DETALLE DE PREFACTURA
@@ -3558,6 +3572,7 @@ model SerieDoc {
   letrasCambio                    LetraCambio[]
   retenciones                     Retencion[]
   percepciones                    Percepcion[]
+
 }
 
 model SubfamiliaProducto {
@@ -3738,7 +3753,7 @@ model TipoDocumento {
    // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
-  comprobantesElectronicos        ComprobanteElectronico[]    @relation("TipoComprobante")
+comprobantesElectronicos        ComprobanteElectronico[]
   preFacturasTipoFinal            PreFactura[]                @relation("TipoDocumentoFinal")
   ordenesCompraTipoFinal          OrdenCompra[]               @relation("TipoDocumentoFinalOC")
   letrasCambio                    LetraCambio[]
@@ -4695,7 +4710,6 @@ model AsientoContable {
   personalAnulador      Personal?               @relation("AsientoAnuladoPor", fields: [anuladoPor], references: [id])
   
   detalles              DetalleAsientoContable[]
-    comprobantesElectronicos ComprobanteElectronico[]
 
 // Nuevas relaciones con Tesorería Avanzada
 cuotasPrestamo        CuotaPrestamo[]
@@ -4927,134 +4941,127 @@ model TipoAfectacionIGV {
   @@index([activo])
 }
 
-
 // ============================================
 // ComprobanteElectronico
-// Factura/Boleta/NC/ND Electrónica SUNAT
-// Integración con Nubefact OSE
+// Comprobantes electrónicos SUNAT (Factura, Boleta, NC, ND)
+// Integrado con Nubefact OSE
 // ============================================
 
 model ComprobanteElectronico {
   id                        BigInt                  @id @default(autoincrement())
   
   // Origen obligatorio
-  preFacturaId              BigInt
+  preFacturaId              BigInt                                       // PreFactura origen (obligatorio)
   
   // Empresa y sede
-  empresaId                 BigInt
-  sedeId                    BigInt
+  empresaId                 BigInt                                       // Empresa emisora
+  sedeId                    BigInt                                       // Sede emisora
   
   // Tipo y serie SUNAT
-  tipoComprobanteId         BigInt                  // 01=Factura, 03=Boleta, 07=NC, 08=ND
-  serieDocId                BigInt
-  numeroSerie               String                  @db.VarChar(4)       // "F001", "B001"
-  numeroCorrelativo         Int
-  numeroCompleto            String                  @db.VarChar(20)      // "F001-00000123"
+  tipoComprobanteId         BigInt                                       // Tipo: 01=Factura, 03=Boleta, 07=NC, 08=ND
+  serieDocId                BigInt                                       // Serie del documento
+  numeroSerie               String                  @db.VarChar(4)       // Serie (ej: "F001", "B001")
+  numeroCorrelativo         Int                                          // Correlativo numérico
+  numeroCompleto            String                  @db.VarChar(20)      // Número completo (ej: "F001-00000123")
   
   // Fechas
-  fechaEmision              DateTime                @default(now())
-  horaEmision               String                  @db.VarChar(8)       // "14:30:00"
-  fechaVencimiento          DateTime?
+  fechaEmision              DateTime                @default(now())      // Fecha de emisión del comprobante
+  horaEmision               String                  @db.VarChar(8)       // Hora de emisión (ej: "14:30:00")
+  fechaVencimiento          DateTime?                                    // Fecha de vencimiento del pago
   
   // Cliente
-  entidadComercialId        BigInt
-  tipoDocumentoClienteId    BigInt                  // 1=DNI, 6=RUC
-  numeroDocumentoCliente    String                  @db.VarChar(20)
-  razonSocialCliente        String                  @db.VarChar(255)
-  direccionCliente          String                  @db.Text
-  emailCliente              String?                 @db.VarChar(100)
+  entidadComercialId        BigInt                                       // Cliente receptor
+  tipoDocumentoClienteId    BigInt                                       // Tipo documento: 1=DNI, 6=RUC
+  numeroDocumentoCliente    String                  @db.VarChar(20)      // Número de documento del cliente
+  razonSocialCliente        String                  @db.VarChar(255)     // Razón social o nombre del cliente
+  direccionCliente          String                  @db.Text             // Dirección del cliente
+  emailCliente              String?                 @db.VarChar(100)     // Email del cliente
   
   // Moneda
-  monedaId                  BigInt
-  tipoCambio                Decimal                 @db.Decimal(10, 4)
+  monedaId                  BigInt                                       // Moneda: PEN, USD, EUR
+  tipoCambio                Decimal                 @db.Decimal(10, 4)   // Tipo de cambio del día
   
   // Condiciones de pago
-  formaPagoId               BigInt
-  montoPendientePago        Decimal?                @db.Decimal(18, 2)
+  formaPagoId               BigInt                                       // Forma de pago: Contado, Crédito
+  montoPendientePago        Decimal?                @db.Decimal(18, 2)   // Monto pendiente de pago
   
   // Datos adicionales
-  ordenCompra               String?                 @db.VarChar(50)
-  guiaRemision              String?                 @db.VarChar(50)
+  ordenCompra               String?                 @db.VarChar(50)      // Orden de compra del cliente
+  guiaRemision              String?                 @db.VarChar(50)      // Guía de remisión asociada
   
   // Detracción
-  sujetoDetraccion          Boolean                 @default(false)
-  codigoDetraccion          String?                 @db.VarChar(10)
-  porcentajeDetraccion      Decimal?                @db.Decimal(5, 2)
-  montoDetraccion           Decimal?                @db.Decimal(18, 2)
+  sujetoDetraccion          Boolean                 @default(false)      // true = Sujeto a detracción
+  codigoDetraccion          String?                 @db.VarChar(10)      // Código de detracción SUNAT
+  porcentajeDetraccion      Decimal?                @db.Decimal(5, 2)    // Porcentaje de detracción (0-100)
+  montoDetraccion           Decimal?                @db.Decimal(18, 2)   // Monto de detracción calculado
   
   // Percepción
-  sujetoPercepcion          Boolean                 @default(false)
-  codigoPercepcion          String?                 @db.VarChar(10)
-  porcentajePercepcion      Decimal?                @db.Decimal(5, 2)
-  montoPercepcion           Decimal?                @db.Decimal(18, 2)
+  sujetoPercepcion          Boolean                 @default(false)      // true = Sujeto a percepción
+  codigoPercepcion          String?                 @db.VarChar(10)      // Código de percepción SUNAT
+  porcentajePercepcion      Decimal?                @db.Decimal(5, 2)    // Porcentaje de percepción (0-100)
+  montoPercepcion           Decimal?                @db.Decimal(18, 2)   // Monto de percepción calculado
   
   // Retención
-  sujetoRetencion           Boolean                 @default(false)
-  porcentajeRetencion       Decimal?                @db.Decimal(5, 2)
-  montoRetencion            Decimal?                @db.Decimal(18, 2)
+  sujetoRetencion           Boolean                 @default(false)      // true = Sujeto a retención
+  porcentajeRetencion       Decimal?                @db.Decimal(5, 2)    // Porcentaje de retención (0-100)
+  montoRetencion            Decimal?                @db.Decimal(18, 2)   // Monto de retención calculado
   
   // NC/ND - Documentos relacionados
-  tipoNotaId                BigInt?
-  motivoNotaId              BigInt?
-  comprobanteModificaId     BigInt?                 // FK al comprobante que modifica
+  tipoNotaId                BigInt?                                      // Tipo de nota (solo para NC/ND)
+  motivoNotaId              BigInt?                                      // Motivo de la nota (solo para NC/ND)
+  comprobanteModificaId     BigInt?                                      // FK al comprobante que modifica (solo para NC/ND)
   
   // Nubefact - Credenciales
-  nubefactRuta              String?                 @db.VarChar(100)
-  nubefactToken             String?                 @db.VarChar(200)
+  nubefactRuta              String?                 @db.VarChar(100)     // Ruta de Nubefact (demo/producción)
+  nubefactToken             String?                 @db.VarChar(200)     // Token de autenticación Nubefact
   
   // Nubefact - Respuesta
-  nubefactAceptadoPorSunat  Boolean?
-  nubefactSunatTransaction  Int?                    @default(1)
-  nubefactEnlacePDF         String?                 @db.VarChar(500)
-  nubefactEnlaceXML         String?                 @db.VarChar(500)
-  nubefactEnlaceCDR         String?                 @db.VarChar(500)
-  nubefactSunatDescription  String?                 @db.Text
-  nubefactSunatNote         String?                 @db.Text
-  nubefactSunatResponsecode String?                 @db.VarChar(10)
-  nubefactSunatSoapError    String?                 @db.Text
-  nubefactCadenaParaQr      String?                 @db.Text
-  nubefactHashCpe           String?                 @db.VarChar(100)
-  nubefactQr                String?                 @db.Text
+  nubefactAceptadoPorSunat  Boolean?                                     // true = SUNAT aceptó el comprobante
+  nubefactSunatTransaction  Int?                    @default(1)          // Transacción SUNAT
+  nubefactEnlacePDF         String?                 @db.VarChar(500)     // URL del PDF en Nubefact
+  nubefactEnlaceXML         String?                 @db.VarChar(500)     // URL del XML en Nubefact
+  nubefactEnlaceCDR         String?                 @db.VarChar(500)     // URL del CDR en Nubefact
+  nubefactSunatDescription  String?                 @db.Text             // Descripción de respuesta SUNAT
+  nubefactSunatNote         String?                 @db.Text             // Nota de respuesta SUNAT
+  nubefactSunatResponsecode String?                 @db.VarChar(10)      // Código de respuesta SUNAT
+  nubefactSunatSoapError    String?                 @db.Text             // Error SOAP si hubo
+  nubefactCadenaParaQr      String?                 @db.Text             // Cadena para generar QR
+  nubefactHashCpe           String?                 @db.VarChar(100)     // Hash del CPE
+  nubefactQr                String?                 @db.Text             // Código QR en base64
   
   // Archivos locales
-  rutaLocalPDF              String?                 @db.VarChar(500)
-  rutaLocalXML              String?                 @db.VarChar(500)
-  rutaLocalCDR              String?                 @db.VarChar(500)
+  rutaLocalPDF              String?                 @db.VarChar(500)     // Ruta local del PDF
+  rutaLocalXML              String?                 @db.VarChar(500)     // Ruta local del XML
+  rutaLocalCDR              String?                 @db.VarChar(500)     // Ruta local del CDR
   
   // Estado OSE
-  estadoOSEId               BigInt                  // 50=PENDIENTE, 51=ENVIADO, 52=ACEPTADO, 53=RECHAZADO, 54=ERROR
-  fechaEnvioOSE             DateTime?
-  fechaRespuestaOSE         DateTime?
+  estadoOSEId               BigInt                                       // Estado OSE: 50=PENDIENTE, 51=ENVIADO, 52=ACEPTADO, 53=RECHAZADO, 54=ERROR
+  fechaEnvioOSE             DateTime?                                    // Fecha de envío a OSE
+  fechaRespuestaOSE         DateTime?                                    // Fecha de respuesta de OSE
   
   // Estado SUNAT
-  estadoSUNATId             BigInt                  // 60=ACTIVO, 61=ANULADO, 62=BAJA, 63=BAJA_ACEPTADA
-  fechaBaja                 DateTime?
-  motivoBaja                String?                 @db.Text
-  ticketBaja                String?                 @db.VarChar(50)
+  estadoSUNATId             BigInt                                       // Estado SUNAT: 60=ACTIVO, 61=ANULADO, 62=BAJA, 63=BAJA_ACEPTADA
+  fechaBaja                 DateTime?                                    // Fecha de baja del comprobante
+  motivoBaja                String?                 @db.Text             // Motivo de baja
+  ticketBaja                String?                 @db.VarChar(50)      // Ticket de baja SUNAT
   
   // Envío email
-  enviadoEmail              Boolean                 @default(false)
-  fechaEnvioEmail           DateTime?
-  emailsEnviados            String?                 @db.Text
+  enviadoEmail              Boolean                 @default(false)      // true = Email enviado al cliente
+  fechaEnvioEmail           DateTime?                                    // Fecha de envío de email
   
-  // Contabilización
-  asientoContableId         BigInt?
-  contabilizado             Boolean                 @default(false)
-  fechaContabilizacion      DateTime?
-  
-  observaciones             String?                 @db.Text
+  observaciones             String?                 @db.Text             // Observaciones generales
   
   // Auditoría
-  creadoEn                  DateTime                @default(now())
-  creadoPor                 BigInt?
-  actualizadoEn             DateTime                @updatedAt
-  actualizadoPor            BigInt?
+  fechaCreacion             DateTime                @default(now())      // Fecha de creación del registro
+  fechaActualizacion        DateTime?               @updatedAt           // Fecha de última actualización
+  creadoPor                 BigInt?                                      // Usuario que creó el registro
+  actualizadoPor            BigInt?                                      // Usuario que actualizó el registro
   
   // Relaciones
   preFactura                PreFactura              @relation(fields: [preFacturaId], references: [id])
   empresa                   Empresa                 @relation(fields: [empresaId], references: [id])
   sede                      SedesEmpresa            @relation(fields: [sedeId], references: [id])
-  tipoComprobante           TipoDocumento           @relation("TipoComprobante", fields: [tipoComprobanteId], references: [id])
+  tipoComprobante           TipoDocumento           @relation(fields: [tipoComprobanteId], references: [id])
   serieDoc                  SerieDoc                @relation(fields: [serieDocId], references: [id])
   entidadComercial          EntidadComercial        @relation(fields: [entidadComercialId], references: [id])
   tipoDocumentoCliente      TiposDocIdentidad       @relation(fields: [tipoDocumentoClienteId], references: [id])
@@ -5062,28 +5069,30 @@ model ComprobanteElectronico {
   formaPago                 FormaPago               @relation(fields: [formaPagoId], references: [id])
   estadoOSE                 EstadoMultiFuncion      @relation("EstadoOSE", fields: [estadoOSEId], references: [id])
   estadoSUNAT               EstadoMultiFuncion      @relation("EstadoSUNAT", fields: [estadoSUNATId], references: [id])
-  asientoContable           AsientoContable?        @relation(fields: [asientoContableId], references: [id])
   comprobanteModifica       ComprobanteElectronico? @relation("NotasModificacion", fields: [comprobanteModificaId], references: [id])
   
-  detalles                  DetalleComprobante[]
-  cuotas                    CuotaPagoComprobante[]
-  notasModificadoras        ComprobanteElectronico[] @relation("NotasModificacion")
-  enviosOSE                 EnvioOSE[]
-
+  // ========================================
+  // ⭐ RELACIÓN NUEVA - CUENTAS POR COBRAR
+  // ========================================
+  cuentasPorCobrar          CuentaPorCobrar[]                            // ⭐ NUEVO: CxC Blancas generadas desde este comprobante
   
-  @@unique([serieDocId, numeroCorrelativo])
+    // Relaciones inversas
+  notasRelacionadas         ComprobanteElectronico[] @relation("NotasModificacion") // NC/ND que modifican este comprobante
+  detalles                  DetalleComprobante[]                         // Detalles de productos
+  cuotas                    CuotaPagoComprobante[]                       // Cuotas de pago
+  enviosOSE                 EnvioOSE[]                                   // Envíos a OSE
+
+  // Índices
   @@index([preFacturaId])
-  @@index([empresaId, fechaEmision])
+  @@index([empresaId])
   @@index([entidadComercialId])
-  @@index([numeroCompleto])
+  @@index([fechaEmision])
   @@index([estadoOSEId])
   @@index([estadoSUNATId])
-  @@index([fechaEmision])
   @@index([tipoComprobanteId])
-  @@index([nubefactAceptadoPorSunat])
-  @@index([contabilizado])
+  @@index([numeroCompleto])
+  @@index([comprobanteModificaId])
 }
-
 
 
 // ============================================
@@ -5194,62 +5203,82 @@ model EnvioOSE {
 }
 
 
+// ============================================
+// CuentaPorCobrar
+// Registro de deudas de clientes
+// Puede originarse de PreFactura o ser saldo inicial
+// ============================================
 
 model CuentaPorCobrar {
   id                        BigInt      @id @default(autoincrement())
   
-  // 🆕 CAMBIO: Ahora opcional para permitir saldos iniciales
-  preFacturaId              BigInt?     @unique
-  empresaId                 BigInt
-  clienteId                 BigInt
+  // Origen
+  preFacturaId              BigInt?     @unique                          // Opcional: PreFactura origen (null para saldos iniciales)
+  empresaId                 BigInt                                       // Empresa acreedora
+  clienteId                 BigInt                                       // Cliente deudor
   
   // Documento
-  numeroPreFactura          String      @db.VarChar(30)
-  fechaEmision              DateTime
-  fechaVencimiento          DateTime
+  numeroPreFactura          String      @db.VarChar(30)                  // Número de PreFactura o código de saldo inicial
+  fechaEmision              DateTime                                     // Fecha de emisión de la deuda
+  fechaVencimiento          DateTime                                     // Fecha de vencimiento del pago
   
-  // 🆕 NUEVO: Montos almacenados (estilo SAP FI)
-  montoTotal                Decimal     @db.Decimal(18, 2)      // Total de la deuda original
-  montoPagado               Decimal     @default(0.00) @db.Decimal(18, 2)  // Se actualiza con cada pago
-  saldoPendiente            Decimal     @db.Decimal(18, 2)      // montoTotal - montoPagado
+  // Montos almacenados (estilo SAP FI)
+  montoTotal                Decimal     @db.Decimal(18, 2)               // Total de la deuda original
+  montoPagado               Decimal     @default(0.00) @db.Decimal(18, 2) // Se actualiza con cada pago
+  saldoPendiente            Decimal     @db.Decimal(18, 2)               // montoTotal - montoPagado (se recalcula con cada pago)
   
-  // 🆕 NUEVO: Flag para saldos iniciales (migración)
-  esSaldoInicial            Boolean     @default(false)
+  // Flags especiales
+  esSaldoInicial            Boolean     @default(false)                  // true = Saldo inicial de migración (sin PreFactura)
+  
+  // ========================================
+  // ⭐ CAMPOS NUEVOS - TIPO DE FACTURACIÓN
+  // ========================================
+  esGerencial               Boolean     @default(false)                  // ⭐ NUEVO: true = CxC Negra (Gerencial/No SUNAT), false = CxC Blanca (Formal/SUNAT)
+  comprobanteElectronicoId  BigInt?                                      // ⭐ NUEVO: Solo para CxC Blanca (tiene comprobante SUNAT asociado)
   
   // Referencia a moneda
-  monedaId                  BigInt
+  monedaId                  BigInt                                       // Moneda de la deuda (PEN, USD, EUR)
   
   // Tipo de venta
-  esContado                 Boolean
+  esContado                 Boolean                                      // true = Venta al contado, false = Venta al crédito
   
   // Estado
-  estadoId                  BigInt
+  estadoId                  BigInt                                       // Estado de la CxC (PENDIENTE, PAGADA, VENCIDA, PARCIAL, ANULADA)
   
-  observaciones             String?     @db.Text
+  observaciones             String?     @db.Text                         // Observaciones generales
   
   // Auditoría
-  creadoEn                  DateTime    @default(now())
-  actualizadoEn             DateTime    @updatedAt
+  creadoEn                  DateTime    @default(now())                  // Fecha de creación del registro
+  actualizadoEn             DateTime    @updatedAt                       // Fecha de última actualización
   
   // Relaciones
-  // 🆕 CAMBIO: Ahora opcional (puede no existir en saldos iniciales)
-  preFactura                PreFactura?             @relation(fields: [preFacturaId], references: [id])
+  preFactura                PreFactura?             @relation(fields: [preFacturaId], references: [id])              // Opcional: PreFactura origen
   empresa                   Empresa                 @relation(fields: [empresaId], references: [id])
   cliente                   EntidadComercial        @relation(fields: [clienteId], references: [id])
   moneda                    Moneda                  @relation(fields: [monedaId], references: [id])
   estado                    EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
   
-  pagos                     PagoCuentaPorCobrar[]
-  detallesFlujoCaja         DetalleFlujoCajaProyectado[]
-  letrasCambio              LetraCambio[]
+  // ========================================
+  // ⭐ RELACIÓN NUEVA - COMPROBANTE ELECTRÓNICO
+  // ========================================
+  comprobanteElectronico    ComprobanteElectronico? @relation(fields: [comprobanteElectronicoId], references: [id])  // ⭐ NUEVO: Solo para CxC Blanca
   
+  // Relaciones inversas
+  pagos                     PagoCuentaPorCobrar[]                        // Pagos recibidos
+  detallesFlujoCaja         DetalleFlujoCajaProyectado[]                 // Proyección de flujo de caja
+  letrasCambio              LetraCambio[]                                // Letras de cambio generadas
+  
+  // Índices
   @@index([empresaId, fechaVencimiento])
   @@index([clienteId])
   @@index([estadoId])
   @@index([fechaVencimiento])
   @@index([esContado])
-  @@index([esSaldoInicial])      // 🆕 NUEVO: Para filtrar saldos iniciales
-  @@index([saldoPendiente])      // 🆕 NUEVO: Para reportes de cobranza
+  @@index([esSaldoInicial])                                              // Para filtrar saldos iniciales
+  @@index([saldoPendiente])                                              // Para reportes de cobranza
+  @@index([esGerencial])                                                 // ⭐ NUEVO: Filtrar CxC Gerenciales vs Formales
+  @@index([comprobanteElectronicoId])                                    // ⭐ NUEVO: Búsqueda por comprobante
+  @@index([preFacturaId])                                                // Búsqueda por PreFactura
 }
 
 
