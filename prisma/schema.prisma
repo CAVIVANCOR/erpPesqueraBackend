@@ -5522,6 +5522,7 @@ model OrdenCompra {
   serieDocFinal        SerieDoc?               @relation("SerieDocFinalOC", fields: [serieDocFinalId], references: [id])            // ⭐ NUEVO
   cuentaPorPagar       CuentaPorPagar?                                                                                               // ⭐ NUEVO: 1:1
   percepciones         Percepcion[]
+  datosAdicionales     DetDatosAdicionalesOrdenCompra[]  // ⭐ AGREGAR ESTA LÍNEA
 
   detalles             DetalleOrdenCompra[]
   
@@ -5533,6 +5534,43 @@ model OrdenCompra {
   @@index([tipoDocumentoFinalId])                                        // ⭐ NUEVO: Filtrar por tipo
   @@index([serieDocFinalId])                                             // ⭐ NUEVO: Búsquedas por serie
 }
+
+
+// ============================================
+// DetDatosAdicionalesOrdenCompra
+// Almacena datos y documentos adicionales
+// requeridos por entidades del estado
+// ============================================
+model DetDatosAdicionalesOrdenCompra {
+  id                    BigInt      @id @default(autoincrement())
+  ordenCompraId         BigInt
+  
+  // Identificación del dato
+  nombreDato            String      @db.VarChar(200)         // "Guía de Remisión", "CLP", "Fecha de Cosecha"
+  esDocumento           Boolean     @default(false)          // true = tiene archivo adjunto
+  imprimirEnOC          Boolean     @default(false)          // true = se imprime en el PDF de la OC
+  
+  // Valor del dato
+  valorDato             String?     @db.Text                 // Para datos de texto o fechas en formato string
+  
+  // Documento adjunto (si esDocumento = true)
+  urlDocumento          String?                      // Ruta del archivo adjunto
+  
+  // Auditoría
+  creadoEn              DateTime    @default(now())
+  actualizadoEn         DateTime    @updatedAt
+  creadoPor             BigInt?
+  actualizadoPor        BigInt?
+  
+  // Relación
+  ordenCompra           OrdenCompra @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+  
+  @@index([ordenCompraId])
+  @@index([esDocumento])
+  @@index([imprimirEnOC])
+}
+
+
 
 
 // ============================================
