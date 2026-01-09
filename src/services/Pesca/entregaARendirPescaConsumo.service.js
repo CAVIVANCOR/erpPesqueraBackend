@@ -8,10 +8,15 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 
 async function validarClavesForaneas(data) {
+  // Convertir a BigInt para la búsqueda en Prisma
+  const novedadId = BigInt(data.novedadPescaConsumoId);
+  const responsableId = BigInt(data.respEntregaRendirId);
+  const centroCostoIdBigInt = BigInt(data.centroCostoId);
+
   const [novedad, responsable, centroCosto] = await Promise.all([
-    prisma.novedadPescaConsumo.findUnique({ where: { id: data.novedadPescaConsumoId } }),
-    prisma.personal.findUnique({ where: { id: data.respEntregaRendirId } }),
-    prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } })
+    prisma.novedadPescaConsumo.findUnique({ where: { id: novedadId } }),
+    prisma.personal.findUnique({ where: { id: responsableId } }),
+    prisma.centroCosto.findUnique({ where: { id: centroCostoIdBigInt } })
   ]);
   if (!novedad) throw new ValidationError('El novedadPescaConsumoId no existe.');
   if (!responsable) throw new ValidationError('El respEntregaRendirId no existe.');
@@ -74,12 +79,12 @@ const crear = async (data) => {
     
     // Preparar datos con campos opcionales explícitos
     const datosNormalizados = {
-      novedadPescaConsumoId: data.novedadPescaConsumoId,
-      respEntregaRendirId: data.respEntregaRendirId,
-      centroCostoId: data.centroCostoId,
+      novedadPescaConsumoId: BigInt(data.novedadPescaConsumoId),
+      respEntregaRendirId: BigInt(data.respEntregaRendirId),
+      centroCostoId: BigInt(data.centroCostoId),
       entregaLiquidada: data.entregaLiquidada || false,
       fechaLiquidacion: data.fechaLiquidacion || null,
-      respLiquidacionId: data.respLiquidacionId || null,
+      respLiquidacionId: data.respLiquidacionId ? BigInt(data.respLiquidacionId) : null,
       urlLiquidacionPdf: data.urlLiquidacionPdf || null,
       fechaCreacion: data.fechaCreacion || new Date(),
       fechaActualizacion: data.fechaActualizacion || new Date(),
@@ -111,9 +116,16 @@ const actualizar = async (id, data) => {
       await validarClavesForaneas({ ...existente, ...data });
     }
     
-    // Preparar datos con campos opcionales explícitos
+    // Preparar datos con campos opcionales explícitos (patrón estándar)
     const datosActualizacion = {
-      ...data,
+      novedadPescaConsumoId: data.novedadPescaConsumoId,
+      respEntregaRendirId: data.respEntregaRendirId,
+      centroCostoId: data.centroCostoId,
+      entregaLiquidada: data.entregaLiquidada,
+      fechaLiquidacion: data.fechaLiquidacion,
+      respLiquidacionId: data.respLiquidacionId,
+      urlLiquidacionPdf: data.urlLiquidacionPdf,
+      fechaCreacion: data.fechaCreacion,
       fechaActualizacion: new Date(),
     };
     

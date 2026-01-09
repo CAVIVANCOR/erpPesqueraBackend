@@ -118,25 +118,36 @@ const crear = async (data) => {
       throw new ValidationError('Campos obligatorios faltantes: otMantenimientoId, respEntregaRendirId, centroCostoId');
     }
 
+    // Convertir IDs a BigInt
+    const otMantenimientoId = BigInt(data.otMantenimientoId);
+
     // Validar que la OT existe
-    const ot = await prisma.oTMantenimiento.findUnique({ where: { id: data.otMantenimientoId } });
+    const ot = await prisma.oTMantenimiento.findUnique({ where: { id: otMantenimientoId } });
     if (!ot) throw new ValidationError('La OT de Mantenimiento no existe');
 
     // Validar que no exista ya una entrega para esta OT
     const existente = await prisma.entregaARendirOTMantenimiento.findUnique({
-      where: { otMantenimientoId: data.otMantenimientoId }
+      where: { otMantenimientoId }
     });
     if (existente) throw new ValidationError('Ya existe una entrega a rendir para esta OT de Mantenimiento');
 
-    const datosConAuditoria = {
-      ...data,
-      entregaLiquidada: data.entregaLiquidada || false,
+    // Crear objeto limpio solo con campos del modelo (patrón estándar)
+    const datosLimpios = {
+      otMantenimientoId: BigInt(data.otMantenimientoId),
+      respEntregaRendirId: BigInt(data.respEntregaRendirId),
+      centroCostoId: data.centroCostoId ? BigInt(data.centroCostoId) : null,
+      entregaLiquidada: data.entregaLiquidada !== undefined ? data.entregaLiquidada : false,
+      fechaLiquidacion: data.fechaLiquidacion,
+      respLiquidacionId: data.respLiquidacionId ? BigInt(data.respLiquidacionId) : null,
+      urlLiquidacionPdf: data.urlLiquidacionPdf,
       fechaCreacion: data.fechaCreacion || new Date(),
       fechaActualizacion: data.fechaActualizacion || new Date(),
+      creadoPor: data.creadoPor ? BigInt(data.creadoPor) : null,
+      actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : null,
     };
 
     return await prisma.entregaARendirOTMantenimiento.create({
-      data: datosConAuditoria,
+      data: datosLimpios,
       include: {
         otMantenimiento: {
           include: {

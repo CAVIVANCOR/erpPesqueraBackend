@@ -263,26 +263,81 @@ const crear = async (data) => {
         }
       }
 
-      // 10. Extraer y remover campos de relaciones anidadas
-      const { detalles, costos, documentos, ...dataSinRelaciones } = data;
-
-      // 11. Asegurar campos de auditoría
-      const datosConAuditoria = {
-        ...dataSinRelaciones,
+      // 10. Crear objeto limpio solo con campos del modelo (patrón PrestamoBancario)
+      const datosLimpios = {
         codigo,
+        version: data.version || 1,
+        cotizacionPadreId: data.cotizacionPadreId,
+        empresaId: data.empresaId,
+        tipoDocumentoId: data.tipoDocumentoId,
+        serieDocId: data.serieDocId,
+        numeroDocumento,
         numSerieDoc: numSerie,
         numCorreDoc: numCorre,
-        numeroDocumento,
+        fechaDocumento: data.fechaDocumento,
         fechaVencimiento,
-        autorizaVentaId, // Asignado desde ParametroAprobador si no venía
-        version: data.version || 1, // Asegurar que siempre tenga versión
+        clienteId: data.clienteId,
+        contactoClienteId: data.contactoClienteId,
+        dirEntregaId: data.dirEntregaId,
+        dirFiscalId: data.dirFiscalId,
+        respVentasId: data.respVentasId,
+        autorizaVentaId,
+        supervisorVentaCampoId: data.supervisorVentaCampoId,
+        respEmbarqueId: data.respEmbarqueId,
+        respProduccionId: data.respProduccionId,
+        respAlmacenId: data.respAlmacenId,
+        tipoProductoId: data.tipoProductoId,
+        formaPagoId: data.formaPagoId,
+        bancoId: data.bancoId,
+        monedaId: data.monedaId,
+        tipoCambio: data.tipoCambio,
+        esExportacion: data.esExportacion,
+        paisDestinoId: data.paisDestinoId,
+        incotermsId: data.incotermsId,
+        puertoCargaId: data.puertoCargaId,
+        puertoDescargaId: data.puertoDescargaId,
+        agenteAduanasId: data.agenteAduanasId,
+        operadorLogisticoId: data.operadorLogisticoId,
+        navieraId: data.navieraId,
+        tipoContenedorId: data.tipoContenedorId,
+        cantidadContenedores: data.cantidadContenedores,
+        pesoMaximoContenedor: data.pesoMaximoContenedor,
+        fechaEntregaEstimada: data.fechaEntregaEstimada,
+        fechaZarpeEstimada: data.fechaZarpeEstimada,
+        fechaArriboEstimada: data.fechaArriboEstimada,
+        diasTransito: data.diasTransito,
+        porcentajeIGV: data.porcentajeIGV,
+        esExoneradoAlIGV: data.esExoneradoAlIGV,
+        metodoCalculoFactor: data.metodoCalculoFactor,
+        factorExportacion: data.factorExportacion,
+        margenUtilidadPorcentaje: data.margenUtilidadPorcentaje,
+        montoAdelantadoCliente: data.montoAdelantadoCliente,
+        porcentajeAdelanto: data.porcentajeAdelanto,
+        estadoId: data.estadoId,
+        motivoRechazo: data.motivoRechazo,
+        fechaAprobacion: data.fechaAprobacion,
+        aprobadoPorId: data.aprobadoPorId,
+        prefacturaVentaId: data.prefacturaVentaId,
+        fechaConversionPreFactura: data.fechaConversionPreFactura,
+        usuarioConversionId: data.usuarioConversionId,
+        destinoProductoId: data.destinoProductoId,
+        formaTransaccionId: data.formaTransaccionId,
+        modoDespachoRecepcionId: data.modoDespachoRecepcionId,
+        tipoEstadoProductoId: data.tipoEstadoProductoId,
+        observaciones: data.observaciones,
+        observacionesInternas: data.observacionesInternas,
+        urlCotizacionPdf: data.urlCotizacionPdf,
+        urlDocumentacionRequeridaPdf: data.urlDocumentacionRequeridaPdf,
+        centroCostoId: data.centroCostoId,
         fechaCreacion: data.fechaCreacion || new Date(),
         fechaActualizacion: data.fechaActualizacion || new Date(),
+        creadoPor: data.creadoPor,
+        actualizadoPor: data.actualizadoPor,
       };
 
-      // 12. Crear la cotización con los números generados
-      return await tx.cotizacionVentas.create({
-        data: datosConAuditoria,
+      // 11. Crear la cotización con los números generados (patrón RequerimientoCompra)
+      const cotizacionCreada = await tx.cotizacionVentas.create({
+        data: datosLimpios,
         include: {
           empresa: true,
           cliente: true,
@@ -293,6 +348,8 @@ const crear = async (data) => {
           incoterms: true
         }
       });
+
+      return cotizacionCreada;
     });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;

@@ -83,9 +83,14 @@ const obtenerPorId = async (id) => {
             }
           }
         },
-        proveedor: true,
+        proveedor: {
+          include: {
+            tipoDocumento: true
+          }
+        },
         formaPago: true,
         moneda: true,
+        estado: true,
         detalles: {
           include: {
             producto: {
@@ -102,6 +107,50 @@ const obtenerPorId = async (id) => {
     });
     
     if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
+    
+    // Cargar manualmente las relaciones que no están en el schema
+    // solicitante, aprobadoPor y centroCosto
+    if (orden.solicitanteId) {
+      const solicitante = await prisma.personal.findUnique({
+        where: { id: orden.solicitanteId },
+        include: {
+          cargo: true
+        }
+      });
+      if (solicitante) {
+        // Agregar nombreCompleto armado
+        solicitante.nombreCompleto = `${solicitante.nombres} ${solicitante.apellidos}`.trim();
+        orden.solicitante = solicitante;
+      }
+    }
+    
+    if (orden.aprobadoPorId) {
+      const aprobadoPor = await prisma.personal.findUnique({
+        where: { id: orden.aprobadoPorId },
+        include: {
+          cargo: true
+        }
+      });
+      if (aprobadoPor) {
+        // Agregar nombreCompleto armado
+        aprobadoPor.nombreCompleto = `${aprobadoPor.nombres} ${aprobadoPor.apellidos}`.trim();
+        orden.aprobadoPor = aprobadoPor;
+      }
+    }
+    
+    if (orden.centroCostoId) {
+      const centroCosto = await prisma.centroCosto.findUnique({
+        where: { id: orden.centroCostoId }
+      });
+      if (centroCosto) {
+        // Normalizar campos (Nombre -> nombre)
+        centroCosto.nombre = centroCosto.Nombre;
+        centroCosto.codigo = centroCosto.Codigo;
+        centroCosto.descripcion = centroCosto.Descripcion;
+        orden.centroCosto = centroCosto;
+      }
+    }
+    
     return orden;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
@@ -165,19 +214,47 @@ const crear = async (data) => {
         throw new ValidationError('No se encontró el estado inicial PENDIENTE (id=32)');
       }
       
-      // 7. Crear la orden de compra con los números generados
-      const nuevo = await tx.ordenCompra.create({
-        data: {
-          ...data,
-          numSerieDoc: numSerie,
-          numCorreDoc: numCorre,
-          numeroDocumento,
-          estadoId: estadoInicial.id,
-          fechaDocumento: data.fechaDocumento || new Date(),
-          // Asignar porcentaje IGV desde la empresa si no viene en data
-          porcentajeIGV: data.porcentajeIGV !== undefined ? data.porcentajeIGV : empresa.porcentajeIgv,
-          esExoneradoAlIGV: data.esExoneradoAlIGV !== undefined ? data.esExoneradoAlIGV : false
-        },
+      // 7. Crear objeto limpio solo con campos del modelo (patrón estándar)
+      const datosLimpios = {
+        empresaId: data.empresaId,
+        tipoDocumentoId: data.tipoDocumentoId,
+        serieDocId: data.serieDocId,
+        numSerieDoc: numSerie,
+        numCorreDoc: numCorre,
+        numeroDocumento,
+        fechaDocumento: data.fechaDocumento || new Date(),
+        requerimientoCompraId: data.requerimientoCompraId,
+        proveedorId: data.proveedorId,
+        formaPagoId: data.formaPagoId,
+        monedaId: data.monedaId,
+        tipoCambio: data.tipoCambio,
+        fechaEntrega: data.fechaEntrega,
+        fechaRecepcion: data.fechaRecepcion,
+        solicitanteId: data.solicitanteId,
+        aprobadoPorId: data.aprobadoPorId,
+        estadoId: estadoInicial.id,
+        centroCostoId: data.centroCostoId,
+        movIngresoAlmacenId: data.movIngresoAlmacenId,
+        observaciones: data.observaciones,
+        urlOrdenCompraPdf: data.urlOrdenCompraPdf,
+        creadoEn: data.creadoEn || new Date(),
+        actualizadoEn: data.actualizadoEn || new Date(),
+        creadoPor: data.creadoPor,
+        actualizadoPor: data.actualizadoPor,
+        porcentajeIGV: data.porcentajeIGV !== undefined ? data.porcentajeIGV : empresa.porcentajeIgv,
+        esExoneradoAlIGV: data.esExoneradoAlIGV !== undefined ? data.esExoneradoAlIGV : false,
+        tipoDocumentoFinalId: data.tipoDocumentoFinalId,
+        serieDocFinalId: data.serieDocFinalId,
+        numeroDocumentoFinal: data.numeroDocumentoFinal,
+        numSerieDocFinal: data.numSerieDocFinal,
+        numCorreDocFinal: data.numCorreDocFinal,
+        comprobanteRecibido: data.comprobanteRecibido,
+        fechaRecepcionComprobante: data.fechaRecepcionComprobante,
+      };
+      
+      // 8. Crear la orden de compra con los números generados (patrón estándar)
+      const ordenCreada = await tx.ordenCompra.create({
+        data: datosLimpios,
         include: {
           empresa: true,
           tipoDocumento: true,
@@ -187,7 +264,7 @@ const crear = async (data) => {
         }
       });
       
-      return nuevo;
+      return ordenCreada;
     });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
@@ -330,15 +407,30 @@ const aprobar = async (id) => {
     const orden = await prisma.ordenCompra.findUnique({ where: { id } });
     if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
     
-    // Validar que esté en estado PENDIENTE
-    if (orden.estadoId !== 38) {
+    // Validar que esté en estado PENDIENTE (id=38)
+    if (Number(orden.estadoId) !== 38) {
       throw new ValidationError('Solo se pueden aprobar órdenes en estado PENDIENTE');
+    }
+    
+    // Buscar el aprobador automáticamente desde ParametroAprobador
+    // Filtrar por empresaId, moduloSistemaId=4 (Compras) y cesado=false
+    const parametroAprobador = await prisma.parametroAprobador.findFirst({
+      where: {
+        empresaId: orden.empresaId,
+        moduloSistemaId: BigInt(4), // Módulo de Compras
+        cesado: false
+      }
+    });
+    
+    if (!parametroAprobador) {
+      throw new ValidationError('No se encontró un aprobador configurado para el módulo de Compras en esta empresa');
     }
     
     const aprobado = await prisma.ordenCompra.update({
       where: { id },
       data: {
         estadoId: BigInt(39), // APROBADO - ORDEN DE COMPRA
+        aprobadoPorId: parametroAprobador.personalRespId,
         actualizadoEn: new Date()
       },
       include: {

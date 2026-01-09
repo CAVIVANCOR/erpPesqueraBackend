@@ -8,10 +8,15 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 
 async function validarClavesForaneas(data) {
+  // Convertir a BigInt para la búsqueda en Prisma
+  const temporadaId = BigInt(data.temporadaPescaId);
+  const responsableId = BigInt(data.respEntregaRendirId);
+  const centroCostoIdBigInt = BigInt(data.centroCostoId);
+
   const [temporada, responsable, centroCosto] = await Promise.all([
-    prisma.temporadaPesca.findUnique({ where: { id: data.temporadaPescaId } }),
-    prisma.personal.findUnique({ where: { id: data.respEntregaRendirId } }),
-    prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } })
+    prisma.temporadaPesca.findUnique({ where: { id: temporadaId } }),
+    prisma.personal.findUnique({ where: { id: responsableId } }),
+    prisma.centroCosto.findUnique({ where: { id: centroCostoIdBigInt } })
   ]);
   if (!temporada) throw new ValidationError('El temporadaPescaId no existe.');
   if (!responsable) throw new ValidationError('El respEntregaRendirId no existe.');
@@ -65,12 +70,12 @@ const crear = async (data) => {
     
     // Preparar datos con campos opcionales explícitos
     const datosNormalizados = {
-      temporadaPescaId: data.temporadaPescaId,
-      respEntregaRendirId: data.respEntregaRendirId,
-      centroCostoId: data.centroCostoId,
+      temporadaPescaId: BigInt(data.temporadaPescaId),
+      respEntregaRendirId: BigInt(data.respEntregaRendirId),
+      centroCostoId: BigInt(data.centroCostoId),
       entregaLiquidada: data.entregaLiquidada || false,
       fechaLiquidacion: data.fechaLiquidacion || null,
-      respLiquidacionId: data.respLiquidacionId || null,
+      respLiquidacionId: data.respLiquidacionId ? BigInt(data.respLiquidacionId) : null,
       urlLiquidacionPdf: data.urlLiquidacionPdf || null,
       fechaCreacion: data.fechaCreacion || new Date(),
       fechaActualizacion: data.fechaActualizacion || new Date(),

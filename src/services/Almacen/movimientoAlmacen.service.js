@@ -183,51 +183,46 @@ const crear = async (data) => {
       const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, '0');
       const numeroDocumento = `${numSerie}-${numCorre}`;
       
-      // 4. Extraer detalles del data
-      const { detalles, ...dataMovimiento } = data;
-      
-      // 5. Preparar data con números generados y estado PENDIENTE (30)
-      const dataConEstado = {
-        ...dataMovimiento,
+      // 4. Crear objeto limpio solo con campos del modelo (patrón estándar)
+      const datosLimpios = {
+        empresaId: data.empresaId,
+        tipoDocumentoId: data.tipoDocumentoId,
+        conceptoMovAlmacenId: data.conceptoMovAlmacenId,
+        serieDocId: data.serieDocId,
         numSerieDoc: numSerie,
         numCorreDoc: numCorre,
-        numeroDocumento: numeroDocumento,
-        estadoDocAlmacenId: BigInt(30),
-        actualizadoEn: new Date()
+        numeroDocumento,
+        fechaDocumento: data.fechaDocumento,
+        entidadComercialId: data.entidadComercialId,
+        faenaPescaId: data.faenaPescaId,
+        embarcacionId: data.embarcacionId,
+        ordenTrabajoId: data.ordenTrabajoId,
+        dirOrigenId: data.dirOrigenId,
+        dirDestinoId: data.dirDestinoId,
+        numGuiaSunat: data.numGuiaSunat,
+        fechaGuiaSunat: data.fechaGuiaSunat,
+        transportistaId: data.transportistaId,
+        vehiculoId: data.vehiculoId,
+        agenciaEnvioId: data.agenciaEnvioId,
+        dirAgenciaEnvioId: data.dirAgenciaEnvioId,
+        personalRespAlmacen: data.personalRespAlmacen,
+        ordenCompraId: data.ordenCompraId,
+        pedidoVentaId: data.pedidoVentaId,
+        estadoDocAlmacenId: BigInt(30), // Estado PENDIENTE
+        esCustodia: data.esCustodia !== undefined ? data.esCustodia : false,
+        observaciones: data.observaciones,
+        creadoEn: data.creadoEn || new Date(),
+        actualizadoEn: new Date(),
+        creadoPor: data.creadoPor,
+        actualizadoPor: data.actualizadoPor,
+        urlMovAlmacenPdf: data.urlMovAlmacenPdf,
+        urlMovAlmacenConCostosPdf: data.urlMovAlmacenConCostosPdf,
       };
       
-      // 6. Si hay detalles, agregarlos con la sintaxis correcta de Prisma
-      if (detalles && detalles.length > 0) {
-        dataConEstado.detalles = {
-          create: detalles.map(detalle => ({
-            productoId: BigInt(detalle.productoId),
-            cantidad: detalle.cantidad,
-            peso: detalle.peso || null,
-            lote: detalle.lote || null,
-            fechaProduccion: detalle.fechaProduccion || null,
-            fechaVencimiento: detalle.fechaVencimiento || null,
-            fechaIngreso: detalle.fechaIngreso || null,
-            nroSerie: detalle.nroSerie || null,
-            nroContenedor: detalle.nroContenedor || null,
-            estadoMercaderiaId: detalle.estadoMercaderiaId ? BigInt(detalle.estadoMercaderiaId) : null,
-            estadoCalidadId: detalle.estadoCalidadId ? BigInt(detalle.estadoCalidadId) : null,
-            entidadComercialId: detalle.entidadComercialId ? BigInt(detalle.entidadComercialId) : null,
-            esCustodia: detalle.esCustodia || false,
-            empresaId: BigInt(detalle.empresaId),
-            observaciones: detalle.observaciones || null,
-            costoUnitario: detalle.costoUnitario || null,
-            precioUnitario: detalle.precioUnitario || 0,
-            creadoPor: detalle.creadoPor ? BigInt(detalle.creadoPor) : null,
-            actualizadoPor: detalle.actualizadoPor ? BigInt(detalle.actualizadoPor) : null
-          }))
-        };
-      }
-      
-      // 7. Crear el movimiento de almacén
+      // 5. Crear el movimiento de almacén (patrón estándar - solo cabecera)
       const movimiento = await tx.movimientoAlmacen.create({ 
-        data: dataConEstado,
+        data: datosLimpios,
         include: {
-          detalles: true,
           conceptoMovAlmacen: true
         }
       });

@@ -8,10 +8,15 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 
 async function validarClavesForaneas(data) {
+  // Convertir a BigInt para la búsqueda en Prisma
+  const cotizacionId = BigInt(data.cotizacionVentasId);
+  const responsableId = BigInt(data.respEntregaRendirId);
+  const centroCostoIdBigInt = BigInt(data.centroCostoId);
+
   const [cotizacion, responsable, centroCosto] = await Promise.all([
-    prisma.cotizacionVentas.findUnique({ where: { id: data.cotizacionVentasId } }),
-    prisma.personal ? prisma.personal.findUnique({ where: { id: data.respEntregaRendirId } }) : Promise.resolve(true),
-    prisma.centroCosto ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }) : Promise.resolve(true)
+    prisma.cotizacionVentas.findUnique({ where: { id: cotizacionId } }),
+    prisma.personal ? prisma.personal.findUnique({ where: { id: responsableId } }) : Promise.resolve(true),
+    prisma.centroCosto ? prisma.centroCosto.findUnique({ where: { id: centroCostoIdBigInt } }) : Promise.resolve(true)
   ]);
   if (!cotizacion) throw new ValidationError('El cotizacionVentasId no existe.');
   if (prisma.personal && !responsable) throw new ValidationError('El respEntregaRendirId no existe.');
@@ -109,24 +114,28 @@ const crear = async (data) => {
     }
     await validarClavesForaneas(data);
     
-    // Asegurar campos de auditoría y campos opcionales explícitos
-    const datosConAuditoria = {
-      ...data,
-      entregaLiquidada: data.entregaLiquidada || false,
-      fechaLiquidacion: data.fechaLiquidacion || null,
-      respLiquidacionId: data.respLiquidacionId || null,
-      urlLiquidacionPdf: data.urlLiquidacionPdf || null,
+    // Crear objeto limpio solo con campos del modelo (patrón estándar)
+    const datosLimpios = {
+      cotizacionVentasId: BigInt(data.cotizacionVentasId),
+      respEntregaRendirId: BigInt(data.respEntregaRendirId),
+      centroCostoId: BigInt(data.centroCostoId),
+      entregaLiquidada: data.entregaLiquidada !== undefined ? data.entregaLiquidada : false,
+      fechaLiquidacion: data.fechaLiquidacion,
+      respLiquidacionId: data.respLiquidacionId ? BigInt(data.respLiquidacionId) : null,
+      urlLiquidacionPdf: data.urlLiquidacionPdf,
       fechaCreacion: data.fechaCreacion || new Date(),
       fechaActualizacion: data.fechaActualizacion || new Date(),
+      creadoPor: data.creadoPor ? BigInt(data.creadoPor) : null,
+      actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : null,
     };
     
     return await prisma.entregaARendirPVentas.create({ 
-      data: datosConAuditoria,
+      data: datosLimpios,
       include: {
         cotizacionVentas: true,
-        respLiquidacion: true,      // Personal que aprobó la liquidación
-        respEntregaRendir: true,    // Personal responsable de la entrega
-        centroCosto: true,          // Centro de costo
+        respLiquidacion: true,
+        respEntregaRendir: true,
+        centroCosto: true,
         movimientos: true
       }
     });

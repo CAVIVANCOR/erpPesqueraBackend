@@ -18,10 +18,15 @@ async function validarClavesForaneas(data) {
     throw new ValidationError('El centroCostoId es requerido.');
   }
 
+  // Convertir a BigInt para la búsqueda en Prisma
+  const requerimientoId = BigInt(data.requerimientoCompraId);
+  const responsableId = BigInt(data.respEntregaRendirId);
+  const centroCostoIdBigInt = BigInt(data.centroCostoId);
+
   const [requerimiento, responsable, centroCosto] = await Promise.all([
-    prisma.requerimientoCompra.findUnique({ where: { id: data.requerimientoCompraId } }),
-    prisma.personal.findUnique({ where: { id: data.respEntregaRendirId } }),
-    prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } })
+    prisma.requerimientoCompra.findUnique({ where: { id: requerimientoId } }),
+    prisma.personal.findUnique({ where: { id: responsableId } }),
+    prisma.centroCosto.findUnique({ where: { id: centroCostoIdBigInt } })
   ]);
   if (!requerimiento) throw new ValidationError('El requerimientoCompraId no existe.');
   if (!responsable) throw new ValidationError('El respEntregaRendirId no existe.');
@@ -85,11 +90,15 @@ const obtenerPorId = async (id) => {
 };
 
 const crear = async (data) => {
+  
   await validarClavesForaneas(data);
+  
+  // Convertir IDs a BigInt
+  const requerimientoCompraId = BigInt(data.requerimientoCompraId);
   
   // Verificar que no exista ya una entrega para este requerimiento (relación 1:1)
   const existente = await prisma.entregaARendirPCompras.findUnique({
-    where: { requerimientoCompraId: data.requerimientoCompraId },
+    where: { requerimientoCompraId },
   });
   
   if (existente) {
@@ -97,18 +106,19 @@ const crear = async (data) => {
   }
   
   try {
-    return await prisma.entregaARendirPCompras.create({
+    const resultado = await prisma.entregaARendirPCompras.create({
       data: {
-        requerimientoCompraId: data.requerimientoCompraId,
-        respEntregaRendirId: data.respEntregaRendirId,
-        centroCostoId: data.centroCostoId,
+        requerimientoCompraId: BigInt(data.requerimientoCompraId),
+        respEntregaRendirId: BigInt(data.respEntregaRendirId),
+        centroCostoId: BigInt(data.centroCostoId),
         entregaLiquidada: data.entregaLiquidada || false,
         fechaLiquidacion: data.fechaLiquidacion || null,
-        respLiquidacionId: data.respLiquidacionId || null,
+        respLiquidacionId: data.respLiquidacionId ? BigInt(data.respLiquidacionId) : null,
         urlLiquidacionPdf: data.urlLiquidacionPdf || null,
-        fechaActualizacion: new Date(),
-        creadoPor: data.creadoPor || null,
-        actualizadoPor: data.actualizadoPor || null,
+        fechaCreacion: data.fechaCreacion || new Date(),
+        fechaActualizacion: data.fechaActualizacion || new Date(),
+        creadoPor: data.creadoPor ? BigInt(data.creadoPor) : null,
+        actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : null,
       },
       include: {
         requerimientoCompra: {
@@ -122,11 +132,12 @@ const crear = async (data) => {
         },
         respLiquidacion: true,      // Personal que aprobó la liquidación
         respEntregaRendir: true,    // Personal responsable de la entrega
-        centroCosto: true           // Centro de costo
+        centroCosto: true,          // Centro de costo
+        movimientos: true           // Movimientos de la entrega
       },
     });
+    return resultado;
   } catch (err) {
-    console.error('Error en crear EntregaARendirPCompras:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

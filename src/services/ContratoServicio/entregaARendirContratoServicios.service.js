@@ -8,10 +8,15 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 
 async function validarClavesForaneas(data) {
+  // Convertir a BigInt para la búsqueda en Prisma
+  const contratoId = BigInt(data.contratoServicioId);
+  const responsableId = BigInt(data.respEntregaRendirId);
+  const centroCostoIdBigInt = BigInt(data.centroCostoId);
+
   const [contrato, responsable, centroCosto] = await Promise.all([
-    prisma.contratoServicio.findUnique({ where: { id: data.contratoServicioId } }),
-    prisma.personal ? prisma.personal.findUnique({ where: { id: data.respEntregaRendirId } }) : Promise.resolve(true),
-    prisma.centroCosto ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }) : Promise.resolve(true)
+    prisma.contratoServicio.findUnique({ where: { id: contratoId } }),
+    prisma.personal ? prisma.personal.findUnique({ where: { id: responsableId } }) : Promise.resolve(true),
+    prisma.centroCosto ? prisma.centroCosto.findUnique({ where: { id: centroCostoIdBigInt } }) : Promise.resolve(true)
   ]);
   if (!contrato) throw new ValidationError('El contratoServicioId no existe.');
   if (prisma.personal && !responsable) throw new ValidationError('El respEntregaRendirId no existe.');
@@ -131,21 +136,23 @@ const crear = async (data) => {
     }
     await validarClavesForaneas(data);
     
-    // Asegurar campos de auditoría y campos opcionales explícitos
-    const datosConAuditoria = {
-      ...data,
-      entregaLiquidada: data.entregaLiquidada || false,
-      fechaLiquidacion: data.fechaLiquidacion || null,
-      respLiquidacionId: data.respLiquidacionId || null,
-      urlLiquidacionPdf: data.urlLiquidacionPdf || null,
-      creadoPor: data.creadoPor || null,
-      actualizadoPor: data.actualizadoPor || null,
+    // Crear objeto limpio solo con campos del modelo (patrón estándar)
+    const datosLimpios = {
+      contratoServicioId: BigInt(data.contratoServicioId),
+      respEntregaRendirId: BigInt(data.respEntregaRendirId),
+      centroCostoId: BigInt(data.centroCostoId),
+      entregaLiquidada: data.entregaLiquidada !== undefined ? data.entregaLiquidada : false,
+      fechaLiquidacion: data.fechaLiquidacion,
+      respLiquidacionId: data.respLiquidacionId ? BigInt(data.respLiquidacionId) : null,
+      urlLiquidacionPdf: data.urlLiquidacionPdf,
       fechaCreacion: data.fechaCreacion || new Date(),
       fechaActualizacion: data.fechaActualizacion || new Date(),
+      creadoPor: data.creadoPor ? BigInt(data.creadoPor) : null,
+      actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : null,
     };
     
     return await prisma.entregaARendirContratoServicios.create({ 
-      data: datosConAuditoria,
+      data: datosLimpios,
       include: {
         contratoServicio: {
           include: {

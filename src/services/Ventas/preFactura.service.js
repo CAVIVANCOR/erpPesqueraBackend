@@ -259,24 +259,80 @@ const crear = async (data) => {
         fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
       }
 
-      // 10. Extraer y remover campos de relaciones anidadas
-      const { detalles, ...dataSinRelaciones } = data;
-
-      // 11. Asegurar campos de auditoría
-      const datosConAuditoria = {
-        ...dataSinRelaciones,
+      // 10. Crear objeto limpio solo con campos del modelo (patrón estándar)
+      const datosLimpios = {
         codigo,
+        empresaId: data.empresaId,
+        tipoDocumentoId: data.tipoDocumentoId,
+        serieDocId: data.serieDocId,
+        numeroDocumento,
         numSerieDoc: numSerie,
         numCorreDoc: numCorre,
-        numeroDocumento,
+        fechaDocumento: data.fechaDocumento,
         fechaVencimiento,
+        tipoDocumentoFinalId: data.tipoDocumentoFinalId,
+        serieDocFinalId: data.serieDocFinalId,
+        numeroDocumentoFinal: data.numeroDocumentoFinal,
+        numSerieDocFinal: data.numSerieDocFinal,
+        numCorreDocFinal: data.numCorreDocFinal,
+        facturado: data.facturado,
+        fechaFacturacion: data.fechaFacturacion,
+        esGerencial: data.esGerencial,
+        preFacturaOrigenId: data.preFacturaOrigenId,
+        esParticionada: data.esParticionada !== undefined ? data.esParticionada : false,
+        clienteId: data.clienteId,
+        contactoClienteId: data.contactoClienteId,
+        dirEntregaId: data.dirEntregaId,
+        dirFiscalId: data.dirFiscalId,
+        respVentasId: data.respVentasId,
+        autorizaVentaId: data.autorizaVentaId,
+        supervisorVentaCampoId: data.supervisorVentaCampoId,
+        respEmbarqueId: data.respEmbarqueId,
+        respProduccionId: data.respProduccionId,
+        respAlmacenId: data.respAlmacenId,
+        tipoProductoId: data.tipoProductoId,
+        formaPagoId: data.formaPagoId,
+        bancoId: data.bancoId,
+        monedaId: data.monedaId,
+        tipoCambio: data.tipoCambio,
+        subtotal: data.subtotal,
+        totalDescuentos: data.totalDescuentos,
+        totalIGV: data.totalIGV,
+        total: data.total,
+        montoAdelantadoCliente: data.montoAdelantadoCliente,
+        porcentajeAdelanto: data.porcentajeAdelanto,
+        estadoId: data.estadoId,
+        motivoRechazo: data.motivoRechazo,
+        fechaAprobacion: data.fechaAprobacion,
+        aprobadoPorId: data.aprobadoPorId,
+        cotizacionVentaId: data.cotizacionVentaId,
+        incotermId: data.incotermId,
+        puertoEmbarqueId: data.puertoEmbarqueId,
+        puertoDestinoId: data.puertoDestinoId,
+        paisDestinoId: data.paisDestinoId,
+        agenteAduanaId: data.agenteAduanaId,
+        numeroBuque: data.numeroBuque,
+        numeroBL: data.numeroBL,
+        numContenedor: data.numContenedor,
+        tipoContenedorId: data.tipoContenedorId,
+        exoneradoIgv: data.exoneradoIgv !== undefined ? data.exoneradoIgv : false,
+        porcentajeIgv: data.porcentajeIgv,
+        factorExportacion: data.factorExportacion,
+        factorExportacionReal: data.factorExportacionReal,
+        observaciones: data.observaciones,
+        urlPreFacturaPdf: data.urlPreFacturaPdf,
+        centroCostoId: data.centroCostoId,
+        contratoServicioId: data.contratoServicioId,
+        movSalidaAlmacenId: data.movSalidaAlmacenId,
         fechaCreacion: data.fechaCreacion || new Date(),
         fechaActualizacion: data.fechaActualizacion || new Date(),
+        creadoPor: data.creadoPor,
+        actualizadoPor: data.actualizadoPor,
       };
 
-      // 12. Crear la pre-factura con los números generados
-      return await tx.preFactura.create({
-        data: datosConAuditoria,
+      // 11. Crear la pre-factura con los números generados (patrón estándar)
+      const preFacturaCreada = await tx.preFactura.create({
+        data: datosLimpios,
         include: {
           empresa: true,
           cliente: true,
@@ -287,6 +343,8 @@ const crear = async (data) => {
           incoterm: true
         }
       });
+
+      return preFacturaCreada;
     });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;

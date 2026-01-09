@@ -167,30 +167,26 @@ const obtenerPorEmpresa = async (empresaId) => {
  */
 const crear = async (data) => {
   try {
-    // Normalizar IDs a BigInt y eliminar campos no válidos
-    const dataNormalizada = {
-      ...data,
-      id: undefined, // Eliminar id si viene como null
-      empresaId: data.empresaId ? BigInt(data.empresaId) : undefined,
-      sedeId: data.sedeId ? BigInt(data.sedeId) : undefined,
-      activoId: data.activoId ? BigInt(data.activoId) : undefined,
-      almacenId: data.almacenId ? BigInt(data.almacenId) : undefined,
-      clienteId: data.clienteId ? BigInt(data.clienteId) : undefined,
-      contactoClienteId: data.contactoClienteId ? BigInt(data.contactoClienteId) : undefined,
-      responsableId: data.responsableId ? BigInt(data.responsableId) : undefined,
-      aprobadorId: data.aprobadorId ? BigInt(data.aprobadorId) : undefined,
-      tipoDocumentoId: data.tipoDocumentoId ? BigInt(data.tipoDocumentoId) : undefined,
-      serieDocId: data.serieDocId ? BigInt(data.serieDocId) : undefined,
-      monedaId: data.monedaId ? BigInt(data.monedaId) : undefined,
-      estadoContratoId: data.estadoContratoId ? BigInt(data.estadoContratoId) : undefined,
-      creadoPor: data.creadoPor ? BigInt(data.creadoPor) : undefined,
-      actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : undefined,
-    };
+    // Normalizar IDs a BigInt
+    const empresaId = data.empresaId ? BigInt(data.empresaId) : undefined;
+    const sedeId = data.sedeId ? BigInt(data.sedeId) : undefined;
+    const activoId = data.activoId ? BigInt(data.activoId) : undefined;
+    const almacenId = data.almacenId ? BigInt(data.almacenId) : undefined;
+    const clienteId = data.clienteId ? BigInt(data.clienteId) : undefined;
+    const contactoClienteId = data.contactoClienteId ? BigInt(data.contactoClienteId) : undefined;
+    const responsableId = data.responsableId ? BigInt(data.responsableId) : undefined;
+    const aprobadorId = data.aprobadorId ? BigInt(data.aprobadorId) : undefined;
+    const tipoDocumentoId = data.tipoDocumentoId ? BigInt(data.tipoDocumentoId) : undefined;
+    const serieDocId = data.serieDocId ? BigInt(data.serieDocId) : undefined;
+    const monedaId = data.monedaId ? BigInt(data.monedaId) : undefined;
+    const estadoContratoId = data.estadoContratoId ? BigInt(data.estadoContratoId) : undefined;
+    const creadoPor = data.creadoPor ? BigInt(data.creadoPor) : undefined;
+    const actualizadoPor = data.actualizadoPor ? BigInt(data.actualizadoPor) : undefined;
 
     // Validar campos obligatorios
-    if (!dataNormalizada.empresaId || !dataNormalizada.sedeId || !dataNormalizada.almacenId || !dataNormalizada.clienteId || 
-        !dataNormalizada.responsableId || !dataNormalizada.tipoDocumentoId || !dataNormalizada.serieDocId || 
-        !dataNormalizada.monedaId || !dataNormalizada.estadoContratoId) {
+    if (!empresaId || !sedeId || !almacenId || !clienteId || 
+        !responsableId || !tipoDocumentoId || !serieDocId || 
+        !monedaId || !estadoContratoId) {
       throw new ValidationError(
         'Faltan campos obligatorios: empresaId, sedeId, almacenId, clienteId, responsableId, tipoDocumentoId, serieDocId, monedaId, estadoContratoId'
       );
@@ -199,26 +195,26 @@ const crear = async (data) => {
     // Usar transacción para generar número y actualizar correlativo atómicamente
     return await prisma.$transaction(async (tx) => {
       // 1. Validar existencia de empresa
-      const empresa = await tx.empresa.findUnique({ where: { id: dataNormalizada.empresaId } });
+      const empresa = await tx.empresa.findUnique({ where: { id: empresaId } });
       if (!empresa) throw new ValidationError('Empresa no existente.');
 
       // 2. Validar existencia de cliente
-      const cliente = await tx.entidadComercial.findUnique({ where: { id: dataNormalizada.clienteId } });
+      const cliente = await tx.entidadComercial.findUnique({ where: { id: clienteId } });
       if (!cliente) throw new ValidationError('Cliente no existente.');
 
       // 3. Validar existencia de responsable
-      const responsable = await tx.personal.findUnique({ where: { id: dataNormalizada.responsableId } });
+      const responsable = await tx.personal.findUnique({ where: { id: responsableId } });
       if (!responsable) throw new ValidationError('Responsable no existente.');
 
       // 4. Validar aprobador si se proporciona
-      if (dataNormalizada.aprobadorId) {
-        const aprobador = await tx.personal.findUnique({ where: { id: dataNormalizada.aprobadorId } });
+      if (aprobadorId) {
+        const aprobador = await tx.personal.findUnique({ where: { id: aprobadorId } });
         if (!aprobador) throw new ValidationError('Aprobador no existente.');
       }
 
       // 5. Obtener la serie seleccionada
       const serie = await tx.serieDoc.findUnique({
-        where: { id: dataNormalizada.serieDocId }
+        where: { id: serieDocId }
       });
       
       if (!serie) {
@@ -235,35 +231,55 @@ const crear = async (data) => {
       
       // 8. Actualizar el correlativo en SerieDoc
       await tx.serieDoc.update({
-        where: { id: dataNormalizada.serieDocId },
+        where: { id: serieDocId },
         data: { correlativo: BigInt(nuevoCorrelativo) }
       });
 
       // 9. Calcular fechaFinContrato si no viene (1 año después de fechaInicioContrato)
-      let fechaFinContrato = dataNormalizada.fechaFinContrato;
-      if (!fechaFinContrato && dataNormalizada.fechaInicioContrato) {
-        const fechaInicio = new Date(dataNormalizada.fechaInicioContrato);
+      let fechaFinContrato = data.fechaFinContrato;
+      if (!fechaFinContrato && data.fechaInicioContrato) {
+        const fechaInicio = new Date(data.fechaInicioContrato);
         fechaFinContrato = new Date(fechaInicio);
         fechaFinContrato.setFullYear(fechaFinContrato.getFullYear() + 1);
       }
 
-      // 10. Extraer y remover campos de relaciones anidadas
-      const { detalles, ...dataSinRelaciones } = dataNormalizada;
-
-      // 11. Asegurar campos de auditoría
-      const datosConAuditoria = {
-        ...dataSinRelaciones,
+      // 10. Crear objeto limpio solo con campos del modelo (patrón estándar)
+      const datosLimpios = {
+        empresaId,
+        sedeId,
+        activoId,
+        almacenId,
+        clienteId,
+        contactoClienteId,
+        responsableId,
+        aprobadorId,
+        tipoDocumentoId,
+        serieDocId,
         numeroSerie: numSerie,
         numeroCorrelativo: nuevoCorrelativo,
         numeroCompleto,
+        fechaCelebracion: data.fechaCelebracion,
+        fechaInicioContrato: data.fechaInicioContrato,
         fechaFinContrato,
-        creadoEn: dataNormalizada.creadoEn || new Date(),
-        actualizadoEn: dataNormalizada.actualizadoEn || new Date(),
+        fechaInicioCobro: data.fechaInicioCobro,
+        periodicidadCobro: data.periodicidadCobro !== undefined ? data.periodicidadCobro : 1,
+        textoEsenciaContrato: data.textoEsenciaContrato,
+        urlContratoPdf: data.urlContratoPdf,
+        incluyeLuz: data.incluyeLuz !== undefined ? data.incluyeLuz : false,
+        porcentajeRecargoLuz: data.porcentajeRecargoLuz,
+        costoPorKilovatio: data.costoPorKilovatio,
+        monedaId,
+        tipoCambio: data.tipoCambio,
+        estadoContratoId,
+        creadoPor,
+        creadoEn: data.creadoEn || new Date(),
+        actualizadoPor,
+        actualizadoEn: data.actualizadoEn || new Date(),
       };
 
-      // 12. Crear el contrato con los números generados
-      return await tx.contratoServicio.create({
-        data: datosConAuditoria,
+      // 11. Crear el contrato con los números generados (patrón estándar)
+      const contratoCreado = await tx.contratoServicio.create({
+        data: datosLimpios,
         include: {
           empresa: true,
           sede: true,
@@ -279,6 +295,8 @@ const crear = async (data) => {
           estadoContrato: true
         }
       });
+
+      return contratoCreado;
     });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;

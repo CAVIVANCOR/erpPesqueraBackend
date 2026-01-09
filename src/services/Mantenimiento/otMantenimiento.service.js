@@ -120,15 +120,70 @@ const crear = async (data) => {
     }
     await validarForaneas(data);
     
-    // Limpiar data: eliminar id, campos null y strings vacíos opcionales
-    const { id, ...dataLimpia } = data;
-    Object.keys(dataLimpia).forEach(key => {
-      if (dataLimpia[key] === null || dataLimpia[key] === '') {
-        delete dataLimpia[key];
+    // Usar transacción para generar número y actualizar correlativo atómicamente
+    return await prisma.$transaction(async (tx) => {
+      // 1. Obtener la serie seleccionada
+      const serie = await tx.serieDoc.findUnique({
+        where: { id: BigInt(data.serieDocId) }
+      });
+      
+      if (!serie) {
+        throw new ValidationError('Serie de documento no encontrada.');
       }
+      
+      // 2. Calcular nuevo correlativo
+      const nuevoCorrelativo = Number(serie.correlativo) + 1;
+      
+      // 3. Generar números con formato
+      const numSerie = String(serie.serie).padStart(serie.numCerosIzqSerie, '0');
+      const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, '0');
+      const numeroCompleto = `${numSerie}-${numCorre}`;
+      
+      // 4. Actualizar el correlativo en SerieDoc
+      await tx.serieDoc.update({
+        where: { id: BigInt(data.serieDocId) },
+        data: { correlativo: BigInt(nuevoCorrelativo) }
+      });
+      
+      // 5. Crear objeto limpio solo con campos del modelo (patrón estándar)
+      const datosLimpios = {
+        empresaId: data.empresaId,
+        fechaDocumento: data.fechaDocumento || new Date(),
+        sedeId: data.sedeId,
+        activoId: data.activoId,
+        tipoMantenimientoId: data.tipoMantenimientoId,
+        motivoOriginoId: data.motivoOriginoId,
+        prioridadAlta: data.prioridadAlta !== undefined ? data.prioridadAlta : false,
+        estadoId: data.estadoId,
+        fechaProgramada: data.fechaProgramada,
+        fechaInicio: data.fechaInicio,
+        fechaFin: data.fechaFin,
+        tipoDocumentoId: data.tipoDocumentoId,
+        serieDocId: data.serieDocId,
+        numeroSerie: numSerie,
+        numeroCorrelativo: nuevoCorrelativo,
+        numeroCompleto,
+        monedaId: data.monedaId,
+        solicitanteId: data.solicitanteId,
+        responsableId: data.responsableId,
+        autorizadoPorId: data.autorizadoPorId,
+        validadoPorId: data.validadoPorId,
+        descripcionProblema: data.descripcionProblema,
+        solucionAplicada: data.solucionAplicada,
+        observaciones: data.observaciones,
+        urlFotosAntesPdf: data.urlFotosAntesPdf,
+        urlFotosDespuesPdf: data.urlFotosDespuesPdf,
+        urlOrdenTrabajoPdf: data.urlOrdenTrabajoPdf,
+        planMantenimientoId: data.planMantenimientoId,
+        creadoEn: data.creadoEn || new Date(),
+        actualizadoEn: data.actualizadoEn || new Date(),
+        creadoPor: data.creadoPor,
+        actualizadoPor: data.actualizadoPor,
+      };
+      
+      // 6. Crear la OT con los números generados (patrón estándar)
+      return await tx.oTMantenimiento.create({ data: datosLimpios });
     });
-    
-    return await prisma.oTMantenimiento.create({ data: dataLimpia });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

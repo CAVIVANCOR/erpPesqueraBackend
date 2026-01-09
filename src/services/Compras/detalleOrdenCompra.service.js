@@ -86,8 +86,8 @@ const crear = async (data) => {
     const nuevo = await prisma.detalleOrdenCompra.create({
       data: {
         ...data,
-        fechaCreacion: new Date(),
-        fechaActualizacion: new Date()
+        creadoEn: new Date(),
+        actualizadoEn: new Date()
       },
       include: {
         producto: {
@@ -125,7 +125,7 @@ const actualizar = async (id, data) => {
       where: { id },
       data: {
         ...data,
-        fechaActualizacion: new Date()
+        actualizadoEn: new Date()
       },
       include: {
         producto: {

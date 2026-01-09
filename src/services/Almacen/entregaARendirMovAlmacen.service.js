@@ -18,10 +18,15 @@ async function validarClavesForaneas(data) {
     throw new ValidationError('El centroCostoId es requerido.');
   }
 
+  // Convertir a BigInt para la búsqueda en Prisma
+  const movimientoId = BigInt(data.movimientoAlmacenId);
+  const responsableId = BigInt(data.respEntregaRendirId);
+  const centroCostoIdBigInt = BigInt(data.centroCostoId);
+
   const [movimiento, responsable, centroCosto] = await Promise.all([
-    prisma.movimientoAlmacen.findUnique({ where: { id: data.movimientoAlmacenId } }),
-    prisma.personal.findUnique({ where: { id: data.respEntregaRendirId } }),
-    prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } })
+    prisma.movimientoAlmacen.findUnique({ where: { id: movimientoId } }),
+    prisma.personal.findUnique({ where: { id: responsableId } }),
+    prisma.centroCosto.findUnique({ where: { id: centroCostoIdBigInt } })
   ]);
   if (!movimiento) throw new ValidationError('El movimientoAlmacenId no existe.');
   if (!responsable) throw new ValidationError('El respEntregaRendirId no existe.');
@@ -90,9 +95,12 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   await validarClavesForaneas(data);
   
+  // Convertir IDs a BigInt
+  const movimientoAlmacenId = BigInt(data.movimientoAlmacenId);
+  
   // Verificar que no exista ya una entrega para este movimiento de almacén (relación 1:1)
   const existente = await prisma.entregaARendirMovAlmacen.findUnique({
-    where: { movimientoAlmacenId: data.movimientoAlmacenId },
+    where: { movimientoAlmacenId },
   });
   
   if (existente) {
@@ -102,16 +110,16 @@ const crear = async (data) => {
   try {
     return await prisma.entregaARendirMovAlmacen.create({
       data: {
-        movimientoAlmacenId: data.movimientoAlmacenId,
-        respEntregaRendirId: data.respEntregaRendirId,
-        centroCostoId: data.centroCostoId,
+        movimientoAlmacenId: BigInt(data.movimientoAlmacenId),
+        respEntregaRendirId: BigInt(data.respEntregaRendirId),
+        centroCostoId: BigInt(data.centroCostoId),
         entregaLiquidada: data.entregaLiquidada || false,
         fechaLiquidacion: data.fechaLiquidacion || null,
-        respLiquidacionId: data.respLiquidacionId || null,
+        respLiquidacionId: data.respLiquidacionId ? BigInt(data.respLiquidacionId) : null,
         urlLiquidacionPdf: data.urlLiquidacionPdf || null,
         fechaActualizacion: new Date(),
-        creadoPor: data.creadoPor || null,
-        actualizadoPor: data.actualizadoPor || null,
+        creadoPor: data.creadoPor ? BigInt(data.creadoPor) : null,
+        actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : null,
       },
       include: {
         movimientoAlmacen: {
