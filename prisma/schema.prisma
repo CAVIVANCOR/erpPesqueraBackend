@@ -463,31 +463,85 @@ model Incoterm {
 model CostoExportacionPorIncoterm {
   id                          BigInt      @id @default(autoincrement())
   incotermId                  BigInt
-  productoId                  BigInt                                 // Producto de FamiliaProducto = 7 "Gastos Exportación"
-  esResponsabilidadVendedor   Boolean     @default(true)             // true=VENDEDOR, false=COMPRADOR
-  activo                      Boolean     @default(true)             // Para activar/desactivar el costo
+  productoId                  BigInt                                 
+  esResponsabilidadVendedor   Boolean     @default(true)             
+  activo                      Boolean     @default(true)             
   esObligatorio               Boolean     @default(true)
-  orden                       Int?                                   // Orden de presentación
+  orden                       Int?                                   
+  requiereDocumento           Boolean     @default(false)
+  documentoAsociadoId         BigInt?
+  
+  // Valores default SOLO si no depende de ruta
+  proveedorDefaultId          BigInt?
+  monedaDefaultId             BigInt?
+  valorVentaDefault           Decimal?    @db.Decimal(18,2)
+  
+  // Indica si este costo varía por ruta
+  variaSegunRuta              Boolean     @default(false)            // 🆕 NUEVO
   
   fechaCreacion               DateTime    @default(now())
   fechaActualizacion          DateTime?   @updatedAt
   creadoPor                   BigInt?
   actualizadoPor              BigInt?
-  proveedorDefaultId          BigInt?
-  monedaDefaultId           BigInt?
-  valorVentaDefault           Decimal?
-  requiereDocumento           Boolean     @default(false)
-  documentoAsociadoId         BigInt?
-
+ 
   proveedorDefault            EntidadComercial? @relation("ProveedorDefaultCostoIncoterm", fields: [proveedorDefaultId], references: [id])
   monedaDefault               Moneda? @relation("MonedaDefaultCostoIncoterm", fields: [monedaDefaultId], references: [id])
   incoterm                    Incoterm @relation(fields: [incotermId], references: [id])
   producto                    Producto @relation(fields: [productoId], references: [id])
   documentoAsociado           DocRequeridaVentas? @relation("CostoIncotermDocumento", fields: [documentoAsociadoId], references: [id])  
   
+  // 🆕 Relación con tarifas por ruta
+  tarifasPorRuta              TarifaCostoExportacionRuta[]
+  
   @@unique([incotermId, productoId])
   @@index([incotermId])
   @@index([productoId])
+}
+ 
+// ============================================
+// 🆕 NUEVA TABLA: Tarifas por Ruta
+// ============================================
+// Define CUÁNTO cuesta cada servicio según la ruta
+model TarifaCostoExportacionRuta {
+  id                          BigInt      @id @default(autoincrement())
+  costoIncotermId             BigInt                                 // FK a CostoExportacionPorIncoterm
+  
+  // Definición de la ruta
+  paisOrigenId                BigInt?                                // Opcional: si aplica por país
+  puertoOrigenId              BigInt?                                // Puerto de partida
+  paisDestinoId               BigInt?                                // Opcional: si aplica por país
+  puertoDestinoId             BigInt?                                // Puerto de llegada
+  
+  // Tarifa específica para esta ruta
+  proveedorId                 BigInt?                                // Proveedor específico para esta ruta
+  monedaId                    BigInt                                 // Moneda de la tarifa
+  valorVenta                  Decimal     @db.Decimal(18,2)          // Precio para esta ruta
+  
+  // Vigencia de la tarifa
+  fechaVigenciaDesde          DateTime    @default(now())
+  fechaVigenciaHasta          DateTime?                              // null = vigencia indefinida
+  
+  activo                      Boolean     @default(true)
+  observaciones               String?     @db.Text
+  
+  fechaCreacion               DateTime    @default(now())
+  fechaActualizacion          DateTime?   @updatedAt
+  creadoPor                   BigInt?
+  actualizadoPor              BigInt?
+ 
+  // Relaciones
+  costoIncoterm               CostoExportacionPorIncoterm @relation(fields: [costoIncotermId], references: [id], onDelete: Cascade)
+  paisOrigen                  Pais? @relation("PaisOrigenTarifa", fields: [paisOrigenId], references: [id])
+  puertoOrigen                PuertoPesca? @relation("PuertoOrigenTarifa", fields: [puertoOrigenId], references: [id])
+  paisDestino                 Pais? @relation("PaisDestinoTarifa", fields: [paisDestinoId], references: [id])
+  puertoDestino               PuertoPesca? @relation("PuertoDestinoTarifa", fields: [puertoDestinoId], references: [id])
+  proveedor                   EntidadComercial? @relation("ProveedorTarifaRuta", fields: [proveedorId], references: [id])
+  moneda                      Moneda @relation("MonedaTarifaRuta", fields: [monedaId], references: [id])
+  
+  @@index([costoIncotermId])
+  @@index([puertoOrigenId, puertoDestinoId])
+  @@index([paisOrigenId, paisDestinoId])
+  @@index([fechaVigenciaDesde, fechaVigenciaHasta])
 }
 
 // ============================================
@@ -2162,6 +2216,8 @@ descargasFaenaConsumo DescargaFaenaConsumo[]
   retenciones                     Retencion[]
   percepciones                    Percepcion[]
   detallesAsientos                DetalleAsientoContable[]
+    // Relación inversa para TarifaCostoExportacionRuta
+  tarifasRutaProveedor TarifaCostoExportacionRuta[] @relation("ProveedorTarifaRuta")
 }
 
 model LineaCreditoEntidad {
@@ -2914,6 +2970,8 @@ model Moneda {
   prestamos    PrestamoBancario[]
   lineasCredito  LineaCredito[]
   inversiones InversionFinanciera[]
+    // Relación inversa para TarifaCostoExportacionRuta
+  tarifasRuta TarifaCostoExportacionRuta[] @relation("MonedaTarifaRuta")
 
 }
 
@@ -3149,6 +3207,8 @@ model Pais {
   departamentos Departamento[]
   ubigeos       Ubigeo[]
   requisitoDocPorPais RequisitoDocPorPais[]
+  tarifasComoOrigen  TarifaCostoExportacionRuta[] @relation("PaisOrigenTarifa")
+tarifasComoDestino TarifaCostoExportacionRuta[] @relation("PaisDestinoTarifa")
 }
 
 model ParametroAprobador {
@@ -3435,6 +3495,10 @@ descargasFaenaPescaDescarga   DescargaFaenaPesca[]   @relation("DescargaFaenaPes
 descargasFaenaPescaFondeo     DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_PuertoFondeo")
 descargasFaenaConsumoDescarga DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_PuertoDescarga")
 descargasFaenaConsumoFondeo   DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_PuertoFondeo")
+
+  // Relaciones inversas para TarifaCostoExportacionRuta
+  tarifasComoOrigen  TarifaCostoExportacionRuta[] @relation("PuertoOrigenTarifa")
+  tarifasComoDestino TarifaCostoExportacionRuta[] @relation("PuertoDestinoTarifa")
 }
 
 model RefreshToken {
@@ -5512,6 +5576,9 @@ model OrdenCompra {
   numCorreDocFinal            String?     @db.VarChar(40)                // ⭐ NUEVO: Correlativo recibido (ej: "00000456")
   comprobanteRecibido         Boolean?    @default(false)                // ⭐ NUEVO: true = Ya se recibió el comprobante
   fechaRecepcionComprobante   DateTime?                                  // ⭐ NUEVO: Fecha de recepción del comprobante
+
+  direccionRecepcionAlmacenId BigInt?
+  contactoProveedorId         BigInt?
   
   // Relaciones
   requerimientoCompra  RequerimientoCompra? @relation(fields: [requerimientoCompraId], references: [id])
