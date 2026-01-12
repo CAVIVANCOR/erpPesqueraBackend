@@ -2253,10 +2253,15 @@ model DireccionEntidad {
   fechaActualizacion   DateTime?
   creadoPor            BigInt?
   actualizadoPor       BigInt?
+  conceptoAlmacenCompraId BigInt?
+  conceptoAlmacenVentaId BigInt?
+  esAlmacenExterno Boolean @default(false)
+  condicionesRecepcionAlmacen String? @db.Text
+  condicionesEntregaAlmacen String? @db.Text
 
   entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
   ubigeo             Ubigeo           @relation(fields: [ubigeoId], references: [id])
-    preFacturasEntrega    PreFactura[]    @relation("DirEntrega")
+  preFacturasEntrega    PreFactura[]    @relation("DirEntrega")
   preFacturasFiscal     PreFactura[]    @relation("DirFiscal")
 }
 
@@ -3868,6 +3873,10 @@ model TipoProducto {
   fechaActualizacion  DateTime?           @updatedAt
   creadoPor           BigInt?
   actualizadoPor      BigInt?
+  especificacionesCompra        String?             @db.Text  // Cambiar a Text
+  especificacionesVenta         String?             @db.Text  // Cambiar a Text
+  validezOfertaCompra           String?             @db.Text  // Cambiar a Text
+  validezOfertaVenta            String?             @db.Text  // Cambiar a Text
 
   // Relaciones
  subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
