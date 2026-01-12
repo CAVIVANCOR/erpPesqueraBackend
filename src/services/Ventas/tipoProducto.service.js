@@ -57,6 +57,10 @@ const crear = async (data, usuarioId) => {
       activo: data.activo !== undefined ? data.activo : true,
       paraCompras: data.paraCompras !== undefined ? data.paraCompras : false,
       paraVentas: data.paraVentas !== undefined ? data.paraVentas : false,
+      especificacionesCompra: data.especificacionesCompra || null,
+      especificacionesVenta: data.especificacionesVenta || null,
+      validezOfertaCompra: data.validezOfertaCompra || null,
+      validezOfertaVenta: data.validezOfertaVenta || null,
       creadoPor: usuarioId ? BigInt(usuarioId) : null
     };
     
@@ -88,6 +92,10 @@ const actualizar = async (id, data, usuarioId) => {
       activo: data.activo !== undefined ? data.activo : true,
       paraCompras: data.paraCompras !== undefined ? data.paraCompras : false,
       paraVentas: data.paraVentas !== undefined ? data.paraVentas : false,
+      especificacionesCompra: data.especificacionesCompra || null,
+      especificacionesVenta: data.especificacionesVenta || null,
+      validezOfertaCompra: data.validezOfertaCompra || null,
+      validezOfertaVenta: data.validezOfertaVenta || null,
       actualizadoPor: usuarioId ? BigInt(usuarioId) : null
     };
     

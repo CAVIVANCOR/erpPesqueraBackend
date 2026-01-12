@@ -13,15 +13,21 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
  * @param {Object} data - Datos de la dirección
  */
 async function validarDireccionEntidad(data) {
-  // Validar existencia de EntidadComercial
   if (data.entidadComercialId) {
     const existe = await prisma.entidadComercial.findUnique({ where: { id: data.entidadComercialId } });
     if (!existe) throw new ValidationError('Entidad comercial no existente.');
   }
-  // Validar existencia de Ubigeo
   if (data.ubigeoId) {
     const existeUbigeo = await prisma.ubigeo.findUnique({ where: { id: data.ubigeoId } });
     if (!existeUbigeo) throw new ValidationError('Ubigeo no existente.');
+  }
+  if (data.conceptoAlmacenCompraId) {
+    const existeConcepto = await prisma.conceptoMovAlmacen.findUnique({ where: { id: data.conceptoAlmacenCompraId } });
+    if (!existeConcepto) throw new ValidationError('Concepto de almacén para compras no existente.');
+  }
+  if (data.conceptoAlmacenVentaId) {
+    const existeConcepto = await prisma.conceptoMovAlmacen.findUnique({ where: { id: data.conceptoAlmacenVentaId } });
+    if (!existeConcepto) throw new ValidationError('Concepto de almacén para ventas no existente.');
   }
 }
 
@@ -76,13 +82,13 @@ const obtenerPorEntidad = async (entidadComercialId) => {
       orderBy: { id: 'desc' }
     });
     
-    // Consultar manualmente los datos de personal para cada dirección
     const resultadoConPersonal = await Promise.all(
       resultado.map(async (direccion) => {
         let personalCreador = null;
         let personalActualizador = null;
+        let conceptoCompra = null;
+        let conceptoVenta = null;
         
-        // Consultar personal creador si existe
         if (direccion.creadoPor) {
           personalCreador = await prisma.personal.findUnique({
             where: { id: direccion.creadoPor },
@@ -90,7 +96,6 @@ const obtenerPorEntidad = async (entidadComercialId) => {
           });
         }
         
-        // Consultar personal actualizador si existe
         if (direccion.actualizadoPor) {
           personalActualizador = await prisma.personal.findUnique({
             where: { id: direccion.actualizadoPor },
@@ -98,10 +103,26 @@ const obtenerPorEntidad = async (entidadComercialId) => {
           });
         }
         
+        if (direccion.conceptoAlmacenCompraId) {
+          conceptoCompra = await prisma.conceptoMovAlmacen.findUnique({
+            where: { id: direccion.conceptoAlmacenCompraId },
+            select: { id: true, descripcionArmada: true }
+          });
+        }
+        
+        if (direccion.conceptoAlmacenVentaId) {
+          conceptoVenta = await prisma.conceptoMovAlmacen.findUnique({
+            where: { id: direccion.conceptoAlmacenVentaId },
+            select: { id: true, descripcionArmada: true }
+          });
+        }
+        
         return {
           ...direccion,
           personalCreador,
-          personalActualizador
+          personalActualizador,
+          conceptoCompra,
+          conceptoVenta
         };
       })
     );
@@ -145,11 +166,27 @@ const crear = async (data) => {
   try {
     await validarDireccionEntidad(data);
     
-    // Asegurar que las fechas de auditoría estén presentes
+    // Objeto limpio para grabación (sin relaciones)
     const datosConAuditoria = {
-      ...data,
+      entidadComercialId: BigInt(data.entidadComercialId),
+      direccion: data.direccion,
+      direccionArmada: data.direccionArmada || null,
+      ubigeoId: BigInt(data.ubigeoId),
+      fiscal: data.fiscal !== undefined ? data.fiscal : false,
+      almacenPrincipal: data.almacenPrincipal !== undefined ? data.almacenPrincipal : false,
+      referencia: data.referencia || null,
+      telefono: data.telefono || null,
+      correo: data.correo || null,
+      activo: data.activo !== undefined ? data.activo : true,
+      conceptoAlmacenCompraId: data.conceptoAlmacenCompraId ? BigInt(data.conceptoAlmacenCompraId) : null,
+      conceptoAlmacenVentaId: data.conceptoAlmacenVentaId ? BigInt(data.conceptoAlmacenVentaId) : null,
+      esAlmacenExterno: data.esAlmacenExterno !== undefined ? data.esAlmacenExterno : false,
+      condicionesRecepcionAlmacen: data.condicionesRecepcionAlmacen || null,
+      condicionesEntregaAlmacen: data.condicionesEntregaAlmacen || null,
       fechaCreacion: data.fechaCreacion || new Date(),
+      creadoPor: data.creadoPor ? BigInt(data.creadoPor) : null,
       fechaActualizacion: data.fechaActualizacion || new Date(),
+      actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : null,
     };
     
     const resultado = await prisma.direccionEntidad.create({ data: datosConAuditoria });
@@ -171,14 +208,27 @@ const actualizar = async (id, data) => {
     if (!existente) throw new NotFoundError('Dirección no encontrada');
     await validarDireccionEntidad(data);
     
-    // Asegurar que todos los campos de auditoría estén presentes
+    // Objeto limpio para grabación (sin relaciones)
     const datosConAuditoria = {
-      ...data,
-      // Si fechaCreacion o creadoPor son null/vacíos en el registro existente, asignarlos ahora
+      entidadComercialId: BigInt(data.entidadComercialId),
+      direccion: data.direccion,
+      direccionArmada: data.direccionArmada || null,
+      ubigeoId: BigInt(data.ubigeoId),
+      fiscal: data.fiscal !== undefined ? data.fiscal : false,
+      almacenPrincipal: data.almacenPrincipal !== undefined ? data.almacenPrincipal : false,
+      referencia: data.referencia || null,
+      telefono: data.telefono || null,
+      correo: data.correo || null,
+      activo: data.activo !== undefined ? data.activo : true,
+      conceptoAlmacenCompraId: data.conceptoAlmacenCompraId ? BigInt(data.conceptoAlmacenCompraId) : null,
+      conceptoAlmacenVentaId: data.conceptoAlmacenVentaId ? BigInt(data.conceptoAlmacenVentaId) : null,
+      esAlmacenExterno: data.esAlmacenExterno !== undefined ? data.esAlmacenExterno : false,
+      condicionesRecepcionAlmacen: data.condicionesRecepcionAlmacen || null,
+      condicionesEntregaAlmacen: data.condicionesEntregaAlmacen || null,
       fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
-      creadoPor: data.creadoPor || existente.creadoPor || null,
-      // Siempre actualizar estos campos
+      creadoPor: data.creadoPor ? BigInt(data.creadoPor) : (existente.creadoPor || null),
       fechaActualizacion: data.fechaActualizacion || new Date(),
+      actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : null,
     };
     
     const resultado = await prisma.direccionEntidad.update({ where: { id }, data: datosConAuditoria });
