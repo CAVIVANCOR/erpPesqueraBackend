@@ -1,11 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 
-/**
- * Servicio CRUD para OrdenCompra
- * Documentado en español.
- */
-
 async function validarForaneas(data) {
   if (data.empresaId) {
     const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
@@ -108,8 +103,6 @@ const obtenerPorId = async (id) => {
     
     if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
     
-    // Cargar manualmente las relaciones que no están en el schema
-    // solicitante, aprobadoPor y centroCosto
     if (orden.solicitanteId) {
       const solicitante = await prisma.personal.findUnique({
         where: { id: orden.solicitanteId },
@@ -118,7 +111,6 @@ const obtenerPorId = async (id) => {
         }
       });
       if (solicitante) {
-        // Agregar nombreCompleto armado
         solicitante.nombreCompleto = `${solicitante.nombres} ${solicitante.apellidos}`.trim();
         orden.solicitante = solicitante;
       }
@@ -132,7 +124,6 @@ const obtenerPorId = async (id) => {
         }
       });
       if (aprobadoPor) {
-        // Agregar nombreCompleto armado
         aprobadoPor.nombreCompleto = `${aprobadoPor.nombres} ${aprobadoPor.apellidos}`.trim();
         orden.aprobadoPor = aprobadoPor;
       }
@@ -143,7 +134,6 @@ const obtenerPorId = async (id) => {
         where: { id: orden.centroCostoId }
       });
       if (centroCosto) {
-        // Normalizar campos (Nombre -> nombre)
         centroCosto.nombre = centroCosto.Nombre;
         centroCosto.codigo = centroCosto.Codigo;
         centroCosto.descripcion = centroCosto.Descripcion;
@@ -161,7 +151,6 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    // Validar campos obligatorios
     if (!data.empresaId || !data.tipoDocumentoId || !data.proveedorId) {
       throw new ValidationError('Los campos empresaId, tipoDocumentoId y proveedorId son obligatorios.');
     }
@@ -171,9 +160,7 @@ const crear = async (data) => {
     
     await validarForaneas(data);
     
-    // Usar transacción para generar número y actualizar correlativo atómicamente
     return await prisma.$transaction(async (tx) => {
-      // 1. Obtener la empresa para el porcentaje de IGV
       const empresa = await tx.empresa.findUnique({
         where: { id: BigInt(data.empresaId) }
       });
@@ -182,7 +169,6 @@ const crear = async (data) => {
         throw new ValidationError('Empresa no encontrada.');
       }
       
-      // 2. Obtener la serie seleccionada
       const serie = await tx.serieDoc.findUnique({
         where: { id: BigInt(data.serieDocId) }
       });
@@ -191,30 +177,24 @@ const crear = async (data) => {
         throw new ValidationError('Serie de documento no encontrada.');
       }
       
-      // 3. Calcular nuevo correlativo
       const nuevoCorrelativo = Number(serie.correlativo) + 1;
-      
-      // 4. Generar números con formato
       const numSerie = String(serie.serie).padStart(serie.numCerosIzqSerie, '0');
       const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, '0');
       const numeroDocumento = `${numSerie}-${numCorre}`;
       
-      // 5. Actualizar el correlativo en SerieDoc
       await tx.serieDoc.update({
         where: { id: BigInt(data.serieDocId) },
         data: { correlativo: BigInt(nuevoCorrelativo) }
       });
       
-      // 6. Obtener estado inicial (PENDIENTE = 32)
       const estadoInicial = await tx.estadoMultiFuncion.findFirst({
-        where: { id: 32 } // PENDIENTE
+        where: { id: 38 }
       });
       
       if (!estadoInicial) {
-        throw new ValidationError('No se encontró el estado inicial PENDIENTE (id=32)');
+        throw new ValidationError('No se encontró el estado inicial PENDIENTE (id=38)');
       }
       
-      // 7. Crear objeto limpio solo con campos del modelo (patrón estándar)
       const datosLimpios = {
         empresaId: data.empresaId,
         tipoDocumentoId: data.tipoDocumentoId,
@@ -252,7 +232,6 @@ const crear = async (data) => {
         fechaRecepcionComprobante: data.fechaRecepcionComprobante,
       };
       
-      // 8. Crear la orden de compra con los números generados (patrón estándar)
       const ordenCreada = await tx.ordenCompra.create({
         data: datosLimpios,
         include: {
@@ -278,16 +257,13 @@ const actualizar = async (id, data) => {
     const existe = await prisma.ordenCompra.findUnique({ where: { id } });
     if (!existe) throw new NotFoundError('OrdenCompra no encontrada');
     
-    // Validar que no esté anulada
-    if (existe.estadoId === 40) { // ANULADO - ORDEN DE COMPRA
+    if (Number(existe.estadoId) === 40) {
       throw new ValidationError('No se puede modificar una orden anulada');
     }
     
     await validarForaneas(data);
     
-    // Usar transacción para actualizar orden y recalcular subtotales de detalles
     const actualizado = await prisma.$transaction(async (tx) => {
-      // 1. Actualizar la orden de compra
       const ordenActualizada = await tx.ordenCompra.update({
         where: { id },
         data: {
@@ -308,12 +284,10 @@ const actualizar = async (id, data) => {
         }
       });
       
-      // 2. Recalcular subtotales de TODOS los detalles (si existen)
       const detalles = await tx.detalleOrdenCompra.findMany({
         where: { ordenCompraId: id }
       });
       
-      // Solo actualizar si hay detalles
       if (detalles && detalles.length > 0) {
         for (const detalle of detalles) {
           const subtotalCalculado = Number(detalle.cantidad) * Number(detalle.precioUnitario);
@@ -326,7 +300,6 @@ const actualizar = async (id, data) => {
         }
       }
       
-      // 3. Retornar la orden actualizada con detalles recalculados
       return await tx.ordenCompra.findUnique({
         where: { id },
         include: {
@@ -357,8 +330,7 @@ const eliminar = async (id) => {
     const existe = await prisma.ordenCompra.findUnique({ where: { id } });
     if (!existe) throw new NotFoundError('OrdenCompra no encontrada');
     
-    // Validar que no esté anulada
-    if (existe.estadoId === 40) { // ANULADO - ORDEN DE COMPRA
+    if (Number(existe.estadoId) === 40) {
       throw new ValidationError('No se puede eliminar una orden anulada.');
     }
     
@@ -370,16 +342,10 @@ const eliminar = async (id) => {
   }
 };
 
-/**
- * Obtiene series de documentos filtradas
- * Filtrado: SerieDoc.empresaId = OrdenCompra.empresaId
- *           SerieDoc.activo = true
- *           SerieDoc.tipoDocumentoId = OrdenCompra.tipoDocumentoId
- */
 const obtenerSeriesDoc = async (empresaId, tipoDocumentoId) => {
   try {
     const where = {
-      activo: true // Solo series activas
+      activo: true
     };
     
     if (empresaId) where.empresaId = BigInt(empresaId);
@@ -399,25 +365,19 @@ const obtenerSeriesDoc = async (empresaId, tipoDocumentoId) => {
   }
 };
 
-/**
- * Aprueba una orden de compra
- */
 const aprobar = async (id) => {
   try {
     const orden = await prisma.ordenCompra.findUnique({ where: { id } });
     if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
     
-    // Validar que esté en estado PENDIENTE (id=38)
     if (Number(orden.estadoId) !== 38) {
       throw new ValidationError('Solo se pueden aprobar órdenes en estado PENDIENTE');
     }
     
-    // Buscar el aprobador automáticamente desde ParametroAprobador
-    // Filtrar por empresaId, moduloSistemaId=4 (Compras) y cesado=false
     const parametroAprobador = await prisma.parametroAprobador.findFirst({
       where: {
         empresaId: orden.empresaId,
-        moduloSistemaId: BigInt(4), // Módulo de Compras
+        moduloSistemaId: BigInt(4),
         cesado: false
       }
     });
@@ -429,7 +389,7 @@ const aprobar = async (id) => {
     const aprobado = await prisma.ordenCompra.update({
       where: { id },
       data: {
-        estadoId: BigInt(39), // APROBADO - ORDEN DE COMPRA
+        estadoId: BigInt(39),
         aprobadoPorId: parametroAprobador.personalRespId,
         actualizadoEn: new Date()
       },
@@ -453,38 +413,87 @@ const aprobar = async (id) => {
   }
 };
 
-/**
- * Anula una orden de compra
- */
 const anular = async (id) => {
   try {
-    const orden = await prisma.ordenCompra.findUnique({ where: { id } });
-    if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
-    
-    // Validar que no esté ya anulada
-    if (orden.estadoId === 40) {
-      throw new ValidationError('La orden ya está anulada');
-    }
-    
-    const anulado = await prisma.ordenCompra.update({
-      where: { id },
-      data: {
-        estadoId: BigInt(40), // ANULADO - ORDEN DE COMPRA
-        actualizadoEn: new Date()
-      },
-      include: {
-        empresa: true,
-        tipoDocumento: true,
-        proveedor: true,
-        detalles: {
-          include: {
-            producto: true
+    return await prisma.$transaction(async (tx) => {
+      const orden = await tx.ordenCompra.findUnique({ 
+        where: { id },
+        include: {
+          movIngresoAlmacen: {
+            include: {
+              detalles: true
+            }
           }
         }
+      });
+      
+      if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
+      
+      if (Number(orden.estadoId) === 40) {
+        throw new ValidationError('La orden ya está anulada');
       }
+      
+      if (orden.movIngresoAlmacenId) {
+        const movId = orden.movIngresoAlmacenId;
+        
+        await tx.kardexAlmacen.deleteMany({
+          where: { movimientoAlmacenId: movId }
+        });
+        
+        const detallesMov = orden.movIngresoAlmacen.detalles;
+        
+        for (const detalle of detallesMov) {
+          const saldoProducto = await tx.saldosProducto.findFirst({
+            where: {
+              productoId: detalle.productoId,
+              almacenId: orden.movIngresoAlmacen.almacenDestinoId
+            }
+          });
+          
+          if (saldoProducto) {
+            const nuevaCantidad = Number(saldoProducto.cantidad) - Number(detalle.cantidad);
+            const nuevoPeso = Number(saldoProducto.peso) - Number(detalle.peso || 0);
+            
+            await tx.saldosProducto.update({
+              where: { id: saldoProducto.id },
+              data: {
+                cantidad: nuevaCantidad >= 0 ? nuevaCantidad : 0,
+                peso: nuevoPeso >= 0 ? nuevoPeso : 0
+              }
+            });
+          }
+        }
+        
+        await tx.detalleMovimientoAlmacen.deleteMany({
+          where: { movimientoAlmacenId: movId }
+        });
+        
+        await tx.movimientoAlmacen.delete({
+          where: { id: movId }
+        });
+      }
+      
+      const anulado = await tx.ordenCompra.update({
+        where: { id },
+        data: {
+          estadoId: BigInt(40),
+          movIngresoAlmacenId: null,
+          actualizadoEn: new Date()
+        },
+        include: {
+          empresa: true,
+          tipoDocumento: true,
+          proveedor: true,
+          detalles: {
+            include: {
+              producto: true
+            }
+          }
+        }
+      });
+      
+      return anulado;
     });
-    
-    return anulado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -492,14 +501,189 @@ const anular = async (id) => {
   }
 };
 
-/**
- * Genera Órdenes de Compra desde un Requerimiento de Compra
- * Maneja tanto compra directa como compra con cotizaciones
- */
+const generarKardex = async (id) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const orden = await tx.ordenCompra.findUnique({
+        where: { id },
+        include: {
+          empresa: true,
+          detalles: {
+            include: {
+              producto: true
+            }
+          }
+        }
+      });
+      
+      if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
+      
+      if (Number(orden.estadoId) !== 39) {
+        throw new ValidationError('Solo se puede generar kardex para órdenes aprobadas');
+      }
+      
+      if (orden.movIngresoAlmacenId) {
+        throw new ValidationError('Esta orden ya tiene un movimiento de almacén generado');
+      }
+      
+      if (!orden.detalles || orden.detalles.length === 0) {
+        throw new ValidationError('La orden no tiene detalles para generar el kardex');
+      }
+      
+      const conceptoCompra = await tx.conceptoMovAlmacen.findFirst({
+        where: { 
+          nombre: { contains: 'COMPRA', mode: 'insensitive' }
+        }
+      });
+      
+      if (!conceptoCompra) {
+        throw new ValidationError('No se encontró el concepto de movimiento para COMPRA');
+      }
+      
+      const almacenPrincipal = await tx.almacen.findFirst({
+        where: {
+          empresaId: orden.empresaId,
+          esPrincipal: true
+        }
+      });
+      
+      if (!almacenPrincipal) {
+        throw new ValidationError('No se encontró un almacén principal para esta empresa');
+      }
+      
+      const serieMovAlmacen = await tx.serieDoc.findFirst({
+        where: {
+          tipoDocumentoId: BigInt(18),
+          empresaId: orden.empresaId,
+          activo: true
+        }
+      });
+      
+      if (!serieMovAlmacen) {
+        throw new ValidationError('No se encontró una serie activa para Movimiento de Almacén');
+      }
+      
+      const nuevoCorrelativo = Number(serieMovAlmacen.correlativo) + 1;
+      const numSerie = String(serieMovAlmacen.serie).padStart(serieMovAlmacen.numCerosIzqSerie, '0');
+      const numCorre = String(nuevoCorrelativo).padStart(serieMovAlmacen.numCerosIzqCorre, '0');
+      const numeroDocumento = `${numSerie}-${numCorre}`;
+      
+      await tx.serieDoc.update({
+        where: { id: serieMovAlmacen.id },
+        data: { correlativo: BigInt(nuevoCorrelativo) }
+      });
+      
+      const estadoPendiente = await tx.estadoMultiFuncion.findFirst({
+        where: { id: 30 }
+      });
+      
+      if (!estadoPendiente) {
+        throw new ValidationError('No se encontró el estado PENDIENTE para movimiento de almacén');
+      }
+      
+      const movimiento = await tx.movimientoAlmacen.create({
+        data: {
+          empresaId: orden.empresaId,
+          tipoDocumentoId: BigInt(18),
+          serieDocId: serieMovAlmacen.id,
+          numSerieDoc: numSerie,
+          numCorreDoc: numCorre,
+          numeroDocumento,
+          fechaDocumento: new Date(),
+          conceptoMovAlmacenId: conceptoCompra.id,
+          almacenDestinoId: almacenPrincipal.id,
+          entidadComercialId: orden.proveedorId,
+          ordenCompraId: orden.id,
+          estadoDocAlmacenId: estadoPendiente.id,
+          observaciones: `Ingreso por Orden de Compra ${orden.numeroDocumento}`,
+          creadoEn: new Date(),
+          actualizadoEn: new Date()
+        }
+      });
+      
+      for (const detalle of orden.detalles) {
+        await tx.detalleMovimientoAlmacen.create({
+          data: {
+            movimientoAlmacenId: movimiento.id,
+            productoId: detalle.productoId,
+            cantidad: detalle.cantidad,
+            peso: 0,
+            creadoEn: new Date(),
+            actualizadoEn: new Date()
+          }
+        });
+        
+        await tx.kardexAlmacen.create({
+          data: {
+            movimientoAlmacenId: movimiento.id,
+            productoId: detalle.productoId,
+            almacenId: almacenPrincipal.id,
+            tipoMovimiento: 'INGRESO',
+            cantidad: detalle.cantidad,
+            peso: 0,
+            fechaMovimiento: new Date(),
+            creadoEn: new Date()
+          }
+        });
+        
+        const saldoExistente = await tx.saldosProducto.findFirst({
+          where: {
+            productoId: detalle.productoId,
+            almacenId: almacenPrincipal.id
+          }
+        });
+        
+        if (saldoExistente) {
+          await tx.saldosProducto.update({
+            where: { id: saldoExistente.id },
+            data: {
+              cantidad: Number(saldoExistente.cantidad) + Number(detalle.cantidad),
+              peso: Number(saldoExistente.peso) + 0
+            }
+          });
+        } else {
+          await tx.saldosProducto.create({
+            data: {
+              productoId: detalle.productoId,
+              almacenId: almacenPrincipal.id,
+              cantidad: detalle.cantidad,
+              peso: 0
+            }
+          });
+        }
+      }
+      
+      const ordenActualizada = await tx.ordenCompra.update({
+        where: { id },
+        data: {
+          estadoId: BigInt(50),
+          movIngresoAlmacenId: movimiento.id,
+          actualizadoEn: new Date()
+        },
+        include: {
+          empresa: true,
+          tipoDocumento: true,
+          proveedor: true,
+          detalles: {
+            include: {
+              producto: true
+            }
+          }
+        }
+      });
+      
+      return ordenActualizada;
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 const generarDesdeRequerimiento = async (requerimientoCompraId) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      // 1. Obtener el requerimiento con todas sus relaciones
       const requerimiento = await tx.requerimientoCompra.findUnique({
         where: { id: BigInt(requerimientoCompraId) },
         include: {
@@ -517,18 +701,15 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
         throw new NotFoundError('Requerimiento de Compra no encontrado');
       }
       
-      // 2. Validar que el requerimiento esté aprobado (estadoId = 35)
       if (requerimiento.estadoId !== BigInt(35)) {
         throw new ValidationError('Solo se pueden generar órdenes desde requerimientos aprobados');
       }
       
-      // 3. Determinar si es compra directa o con cotizaciones
       const esCompraDirecta = !requerimiento.esConCotizacion;
       
       let ordenesGeneradas = [];
       
       if (esCompraDirecta) {
-        // COMPRA DIRECTA: Generar una orden por proveedor
         const detallesPorProveedor = new Map();
         
         for (const detalle of requerimiento.detalles) {
@@ -543,13 +724,11 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
           detallesPorProveedor.get(proveedorId).push(detalle);
         }
         
-        // Generar una orden por cada proveedor
         for (const [proveedorId, detalles] of detallesPorProveedor) {
           const orden = await crearOrdenCompraDirecta(tx, requerimiento, BigInt(proveedorId), detalles);
           ordenesGeneradas.push(orden);
         }
       } else {
-        // COMPRA CON COTIZACIONES: Obtener detalles seleccionados
         const cotizaciones = await tx.cotizacionProveedor.findMany({
           where: {
             requerimientoCompraId: BigInt(requerimientoCompraId)
@@ -568,7 +747,6 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
           }
         });
         
-        // Agrupar por proveedor y moneda
         const itemsPorProveedorMoneda = new Map();
         
         for (const cotizacion of cotizaciones) {
@@ -591,18 +769,16 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
           throw new ValidationError('No hay items seleccionados para generar órdenes de compra');
         }
         
-        // Generar una orden por cada combinación proveedor-moneda
         for (const [key, data] of itemsPorProveedorMoneda) {
           const orden = await crearOrdenCompraConCotizacion(tx, requerimiento, data.proveedorId, data.monedaId, data.detalles);
           ordenesGeneradas.push(orden);
         }
       }
       
-      // 4. Actualizar estado del requerimiento a AUTORIZA COMPRA (37)
       await tx.requerimientoCompra.update({
         where: { id: BigInt(requerimientoCompraId) },
         data: {
-          estadoId: BigInt(37), // AUTORIZA COMPRA
+          estadoId: BigInt(37),
           actualizadoEn: new Date()
         }
       });
@@ -616,14 +792,10 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
   }
 };
 
-/**
- * Función auxiliar para crear una Orden de Compra (Compra Directa)
- */
 async function crearOrdenCompraDirecta(tx, requerimiento, proveedorId, detalles) {
-  // 1. Buscar la serie correspondiente
   const serieOrden = await tx.serieDoc.findFirst({
     where: {
-      tipoDocumentoId: BigInt(17), // ORDEN DE COMPRA
+      tipoDocumentoId: BigInt(17),
       empresaId: requerimiento.empresaId,
       tipoAlmacenId: requerimiento.serieDoc.tipoAlmacenId,
       serie: requerimiento.serieDoc.serie,
@@ -638,25 +810,20 @@ async function crearOrdenCompraDirecta(tx, requerimiento, proveedorId, detalles)
     );
   }
   
-  // 2. Calcular nuevo correlativo
   const nuevoCorrelativo = Number(serieOrden.correlativo) + 1;
-  
-  // 3. Generar números con formato (mismo patrón que RequerimientoCompra)
   const numSerie = String(serieOrden.serie).padStart(serieOrden.numCerosIzqSerie, '0');
   const numCorre = String(nuevoCorrelativo).padStart(serieOrden.numCerosIzqCorre, '0');
   const numeroDocumento = `${numSerie}-${numCorre}`;
   
-  // 4. Actualizar el correlativo en SerieDoc
   await tx.serieDoc.update({
     where: { id: serieOrden.id },
     data: { correlativo: BigInt(nuevoCorrelativo) }
   });
   
-  // 5. Crear la Orden de Compra
   const ordenCompra = await tx.ordenCompra.create({
     data: {
       empresaId: requerimiento.empresaId,
-      tipoDocumentoId: BigInt(17), // ORDEN DE COMPRA
+      tipoDocumentoId: BigInt(17),
       serieDocId: serieOrden.id,
       numSerieDoc: numSerie,
       numCorreDoc: numCorre,
@@ -669,7 +836,7 @@ async function crearOrdenCompraDirecta(tx, requerimiento, proveedorId, detalles)
       tipoCambio: requerimiento.tipoCambio,
       fechaEntrega: requerimiento.fechaRequerida,
       solicitanteId: requerimiento.solicitanteId,
-      estadoId: BigInt(38), // PENDIENTE
+      estadoId: BigInt(38),
       centroCostoId: requerimiento.centroCostoId,
       porcentajeIGV: requerimiento.porcentajeIGV,
       esExoneradoAlIGV: requerimiento.esExoneradoAlIGV,
@@ -695,14 +862,10 @@ async function crearOrdenCompraDirecta(tx, requerimiento, proveedorId, detalles)
   return ordenCompra;
 }
 
-/**
- * Función auxiliar para crear una Orden de Compra (Con Cotizaciones)
- */
 async function crearOrdenCompraConCotizacion(tx, requerimiento, proveedorId, monedaId, detallesCotizacion) {
-  // 1. Buscar la serie correspondiente
   const serieOrden = await tx.serieDoc.findFirst({
     where: {
-      tipoDocumentoId: BigInt(17), // ORDEN DE COMPRA
+      tipoDocumentoId: BigInt(17),
       empresaId: requerimiento.empresaId,
       tipoAlmacenId: requerimiento.serieDoc.tipoAlmacenId,
       serie: requerimiento.serieDoc.serie,
@@ -717,25 +880,20 @@ async function crearOrdenCompraConCotizacion(tx, requerimiento, proveedorId, mon
     );
   }
   
-  // 2. Calcular nuevo correlativo
   const nuevoCorrelativo = Number(serieOrden.correlativo) + 1;
-  
-  // 3. Generar números con formato
   const numSerie = String(serieOrden.serie).padStart(serieOrden.numCerosIzqSerie, '0');
   const numCorre = String(nuevoCorrelativo).padStart(serieOrden.numCerosIzqCorre, '0');
   const numeroDocumento = `${numSerie}-${numCorre}`;
   
-  // 4. Actualizar el correlativo en SerieDoc
   await tx.serieDoc.update({
     where: { id: serieOrden.id },
     data: { correlativo: BigInt(nuevoCorrelativo) }
   });
   
-  // 5. Crear la Orden de Compra
   const ordenCompra = await tx.ordenCompra.create({
     data: {
       empresaId: requerimiento.empresaId,
-      tipoDocumentoId: BigInt(17), // ORDEN DE COMPRA
+      tipoDocumentoId: BigInt(17),
       serieDocId: serieOrden.id,
       numSerieDoc: numSerie,
       numCorreDoc: numCorre,
@@ -744,11 +902,11 @@ async function crearOrdenCompraConCotizacion(tx, requerimiento, proveedorId, mon
       requerimientoCompraId: requerimiento.id,
       proveedorId: proveedorId,
       formaPagoId: requerimiento.formaPagoId,
-      monedaId: monedaId, // Moneda del detalle de cotización
+      monedaId: monedaId,
       tipoCambio: requerimiento.tipoCambio,
       fechaEntrega: requerimiento.fechaRequerida,
       solicitanteId: requerimiento.solicitanteId,
-      estadoId: BigInt(38), // PENDIENTE
+      estadoId: BigInt(38),
       centroCostoId: requerimiento.centroCostoId,
       porcentajeIGV: requerimiento.porcentajeIGV,
       esExoneradoAlIGV: requerimiento.esExoneradoAlIGV,
@@ -783,5 +941,6 @@ export default {
   obtenerSeriesDoc,
   aprobar,
   anular,
+  generarKardex,
   generarDesdeRequerimiento
 };

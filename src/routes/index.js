@@ -123,6 +123,7 @@ import requerimientoCompraRoutes from '../routes/Compras/requerimientoCompra.rou
 import detalleReqCompraRoutes from '../routes/Compras/detalleReqCompra.routes.js';
 import ordenCompraRoutes from '../routes/Compras/ordenCompra.routes.js';
 import detalleOrdenCompraRoutes from '../routes/Compras/detalleOrdenCompra.routes.js';
+import detDatosAdicionalesOrdenCompraRoutes from '../routes/Compras/detDatosAdicionalesOrdenCompra.routes.js';
 import entregaARendirPComprasRoutes from '../routes/Compras/entregaARendirPCompras.routes.js';
 import detMovsEntregaRendirPComprasRoutes from '../routes/Compras/detMovsEntregaRendirPCompras.routes.js';
 import cotizacionVentasRoutes from '../routes/Ventas/cotizacionVentas.routes.js';
@@ -434,6 +435,8 @@ router.use('/cotizaciones-proveedor', cotizacionProveedorRoutes);
 router.use('/ordenes-compra', ordenCompraRoutes);
 // Rutas para DetalleOrdenCompra
 router.use('/detalles-orden-compra', detalleOrdenCompraRoutes);
+// Rutas para DetDatosAdicionalesOrdenCompra
+router.use('/det-datos-adicionales-orden-compra', detDatosAdicionalesOrdenCompraRoutes);
 // Rutas para EntregaARendirPCompras
 router.use('/entrega-a-rendir-p-compras', entregaARendirPComprasRoutes);
 // Rutas para DetMovsEntregaRendirPCompras
