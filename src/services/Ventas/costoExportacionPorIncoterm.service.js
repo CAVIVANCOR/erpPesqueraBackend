@@ -41,7 +41,17 @@ const listar = async () => {
         },
         proveedorDefault: true,
         monedaDefault: true,
-        documentoAsociado: true
+        documentoAsociado: true,
+        tarifasPorRuta: {
+          include: {
+            paisOrigen: true,
+            puertoOrigen: true,
+            paisDestino: true,
+            puertoDestino: true,
+            proveedor: true,
+            moneda: true
+          }
+        }
       },
       orderBy: [
         { incotermId: 'asc' },
@@ -71,12 +81,26 @@ const obtenerPorId = async (id) => {
         },
         proveedorDefault: true,
         monedaDefault: true,
-        documentoAsociado: true
+        documentoAsociado: true,
+        tarifasPorRuta: {
+          include: {
+            paisOrigen: true,
+            puertoOrigen: true,
+            paisDestino: true,
+            puertoDestino: true,
+            proveedor: true,
+            moneda: true
+          },
+          orderBy: {
+            fechaVigenciaDesde: 'desc'
+          }
+        }
       }
     });
     if (!costo) throw new NotFoundError('Costo de exportación no encontrado');
     return costo;
   } catch (err) {
+    if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -101,7 +125,20 @@ const obtenerPorIncoterm = async (incotermId) => {
         },
         proveedorDefault: true,
         monedaDefault: true,
-        documentoAsociado: true
+        documentoAsociado: true,
+        tarifasPorRuta: {
+          where: {
+            activo: true
+          },
+          include: {
+            paisOrigen: true,
+            puertoOrigen: true,
+            paisDestino: true,
+            puertoDestino: true,
+            proveedor: true,
+            moneda: true
+          }
+        }
       },
       orderBy: { orden: 'asc' }
     });
@@ -131,7 +168,20 @@ const obtenerCostosVendedorPorIncoterm = async (incotermId) => {
         },
         proveedorDefault: true,
         monedaDefault: true,
-        documentoAsociado: true
+        documentoAsociado: true,
+        tarifasPorRuta: {
+          where: {
+            activo: true
+          },
+          include: {
+            paisOrigen: true,
+            puertoOrigen: true,
+            paisDestino: true,
+            puertoDestino: true,
+            proveedor: true,
+            moneda: true
+          }
+        }
       },
       orderBy: { orden: 'asc' }
     });
@@ -164,16 +214,43 @@ const crear = async (data, usuarioId) => {
     if (!producto) throw new ValidationError('Producto no existente.');
     
     // Validar que el producto sea de la familia "Gastos Exportación" (familiaId = 7)
-    if (producto.familiaId !== 7) {
+    if (Number(producto.familiaId) !== 7) {
       throw new ValidationError('El producto debe pertenecer a la familia "Gastos Exportación" (ID: 7).');
     }
     
     // Validar unicidad
     await validarUnicidad(data.incotermId, data.productoId);
     
-    // Asegurar campos de auditoría
-    const datosConAuditoria = {
-      ...data,
+    // Objeto para edición (con validaciones)
+    const datosParaEdicion = {
+      incotermId: data.incotermId,
+      productoId: data.productoId,
+      esResponsabilidadVendedor: data.esResponsabilidadVendedor !== undefined ? data.esResponsabilidadVendedor : true,
+      activo: data.activo !== undefined ? data.activo : true,
+      esObligatorio: data.esObligatorio !== undefined ? data.esObligatorio : true,
+      orden: data.orden,
+      requiereDocumento: data.requiereDocumento !== undefined ? data.requiereDocumento : false,
+      documentoAsociadoId: data.documentoAsociadoId,
+      proveedorDefaultId: data.proveedorDefaultId,
+      monedaDefaultId: data.monedaDefaultId,
+      valorVentaDefault: data.valorVentaDefault,
+      variaSegunRuta: data.variaSegunRuta !== undefined ? data.variaSegunRuta : false,
+    };
+    
+    // Objeto para grabación (sin relaciones)
+    const datosParaGrabacion = {
+      incotermId: data.incotermId,
+      productoId: data.productoId,
+      esResponsabilidadVendedor: data.esResponsabilidadVendedor !== undefined ? data.esResponsabilidadVendedor : true,
+      activo: data.activo !== undefined ? data.activo : true,
+      esObligatorio: data.esObligatorio !== undefined ? data.esObligatorio : true,
+      orden: data.orden,
+      requiereDocumento: data.requiereDocumento !== undefined ? data.requiereDocumento : false,
+      documentoAsociadoId: data.documentoAsociadoId,
+      proveedorDefaultId: data.proveedorDefaultId,
+      monedaDefaultId: data.monedaDefaultId,
+      valorVentaDefault: data.valorVentaDefault,
+      variaSegunRuta: data.variaSegunRuta !== undefined ? data.variaSegunRuta : false,
       fechaCreacion: new Date(),
       fechaActualizacion: new Date(),
       creadoPor: usuarioId || null,
@@ -181,7 +258,7 @@ const crear = async (data, usuarioId) => {
     };
     
     return await prisma.costoExportacionPorIncoterm.create({ 
-      data: datosConAuditoria,
+      data: datosParaGrabacion,
       include: {
         incoterm: true,
         producto: {
@@ -192,7 +269,8 @@ const crear = async (data, usuarioId) => {
         },
         proveedorDefault: true,
         monedaDefault: true,
-        documentoAsociado: true
+        documentoAsociado: true,
+        tarifasPorRuta: true
       }
     });
   } catch (err) {
@@ -226,7 +304,7 @@ const actualizar = async (id, data, usuarioId) => {
       if (!producto) throw new ValidationError('Producto no existente.');
       
       // Validar familia
-      if (producto.familiaId !== 7) {
+      if (Number(producto.familiaId) !== 7) {
         throw new ValidationError('El producto debe pertenecer a la familia "Gastos Exportación" (ID: 7).');
       }
     }
@@ -244,21 +322,48 @@ const actualizar = async (id, data, usuarioId) => {
       );
     }
     
-    // Asegurar campos de auditoría
-    const datosConAuditoria = {
-      ...data,
+    // Objeto para edición (con validaciones)
+    const datosParaEdicion = {
+      incotermId: data.incotermId,
+      productoId: data.productoId,
+      esResponsabilidadVendedor: data.esResponsabilidadVendedor,
+      activo: data.activo,
+      esObligatorio: data.esObligatorio,
+      orden: data.orden,
+      requiereDocumento: data.requiereDocumento,
+      documentoAsociadoId: data.documentoAsociadoId,
+      proveedorDefaultId: data.proveedorDefaultId,
+      monedaDefaultId: data.monedaDefaultId,
+      valorVentaDefault: data.valorVentaDefault,
+      variaSegunRuta: data.variaSegunRuta,
+    };
+    
+    // Objeto para grabación (sin relaciones)
+    const datosParaGrabacion = {
+      incotermId: data.incotermId,
+      productoId: data.productoId,
+      esResponsabilidadVendedor: data.esResponsabilidadVendedor,
+      activo: data.activo,
+      esObligatorio: data.esObligatorio,
+      orden: data.orden,
+      requiereDocumento: data.requiereDocumento,
+      documentoAsociadoId: data.documentoAsociadoId,
+      proveedorDefaultId: data.proveedorDefaultId,
+      monedaDefaultId: data.monedaDefaultId,
+      valorVentaDefault: data.valorVentaDefault,
+      variaSegunRuta: data.variaSegunRuta,
       fechaActualizacion: new Date(),
       actualizadoPor: usuarioId || null,
     };
     
     // Si no existe creadoPor, establecerlo con el usuario actual
     if (!existente.creadoPor && usuarioId) {
-      datosConAuditoria.creadoPor = usuarioId;
+      datosParaGrabacion.creadoPor = usuarioId;
     }
     
     return await prisma.costoExportacionPorIncoterm.update({ 
       where: { id }, 
-      data: datosConAuditoria,
+      data: datosParaGrabacion,
       include: {
         incoterm: true,
         producto: {
@@ -269,7 +374,17 @@ const actualizar = async (id, data, usuarioId) => {
         },
         proveedorDefault: true,
         monedaDefault: true,
-        documentoAsociado: true
+        documentoAsociado: true,
+        tarifasPorRuta: {
+          include: {
+            paisOrigen: true,
+            puertoOrigen: true,
+            paisDestino: true,
+            puertoDestino: true,
+            proveedor: true,
+            moneda: true
+          }
+        }
       }
     });
   } catch (err) {

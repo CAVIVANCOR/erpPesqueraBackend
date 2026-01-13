@@ -1,6 +1,4 @@
 import faenaPescaService from '../../services/Pesca/faenaPesca.service.js';
-import wmsService from '../../services/Almacen/wms.service.js';
-import finalizarFaenaConMovimientosService from '../../services/Pesca/finalizarFaenaConMovimientos.service.js';
 import finalizarFaenaSimpleService from '../../services/Pesca/finalizarFaena.service.js';
 import crearFaenaCompletaService from '../../services/Pesca/crearFaenaCompleta.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';

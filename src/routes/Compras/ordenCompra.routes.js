@@ -17,5 +17,6 @@ router.delete('/:id', ordenCompraController.eliminar);
 router.post('/:id/aprobar', ordenCompraController.aprobar);
 router.post('/:id/anular', ordenCompraController.anular);
 router.post('/:id/generar-movimiento', ordenCompraController.generarMovimiento);
+router.post('/:id/generar-kardex', ordenCompraController.generarKardex);
 
 export default router;

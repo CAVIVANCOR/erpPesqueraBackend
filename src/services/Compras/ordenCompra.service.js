@@ -1,32 +1,54 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+} from "../../utils/errors.js";
+import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
 
 async function validarForaneas(data) {
   if (data.empresaId) {
-    const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
-    if (!empresa) throw new ValidationError('La empresa referenciada no existe.');
-  }
-  
-  if (data.tipoDocumentoId) {
-    const tipoDoc = await prisma.tipoDocumento.findUnique({ where: { id: data.tipoDocumentoId } });
-    if (!tipoDoc) throw new ValidationError('El tipo de documento referenciado no existe.');
-  }
-  
-  if (data.serieDocId) {
-    const serieDoc = await prisma.serieDoc.findUnique({ where: { id: data.serieDocId } });
-    if (!serieDoc) throw new ValidationError('La serie de documento referenciada no existe.');
-  }
-  
-  if (data.proveedorId) {
-    const proveedor = await prisma.entidadComercial.findUnique({ where: { id: data.proveedorId } });
-    if (!proveedor) throw new ValidationError('El proveedor referenciado no existe.');
-  }
-  
-  if (data.requerimientoCompraId) {
-    const req = await prisma.requerimientoCompra.findUnique({ 
-      where: { id: data.requerimientoCompraId } 
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: data.empresaId },
     });
-    if (!req) throw new ValidationError('El requerimiento de compra referenciado no existe.');
+    if (!empresa)
+      throw new ValidationError("La empresa referenciada no existe.");
+  }
+
+  if (data.tipoDocumentoId) {
+    const tipoDoc = await prisma.tipoDocumento.findUnique({
+      where: { id: data.tipoDocumentoId },
+    });
+    if (!tipoDoc)
+      throw new ValidationError("El tipo de documento referenciado no existe.");
+  }
+
+  if (data.serieDocId) {
+    const serieDoc = await prisma.serieDoc.findUnique({
+      where: { id: data.serieDocId },
+    });
+    if (!serieDoc)
+      throw new ValidationError(
+        "La serie de documento referenciada no existe."
+      );
+  }
+
+  if (data.proveedorId) {
+    const proveedor = await prisma.entidadComercial.findUnique({
+      where: { id: data.proveedorId },
+    });
+    if (!proveedor)
+      throw new ValidationError("El proveedor referenciado no existe.");
+  }
+
+  if (data.requerimientoCompraId) {
+    const req = await prisma.requerimientoCompra.findUnique({
+      where: { id: data.requerimientoCompraId },
+    });
+    if (!req)
+      throw new ValidationError(
+        "El requerimiento de compra referenciado no existe."
+      );
   }
 }
 
@@ -43,25 +65,26 @@ const listar = async () => {
         moneda: true,
         detalles: {
           include: {
-            producto: true
-          }
-        }
+            producto: true,
+          },
+        },
       },
       orderBy: {
-        fechaDocumento: 'desc'
-      }
+        fechaDocumento: "desc",
+      },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
 
 const obtenerPorId = async (id) => {
   try {
-    const orden = await prisma.ordenCompra.findUnique({ 
+    const orden = await prisma.ordenCompra.findUnique({
       where: { id },
-      include: { 
+      include: {
         empresa: true,
         tipoDocumento: true,
         serieDoc: true,
@@ -71,17 +94,17 @@ const obtenerPorId = async (id) => {
               include: {
                 producto: {
                   include: {
-                    unidadMedida: true
-                  }
-                }
-              }
-            }
-          }
+                    unidadMedida: true,
+                  },
+                },
+              },
+            },
+          },
         },
         proveedor: {
           include: {
-            tipoDocumento: true
-          }
+            tipoDocumento: true,
+          },
         },
         formaPago: true,
         moneda: true,
@@ -93,45 +116,47 @@ const obtenerPorId = async (id) => {
                 unidadMedida: true,
                 marca: true,
                 familia: true,
-                subfamilia: true
-              }
-            }
-          }
-        }
-      }
+                subfamilia: true,
+              },
+            },
+          },
+        },
+      },
     });
-    
-    if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
-    
+
+    if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
+
     if (orden.solicitanteId) {
       const solicitante = await prisma.personal.findUnique({
         where: { id: orden.solicitanteId },
         include: {
-          cargo: true
-        }
+          cargo: true,
+        },
       });
       if (solicitante) {
-        solicitante.nombreCompleto = `${solicitante.nombres} ${solicitante.apellidos}`.trim();
+        solicitante.nombreCompleto =
+          `${solicitante.nombres} ${solicitante.apellidos}`.trim();
         orden.solicitante = solicitante;
       }
     }
-    
+
     if (orden.aprobadoPorId) {
       const aprobadoPor = await prisma.personal.findUnique({
         where: { id: orden.aprobadoPorId },
         include: {
-          cargo: true
-        }
+          cargo: true,
+        },
       });
       if (aprobadoPor) {
-        aprobadoPor.nombreCompleto = `${aprobadoPor.nombres} ${aprobadoPor.apellidos}`.trim();
+        aprobadoPor.nombreCompleto =
+          `${aprobadoPor.nombres} ${aprobadoPor.apellidos}`.trim();
         orden.aprobadoPor = aprobadoPor;
       }
     }
-    
+
     if (orden.centroCostoId) {
       const centroCosto = await prisma.centroCosto.findUnique({
-        where: { id: orden.centroCostoId }
+        where: { id: orden.centroCostoId },
       });
       if (centroCosto) {
         centroCosto.nombre = centroCosto.Nombre;
@@ -140,11 +165,35 @@ const obtenerPorId = async (id) => {
         orden.centroCosto = centroCosto;
       }
     }
-    
+
+    // ⭐ CONSTRUCCIÓN MANUAL: Dirección de Recepción en Almacén
+    if (orden.direccionRecepcionAlmacenId) {
+      const direccion = await prisma.direccionEntidad.findUnique({
+        where: { id: orden.direccionRecepcionAlmacenId },
+        include: {
+          ubigeo: true,
+        },
+      });
+      if (direccion) {
+        orden.direccionRecepcionAlmacen = direccion;
+      }
+    }
+
+    // ⭐ CONSTRUCCIÓN MANUAL: Contacto del Proveedor
+    if (orden.contactoProveedorId) {
+      const contacto = await prisma.contactoEntidad.findUnique({
+        where: { id: orden.contactoProveedorId },
+      });
+      if (contacto) {
+        orden.contactoProveedor = contacto;
+      }
+    }
+
     return orden;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -152,49 +201,59 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     if (!data.empresaId || !data.tipoDocumentoId || !data.proveedorId) {
-      throw new ValidationError('Los campos empresaId, tipoDocumentoId y proveedorId son obligatorios.');
+      throw new ValidationError(
+        "Los campos empresaId, tipoDocumentoId y proveedorId son obligatorios."
+      );
     }
     if (!data.serieDocId) {
-      throw new ValidationError('El campo serieDocId es obligatorio.');
+      throw new ValidationError("El campo serieDocId es obligatorio.");
     }
-    
+
     await validarForaneas(data);
-    
+
     return await prisma.$transaction(async (tx) => {
       const empresa = await tx.empresa.findUnique({
-        where: { id: BigInt(data.empresaId) }
+        where: { id: BigInt(data.empresaId) },
       });
-      
+
       if (!empresa) {
-        throw new ValidationError('Empresa no encontrada.');
+        throw new ValidationError("Empresa no encontrada.");
       }
-      
+
       const serie = await tx.serieDoc.findUnique({
-        where: { id: BigInt(data.serieDocId) }
+        where: { id: BigInt(data.serieDocId) },
       });
-      
+
       if (!serie) {
-        throw new ValidationError('Serie de documento no encontrada.');
+        throw new ValidationError("Serie de documento no encontrada.");
       }
-      
+
       const nuevoCorrelativo = Number(serie.correlativo) + 1;
-      const numSerie = String(serie.serie).padStart(serie.numCerosIzqSerie, '0');
-      const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, '0');
+      const numSerie = String(serie.serie).padStart(
+        serie.numCerosIzqSerie,
+        "0"
+      );
+      const numCorre = String(nuevoCorrelativo).padStart(
+        serie.numCerosIzqCorre,
+        "0"
+      );
       const numeroDocumento = `${numSerie}-${numCorre}`;
-      
+
       await tx.serieDoc.update({
         where: { id: BigInt(data.serieDocId) },
-        data: { correlativo: BigInt(nuevoCorrelativo) }
+        data: { correlativo: BigInt(nuevoCorrelativo) },
       });
-      
+
       const estadoInicial = await tx.estadoMultiFuncion.findFirst({
-        where: { id: 38 }
+        where: { id: 38 },
       });
-      
+
       if (!estadoInicial) {
-        throw new ValidationError('No se encontró el estado inicial PENDIENTE (id=38)');
+        throw new ValidationError(
+          "No se encontró el estado inicial PENDIENTE (id=38)"
+        );
       }
-      
+
       const datosLimpios = {
         empresaId: data.empresaId,
         tipoDocumentoId: data.tipoDocumentoId,
@@ -221,8 +280,12 @@ const crear = async (data) => {
         actualizadoEn: data.actualizadoEn || new Date(),
         creadoPor: data.creadoPor,
         actualizadoPor: data.actualizadoPor,
-        porcentajeIGV: data.porcentajeIGV !== undefined ? data.porcentajeIGV : empresa.porcentajeIgv,
-        esExoneradoAlIGV: data.esExoneradoAlIGV !== undefined ? data.esExoneradoAlIGV : false,
+        porcentajeIGV:
+          data.porcentajeIGV !== undefined
+            ? data.porcentajeIGV
+            : empresa.porcentajeIgv,
+        esExoneradoAlIGV:
+          data.esExoneradoAlIGV !== undefined ? data.esExoneradoAlIGV : false,
         tipoDocumentoFinalId: data.tipoDocumentoFinalId,
         serieDocFinalId: data.serieDocFinalId,
         numeroDocumentoFinal: data.numeroDocumentoFinal,
@@ -230,8 +293,9 @@ const crear = async (data) => {
         numCorreDocFinal: data.numCorreDocFinal,
         comprobanteRecibido: data.comprobanteRecibido,
         fechaRecepcionComprobante: data.fechaRecepcionComprobante,
+        direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
+        contactoProveedorId: data.contactoProveedorId,
       };
-      
       const ordenCreada = await tx.ordenCompra.create({
         data: datosLimpios,
         include: {
@@ -239,15 +303,16 @@ const crear = async (data) => {
           tipoDocumento: true,
           serieDoc: true,
           proveedor: true,
-          moneda: true
-        }
+          moneda: true,
+        },
       });
-      
+
       return ordenCreada;
     });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -255,21 +320,91 @@ const crear = async (data) => {
 const actualizar = async (id, data) => {
   try {
     const existe = await prisma.ordenCompra.findUnique({ where: { id } });
-    if (!existe) throw new NotFoundError('OrdenCompra no encontrada');
-    
+    if (!existe) throw new NotFoundError("OrdenCompra no encontrada");
+
     if (Number(existe.estadoId) === 40) {
-      throw new ValidationError('No se puede modificar una orden anulada');
+      throw new ValidationError("No se puede modificar una orden anulada");
     }
-    
+
     await validarForaneas(data);
-    
+
     const actualizado = await prisma.$transaction(async (tx) => {
+      // Objeto para edición (CON relaciones para validación)
+      const dataParaEdicion = {
+        empresaId: data.empresaId,
+        tipoDocumentoId: data.tipoDocumentoId,
+        serieDocId: data.serieDocId,
+        numSerieDoc: data.numSerieDoc,
+        numCorreDoc: data.numCorreDoc,
+        numeroDocumento: data.numeroDocumento,
+        fechaDocumento: data.fechaDocumento,
+        requerimientoCompraId: data.requerimientoCompraId,
+        proveedorId: data.proveedorId,
+        formaPagoId: data.formaPagoId,
+        monedaId: data.monedaId,
+        tipoCambio: data.tipoCambio,
+        fechaEntrega: data.fechaEntrega,
+        fechaRecepcion: data.fechaRecepcion,
+        solicitanteId: data.solicitanteId,
+        aprobadoPorId: data.aprobadoPorId,
+        estadoId: data.estadoId,
+        centroCostoId: data.centroCostoId,
+        movIngresoAlmacenId: data.movIngresoAlmacenId,
+        observaciones: data.observaciones,
+        urlOrdenCompraPdf: data.urlOrdenCompraPdf,
+        porcentajeIGV: data.porcentajeIGV,
+        esExoneradoAlIGV: data.esExoneradoAlIGV,
+        tipoDocumentoFinalId: data.tipoDocumentoFinalId,
+        serieDocFinalId: data.serieDocFinalId,
+        numeroDocumentoFinal: data.numeroDocumentoFinal,
+        numSerieDocFinal: data.numSerieDocFinal,
+        numCorreDocFinal: data.numCorreDocFinal,
+        comprobanteRecibido: data.comprobanteRecibido,
+        fechaRecepcionComprobante: data.fechaRecepcionComprobante,
+        direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
+        contactoProveedorId: data.contactoProveedorId,
+      };
+
+      // Objeto para grabación (SIN relaciones, solo IDs)
+      const dataParaGrabacion = {
+        empresaId: data.empresaId,
+        tipoDocumentoId: data.tipoDocumentoId,
+        serieDocId: data.serieDocId,
+        numSerieDoc: data.numSerieDoc,
+        numCorreDoc: data.numCorreDoc,
+        numeroDocumento: data.numeroDocumento,
+        fechaDocumento: data.fechaDocumento,
+        requerimientoCompraId: data.requerimientoCompraId,
+        proveedorId: data.proveedorId,
+        formaPagoId: data.formaPagoId,
+        monedaId: data.monedaId,
+        tipoCambio: data.tipoCambio,
+        fechaEntrega: data.fechaEntrega,
+        fechaRecepcion: data.fechaRecepcion,
+        solicitanteId: data.solicitanteId,
+        aprobadoPorId: data.aprobadoPorId,
+        estadoId: data.estadoId,
+        centroCostoId: data.centroCostoId,
+        movIngresoAlmacenId: data.movIngresoAlmacenId,
+        observaciones: data.observaciones,
+        urlOrdenCompraPdf: data.urlOrdenCompraPdf,
+        porcentajeIGV: data.porcentajeIGV,
+        esExoneradoAlIGV: data.esExoneradoAlIGV,
+        tipoDocumentoFinalId: data.tipoDocumentoFinalId,
+        serieDocFinalId: data.serieDocFinalId,
+        numeroDocumentoFinal: data.numeroDocumentoFinal,
+        numSerieDocFinal: data.numSerieDocFinal,
+        numCorreDocFinal: data.numCorreDocFinal,
+        comprobanteRecibido: data.comprobanteRecibido,
+        fechaRecepcionComprobante: data.fechaRecepcionComprobante,
+        direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
+        contactoProveedorId: data.contactoProveedorId,
+        actualizadoEn: new Date(),
+      };
+
       const ordenActualizada = await tx.ordenCompra.update({
         where: { id },
-        data: {
-          ...data,
-          actualizadoEn: new Date()
-        },
+        data: dataParaGrabacion,
         include: {
           empresa: true,
           tipoDocumento: true,
@@ -278,28 +413,29 @@ const actualizar = async (id, data) => {
           moneda: true,
           detalles: {
             include: {
-              producto: true
-            }
-          }
-        }
+              producto: true,
+            },
+          },
+        },
       });
-      
+
       const detalles = await tx.detalleOrdenCompra.findMany({
-        where: { ordenCompraId: id }
+        where: { ordenCompraId: id },
       });
-      
+
       if (detalles && detalles.length > 0) {
         for (const detalle of detalles) {
-          const subtotalCalculado = Number(detalle.cantidad) * Number(detalle.precioUnitario);
+          const subtotalCalculado =
+            Number(detalle.cantidad) * Number(detalle.precioUnitario);
           await tx.detalleOrdenCompra.update({
             where: { id: detalle.id },
             data: {
-              subtotal: subtotalCalculado
-            }
+              subtotal: subtotalCalculado,
+            },
           });
         }
       }
-      
+
       return await tx.ordenCompra.findUnique({
         where: { id },
         include: {
@@ -310,17 +446,19 @@ const actualizar = async (id, data) => {
           moneda: true,
           detalles: {
             include: {
-              producto: true
-            }
-          }
-        }
+              producto: true,
+            },
+          },
+        },
       });
     });
-    
+
     return actualizado;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -328,16 +466,18 @@ const actualizar = async (id, data) => {
 const eliminar = async (id) => {
   try {
     const existe = await prisma.ordenCompra.findUnique({ where: { id } });
-    if (!existe) throw new NotFoundError('OrdenCompra no encontrada');
-    
+    if (!existe) throw new NotFoundError("OrdenCompra no encontrada");
+
     if (Number(existe.estadoId) === 40) {
-      throw new ValidationError('No se puede eliminar una orden anulada.');
+      throw new ValidationError("No se puede eliminar una orden anulada.");
     }
-    
+
     await prisma.ordenCompra.delete({ where: { id } });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -345,22 +485,23 @@ const eliminar = async (id) => {
 const obtenerSeriesDoc = async (empresaId, tipoDocumentoId) => {
   try {
     const where = {
-      activo: true
+      activo: true,
     };
-    
+
     if (empresaId) where.empresaId = BigInt(empresaId);
     if (tipoDocumentoId) where.tipoDocumentoId = BigInt(tipoDocumentoId);
-    
+
     const series = await prisma.serieDoc.findMany({
       where,
       orderBy: {
-        serie: 'asc'
-      }
+        serie: "asc",
+      },
     });
-    
+
     return series;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -368,30 +509,65 @@ const obtenerSeriesDoc = async (empresaId, tipoDocumentoId) => {
 const aprobar = async (id) => {
   try {
     const orden = await prisma.ordenCompra.findUnique({ where: { id } });
-    if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
-    
+    if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
+
     if (Number(orden.estadoId) !== 38) {
-      throw new ValidationError('Solo se pueden aprobar órdenes en estado PENDIENTE');
+      throw new ValidationError(
+        "Solo se pueden aprobar órdenes en estado PENDIENTE"
+      );
     }
-    
+
+    // ⭐ VALIDACIÓN OBLIGATORIA: Contacto del Proveedor
+    if (!orden.contactoProveedorId) {
+      throw new ValidationError(
+        "Debe seleccionar un contacto del proveedor antes de aprobar la orden de compra"
+      );
+    }
+
+    // ⭐ VALIDACIÓN OBLIGATORIA: Dirección de Recepción de Mercadería
+    if (!orden.direccionRecepcionAlmacenId) {
+      throw new ValidationError(
+        "Debe seleccionar una dirección de recepción de mercadería antes de aprobar la orden de compra"
+      );
+    }
+
+    // Validar que la dirección tenga concepto de almacén configurado
+    const direccion = await prisma.direccionEntidad.findUnique({
+      where: { id: orden.direccionRecepcionAlmacenId },
+    });
+
+    if (!direccion) {
+      throw new ValidationError(
+        "La dirección de recepción seleccionada no existe"
+      );
+    }
+
+    if (!direccion.conceptoAlmacenCompraId) {
+      throw new ValidationError(
+        "La dirección de recepción no tiene un concepto de almacén de compra configurado. Por favor, configure el concepto de almacén en la dirección."
+      );
+    }
+
     const parametroAprobador = await prisma.parametroAprobador.findFirst({
       where: {
         empresaId: orden.empresaId,
         moduloSistemaId: BigInt(4),
-        cesado: false
-      }
+        cesado: false,
+      },
     });
-    
+
     if (!parametroAprobador) {
-      throw new ValidationError('No se encontró un aprobador configurado para el módulo de Compras en esta empresa');
+      throw new ValidationError(
+        "No se encontró un aprobador configurado para el módulo de Compras en esta empresa"
+      );
     }
-    
+
     const aprobado = await prisma.ordenCompra.update({
       where: { id },
       data: {
         estadoId: BigInt(39),
         aprobadoPorId: parametroAprobador.personalRespId,
-        actualizadoEn: new Date()
+        actualizadoEn: new Date(),
       },
       include: {
         empresa: true,
@@ -399,16 +575,18 @@ const aprobar = async (id) => {
         proveedor: true,
         detalles: {
           include: {
-            producto: true
-          }
-        }
-      }
+            producto: true,
+          },
+        },
+      },
     });
-    
+
     return aprobado;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -416,69 +594,71 @@ const aprobar = async (id) => {
 const anular = async (id) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      const orden = await tx.ordenCompra.findUnique({ 
+      const orden = await tx.ordenCompra.findUnique({
         where: { id },
         include: {
           movIngresoAlmacen: {
             include: {
-              detalles: true
-            }
-          }
-        }
+              detalles: true,
+            },
+          },
+        },
       });
-      
-      if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
-      
+
+      if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
+
       if (Number(orden.estadoId) === 40) {
-        throw new ValidationError('La orden ya está anulada');
+        throw new ValidationError("La orden ya está anulada");
       }
-      
+
       if (orden.movIngresoAlmacenId) {
         const movId = orden.movIngresoAlmacenId;
-        
+
         await tx.kardexAlmacen.deleteMany({
-          where: { movimientoAlmacenId: movId }
+          where: { movimientoAlmacenId: movId },
         });
-        
+
         const detallesMov = orden.movIngresoAlmacen.detalles;
-        
+
         for (const detalle of detallesMov) {
           const saldoProducto = await tx.saldosProducto.findFirst({
             where: {
               productoId: detalle.productoId,
-              almacenId: orden.movIngresoAlmacen.almacenDestinoId
-            }
+              almacenId: orden.movIngresoAlmacen.almacenDestinoId,
+            },
           });
-          
+
           if (saldoProducto) {
-            const nuevaCantidad = Number(saldoProducto.cantidad) - Number(detalle.cantidad);
-            const nuevoPeso = Number(saldoProducto.peso) - Number(detalle.peso || 0);
-            
+            const nuevaCantidad =
+              Number(saldoProducto.cantidad) - Number(detalle.cantidad);
+            const nuevoPeso =
+              Number(saldoProducto.peso) - Number(detalle.peso || 0);
+
             await tx.saldosProducto.update({
               where: { id: saldoProducto.id },
               data: {
                 cantidad: nuevaCantidad >= 0 ? nuevaCantidad : 0,
-                peso: nuevoPeso >= 0 ? nuevoPeso : 0
-              }
+                peso: nuevoPeso >= 0 ? nuevoPeso : 0,
+              },
             });
           }
         }
-        
+
         await tx.detalleMovimientoAlmacen.deleteMany({
-          where: { movimientoAlmacenId: movId }
+          where: { movimientoAlmacenId: movId },
         });
-        
+
         await tx.movimientoAlmacen.delete({
-          where: { id: movId }
+          where: { id: movId },
         });
       }
-      
+
       const anulado = await tx.ordenCompra.update({
         where: { id },
         data: {
           estadoId: BigInt(40),
           movIngresoAlmacenId: null,
-          actualizadoEn: new Date()
+          actualizadoEn: new Date(),
         },
         include: {
           empresa: true,
@@ -486,179 +666,182 @@ const anular = async (id) => {
           proveedor: true,
           detalles: {
             include: {
-              producto: true
-            }
-          }
-        }
+              producto: true,
+            },
+          },
+        },
       });
-      
+
       return anulado;
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
 
-const generarKardex = async (id) => {
+const generarKardex = async (id, usuarioId) => {
   try {
     return await prisma.$transaction(async (tx) => {
+      // ========================================
+      // PASO 1: OBTENER Y VALIDAR ORDEN DE COMPRA
+      // ========================================
       const orden = await tx.ordenCompra.findUnique({
         where: { id },
         include: {
           empresa: true,
           detalles: {
             include: {
-              producto: true
-            }
-          }
-        }
+              producto: true,
+            },
+          },
+        },
       });
-      
-      if (!orden) throw new NotFoundError('OrdenCompra no encontrada');
-      
+
+      if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
+
       if (Number(orden.estadoId) !== 39) {
-        throw new ValidationError('Solo se puede generar kardex para órdenes aprobadas');
+        throw new ValidationError(
+          "Solo se puede generar kardex para órdenes aprobadas"
+        );
       }
-      
+
       if (orden.movIngresoAlmacenId) {
-        throw new ValidationError('Esta orden ya tiene un movimiento de almacén generado');
+        throw new ValidationError(
+          "Esta orden ya tiene un movimiento de almacén generado"
+        );
       }
-      
+
       if (!orden.detalles || orden.detalles.length === 0) {
-        throw new ValidationError('La orden no tiene detalles para generar el kardex');
+        throw new ValidationError(
+          "La orden no tiene detalles para generar el kardex"
+        );
       }
-      
-      const conceptoCompra = await tx.conceptoMovAlmacen.findFirst({
-        where: { 
-          nombre: { contains: 'COMPRA', mode: 'insensitive' }
-        }
+
+      // ⭐ VALIDAR que tenga dirección de recepción
+      if (!orden.direccionRecepcionAlmacenId) {
+        throw new ValidationError(
+          "La orden no tiene dirección de recepción configurada"
+        );
+      }
+
+      // ========================================
+      // PASO 2: OBTENER DIRECCIÓN Y CONCEPTO DE ALMACÉN
+      // ========================================
+      const direccion = await tx.direccionEntidad.findUnique({
+        where: { id: orden.direccionRecepcionAlmacenId },
       });
-      
-      if (!conceptoCompra) {
-        throw new ValidationError('No se encontró el concepto de movimiento para COMPRA');
+
+      if (!direccion) {
+        throw new ValidationError(
+          "La dirección de recepción no existe"
+        );
       }
-      
-      const almacenPrincipal = await tx.almacen.findFirst({
+
+      if (!direccion.conceptoAlmacenCompraId) {
+        throw new ValidationError(
+          "La dirección de recepción no tiene concepto de almacén de compra configurado"
+        );
+      }
+
+      // ========================================
+      // PASO 3: OBTENER RESPONSABLE DE ALMACÉN
+      // ========================================
+      const parametroAprobador = await tx.parametroAprobador.findFirst({
         where: {
           empresaId: orden.empresaId,
-          esPrincipal: true
-        }
+          activo: true,
+        },
       });
-      
-      if (!almacenPrincipal) {
-        throw new ValidationError('No se encontró un almacén principal para esta empresa');
+
+      if (!parametroAprobador || !parametroAprobador.personalRespId) {
+        throw new ValidationError(
+          "No se encontró responsable de almacén configurado"
+        );
       }
-      
+
+      // ========================================
+      // PASO 4: OBTENER SERIE DE DOCUMENTO
+      // ========================================
       const serieMovAlmacen = await tx.serieDoc.findFirst({
         where: {
-          tipoDocumentoId: BigInt(18),
-          empresaId: orden.empresaId,
-          activo: true
-        }
+          id: BigInt(1), // Serie de Nota de Ingreso
+          activo: true,
+        },
       });
-      
+
       if (!serieMovAlmacen) {
-        throw new ValidationError('No se encontró una serie activa para Movimiento de Almacén');
+        throw new ValidationError(
+          "No se encontró la serie de Nota de Ingreso (ID: 1)"
+        );
       }
-      
-      const nuevoCorrelativo = Number(serieMovAlmacen.correlativo) + 1;
-      const numSerie = String(serieMovAlmacen.serie).padStart(serieMovAlmacen.numCerosIzqSerie, '0');
-      const numCorre = String(nuevoCorrelativo).padStart(serieMovAlmacen.numCerosIzqCorre, '0');
-      const numeroDocumento = `${numSerie}-${numCorre}`;
-      
-      await tx.serieDoc.update({
-        where: { id: serieMovAlmacen.id },
-        data: { correlativo: BigInt(nuevoCorrelativo) }
-      });
-      
-      const estadoPendiente = await tx.estadoMultiFuncion.findFirst({
-        where: { id: 30 }
-      });
-      
-      if (!estadoPendiente) {
-        throw new ValidationError('No se encontró el estado PENDIENTE para movimiento de almacén');
-      }
-      
-      const movimiento = await tx.movimientoAlmacen.create({
-        data: {
-          empresaId: orden.empresaId,
-          tipoDocumentoId: BigInt(18),
-          serieDocId: serieMovAlmacen.id,
-          numSerieDoc: numSerie,
-          numCorreDoc: numCorre,
-          numeroDocumento,
-          fechaDocumento: new Date(),
-          conceptoMovAlmacenId: conceptoCompra.id,
-          almacenDestinoId: almacenPrincipal.id,
-          entidadComercialId: orden.proveedorId,
-          ordenCompraId: orden.id,
-          estadoDocAlmacenId: estadoPendiente.id,
-          observaciones: `Ingreso por Orden de Compra ${orden.numeroDocumento}`,
-          creadoEn: new Date(),
-          actualizadoEn: new Date()
-        }
-      });
-      
-      for (const detalle of orden.detalles) {
-        await tx.detalleMovimientoAlmacen.create({
-          data: {
-            movimientoAlmacenId: movimiento.id,
-            productoId: detalle.productoId,
-            cantidad: detalle.cantidad,
-            peso: 0,
-            creadoEn: new Date(),
-            actualizadoEn: new Date()
-          }
-        });
-        
-        await tx.kardexAlmacen.create({
-          data: {
-            movimientoAlmacenId: movimiento.id,
-            productoId: detalle.productoId,
-            almacenId: almacenPrincipal.id,
-            tipoMovimiento: 'INGRESO',
-            cantidad: detalle.cantidad,
-            peso: 0,
-            fechaMovimiento: new Date(),
-            creadoEn: new Date()
-          }
-        });
-        
-        const saldoExistente = await tx.saldosProducto.findFirst({
-          where: {
-            productoId: detalle.productoId,
-            almacenId: almacenPrincipal.id
-          }
-        });
-        
-        if (saldoExistente) {
-          await tx.saldosProducto.update({
-            where: { id: saldoExistente.id },
-            data: {
-              cantidad: Number(saldoExistente.cantidad) + Number(detalle.cantidad),
-              peso: Number(saldoExistente.peso) + 0
-            }
-          });
-        } else {
-          await tx.saldosProducto.create({
-            data: {
-              productoId: detalle.productoId,
-              almacenId: almacenPrincipal.id,
-              cantidad: detalle.cantidad,
-              peso: 0
-            }
-          });
-        }
-      }
-      
+
+      // ========================================
+      // PASO 5: PREPARAR CABECERA DEL MOVIMIENTO
+      // ========================================
+      const cabecera = {
+        empresaId: orden.empresaId,
+        tipoDocumentoId: BigInt(13), // Nota de Ingreso
+        conceptoMovAlmacenId: direccion.conceptoAlmacenCompraId,
+        serieDocId: serieMovAlmacen.id,
+        fechaDocumento: new Date(),
+        entidadComercialId: orden.proveedorId,
+        estadoDocAlmacenId: BigInt(30), // PENDIENTE (se cambiará automáticamente)
+        esCustodia: false,
+        personalRespAlmacen: parametroAprobador.personalRespId,
+        ordenCompraId: orden.id,
+        observaciones: `Ingreso por Orden de Compra ${orden.numeroDocumento}`,
+      };
+
+      // ========================================
+      // PASO 6: PREPARAR DETALLES DEL MOVIMIENTO
+      // ========================================
+      const fechaActual = new Date();
+      const fechaVencimiento = new Date(fechaActual);
+      fechaVencimiento.setDate(fechaVencimiento.getDate() + 30); // +30 días
+
+      const detalles = orden.detalles.map((det) => ({
+        productoId: det.productoId,
+        cantidad: det.cantidad,
+        peso: det.peso || 0,
+        lote: "",
+        fechaProduccion: fechaActual,
+        fechaVencimiento: fechaVencimiento,
+        fechaIngreso: fechaActual,
+        nroSerie: "",
+        nroContenedor: "",
+        estadoMercaderiaId: BigInt(6), // Estado por defecto
+        estadoCalidadId: BigInt(10), // Calidad por defecto
+        entidadComercialId: orden.proveedorId,
+        esCustodia: false,
+        empresaId: orden.empresaId,
+        costoUnitario: det.precioUnitario || 0,
+        observaciones: null,
+        detalleReqCompraId: det.detalleReqCompraId || null,
+      }));
+
+      // ========================================
+      // PASO 7: CREAR MOVIMIENTO DE ALMACÉN CON KARDEX
+      // ========================================
+      const resultado = await crearMovimientoAlmacenService.crearMovimientoAlmacenCompleto(
+        cabecera,
+        detalles,
+        usuarioId,
+        tx // Pasar la transacción actual
+      );
+
+      // ========================================
+      // PASO 8: ACTUALIZAR ORDEN DE COMPRA
+      // ========================================
       const ordenActualizada = await tx.ordenCompra.update({
         where: { id },
         data: {
-          estadoId: BigInt(50),
-          movIngresoAlmacenId: movimiento.id,
-          actualizadoEn: new Date()
+          estadoId: BigInt(50), // Estado: Con Kardex Generado
+          movIngresoAlmacenId: resultado.movimiento.id,
+          actualizadoEn: new Date(),
         },
         include: {
           empresa: true,
@@ -666,17 +849,23 @@ const generarKardex = async (id) => {
           proveedor: true,
           detalles: {
             include: {
-              producto: true
-            }
-          }
-        }
+              producto: true,
+            },
+          },
+        },
       });
-      
-      return ordenActualizada;
+
+      return {
+        orden: ordenActualizada,
+        movimiento: resultado.movimiento,
+        kardex: resultado.kardex,
+      };
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -691,135 +880,171 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
           detalles: {
             include: {
               producto: true,
-              proveedor: true
-            }
-          }
-        }
+              proveedor: true,
+            },
+          },
+        },
       });
-      
+
       if (!requerimiento) {
-        throw new NotFoundError('Requerimiento de Compra no encontrado');
+        throw new NotFoundError("Requerimiento de Compra no encontrado");
       }
-      
+
       if (requerimiento.estadoId !== BigInt(35)) {
-        throw new ValidationError('Solo se pueden generar órdenes desde requerimientos aprobados');
+        throw new ValidationError(
+          "Solo se pueden generar órdenes desde requerimientos aprobados"
+        );
       }
-      
+
       const esCompraDirecta = !requerimiento.esConCotizacion;
-      
+
       let ordenesGeneradas = [];
-      
+
       if (esCompraDirecta) {
         const detallesPorProveedor = new Map();
-        
+
         for (const detalle of requerimiento.detalles) {
           if (!detalle.proveedorId) {
-            throw new ValidationError(`El detalle del producto ${detalle.producto?.nombre || detalle.productoId} no tiene proveedor asignado`);
+            throw new ValidationError(
+              `El detalle del producto ${
+                detalle.producto?.nombre || detalle.productoId
+              } no tiene proveedor asignado`
+            );
           }
-          
+
           const proveedorId = String(detalle.proveedorId);
           if (!detallesPorProveedor.has(proveedorId)) {
             detallesPorProveedor.set(proveedorId, []);
           }
           detallesPorProveedor.get(proveedorId).push(detalle);
         }
-        
+
         for (const [proveedorId, detalles] of detallesPorProveedor) {
-          const orden = await crearOrdenCompraDirecta(tx, requerimiento, BigInt(proveedorId), detalles);
+          const orden = await crearOrdenCompraDirecta(
+            tx,
+            requerimiento,
+            BigInt(proveedorId),
+            detalles
+          );
           ordenesGeneradas.push(orden);
         }
       } else {
         const cotizaciones = await tx.cotizacionProveedor.findMany({
           where: {
-            requerimientoCompraId: BigInt(requerimientoCompraId)
+            requerimientoCompraId: BigInt(requerimientoCompraId),
           },
           include: {
             detalles: {
               where: {
-                esSeleccionadoParaOrdenCompra: true
+                esSeleccionadoParaOrdenCompra: true,
               },
               include: {
                 producto: true,
-                detalleReqCompra: true
-              }
+                detalleReqCompra: true,
+              },
             },
-            proveedor: true
-          }
+            proveedor: true,
+          },
         });
-        
+
         const itemsPorProveedorMoneda = new Map();
-        
+
         for (const cotizacion of cotizaciones) {
           if (cotizacion.detalles.length > 0) {
-            const key = `${cotizacion.proveedorId}-${cotizacion.monedaId || 'null'}`;
-            
+            const key = `${cotizacion.proveedorId}-${
+              cotizacion.monedaId || "null"
+            }`;
+
             if (!itemsPorProveedorMoneda.has(key)) {
               itemsPorProveedorMoneda.set(key, {
                 proveedorId: cotizacion.proveedorId,
                 monedaId: cotizacion.monedaId,
-                detalles: []
+                detalles: [],
               });
             }
-            
-            itemsPorProveedorMoneda.get(key).detalles.push(...cotizacion.detalles);
+
+            itemsPorProveedorMoneda
+              .get(key)
+              .detalles.push(...cotizacion.detalles);
           }
         }
-        
+
         if (itemsPorProveedorMoneda.size === 0) {
-          throw new ValidationError('No hay items seleccionados para generar órdenes de compra');
+          throw new ValidationError(
+            "No hay items seleccionados para generar órdenes de compra"
+          );
         }
-        
+
         for (const [key, data] of itemsPorProveedorMoneda) {
-          const orden = await crearOrdenCompraConCotizacion(tx, requerimiento, data.proveedorId, data.monedaId, data.detalles);
+          const orden = await crearOrdenCompraConCotizacion(
+            tx,
+            requerimiento,
+            data.proveedorId,
+            data.monedaId,
+            data.detalles
+          );
           ordenesGeneradas.push(orden);
         }
       }
-      
+
       await tx.requerimientoCompra.update({
         where: { id: BigInt(requerimientoCompraId) },
         data: {
           estadoId: BigInt(37),
-          actualizadoEn: new Date()
-        }
+          actualizadoEn: new Date(),
+        },
       });
-      
+
       return ordenesGeneradas;
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
 
-async function crearOrdenCompraDirecta(tx, requerimiento, proveedorId, detalles) {
+async function crearOrdenCompraDirecta(
+  tx,
+  requerimiento,
+  proveedorId,
+  detalles
+) {
   const serieOrden = await tx.serieDoc.findFirst({
     where: {
       tipoDocumentoId: BigInt(17),
       empresaId: requerimiento.empresaId,
       tipoAlmacenId: requerimiento.serieDoc.tipoAlmacenId,
       serie: requerimiento.serieDoc.serie,
-      activo: true
-    }
+      activo: true,
+    },
   });
-  
+
   if (!serieOrden) {
     throw new ValidationError(
       `No se encontró una serie activa para Orden de Compra con los criterios: ` +
-      `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`
+        `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`
     );
   }
-  
+
   const nuevoCorrelativo = Number(serieOrden.correlativo) + 1;
-  const numSerie = String(serieOrden.serie).padStart(serieOrden.numCerosIzqSerie, '0');
-  const numCorre = String(nuevoCorrelativo).padStart(serieOrden.numCerosIzqCorre, '0');
+  const numSerie = String(serieOrden.serie).padStart(
+    serieOrden.numCerosIzqSerie,
+    "0"
+  );
+  const numCorre = String(nuevoCorrelativo).padStart(
+    serieOrden.numCerosIzqCorre,
+    "0"
+  );
   const numeroDocumento = `${numSerie}-${numCorre}`;
-  
+
   await tx.serieDoc.update({
     where: { id: serieOrden.id },
-    data: { correlativo: BigInt(nuevoCorrelativo) }
+    data: { correlativo: BigInt(nuevoCorrelativo) },
   });
-  
+
   const ordenCompra = await tx.ordenCompra.create({
     data: {
       empresaId: requerimiento.empresaId,
@@ -841,55 +1066,67 @@ async function crearOrdenCompraDirecta(tx, requerimiento, proveedorId, detalles)
       porcentajeIGV: requerimiento.porcentajeIGV,
       esExoneradoAlIGV: requerimiento.esExoneradoAlIGV,
       detalles: {
-        create: detalles.map(detalle => ({
+        create: detalles.map((detalle) => ({
           productoId: detalle.productoId,
           cantidad: detalle.cantidad,
           precioUnitario: detalle.costoUnitario,
-          observaciones: detalle.observaciones
-        }))
-      }
+          observaciones: detalle.observaciones,
+        })),
+      },
     },
     include: {
       proveedor: true,
       detalles: {
         include: {
-          producto: true
-        }
-      }
-    }
+          producto: true,
+        },
+      },
+    },
   });
-  
+
   return ordenCompra;
 }
 
-async function crearOrdenCompraConCotizacion(tx, requerimiento, proveedorId, monedaId, detallesCotizacion) {
+async function crearOrdenCompraConCotizacion(
+  tx,
+  requerimiento,
+  proveedorId,
+  monedaId,
+  detallesCotizacion
+) {
   const serieOrden = await tx.serieDoc.findFirst({
     where: {
       tipoDocumentoId: BigInt(17),
       empresaId: requerimiento.empresaId,
       tipoAlmacenId: requerimiento.serieDoc.tipoAlmacenId,
       serie: requerimiento.serieDoc.serie,
-      activo: true
-    }
+      activo: true,
+    },
   });
-  
+
   if (!serieOrden) {
     throw new ValidationError(
       `No se encontró una serie activa para Orden de Compra con los criterios: ` +
-      `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`
+        `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`
     );
   }
-  
+
   const nuevoCorrelativo = Number(serieOrden.correlativo) + 1;
-  const numSerie = String(serieOrden.serie).padStart(serieOrden.numCerosIzqSerie, '0');
-  const numCorre = String(nuevoCorrelativo).padStart(serieOrden.numCerosIzqCorre, '0');
+  const numSerie = String(serieOrden.serie).padStart(
+    serieOrden.numCerosIzqSerie,
+    "0"
+  );
+  const numCorre = String(nuevoCorrelativo).padStart(
+    serieOrden.numCerosIzqCorre,
+    "0"
+  );
   const numeroDocumento = `${numSerie}-${numCorre}`;
-  
+
   await tx.serieDoc.update({
     where: { id: serieOrden.id },
-    data: { correlativo: BigInt(nuevoCorrelativo) }
+    data: { correlativo: BigInt(nuevoCorrelativo) },
   });
-  
+
   const ordenCompra = await tx.ordenCompra.create({
     data: {
       empresaId: requerimiento.empresaId,
@@ -911,24 +1148,24 @@ async function crearOrdenCompraConCotizacion(tx, requerimiento, proveedorId, mon
       porcentajeIGV: requerimiento.porcentajeIGV,
       esExoneradoAlIGV: requerimiento.esExoneradoAlIGV,
       detalles: {
-        create: detallesCotizacion.map(detalle => ({
+        create: detallesCotizacion.map((detalle) => ({
           productoId: detalle.productoId,
           cantidad: detalle.cantidad,
           precioUnitario: detalle.precioUnitario,
-          observaciones: detalle.observaciones
-        }))
-      }
+          observaciones: detalle.observaciones,
+        })),
+      },
     },
     include: {
       proveedor: true,
       detalles: {
         include: {
-          producto: true
-        }
-      }
-    }
+          producto: true,
+        },
+      },
+    },
   });
-  
+
   return ordenCompra;
 }
 
@@ -942,5 +1179,5 @@ export default {
   aprobar,
   anular,
   generarKardex,
-  generarDesdeRequerimiento
+  generarDesdeRequerimiento,
 };

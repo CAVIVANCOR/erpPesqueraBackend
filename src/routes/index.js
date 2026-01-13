@@ -216,6 +216,7 @@ import desembolsoPrestamoRoutes from './Tesoreria/desembolsoPrestamo.routes.js';
 import garantiaPrestamoRoutes from './Tesoreria/garantiaPrestamo.routes.js';
 import movimientoInversionRoutes from './Tesoreria/movimientoInversion.routes.js';
 import tipoPrestamoRoutes from './Tesoreria/tipoPrestamo.routes.js';
+import tarifaCostoExportacionRutaRoutes from './Ventas/tarifaCostoExportacionRuta.routes.js';
 
 const router = express.Router();
 
@@ -447,6 +448,10 @@ router.use('/cotizaciones-ventas', cotizacionVentasRoutes);
 router.use('/cotizacion-ventas', cotizacionVentasImpresionRoutes);
 // Rutas para DetCotizacionVentas
 router.use('/detalles-cotizacion-ventas', detCotizacionVentasRoutes);
+
+// Rutas para TarifaCostoExportacionRuta
+router.use('/tarifas-costo-exportacion-ruta', tarifaCostoExportacionRutaRoutes);
+
 // Rutas para ContratoServicio
 router.use('/contratos-servicio', contratoServicioRoutes);
 // Rutas para DetServicioContrato

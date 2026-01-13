@@ -102,6 +102,25 @@ export async function generarMovimiento(req, res, next) {
 }
 
 /**
+ * Genera el kardex (movimiento de almacén) desde una Orden de Compra aprobada
+ */
+export async function generarKardex(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const usuarioId = req.user?.id;
+    
+    if (!usuarioId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
+    
+    const resultado = await ordenCompraService.generarKardex(id, BigInt(usuarioId));
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Genera una Orden de Compra desde un Requerimiento aprobado
  */
 export async function generarDesdeRequerimiento(req, res, next) {
