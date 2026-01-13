@@ -1348,6 +1348,7 @@ model DescargaFaenaConsumo {
   creadoEn                     DateTime               @default(now())
   actualizadoEn                DateTime
   movIngresoAlmacenId          BigInt?
+  movSalidaAlmacenId           BigInt?                // ⭐ NUEVO CAMPO
   especieId                    BigInt?
   toneladas                    Decimal?
   porcentajeJuveniles          Decimal?
@@ -1369,10 +1370,12 @@ model DescargaFaenaConsumo {
   bahia              Personal           @relation("DescargaFaenaConsumo_Bahia", fields: [bahiaId], references: [id])
   cliente            EntidadComercial?  @relation(fields: [clienteId], references: [id])
   especie            Especie?           @relation(fields: [especieId], references: [id])
-  movIngresoAlmacen  MovimientoAlmacen? @relation(fields: [movIngresoAlmacenId], references: [id])
+  movIngresoAlmacen  MovimientoAlmacen? @relation("DescargaConsumoMovimientoIngreso", fields: [movIngresoAlmacenId], references: [id])
+  movSalidaAlmacen   MovimientoAlmacen? @relation("DescargaConsumoMovimientoSalida", fields: [movSalidaAlmacenId], references: [id])  // ⭐ NUEVA RELACIÓN
   katanaTripulacion  KatanaTripulacion? @relation("DescargaFaenaConsumo_KatanaTripulacion", fields: [katanaTripulacionId], references: [id])
 
   @@index([movIngresoAlmacenId])
+  @@index([movSalidaAlmacenId])          // ⭐ NUEVO ÍNDICE
   @@index([puertoDescargaId])
   @@index([puertoFondeoId])
   @@index([patronId])
@@ -1413,6 +1416,7 @@ model DescargaFaenaPesca {
   temporadaPescaId             BigInt                 // Opcional: puedes quitarlo si prefieres acceder vía faenaPesca
   urlInformeDescargaProduce    String?
   movIngresoAlmacenId          BigInt?
+  movSalidaAlmacenId           BigInt?                // ⭐ NUEVO CAMPO
   especieId                    BigInt?
   toneladas                    Decimal?
   porcentajeJuveniles          Decimal?
@@ -1432,9 +1436,12 @@ model DescargaFaenaPesca {
   bahia              Personal           @relation("DescargaFaenaPesca_Bahia", fields: [bahiaId], references: [id])
   cliente            EntidadComercial?  @relation(fields: [clienteId], references: [id])
   especie            Especie?           @relation(fields: [especieId], references: [id])
-  movIngresoAlmacen  MovimientoAlmacen? @relation(fields: [movIngresoAlmacenId], references: [id])
+  movIngresoAlmacen  MovimientoAlmacen? @relation("DescargaMovimientoIngreso", fields: [movIngresoAlmacenId], references: [id])
+  movSalidaAlmacen   MovimientoAlmacen? @relation("DescargaMovimientoSalida", fields: [movSalidaAlmacenId], references: [id])  // ⭐ NUEVA RELACIÓN
+
 
   @@index([movIngresoAlmacenId])
+  @@index([movSalidaAlmacenId])          // ⭐ NUEVO ÍNDICE
   @@index([puertoDescargaId])
   @@index([puertoFondeoId])
   @@index([patronId])
@@ -3038,8 +3045,13 @@ model MovimientoAlmacen {
   preFacturas PreFactura[] @relation("MovimientoAlmacenToPreFactura")
   entregaARendirMovAlmacen EntregaARendirMovAlmacen?
   insumosOT  DetInsumosTareaOT[] @relation("MovAlmacenInsumoOT")
-  descargasFaenaPesca   DescargaFaenaPesca[]
-descargasFaenaConsumo DescargaFaenaConsumo[]
+  // Relaciones con Descargas (Ingreso)
+  descargasIngresoFaenaPesca    DescargaFaenaPesca[]   @relation("DescargaMovimientoIngreso")
+  descargasIngresoFaenaConsumo  DescargaFaenaConsumo[] @relation("DescargaConsumoMovimientoIngreso")
+  
+  // Relaciones con Descargas (Salida)
+  descargasSalidaFaenaPesca     DescargaFaenaPesca[]   @relation("DescargaMovimientoSalida")
+  descargasSalidaFaenaConsumo   DescargaFaenaConsumo[] @relation("DescargaConsumoMovimientoSalida")
 
 }
 
