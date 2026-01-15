@@ -3649,7 +3649,6 @@ model SerieDoc {
   // ========================================
   comprobantesElectronicos        ComprobanteElectronico[]
   preFacturasSeriFinal            PreFactura[]                @relation("SerieDocFinal")
-  ordenesCompraSeriFinal          OrdenCompra[]               @relation("SerieDocFinalOC")
   letrasCambio                    LetraCambio[]
   retenciones                     Retencion[]
   percepciones                    Percepcion[]
@@ -5436,6 +5435,11 @@ model CuentaPorPagar {
   // 🆕 NUEVO: Flag para saldos iniciales (migración)
   esSaldoInicial        Boolean     @default(false)
   
+  // ========================================
+  // ⭐ NUEVO CAMPO - TIPO DE FACTURACIÓN
+  // ========================================
+  esGerencial           Boolean?    @default(false)         // ⭐ NUEVO: true = CxP Negra (Gerencial), false = CxP Blanca (Formal)
+  
   // Referencia a moneda
   monedaId              BigInt
   
@@ -5451,7 +5455,9 @@ model CuentaPorPagar {
   creadoEn              DateTime    @default(now())
   actualizadoEn         DateTime    @updatedAt
   
-  // Relaciones
+  // ========================================
+  // RELACIONES
+  // ========================================
   // 🆕 CAMBIO: Ahora opcional (puede no existir en saldos iniciales)
   ordenCompra           OrdenCompra?        @relation(fields: [ordenCompraId], references: [id])
   empresa               Empresa             @relation(fields: [empresaId], references: [id])
@@ -5465,13 +5471,21 @@ model CuentaPorPagar {
   retenciones           Retencion[]
   percepciones          Percepcion[]
   
+  // ========================================
+  // ÍNDICES EXISTENTES
+  // ========================================
   @@index([empresaId, fechaVencimiento])
   @@index([proveedorId])
   @@index([estadoId])
   @@index([fechaVencimiento])
   @@index([esContado])
-  @@index([esSaldoInicial])      // 🆕 NUEVO: Para filtrar saldos iniciales
-  @@index([saldoPendiente])      // 🆕 NUEVO: Para reportes de tesorería
+  @@index([esSaldoInicial])      // YA EXISTE: Para filtrar saldos iniciales
+  @@index([saldoPendiente])      // YA EXISTE: Para reportes de tesorería
+  
+  // ========================================
+  // ⭐ ÍNDICE NUEVO
+  // ========================================
+  @@index([esGerencial])         // ⭐ NUEVO: Filtrar CxP Gerenciales vs Formales
 }
 
 
@@ -5541,12 +5555,6 @@ model MedioPago {
 }
 
 
-
-// ============================================
-// OrdenCompra
-// Orden de Compra a Proveedores
-// ============================================
-
 model OrdenCompra {
   id                   BigInt      @id @default(autoincrement())
   empresaId            BigInt
@@ -5581,18 +5589,28 @@ model OrdenCompra {
   // ⭐ CAMPOS NUEVOS - DOCUMENTO FINAL (COMPROBANTE DEL PROVEEDOR)
   // Define qué comprobante se recibirá del proveedor
   // ========================================
-  tipoDocumentoFinalId        BigInt?                                    // ⭐ NUEVO: Tipo esperado (01=Factura, 03=Boleta)
-  serieDocFinalId             BigInt?                                    // ⭐ NUEVO: Serie esperada del proveedor
-  numeroDocumentoFinal        String?     @db.VarChar(40)                // ⭐ NUEVO: Número del comprobante recibido
+  tipoDocumentoFinalId        BigInt?                                    // ⭐ NUEVO: Tipo recibido (01=Factura, 03=Boleta)
+  numeroDocumentoFinal        String?     @db.VarChar(40)                // ⭐ NUEVO: Número completo del comprobante recibido (ej: "F001-00000456")
   numSerieDocFinal            String?     @db.VarChar(40)                // ⭐ NUEVO: Serie recibida (ej: "F001")
   numCorreDocFinal            String?     @db.VarChar(40)                // ⭐ NUEVO: Correlativo recibido (ej: "00000456")
   comprobanteRecibido         Boolean?    @default(false)                // ⭐ NUEVO: true = Ya se recibió el comprobante
   fechaRecepcionComprobante   DateTime?                                  // ⭐ NUEVO: Fecha de recepción del comprobante
+  facturado                   Boolean?    @default(false)                // ⭐ NUEVO: true = Ya se generó CxP (Negra o Blanca)
+  fechaFacturacion            DateTime?                                  // ⭐ NUEVO: Fecha de generación de CxP
+  
+  // ========================================
+  // ⭐ CAMPOS NUEVOS - TIPO DE FACTURACIÓN Y PARTICIÓN
+  // ========================================
+  esGerencial                 Boolean?    @default(false)                // ⭐ NUEVO: true = Compra Negra (Gerencial/No SUNAT), false = Blanca (Formal/SUNAT)
+  ordenCompraOrigenId         BigInt?                                    // ⭐ NUEVO: ID de la OC original si esta fue creada por partición
+  esParticionada              Boolean     @default(false)                // ⭐ NUEVO: true = Esta OC fue partida en Blanca/Negra (se anula y crea 2 nuevas)
 
   direccionRecepcionAlmacenId BigInt?
   contactoProveedorId         BigInt?
   
-  // Relaciones
+  // ========================================
+  // RELACIONES EXISTENTES
+  // ========================================
   requerimientoCompra  RequerimientoCompra? @relation(fields: [requerimientoCompraId], references: [id])
   proveedor            EntidadComercial @relation("ProveedorOrdenCompra", fields: [proveedorId], references: [id])
   formaPago            FormaPago? @relation(fields: [formaPagoId], references: [id])
@@ -5604,23 +5622,42 @@ model OrdenCompra {
   insumosOT            DetInsumosTareaOT[] @relation("OCInsumoOT")
   
   // ========================================
-  // ⭐ RELACIONES NUEVAS
+  // ⭐ RELACIONES NUEVAS - COMPROBANTE DEL PROVEEDOR
   // ========================================
   tipoDocumentoFinal   TipoDocumento?          @relation("TipoDocumentoFinalOC", fields: [tipoDocumentoFinalId], references: [id])  // ⭐ NUEVO
-  serieDocFinal        SerieDoc?               @relation("SerieDocFinalOC", fields: [serieDocFinalId], references: [id])            // ⭐ NUEVO
-  cuentaPorPagar       CuentaPorPagar?                                                                                               // ⭐ NUEVO: 1:1
+  
+  // ========================================
+  // ⭐ RELACIONES NUEVAS - PARTICIÓN
+  // ========================================
+  ordenCompraOrigen    OrdenCompra?            @relation("ParticionOrdenCompra", fields: [ordenCompraOrigenId], references: [id])  // ⭐ NUEVO: OC madre
+  ordenesCompraHijas   OrdenCompra[]           @relation("ParticionOrdenCompra")                                                    // ⭐ NUEVO: OCs hijas (Blanca y Negra)
+  
+  // ========================================
+  // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
+  // ========================================
+  cuentaPorPagar       CuentaPorPagar?                                                                                              // ⭐ NUEVO: 1:1 - Cuenta por pagar generada
+  
   percepciones         Percepcion[]
-  datosAdicionales     DetDatosAdicionalesOrdenCompra[]  // ⭐ AGREGAR ESTA LÍNEA
-
+  datosAdicionales     DetDatosAdicionalesOrdenCompra[]
   detalles             DetalleOrdenCompra[]
   
+  // ========================================
+  // ÍNDICES EXISTENTES
+  // ========================================
   @@index([empresaId, fechaDocumento])
   @@index([estadoId])
   @@index([proveedorId])
   @@index([requerimientoCompraId])
-  @@index([comprobanteRecibido])                                         // ⭐ NUEVO: Filtrar pendientes de comprobante
-  @@index([tipoDocumentoFinalId])                                        // ⭐ NUEVO: Filtrar por tipo
-  @@index([serieDocFinalId])                                             // ⭐ NUEVO: Búsquedas por serie
+  @@index([comprobanteRecibido])                                         // YA EXISTE
+  @@index([tipoDocumentoFinalId])                                        // YA EXISTE
+  
+  // ========================================
+  // ⭐ ÍNDICES NUEVOS
+  // ========================================
+  @@index([facturado])                                                   // ⭐ NUEVO: Filtrar pendientes de facturar
+  @@index([esGerencial])                                                 // ⭐ NUEVO: Filtrar Gerenciales (Negras) vs Formales (Blancas)
+  @@index([ordenCompraOrigenId])                                         // ⭐ NUEVO: Trazabilidad de particiones
+  @@index([esParticionada])                                              // ⭐ NUEVO: Filtrar OCs particionadas
 }
 
 
