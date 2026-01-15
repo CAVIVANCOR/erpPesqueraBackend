@@ -86,16 +86,14 @@ export async function anular(req, res, next) {
 export async function generarMovimiento(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const { conceptoMovAlmacenId, fechaDocumento, observaciones } = req.body;
+    const usuarioId = req.user?.id;
     
-    const movimiento = await ordenCompraService.generarMovimiento(
-      id,
-      conceptoMovAlmacenId,
-      fechaDocumento,
-      observaciones
-    );
+    if (!usuarioId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
     
-    res.json(toJSONBigInt(movimiento));
+    const resultado = await ordenCompraService.generarKardex(id, BigInt(usuarioId));
+    res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }
@@ -132,3 +130,23 @@ export async function generarDesdeRequerimiento(req, res, next) {
     next(err);
   }
 }
+
+export const regenerarKardex = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const usuarioId = req.user?.id;
+
+    if (!usuarioId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
+
+    const resultado = await ordenCompraService.regenerarKardex(
+      BigInt(id),
+      BigInt(usuarioId)
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (error) {
+    next(error);
+  }
+};

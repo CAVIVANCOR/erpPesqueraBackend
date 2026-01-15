@@ -153,86 +153,130 @@ export const obtenerStockProducto = async (empresaId, almacenId, productoId) => 
  * @returns {Object} Movimiento de almacén creado
  */
 export const generarSalidaInsumosTarea = async (tareaId, empresaId, almacenId, conceptoMovAlmacenId, usuarioId) => {
-  try {
-    // Validar stock antes de generar movimiento
-    const validacion = await validarStockInsumosTarea(tareaId, empresaId, almacenId);
-    
-    if (!validacion.todoDisponible) {
-      const faltantes = validacion.detalles
-        .filter(d => !d.disponible)
-        .map(d => `${d.productoDescripcion}: falta ${d.faltante}`)
-        .join(', ');
+  return await prisma.$transaction(async (tx) => {
+    try {
+      // ============================================
+      // PASO 1: VALIDAR STOCK
+      // ============================================
       
-      throw new ValidationError(`Stock insuficiente. ${faltantes}`);
-    }
+      const validacion = await validarStockInsumosTarea(tareaId, empresaId, almacenId);
+      
+      if (!validacion.todoDisponible) {
+        const faltantes = validacion.detalles
+          .filter(d => !d.disponible)
+          .map(d => `${d.productoDescripcion}: falta ${d.faltante}`)
+          .join(', ');
+        
+        throw new ValidationError(`Stock insuficiente. ${faltantes}`);
+      }
 
-    // Obtener datos de la tarea y OT
-    const tarea = await prisma.detTareasOT.findUnique({
-      where: { id: BigInt(tareaId) },
-      include: {
-        otMantenimiento: {
-          select: {
-            id: true,
-            numeroCompleto: true,
-            descripcion: true
+      // ============================================
+      // PASO 2: OBTENER DATOS DE TAREA Y OT
+      // ============================================
+      
+      const tarea = await tx.detTareasOT.findUnique({
+        where: { id: BigInt(tareaId) },
+        include: {
+          otMantenimiento: {
+            select: {
+              id: true,
+              numeroCompleto: true,
+              descripcion: true,
+              ordenTrabajoId: true
+            }
           }
         }
+      });
+
+      if (!tarea) {
+        throw new ValidationError('Tarea no encontrada');
       }
-    });
 
-    if (!tarea) throw new ValidationError('Tarea no encontrada');
+      // ============================================
+      // PASO 3: OBTENER INSUMOS
+      // ============================================
+      
+      const insumos = await tx.detInsumosTareaOT.findMany({
+        where: { tareaId: BigInt(tareaId) },
+        include: { producto: true }
+      });
 
-    // Obtener insumos
-    const insumos = await prisma.detInsumosTareaOT.findMany({
-      where: { tareaId: BigInt(tareaId) },
-      include: { producto: true }
-    });
+      if (insumos.length === 0) {
+        throw new ValidationError('No hay insumos para generar movimiento');
+      }
 
-    // Crear movimiento de almacén (cabecera)
-    const movimiento = await prisma.movimientoAlmacen.create({
-      data: {
+      // ============================================
+      // PASO 4: PREPARAR DETALLES DEL MOVIMIENTO
+      // ============================================
+      
+      const detalles = insumos.map(insumo => ({
+        productoId: insumo.productoId,
+        cantidad: insumo.cantidad,
+        observaciones: `Insumo para tarea ${tarea.numeroTarea}`,
+        esCustodia: false,
+        empresaId: empresaId
+      }));
+
+      // ============================================
+      // PASO 5: PREPARAR DATOS DEL MOVIMIENTO
+      // ============================================
+      
+      const dataMovimiento = {
         empresaId: BigInt(empresaId),
+        tipoDocumentoId: BigInt(14), // Nota de Salida
         conceptoMovAlmacenId: BigInt(conceptoMovAlmacenId),
-        fecha: new Date(),
-        glosa: `Salida para OT ${tarea.otMantenimiento.numeroCompleto} - Tarea ${tarea.numeroTarea}: ${tarea.descripcion}`,
-        observaciones: `Generado automáticamente desde OT Mantenimiento`,
-        estadoDocumentoId: BigInt(1), // Estado inicial
-        creadoPor: BigInt(usuarioId),
-        fechaCreacion: new Date()
-      }
-    });
+        serieDocId: BigInt(2), // Serie de Salida
+        fechaDocumento: new Date(),
+        ordenTrabajoId: tarea.otMantenimiento.ordenTrabajoId,
+        observaciones: `Salida para OT ${tarea.otMantenimiento.numeroCompleto} - Tarea ${tarea.numeroTarea}: ${tarea.descripcion}`,
+        esCustodia: false,
+        detalles: detalles
+      };
 
-    // Crear detalles del movimiento
-    for (const insumo of insumos) {
-      await prisma.detalleMovimientoAlmacen.create({
-        data: {
-          movimientoAlmacenId: movimiento.id,
-          productoId: insumo.productoId,
-          cantidad: insumo.cantidad,
-          observaciones: `Insumo para tarea ${tarea.numeroTarea}`,
-          esCustodia: false,
-          entidadComercialId: null
+      // ============================================
+      // PASO 6: GENERAR MOVIMIENTO CON SERVICIO ESTANDARIZADO
+      // ============================================
+      
+      // Importar servicio dinámicamente para evitar dependencias circulares
+      const crearMovimientoService = await import('../Almacen/crearMovimientoAlmacen.service.js');
+      
+      const movimientoCreado = await crearMovimientoService.default.crearMovimientoAlmacenCompleto(
+        dataMovimiento,
+        usuarioId,
+        tx
+      );
+
+      // ============================================
+      // PASO 7: ACTUALIZAR ESTADO DE INSUMOS
+      // ============================================
+      
+      await tx.detInsumosTareaOT.updateMany({
+        where: { tareaId: BigInt(tareaId) },
+        data: { 
+          estadoInsumoId: BigInt(62), // Estado "ENTREGADO"
+          movAlmacenId: movimientoCreado.movimiento.id
         }
       });
+
+      // ============================================
+      // PASO 8: RETORNAR RESULTADO
+      // ============================================
+      
+      return {
+        movimientoId: Number(movimientoCreado.movimiento.id),
+        numeroDocumento: movimientoCreado.movimiento.numeroDocumento,
+        tareaId: Number(tareaId),
+        cantidadInsumos: insumos.length,
+        mensaje: 'Movimiento de salida generado exitosamente con kardex y saldos actualizados'
+      };
+
+    } catch (err) {
+      console.error('❌ Error en generarSalidaInsumosTarea:', err);
+      if (err instanceof ValidationError) throw err;
+      if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+      throw err;
     }
-
-    // Actualizar estado de insumos a "EN PROCESO" o "ENTREGADO"
-    await prisma.detInsumosTareaOT.updateMany({
-      where: { tareaId: BigInt(tareaId) },
-      data: { estadoInsumoId: BigInt(62) } // Ajustar según ID de estado "ENTREGADO"
-    });
-
-    return {
-      movimientoId: Number(movimiento.id),
-      tareaId: Number(tareaId),
-      cantidadInsumos: insumos.length,
-      mensaje: 'Movimiento de salida generado exitosamente'
-    };
-  } catch (err) {
-    if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
-    throw err;
-  }
+  });
 };
 
 export default {

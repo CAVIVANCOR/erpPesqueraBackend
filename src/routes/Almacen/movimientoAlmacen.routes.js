@@ -15,8 +15,9 @@ router.post('/', movimientoAlmacenController.crear);
 router.put('/:id', movimientoAlmacenController.actualizar);
 router.delete('/:id', movimientoAlmacenController.eliminar);
 
-// Rutas para operaciones de cierre y anulación
+// Rutas para operaciones de cierre, anulación y reactivación
 router.post('/:id/cerrar', movimientoAlmacenController.cerrarMovimiento);
 router.post('/:id/anular', movimientoAlmacenController.anularMovimiento);
+router.post('/:id/reactivar', movimientoAlmacenController.reactivarDocumento);
 
 export default router;

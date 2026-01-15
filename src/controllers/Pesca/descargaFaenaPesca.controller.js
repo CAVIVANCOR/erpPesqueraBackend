@@ -104,3 +104,61 @@ export async function finalizarDescargaConMovimientos(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Elimina los movimientos de almacén de una descarga
+ * @param {Object} req.params.id - ID de la descarga de faena pesca
+ * @param {Object} req.user.id - ID del usuario logueado (desde middleware de autenticación)
+ */
+export async function eliminarMovimientosDescarga(req, res, next) {
+  try {
+    const descargaId = BigInt(req.params.id);
+    const usuarioId = BigInt(req.user?.id || 1);
+
+    // Importar servicio de eliminación
+    const eliminarMovimientosService = await import('../../services/Pesca/eliminarMovimientosDescarga.service.js');
+    
+    const resultado = await eliminarMovimientosService.default.eliminarMovimientosDescarga(
+      descargaId,
+      usuarioId
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Regenera los movimientos de almacén de una descarga
+ * Elimina los movimientos existentes y genera nuevos con datos actualizados
+ * @param {Object} req.params.id - ID de la descarga de faena pesca
+ * @param {Object} req.body.temporadaPescaId - ID de la temporada de pesca
+ * @param {Object} req.user.id - ID del usuario logueado (desde middleware de autenticación)
+ */
+export async function regenerarMovimientosDescarga(req, res, next) {
+  try {
+    const descargaId = BigInt(req.params.id);
+    const { temporadaPescaId } = req.body;
+    const usuarioId = BigInt(req.user?.id || 1);
+
+    if (!temporadaPescaId) {
+      return res.status(400).json({
+        error: 'El ID de la temporada de pesca es requerido',
+      });
+    }
+
+    // Importar servicio de regeneración
+    const eliminarMovimientosService = await import('../../services/Pesca/eliminarMovimientosDescarga.service.js');
+    
+    const resultado = await eliminarMovimientosService.default.regenerarMovimientosDescarga(
+      descargaId,
+      BigInt(temporadaPescaId),
+      usuarioId
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

@@ -1,5 +1,10 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio CRUD para CostosExportacionCotizacion
@@ -19,20 +24,18 @@ const listar = async () => {
         producto: {
           include: {
             familia: true,
-            subfamilia: true
-          }
+            subfamilia: true,
+          },
         },
         moneda: true,
         proveedor: true,
-        movimientoEntregaRendir: true
+        movimientoEntregaRendir: true,
       },
-      orderBy: [
-        { cotizacionVentasId: 'asc' },
-        { orden: 'asc' }
-      ]
+      orderBy: [{ cotizacionVentasId: "asc" }, { orden: "asc" }],
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -49,18 +52,19 @@ const obtenerPorId = async (id) => {
         producto: {
           include: {
             familia: true,
-            subfamilia: true
-          }
+            subfamilia: true,
+          },
         },
         moneda: true,
         proveedor: true,
-        movimientoEntregaRendir: true
-      }
+        movimientoEntregaRendir: true,
+      },
     });
-    if (!costo) throw new NotFoundError('Costo de exportación no encontrado');
+    if (!costo) throw new NotFoundError("Costo de exportación no encontrado");
     return costo;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -76,17 +80,18 @@ const obtenerPorCotizacion = async (cotizacionVentasId) => {
         producto: {
           include: {
             familia: true,
-            subfamilia: true
-          }
+            subfamilia: true,
+          },
         },
         moneda: true,
         proveedor: true,
-        movimientoEntregaRendir: true
+        movimientoEntregaRendir: true,
       },
-      orderBy: { orden: 'asc' }
+      orderBy: { orden: "asc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -97,20 +102,21 @@ const obtenerPorCotizacion = async (cotizacionVentasId) => {
 const obtenerCostosConVariacion = async (cotizacionVentasId) => {
   try {
     const costos = await prisma.costosExportacionCotizacion.findMany({
-      where: { 
+      where: {
         cotizacionVentasId,
-        montoReal: { not: null }
+        montoReal: { not: null },
       },
       include: {
         producto: true,
         moneda: true,
-        proveedor: true
+        proveedor: true,
       },
-      orderBy: { orden: 'asc' }
+      orderBy: { orden: "asc" },
     });
     return costos;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -121,37 +127,43 @@ const obtenerCostosConVariacion = async (cotizacionVentasId) => {
 const crear = async (data) => {
   try {
     if (!data.cotizacionVentasId || !data.productoId || !data.monedaId) {
-      throw new ValidationError('Faltan campos obligatorios: cotizacionVentasId, productoId, monedaId');
+      throw new ValidationError(
+        "Faltan campos obligatorios: cotizacionVentasId, productoId, monedaId"
+      );
     }
 
     // Validar existencia de cotización
-    const cotizacion = await prisma.cotizacionVentas.findUnique({ 
-      where: { id: data.cotizacionVentasId } 
+    const cotizacion = await prisma.cotizacionVentas.findUnique({
+      where: { id: data.cotizacionVentasId },
     });
-    if (!cotizacion) throw new ValidationError('Cotización no existente.');
+    if (!cotizacion) throw new ValidationError("Cotización no existente.");
 
     // Validar existencia de producto
-    const producto = await prisma.producto.findUnique({ 
+    const producto = await prisma.producto.findUnique({
       where: { id: data.productoId },
-      include: { familia: true }
+      include: { familia: true },
     });
-    if (!producto) throw new ValidationError('Producto no existente.');
-    
+    if (!producto) throw new ValidationError("Producto no existente.");
+
     // Validar que sea de familia Gastos Exportación
     if (producto.familiaId !== 7) {
-      throw new ValidationError('El producto debe pertenecer a la familia "Gastos Exportación" (ID: 7).');
+      throw new ValidationError(
+        'El producto debe pertenecer a la familia "Gastos Exportación" (ID: 7).'
+      );
     }
 
     // Validar moneda
-    const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
-    if (!moneda) throw new ValidationError('Moneda no existente.');
+    const moneda = await prisma.moneda.findUnique({
+      where: { id: data.monedaId },
+    });
+    if (!moneda) throw new ValidationError("Moneda no existente.");
 
     // Validar proveedor si se proporciona
     if (data.proveedorId) {
-      const proveedor = await prisma.entidadComercial.findUnique({ 
-        where: { id: data.proveedorId } 
+      const proveedor = await prisma.entidadComercial.findUnique({
+        where: { id: data.proveedorId },
       });
-      if (!proveedor) throw new ValidationError('Proveedor no existente.');
+      if (!proveedor) throw new ValidationError("Proveedor no existente.");
     }
 
     // Asegurar campos de auditoría
@@ -167,12 +179,13 @@ const crear = async (data) => {
         cotizacionVentas: true,
         producto: true,
         moneda: true,
-        proveedor: true
-      }
+        proveedor: true,
+      },
     });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -182,48 +195,64 @@ const crear = async (data) => {
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.costosExportacionCotizacion.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Costo de exportación no encontrado');
+    const existente = await prisma.costosExportacionCotizacion.findUnique({
+      where: { id },
+    });
+    if (!existente)
+      throw new NotFoundError("Costo de exportación no encontrado");
 
     // Validar referencias si cambian
-    if (data.productoId && data.productoId !== existente.productoId) {
-      const producto = await prisma.producto.findUnique({ 
-        where: { id: data.productoId },
-        include: { familia: true }
+    if (
+      data.productoId &&
+      Number(data.productoId) !== Number(existente.productoId)
+    ) {
+      const producto = await prisma.producto.findUnique({
+        where: { id: BigInt(data.productoId) },
+        include: { familia: true },
       });
-      if (!producto) throw new ValidationError('Producto no existente.');
-      if (producto.familiaId !== 7) {
-        throw new ValidationError('El producto debe pertenecer a la familia "Gastos Exportación" (ID: 7).');
+      if (!producto) throw new ValidationError("Producto no existente.");
+      if (Number(producto.familiaId) !== 7) {
+        throw new ValidationError(
+          'El producto debe pertenecer a la familia "Gastos Exportación" (ID: 7).'
+        );
       }
     }
 
-    if (data.monedaId && data.monedaId !== existente.monedaId) {
-      const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
-      if (!moneda) throw new ValidationError('Moneda no existente.');
+    if (data.monedaId && Number(data.monedaId) !== Number(existente.monedaId)) {
+      const moneda = await prisma.moneda.findUnique({
+        where: { id: BigInt(data.monedaId) },
+      });
+      if (!moneda) throw new ValidationError("Moneda no existente.");
     }
 
-    if (data.proveedorId && data.proveedorId !== existente.proveedorId) {
-      const proveedor = await prisma.entidadComercial.findUnique({ 
-        where: { id: data.proveedorId } 
+    if (
+      data.proveedorId &&
+      Number(data.proveedorId) !== Number(existente.proveedorId)
+    ) {
+      const proveedor = await prisma.entidadComercial.findUnique({
+        where: { id: BigInt(data.proveedorId) },
       });
-      if (!proveedor) throw new ValidationError('Proveedor no existente.');
+      if (!proveedor) throw new ValidationError("Proveedor no existente.");
     }
 
     // Calcular variación si se actualiza monto real
     if (data.montoReal !== undefined && data.montoReal !== null) {
-      const montoEstimado = data.montoEstimadoMonedaBase || existente.montoEstimadoMonedaBase;
+      const montoEstimado =
+        data.montoEstimadoMonedaBase || existente.montoEstimadoMonedaBase;
       const montoReal = data.montoRealMonedaBase || data.montoReal;
-      
+
       data.variacionMonto = montoReal - montoEstimado;
-      data.variacionPorcentaje = montoEstimado > 0 
-        ? ((montoReal - montoEstimado) / montoEstimado) * 100 
-        : 0;
+      data.variacionPorcentaje =
+        montoEstimado > 0
+          ? ((montoReal - montoEstimado) / montoEstimado) * 100
+          : 0;
     }
 
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
-      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      fechaCreacion:
+        data.fechaCreacion || existente.fechaCreacion || new Date(),
       creadoPor: data.creadoPor || existente.creadoPor || null,
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
@@ -235,12 +264,14 @@ const actualizar = async (id, data) => {
         cotizacionVentas: true,
         producto: true,
         moneda: true,
-        proveedor: true
-      }
+        proveedor: true,
+      },
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -248,15 +279,27 @@ const actualizar = async (id, data) => {
 /**
  * Registra el monto real desde un movimiento de entrega a rendir
  */
-const registrarMontoReal = async (id, movimientoEntregaRendirId, montoReal, montoRealMonedaBase) => {
+const registrarMontoReal = async (
+  id,
+  movimientoEntregaRendirId,
+  montoReal,
+  montoRealMonedaBase
+) => {
   try {
-    const existente = await prisma.costosExportacionCotizacion.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Costo de exportación no encontrado');
+    const existente = await prisma.costosExportacionCotizacion.findUnique({
+      where: { id },
+    });
+    if (!existente)
+      throw new NotFoundError("Costo de exportación no encontrado");
 
-    const variacionMonto = montoRealMonedaBase - existente.montoEstimadoMonedaBase;
-    const variacionPorcentaje = existente.montoEstimadoMonedaBase > 0
-      ? ((montoRealMonedaBase - existente.montoEstimadoMonedaBase) / existente.montoEstimadoMonedaBase) * 100
-      : 0;
+    const variacionMonto =
+      montoRealMonedaBase - existente.montoEstimadoMonedaBase;
+    const variacionPorcentaje =
+      existente.montoEstimadoMonedaBase > 0
+        ? ((montoRealMonedaBase - existente.montoEstimadoMonedaBase) /
+            existente.montoEstimadoMonedaBase) *
+          100
+        : 0;
 
     return await prisma.costosExportacionCotizacion.update({
       where: { id },
@@ -266,18 +309,19 @@ const registrarMontoReal = async (id, movimientoEntregaRendirId, montoReal, mont
         variacionMonto,
         variacionPorcentaje,
         movimientoEntregaRendirId,
-        fechaActualizacion: new Date()
+        fechaActualizacion: new Date(),
       },
       include: {
         cotizacionVentas: true,
         producto: true,
         moneda: true,
-        movimientoEntregaRendir: true
-      }
+        movimientoEntregaRendir: true,
+      },
     });
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -287,14 +331,18 @@ const registrarMontoReal = async (id, movimientoEntregaRendirId, montoReal, mont
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.costosExportacionCotizacion.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Costo de exportación no encontrado');
+    const existente = await prisma.costosExportacionCotizacion.findUnique({
+      where: { id },
+    });
+    if (!existente)
+      throw new NotFoundError("Costo de exportación no encontrado");
 
     await prisma.costosExportacionCotizacion.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -307,5 +355,5 @@ export default {
   crear,
   actualizar,
   registrarMontoReal,
-  eliminar
+  eliminar,
 };

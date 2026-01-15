@@ -195,3 +195,26 @@ export async function uploadPdf(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Reactiva un documento de almacén
+ */
+export async function reactivarDocumento(req, res, next) {
+  try {
+    const { id } = req.params;
+    const usuarioId = req.user?.id;
+
+    if (!usuarioId) {
+      return res.status(401).json({ error: "Usuario no autenticado" });
+    }
+
+    const resultado = await movimientoAlmacenService.reactivarDocumentoAlmacen(
+      BigInt(id),
+      BigInt(usuarioId)
+    );
+
+    res.status(200).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

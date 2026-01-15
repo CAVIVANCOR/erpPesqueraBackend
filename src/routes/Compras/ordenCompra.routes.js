@@ -18,5 +18,6 @@ router.post('/:id/aprobar', ordenCompraController.aprobar);
 router.post('/:id/anular', ordenCompraController.anular);
 router.post('/:id/generar-movimiento', ordenCompraController.generarMovimiento);
 router.post('/:id/generar-kardex', ordenCompraController.generarKardex);
+router.post("/:id/regenerar-kardex", ordenCompraController.regenerarKardex);
 
 export default router;

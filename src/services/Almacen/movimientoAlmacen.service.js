@@ -683,6 +683,68 @@ const anularMovimiento = async (id, empresaId) => {
   }
 };
 
+/**
+ * Reactiva un documento de almacén (cambia estado a PENDIENTE)
+ * Permite editar el documento antes de generar kardex
+ * @param {BigInt} id - ID del movimiento
+ * @param {BigInt} usuarioId - ID del usuario que reactiva
+ * @returns {Object} - Movimiento reactivado
+ */
+const reactivarDocumentoAlmacen = async (id, usuarioId) => {
+  try {
+    // Obtener el movimiento actual
+    const movimiento = await prisma.movimientoAlmacen.findUnique({
+      where: { id },
+      include: {
+        estadoDocAlmacen: true,
+      },
+    });
+
+    if (!movimiento) {
+      throw new NotFoundError("Movimiento de almacén no encontrado");
+    }
+
+    // Validar que el movimiento esté CERRADO (31) o KARDEX_GENERADO (33)
+    const estadoActual = Number(movimiento.estadoDocAlmacenId);
+    if (estadoActual !== 31 && estadoActual !== 33) {
+      throw new ValidationError(
+        "Solo se pueden reactivar documentos cerrados o con kardex generado"
+      );
+    }
+
+    // Cambiar estado a PENDIENTE (estado 30)
+    const movimientoReactivado = await prisma.movimientoAlmacen.update({
+      where: { id },
+      data: {
+        estadoDocAlmacenId: BigInt(30), // PENDIENTE
+        actualizadoEn: new Date(),
+        actualizadoPor: usuarioId,
+      },
+      include: {
+        empresa: true,
+        tipoDocumento: true,
+        conceptoMovAlmacen: true,
+        serieDoc: true,
+        entidadComercial: true,
+        estadoDocAlmacen: true,
+        detalles: {
+          include: {
+            producto: true,
+          },
+        },
+      },
+    });
+
+    return movimientoReactivado;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -692,5 +754,6 @@ export default {
   obtenerSeriesDoc,
   generarNumeroDocumento,
   cerrarMovimiento,
-  anularMovimiento
+  anularMovimiento,
+  reactivarDocumentoAlmacen
 };
