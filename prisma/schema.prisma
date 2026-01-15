@@ -2040,7 +2040,11 @@ model Empresa {
   cantDivisoriaCalcComisionMotorista Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeCalcComisionPanguero Decimal? @default(0.00) @db.Decimal(7,2)
   monedaCalculosLiqId BigInt? @default(1)
-
+  // ========================================
+  // ⭐ CAMPOS NUBEFACT - FACTURACIÓN ELECTRÓNICA
+  // ========================================
+  nubefactUrl          String?     @db.VarChar(255)        // URL del API de Nubefact
+  nubefactToken        String?     @db.VarChar(500)        // Token de autenticación de Nubefact
 
   sedes SedesEmpresa[]
   centrosCosto EmpresaCentroCosto[]
