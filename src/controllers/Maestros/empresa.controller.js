@@ -62,3 +62,13 @@ export async function propagarMargenes(req, res, next) {
     next(err);
   }
 }
+
+export async function obtenerParametrosLiquidacion(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const parametros = await empresaService.obtenerParametrosLiquidacion(id);
+    res.json(toJSONBigInt(parametros));
+  } catch (err) {
+    next(err);
+  }
+}

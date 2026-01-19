@@ -116,3 +116,12 @@ export async function cancelar(req, res, next) {
   }
 }
 
+export async function calcularLiquidaciones(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const temporada = await temporadaPescaService.calcularLiquidaciones(id);
+    res.json(toJSONBigInt(temporada));
+  } catch (err) {
+    next(err);
+  }
+}

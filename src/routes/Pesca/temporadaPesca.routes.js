@@ -12,5 +12,5 @@ router.delete('/:id', temporadaPescaController.eliminar);
 router.post('/:id/iniciar', temporadaPescaController.iniciar);
 router.post('/:id/finalizar', temporadaPescaController.finalizar);
 router.post('/:id/cancelar', temporadaPescaController.cancelar);
-
+router.post('/:id/calcular-liquidaciones', temporadaPescaController.calcularLiquidaciones);
 export default router;

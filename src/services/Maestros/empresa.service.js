@@ -269,4 +269,36 @@ const propagarMargenes = async (id) => {
   }
 };
 
-export default { listar, obtenerPorId, crear, actualizar, eliminar, propagarMargenes };
+/**
+ * Obtiene los parámetros de liquidación de pesca de una empresa
+ * @param {BigInt} id - ID de la empresa
+ * @returns {Promise<Object>} Parámetros de liquidación
+ */
+const obtenerParametrosLiquidacion = async (id) => {
+  try {
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: BigInt(id) },
+      select: {
+        id: true,
+        porcentajeBaseLiqPesca: true,
+        porcentajeComisionPatron: true,
+        cantPersonalCalcComisionMotorista: true,
+        cantDivisoriaCalcComisionMotorista: true,
+        porcentajeCalcComisionPanguero: true,
+        monedaCalculosLiqId: true
+      }
+    });
+
+    if (!empresa) {
+      throw new NotFoundError('Empresa no encontrada');
+    }
+
+    return empresa;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+export default { listar, obtenerPorId, crear, actualizar, eliminar, propagarMargenes, obtenerParametrosLiquidacion };
