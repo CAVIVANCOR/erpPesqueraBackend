@@ -3,14 +3,14 @@ import * as pagoController from '../../controllers/CuentasPorCobrarPagar/pago.co
 
 const router = Router();
 
+// Solo rutas de consulta (GET)
 router.get('/', pagoController.listar);
 router.get('/:id', pagoController.obtenerPorId);
-router.post('/', pagoController.crear);
-router.put('/:id', pagoController.actualizar);
-router.delete('/:id', pagoController.eliminar);
-
 router.get('/empresa/:empresaId', pagoController.listarPorEmpresa);
 router.get('/cuenta-cobrar/:cuentaPorCobrarId', pagoController.listarPorCuentaCobrar);
 router.get('/cuenta-pagar/:cuentaPorPagarId', pagoController.listarPorCuentaPagar);
+
+// NOTA: No hay rutas POST, PUT o DELETE
+// Los pagos se crean/editan/eliminan desde los tabs de CuentaPorCobrar y CuentaPorPagar
 
 export default router;

@@ -131,3 +131,47 @@ export async function generarBoleta(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Partir PreFactura en Blanca y Negra
+ * POST /api/prefactura/:id/partir
+ */
+export async function partirPreFactura(req, res, next) {
+  try {
+    const preFacturaId = Number(req.params.id);
+    const { porcentajeNegro, porcentajeBlanco } = req.body;
+    
+    const resultado = await preFacturaService.partirPreFactura(preFacturaId, {
+      porcentajeNegro,
+      porcentajeBlanco
+    });
+    
+    res.status(201).json(toJSONBigInt({
+      success: true,
+      mensaje: 'PreFactura partida exitosamente',
+      resultado
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Facturar PreFactura Negra (Gerencial)
+ * POST /api/prefactura/:id/facturar-negra
+ */
+export async function facturarPreFacturaNegra(req, res, next) {
+  try {
+    const preFacturaId = Number(req.params.id);
+    
+    const resultado = await preFacturaService.facturarPreFacturaNegra(preFacturaId);
+    
+    res.status(201).json(toJSONBigInt({
+      success: true,
+      mensaje: 'PreFactura Negra facturada exitosamente',
+      resultado
+    }));
+  } catch (err) {
+    next(err);
+  }
+}

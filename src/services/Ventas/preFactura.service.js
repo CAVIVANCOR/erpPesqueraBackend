@@ -783,6 +783,216 @@ const generarBoletaDesdePreFactura = async (preFacturaId, datosBoleta = {}) => {
   }
 };
 
+/**
+ * Partir PreFactura en dos: Blanca (Formal) y Negra (Gerencial)
+ * Caso 2: Mixto según flujoFacturacion.md
+ */
+const partirPreFactura = async (preFacturaId, datos) => {
+  try {
+    const { porcentajeNegro, porcentajeBlanco } = datos;
+
+    // Validar porcentajes
+    if (porcentajeNegro + porcentajeBlanco !== 100) {
+      throw new ValidationError('La suma de porcentajes debe ser 100%');
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      // 1. Obtener PreFactura original
+      const preFacturaOriginal = await tx.preFactura.findUnique({
+        where: { id: preFacturaId },
+        include: {
+          detalles: {
+            include: { producto: true }
+          }
+        }
+      });
+
+      if (!preFacturaOriginal) {
+        throw new NotFoundError('PreFactura no encontrada');
+      }
+
+      // Validar que esté APROBADA (estado 46)
+      if (Number(preFacturaOriginal.estadoId) !== 46) {
+        throw new ValidationError('Solo se pueden partir PreFacturas APROBADAS');
+      }
+
+      // 2. Calcular montos
+      const montoNegro = (Number(preFacturaOriginal.total) * porcentajeNegro) / 100;
+      const montoBlanco = (Number(preFacturaOriginal.total) * porcentajeBlanco) / 100;
+
+      // 3. Crear PreFactura NEGRA (Gerencial)
+      const codigoNegra = await generarCodigoPreFactura(preFacturaOriginal.empresaId);
+      const preFacturaNegra = await tx.preFactura.create({
+        data: {
+          ...preFacturaOriginal,
+          id: undefined,
+          codigo: codigoNegra,
+          esGerencial: true,
+          esParticionada: false,
+          preFacturaOrigenId: preFacturaOriginal.id,
+          total: montoNegro,
+          subtotal: montoNegro / (1 + (Number(preFacturaOriginal.porcentajeIGV) || 0) / 100),
+          totalIGV: preFacturaOriginal.exoneradoIgv ? 0 : montoNegro - (montoNegro / (1 + (Number(preFacturaOriginal.porcentajeIGV) || 0) / 100)),
+          observaciones: `Parte NEGRA (${porcentajeNegro}%) de ${preFacturaOriginal.codigo}`,
+          facturado: false,
+          fechaFacturacion: null
+        }
+      });
+
+      // 4. Crear PreFactura BLANCA (Formal)
+      const codigoBlanca = await generarCodigoPreFactura(preFacturaOriginal.empresaId);
+      const preFacturaBlanca = await tx.preFactura.create({
+        data: {
+          ...preFacturaOriginal,
+          id: undefined,
+          codigo: codigoBlanca,
+          esGerencial: false,
+          esParticionada: false,
+          preFacturaOrigenId: preFacturaOriginal.id,
+          total: montoBlanco,
+          subtotal: montoBlanco / (1 + (Number(preFacturaOriginal.porcentajeIGV) || 0) / 100),
+          totalIGV: preFacturaOriginal.exoneradoIgv ? 0 : montoBlanco - (montoBlanco / (1 + (Number(preFacturaOriginal.porcentajeIGV) || 0) / 100)),
+          observaciones: `Parte BLANCA (${porcentajeBlanco}%) de ${preFacturaOriginal.codigo}`,
+          facturado: false,
+          fechaFacturacion: null
+        }
+      });
+
+      // 5. Copiar detalles proporcionalmente
+      for (const detalle of preFacturaOriginal.detalles) {
+        const cantidadNegra = (Number(detalle.cantidad) * porcentajeNegro) / 100;
+        const cantidadBlanca = (Number(detalle.cantidad) * porcentajeBlanco) / 100;
+
+        // Detalle para PreFactura Negra
+        await tx.detallePreFactura.create({
+          data: {
+            preFacturaId: preFacturaNegra.id,
+            productoId: detalle.productoId,
+            cantidad: cantidadNegra,
+            precioUnitario: detalle.precioUnitario,
+            descripcion: detalle.descripcion
+          }
+        });
+
+        // Detalle para PreFactura Blanca
+        await tx.detallePreFactura.create({
+          data: {
+            preFacturaId: preFacturaBlanca.id,
+            productoId: detalle.productoId,
+            cantidad: cantidadBlanca,
+            precioUnitario: detalle.precioUnitario,
+            descripcion: detalle.descripcion
+          }
+        });
+      }
+
+      // 6. Actualizar PreFactura original a PARTICIONADA (estado 48)
+      await tx.preFactura.update({
+        where: { id: preFacturaOriginal.id },
+        data: {
+          esParticionada: true,
+          estadoId: BigInt(48) // Estado PARTICIONADA
+        }
+      });
+
+      return {
+        preFacturaOriginal,
+        preFacturaNegra,
+        preFacturaBlanca
+      };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Facturar PreFactura Negra (Gerencial) - Caso 1: 100% Negro
+ * Genera CuentaPorCobrar sin comprobante electrónico
+ */
+const facturarPreFacturaNegra = async (preFacturaId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // 1. Obtener PreFactura
+      const preFactura = await tx.preFactura.findUnique({
+        where: { id: preFacturaId },
+        include: {
+          cliente: true,
+          moneda: true
+        }
+      });
+
+      if (!preFactura) {
+        throw new NotFoundError('PreFactura no encontrada');
+      }
+
+      // Validar que esté APROBADA (estado 46)
+      if (Number(preFactura.estadoId) !== 46) {
+        throw new ValidationError('Solo se pueden facturar PreFacturas APROBADAS');
+      }
+
+      // Validar que sea GERENCIAL
+      if (!preFactura.esGerencial) {
+        throw new ValidationError('Solo se pueden facturar como NEGRA las PreFacturas GERENCIALES');
+      }
+
+      // 2. Buscar estado PENDIENTE DE PAGO para CxC (ID 100)
+      const estadoPendiente = await tx.estadoMultiFuncion.findFirst({
+        where: {
+          tipoProvieneDeId: BigInt(24), // Tipo Proviene: CUENTAS POR COBRAR
+          nombre: { contains: 'PENDIENTE', mode: 'insensitive' }
+        }
+      });
+
+      if (!estadoPendiente) {
+        throw new ValidationError('No se encontró el estado PENDIENTE para CuentaPorCobrar');
+      }
+
+      // 3. Crear CuentaPorCobrar NEGRA (Gerencial)
+      const cuentaPorCobrar = await tx.cuentaPorCobrar.create({
+        data: {
+          preFacturaId: preFactura.id,
+          empresaId: preFactura.empresaId,
+          clienteId: preFactura.clienteId,
+          numeroPreFactura: preFactura.codigo,
+          fechaEmision: new Date(),
+          fechaVencimiento: preFactura.fechaVencimiento || new Date(),
+          montoTotal: preFactura.total,
+          montoPagado: 0,
+          saldoPendiente: preFactura.total,
+          esSaldoInicial: false,
+          esGerencial: true, // NEGRA
+          monedaId: preFactura.monedaId,
+          esContado: preFactura.esContado || false,
+          estadoId: estadoPendiente.id,
+          observaciones: `CxC Negra generada desde PreFactura ${preFactura.codigo}`
+        }
+      });
+
+      // 4. Actualizar PreFactura a FACTURADA (estado 95)
+      await tx.preFactura.update({
+        where: { id: preFactura.id },
+        data: {
+          facturado: true,
+          fechaFacturacion: new Date(),
+          estadoId: BigInt(95) // Estado FACTURADA
+        }
+      });
+
+      return {
+        preFactura,
+        cuentaPorCobrar
+      };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -792,5 +1002,7 @@ export default {
   actualizar,
   eliminar,
   generarFacturaDesdePreFactura,
-  generarBoletaDesdePreFactura
+  generarBoletaDesdePreFactura,
+  partirPreFactura,
+  facturarPreFacturaNegra
 };

@@ -217,6 +217,7 @@ import garantiaPrestamoRoutes from './Tesoreria/garantiaPrestamo.routes.js';
 import movimientoInversionRoutes from './Tesoreria/movimientoInversion.routes.js';
 import tipoPrestamoRoutes from './Tesoreria/tipoPrestamo.routes.js';
 import tarifaCostoExportacionRutaRoutes from './Ventas/tarifaCostoExportacionRuta.routes.js';
+import medioPagoRoutes from '../routes/Maestros/medioPago.routes.js';
 
 const router = express.Router();
 
@@ -591,6 +592,7 @@ router.use('/asientos-contables-interfaz', asientoContableInterfazRoutes);
 router.use('/tipos-contrato', tipoContratoRoutes);
 router.use('/tipos-referencia-movimiento-caja', tipoReferenciaMovimientoCajaRoutes);
 router.use('/bancos', bancoRoutes);
+router.use('/medio-pago', medioPagoRoutes);
 router.use('/tipos-cuenta-corriente', tipoCuentaCorrienteRoutes);
 // Rutas para Contabilidad - Plan de Cuentas Contable
 router.use('/contabilidad/plan-cuentas-contable', planCuentasContableRoutes);
@@ -604,6 +606,7 @@ router.use('/facturacion-electronica/comprobante-electronico', comprobanteElectr
 // Rutas para Cuentas Por Cobrar/Pagar
 router.use('/cuentas-por-cobrar-pagar/cuenta-por-cobrar', cuentaPorCobrarRoutes);
 router.use('/cuentas-por-cobrar-pagar/cuenta-por-pagar', cuentaPorPagarRoutes);
+// Ruta para consulta consolidada de pagos (combina PagoCuentaPorCobrar y PagoCuentaPorPagar)
 router.use('/cuentas-por-cobrar-pagar/pago', pagoRoutes);
 // Rutas para Tesorería
 router.use('/tesoreria/flujo-caja', flujoCajaRoutes);

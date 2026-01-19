@@ -103,17 +103,18 @@ const actualizar = async (id, data) => {
     const existente = await prisma.detDocsReqCotizaVentas.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('DetDocsReqCotizaVentas no encontrado');
     
-    const claves = ['cotizacionVentasId', 'docRequeridaVentasId', 'monedaId'];
-    if (claves.some(k => data[k] && data[k] !== existente[k])) {
-      await validarClavesForaneas({ ...existente, ...data });
-    }
-    
+    // Eliminar campos de relación que no se pueden actualizar directamente
+    const { cotizacionVentasId, docRequeridaVentasId, ...datosActualizables } = data;    
+    // Preparar datos con auditoría
     const datosConAuditoria = {
-      ...data,
-      fechaCreacion: existente.fechaCreacion,
-      creadoPor: existente.creadoPor,
+      ...datosActualizables,
       fechaActualizacion: new Date()
     };
+    
+    // Eliminar campos que no deben actualizarse
+    delete datosConAuditoria.fechaCreacion;
+    delete datosConAuditoria.creadoPor;
+    delete datosConAuditoria.id;
     
     return await prisma.detDocsReqCotizaVentas.update({ 
       where: { id }, 

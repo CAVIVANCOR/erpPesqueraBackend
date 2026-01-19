@@ -1,261 +1,71 @@
 import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 
 /**
- * Servicio CRUD para Pago
- * Gestiona los pagos de cuentas por cobrar y por pagar.
+ * Servicio para consulta consolidada de Pagos
+ * Combina PagoCuentaPorCobrar y PagoCuentaPorPagar para vistas consolidadas
  * Documentado en español.
  */
 
-async function validarPago(data) {
-  if (data.empresaId) {
-    const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
-    if (!empresa) throw new ValidationError('La empresa referenciada no existe.');
-  }
-
-  if (data.cuentaPorCobrarId) {
-    const cuenta = await prisma.cuentaPorCobrar.findUnique({ where: { id: data.cuentaPorCobrarId } });
-    if (!cuenta) throw new ValidationError('La cuenta por cobrar referenciada no existe.');
-  }
-
-  if (data.cuentaPorPagarId) {
-    const cuenta = await prisma.cuentaPorPagar.findUnique({ where: { id: data.cuentaPorPagarId } });
-    if (!cuenta) throw new ValidationError('La cuenta por pagar referenciada no existe.');
-  }
-
-  if (data.medioPagoId) {
-    const medio = await prisma.medioPago.findUnique({ where: { id: data.medioPagoId } });
-    if (!medio) throw new ValidationError('El medio de pago referenciado no existe.');
-  }
-
-  if (data.monedaId) {
-    const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
-    if (!moneda) throw new ValidationError('La moneda referenciada no existe.');
-  }
-
-  if (data.estadoId) {
-    const estado = await prisma.estadoMultiFuncion.findUnique({ where: { id: data.estadoId } });
-    if (!estado) throw new ValidationError('El estado referenciado no existe.');
-  }
-
-  if (data.montoPagado !== undefined && data.montoPagado <= 0) {
-    throw new ValidationError('El monto pagado debe ser mayor a 0.');
-  }
-
-  if (data.cuentaPorCobrarId && data.cuentaPorPagarId) {
-    throw new ValidationError('Un pago no puede estar asociado a una cuenta por cobrar y por pagar simultáneamente.');
-  }
-
-  if (!data.cuentaPorCobrarId && !data.cuentaPorPagarId) {
-    throw new ValidationError('El pago debe estar asociado a una cuenta por cobrar o por pagar.');
-  }
-}
-
 const listar = async () => {
   try {
-    return await prisma.pago.findMany({
+    // Obtener pagos de cuentas por cobrar
+    const pagosCobrar = await prisma.pagoCuentaPorCobrar.findMany({
       include: {
-        empresa: true,
         cuentaPorCobrar: {
-          include: { cliente: true }
-        },
-        cuentaPorPagar: {
-          include: { proveedor: true }
+          include: { 
+            cliente: true,
+            empresa: true,
+            moneda: true
+          }
         },
         medioPago: true,
         moneda: true,
-        estado: true
+        banco: true,
+        cuentaBancaria: true
       },
       orderBy: { fechaPago: 'desc' }
     });
-  } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
 
-const obtenerPorId = async (id) => {
-  try {
-    const pago = await prisma.pago.findUnique({
-      where: { id },
+    // Obtener pagos de cuentas por pagar
+    const pagosPagar = await prisma.pagoCuentaPorPagar.findMany({
       include: {
-        empresa: true,
-        cuentaPorCobrar: {
-          include: { cliente: true }
-        },
         cuentaPorPagar: {
-          include: { proveedor: true }
+          include: { 
+            proveedor: true,
+            empresa: true,
+            moneda: true
+          }
         },
         medioPago: true,
         moneda: true,
-        estado: true
-      }
-    });
-    if (!pago) throw new NotFoundError('Pago no encontrado');
-    return pago;
-  } catch (err) {
-    if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
-
-const crear = async (data) => {
-  try {
-    if (!data.empresaId || !data.fechaPago || !data.montoPagado || !data.medioPagoId || !data.monedaId || !data.estadoId) {
-      throw new ValidationError('Faltan campos obligatorios.');
-    }
-
-    await validarPago(data);
-
-    return await prisma.$transaction(async (tx) => {
-      const pagoData = {
-        ...data,
-        fechaActualizacion: new Date()
-      };
-
-      const pago = await tx.pago.create({ data: pagoData });
-
-      if (data.cuentaPorCobrarId) {
-        const cuenta = await tx.cuentaPorCobrar.findUnique({ 
-          where: { id: data.cuentaPorCobrarId } 
-        });
-        
-        const nuevoMontoPagado = (cuenta.montoPagado || 0) + data.montoPagado;
-        const nuevoSaldoPendiente = cuenta.montoTotal - nuevoMontoPagado;
-
-        await tx.cuentaPorCobrar.update({
-          where: { id: data.cuentaPorCobrarId },
-          data: {
-            montoPagado: nuevoMontoPagado,
-            saldoPendiente: nuevoSaldoPendiente,
-            fechaActualizacion: new Date()
-          }
-        });
-      }
-
-      if (data.cuentaPorPagarId) {
-        const cuenta = await tx.cuentaPorPagar.findUnique({ 
-          where: { id: data.cuentaPorPagarId } 
-        });
-        
-        const nuevoMontoPagado = (cuenta.montoPagado || 0) + data.montoPagado;
-        const nuevoSaldoPendiente = cuenta.montoTotal - nuevoMontoPagado;
-
-        await tx.cuentaPorPagar.update({
-          where: { id: data.cuentaPorPagarId },
-          data: {
-            montoPagado: nuevoMontoPagado,
-            saldoPendiente: nuevoSaldoPendiente,
-            fechaActualizacion: new Date()
-          }
-        });
-      }
-
-      return await tx.pago.findUnique({
-        where: { id: pago.id },
-        include: {
-          empresa: true,
-          cuentaPorCobrar: {
-            include: { cliente: true }
-          },
-          cuentaPorPagar: {
-            include: { proveedor: true }
-          },
-          medioPago: true,
-          moneda: true,
-          estado: true
-        }
-      });
-    });
-  } catch (err) {
-    if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
-
-const actualizar = async (id, data) => {
-  try {
-    const existente = await prisma.pago.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Pago no encontrado');
-
-    await validarPago({ ...data, id });
-
-    const pagoData = {
-      ...data,
-      fechaActualizacion: new Date()
-    };
-
-    return await prisma.pago.update({
-      where: { id },
-      data: pagoData
-    });
-  } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
-
-const eliminar = async (id) => {
-  try {
-    const existente = await prisma.pago.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Pago no encontrado');
-
-    return await prisma.$transaction(async (tx) => {
-      if (existente.cuentaPorCobrarId) {
-        const cuenta = await tx.cuentaPorCobrar.findUnique({ 
-          where: { id: existente.cuentaPorCobrarId } 
-        });
-        
-        const nuevoMontoPagado = (cuenta.montoPagado || 0) - existente.montoPagado;
-        const nuevoSaldoPendiente = cuenta.montoTotal - nuevoMontoPagado;
-
-        await tx.cuentaPorCobrar.update({
-          where: { id: existente.cuentaPorCobrarId },
-          data: {
-            montoPagado: nuevoMontoPagado,
-            saldoPendiente: nuevoSaldoPendiente,
-            fechaActualizacion: new Date()
-          }
-        });
-      }
-
-      if (existente.cuentaPorPagarId) {
-        const cuenta = await tx.cuentaPorPagar.findUnique({ 
-          where: { id: existente.cuentaPorPagarId } 
-        });
-        
-        const nuevoMontoPagado = (cuenta.montoPagado || 0) - existente.montoPagado;
-        const nuevoSaldoPendiente = cuenta.montoTotal - nuevoMontoPagado;
-
-        await tx.cuentaPorPagar.update({
-          where: { id: existente.cuentaPorPagarId },
-          data: {
-            montoPagado: nuevoMontoPagado,
-            saldoPendiente: nuevoSaldoPendiente,
-            fechaActualizacion: new Date()
-          }
-        });
-      }
-
-      await tx.pago.delete({ where: { id } });
+        banco: true,
+        cuentaBancaria: true
+      },
+      orderBy: { fechaPago: 'desc' }
     });
 
-    return true;
+    // Combinar ambos arrays y agregar un campo tipo
+    const pagosCobrarConTipo = pagosCobrar.map(p => ({ 
+      ...p, 
+      tipoPago: 'COBRAR',
+      entidad: p.cuentaPorCobrar?.cliente?.razonSocial || 'N/A',
+      empresaNombre: p.cuentaPorCobrar?.empresa?.razonSocial || 'N/A'
+    }));
+    
+    const pagosPagarConTipo = pagosPagar.map(p => ({ 
+      ...p, 
+      tipoPago: 'PAGAR',
+      entidad: p.cuentaPorPagar?.proveedor?.razonSocial || 'N/A',
+      empresaNombre: p.cuentaPorPagar?.empresa?.razonSocial || 'N/A'
+    }));
+
+    return [...pagosCobrarConTipo, ...pagosPagarConTipo].sort((a, b) => 
+      new Date(b.fechaPago) - new Date(a.fechaPago)
+    );
   } catch (err) {
-    if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+      throw new DatabaseError('Error de base de datos al listar pagos', err.message);
     }
     throw err;
   }
@@ -263,24 +73,72 @@ const eliminar = async (id) => {
 
 const listarPorEmpresa = async (empresaId) => {
   try {
-    return await prisma.pago.findMany({
-      where: { empresaId },
+    // Obtener pagos de cuentas por cobrar de la empresa
+    const pagosCobrar = await prisma.pagoCuentaPorCobrar.findMany({
+      where: {
+        cuentaPorCobrar: {
+          empresaId: Number(empresaId)
+        }
+      },
       include: {
         cuentaPorCobrar: {
-          include: { cliente: true }
-        },
-        cuentaPorPagar: {
-          include: { proveedor: true }
+          include: { 
+            cliente: true,
+            empresa: true,
+            moneda: true
+          }
         },
         medioPago: true,
         moneda: true,
-        estado: true
+        banco: true,
+        cuentaBancaria: true
       },
       orderBy: { fechaPago: 'desc' }
     });
+
+    // Obtener pagos de cuentas por pagar de la empresa
+    const pagosPagar = await prisma.pagoCuentaPorPagar.findMany({
+      where: {
+        cuentaPorPagar: {
+          empresaId: Number(empresaId)
+        }
+      },
+      include: {
+        cuentaPorPagar: {
+          include: { 
+            proveedor: true,
+            empresa: true,
+            moneda: true
+          }
+        },
+        medioPago: true,
+        moneda: true,
+        banco: true,
+        cuentaBancaria: true
+      },
+      orderBy: { fechaPago: 'desc' }
+    });
+
+    const pagosCobrarConTipo = pagosCobrar.map(p => ({ 
+      ...p, 
+      tipoPago: 'COBRAR',
+      entidad: p.cuentaPorCobrar?.cliente?.razonSocial || 'N/A',
+      empresaNombre: p.cuentaPorCobrar?.empresa?.razonSocial || 'N/A'
+    }));
+    
+    const pagosPagarConTipo = pagosPagar.map(p => ({ 
+      ...p, 
+      tipoPago: 'PAGAR',
+      entidad: p.cuentaPorPagar?.proveedor?.razonSocial || 'N/A',
+      empresaNombre: p.cuentaPorPagar?.empresa?.razonSocial || 'N/A'
+    }));
+
+    return [...pagosCobrarConTipo, ...pagosPagarConTipo].sort((a, b) => 
+      new Date(b.fechaPago) - new Date(a.fechaPago)
+    );
   } catch (err) {
     if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+      throw new DatabaseError('Error de base de datos al listar pagos por empresa', err.message);
     }
     throw err;
   }
@@ -288,18 +146,31 @@ const listarPorEmpresa = async (empresaId) => {
 
 const listarPorCuentaCobrar = async (cuentaPorCobrarId) => {
   try {
-    return await prisma.pago.findMany({
-      where: { cuentaPorCobrarId },
+    const pagos = await prisma.pagoCuentaPorCobrar.findMany({
+      where: { cuentaPorCobrarId: Number(cuentaPorCobrarId) },
       include: {
+        cuentaPorCobrar: {
+          include: { 
+            cliente: true,
+            empresa: true
+          }
+        },
         medioPago: true,
         moneda: true,
-        estado: true
+        banco: true,
+        cuentaBancaria: true
       },
       orderBy: { fechaPago: 'desc' }
     });
+
+    return pagos.map(p => ({ 
+      ...p, 
+      tipoPago: 'COBRAR',
+      entidad: p.cuentaPorCobrar?.cliente?.razonSocial || 'N/A'
+    }));
   } catch (err) {
     if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+      throw new DatabaseError('Error de base de datos al listar pagos por cuenta por cobrar', err.message);
     }
     throw err;
   }
@@ -307,18 +178,103 @@ const listarPorCuentaCobrar = async (cuentaPorCobrarId) => {
 
 const listarPorCuentaPagar = async (cuentaPorPagarId) => {
   try {
-    return await prisma.pago.findMany({
-      where: { cuentaPorPagarId },
+    const pagos = await prisma.pagoCuentaPorPagar.findMany({
+      where: { cuentaPorPagarId: Number(cuentaPorPagarId) },
       include: {
+        cuentaPorPagar: {
+          include: { 
+            proveedor: true,
+            empresa: true
+          }
+        },
         medioPago: true,
         moneda: true,
-        estado: true
+        banco: true,
+        cuentaBancaria: true
       },
       orderBy: { fechaPago: 'desc' }
     });
+
+    return pagos.map(p => ({ 
+      ...p, 
+      tipoPago: 'PAGAR',
+      entidad: p.cuentaPorPagar?.proveedor?.razonSocial || 'N/A'
+    }));
   } catch (err) {
     if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+      throw new DatabaseError('Error de base de datos al listar pagos por cuenta por pagar', err.message);
+    }
+    throw err;
+  }
+};
+
+// NOTA: Las funciones crear, actualizar y eliminar NO están disponibles en este servicio
+// porque los pagos se gestionan desde los tabs de CuentaPorCobrar y CuentaPorPagar
+// Este servicio es SOLO para consultas consolidadas
+
+const obtenerPorId = async (id, tipoPago) => {
+  if (!tipoPago) {
+    throw new ValidationError('Debe especificar el tipo de pago (COBRAR o PAGAR)');
+  }
+
+  try {
+    if (tipoPago === 'COBRAR') {
+      const pago = await prisma.pagoCuentaPorCobrar.findUnique({
+        where: { id: Number(id) },
+        include: {
+          cuentaPorCobrar: {
+            include: { 
+              cliente: true,
+              empresa: true
+            }
+          },
+          medioPago: true,
+          moneda: true,
+          banco: true,
+          cuentaBancaria: true
+        }
+      });
+      
+      if (!pago) throw new NotFoundError('Pago no encontrado');
+      
+      return { 
+        ...pago, 
+        tipoPago: 'COBRAR',
+        entidad: pago.cuentaPorCobrar?.cliente?.razonSocial || 'N/A'
+      };
+    }
+    
+    if (tipoPago === 'PAGAR') {
+      const pago = await prisma.pagoCuentaPorPagar.findUnique({
+        where: { id: Number(id) },
+        include: {
+          cuentaPorPagar: {
+            include: { 
+              proveedor: true,
+              empresa: true
+            }
+          },
+          medioPago: true,
+          moneda: true,
+          banco: true,
+          cuentaBancaria: true
+        }
+      });
+      
+      if (!pago) throw new NotFoundError('Pago no encontrado');
+      
+      return { 
+        ...pago, 
+        tipoPago: 'PAGAR',
+        entidad: pago.cuentaPorPagar?.proveedor?.razonSocial || 'N/A'
+      };
+    }
+
+    throw new ValidationError('Tipo de pago inválido. Use COBRAR o PAGAR');
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al obtener pago', err.message);
     }
     throw err;
   }
@@ -327,9 +283,6 @@ const listarPorCuentaPagar = async (cuentaPorPagarId) => {
 export default {
   listar,
   obtenerPorId,
-  crear,
-  actualizar,
-  eliminar,
   listarPorEmpresa,
   listarPorCuentaCobrar,
   listarPorCuentaPagar

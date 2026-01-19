@@ -301,6 +301,11 @@ const crear = async (data) => {
         fechaRecepcionComprobante: data.fechaRecepcionComprobante,
         direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
         contactoProveedorId: data.contactoProveedorId,
+        facturado: data.facturado !== undefined ? data.facturado : false,
+        fechaFacturacion: data.fechaFacturacion,
+        esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
+        ordenCompraOrigenId: data.ordenCompraOrigenId,
+        esParticionada: data.esParticionada !== undefined ? data.esParticionada : false,
       };
       const ordenCreada = await tx.ordenCompra.create({
         data: datosLimpios,
@@ -369,6 +374,11 @@ const actualizar = async (id, data) => {
         fechaRecepcionComprobante: data.fechaRecepcionComprobante,
         direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
         contactoProveedorId: data.contactoProveedorId,
+        facturado: data.facturado,
+        fechaFacturacion: data.fechaFacturacion,
+        esGerencial: data.esGerencial,
+        ordenCompraOrigenId: data.ordenCompraOrigenId,
+        esParticionada: data.esParticionada,
       };
 
       // Objeto para grabación (SIN relaciones, solo IDs)
@@ -405,6 +415,11 @@ const actualizar = async (id, data) => {
         fechaRecepcionComprobante: data.fechaRecepcionComprobante,
         direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
         contactoProveedorId: data.contactoProveedorId,
+        facturado: data.facturado,
+        fechaFacturacion: data.fechaFacturacion,
+        esGerencial: data.esGerencial,
+        ordenCompraOrigenId: data.ordenCompraOrigenId,
+        esParticionada: data.esParticionada,
         actualizadoEn: new Date(),
       };
 
@@ -894,7 +909,8 @@ const generarKardex = async (id, usuarioId) => {
       const ordenActualizada = await tx.ordenCompra.update({
         where: { id },
         data: {
-          estadoId: BigInt(50), // Estado: Con Kardex Generado
+          // ✅ NO cambiar estadoId - mantener en APROBADA (39)
+          // El estado 50 (PARTICIONADA) solo se usa cuando se divide la OC en negra/blanca
           movIngresoAlmacenId: resultado.movimiento.id,
           actualizadoEn: new Date(),
         },
@@ -955,9 +971,10 @@ const regenerarKardex = async (id, usuarioId) => {
 
       if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
 
-      if (Number(orden.estadoId) !== 50) {
+      // ✅ Validar que la orden esté APROBADA (39) y tenga kardex generado
+      if (Number(orden.estadoId) !== 39) {
         throw new ValidationError(
-          "Solo se puede regenerar kardex de órdenes con kardex generado"
+          "Solo se puede regenerar kardex de órdenes aprobadas"
         );
       }
 
@@ -1121,7 +1138,8 @@ const regenerarKardex = async (id, usuarioId) => {
       const ordenActualizada = await tx.ordenCompra.update({
         where: { id },
         data: {
-          estadoId: BigInt(50), // CON KARDEX GENERADO
+          // ✅ NO cambiar estadoId - mantener en APROBADA (39)
+          // El estado 50 (PARTICIONADA) solo se usa cuando se divide la OC en negra/blanca
           movIngresoAlmacenId: resultado.movimiento.id,
           actualizadoEn: new Date(),
         },

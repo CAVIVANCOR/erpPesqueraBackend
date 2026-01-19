@@ -13,37 +13,9 @@ export async function listar(req, res, next) {
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const pago = await pagoService.obtenerPorId(id);
+    const tipoPago = req.query.tipoPago; // COBRAR o PAGAR
+    const pago = await pagoService.obtenerPorId(id, tipoPago);
     res.json(toJSONBigInt(pago));
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function crear(req, res, next) {
-  try {
-    const nuevo = await pagoService.crear(req.body);
-    res.status(201).json(toJSONBigInt(nuevo));
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function actualizar(req, res, next) {
-  try {
-    const id = Number(req.params.id);
-    const actualizado = await pagoService.actualizar(id, req.body);
-    res.json(toJSONBigInt(actualizado));
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function eliminar(req, res, next) {
-  try {
-    const id = Number(req.params.id);
-    await pagoService.eliminar(id);
-    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
   } catch (err) {
     next(err);
   }
@@ -78,3 +50,6 @@ export async function listarPorCuentaPagar(req, res, next) {
     next(err);
   }
 }
+
+// NOTA: No hay funciones crear, actualizar o eliminar
+// Los pagos se gestionan desde los tabs de CuentaPorCobrar y CuentaPorPagar

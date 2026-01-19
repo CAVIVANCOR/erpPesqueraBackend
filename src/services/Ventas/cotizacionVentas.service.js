@@ -406,18 +406,69 @@ const actualizar = async (id, data) => {
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
 
-    return await prisma.cotizacionVentas.update({
-      where: { id },
-      data: datosConAuditoria,
-      include: {
-        empresa: true,
-        cliente: true,
-        tipoDocumento: true,
-        serieDoc: true,
-        moneda: true,
-        formaPago: true,
-        incoterms: true
+    // Usar transacción para actualizar cotización y documentos
+    return await prisma.$transaction(async (tx) => {
+      // 1. Actualizar la cotización
+      const cotizacionActualizada = await tx.cotizacionVentas.update({
+        where: { id },
+        data: datosConAuditoria,
+        include: {
+          empresa: true,
+          cliente: true,
+          tipoDocumento: true,
+          serieDoc: true,
+          moneda: true,
+          formaPago: true,
+          incoterms: true
+        }
+      });
+
+      // 2. Procesar documentos si vienen en el payload
+      if (documentos && Array.isArray(documentos)) {
+        for (const doc of documentos) {
+          if (doc.id) {
+            // Actualizar documento existente
+            await tx.detDocsReqCotizaVentas.update({
+              where: { id: BigInt(doc.id) },
+              data: {
+                docRequeridaVentasId: doc.docRequeridaVentasId ? BigInt(doc.docRequeridaVentasId) : undefined,
+                numeroDocumento: doc.numeroDocumento,
+                urlDocumento: doc.urlDocumento,
+                fechaEmision: doc.fechaEmision,
+                fechaVencimiento: doc.fechaVencimiento,
+                esObligatorio: doc.esObligatorio,
+                verificado: doc.verificado,
+                fechaVerificacion: doc.verificado ? (doc.fechaVerificacion || new Date()) : null,
+                verificadoPorId: doc.verificadoPorId,
+                observacionesVerificacion: doc.observacionesVerificacion,
+                costoDocumento: doc.costoDocumento,
+                monedaId: doc.monedaId ? BigInt(doc.monedaId) : null,
+              }
+            });
+          } else {
+            // Crear nuevo documento
+            await tx.detDocsReqCotizaVentas.create({
+              data: {
+                cotizacionVentasId: id,
+                docRequeridaVentasId: doc.docRequeridaVentasId ? BigInt(doc.docRequeridaVentasId) : undefined,
+                numeroDocumento: doc.numeroDocumento,
+                urlDocumento: doc.urlDocumento,
+                fechaEmision: doc.fechaEmision,
+                fechaVencimiento: doc.fechaVencimiento,
+                esObligatorio: doc.esObligatorio || false,
+                verificado: doc.verificado || false,
+                fechaVerificacion: doc.verificado ? (doc.fechaVerificacion || new Date()) : null,
+                verificadoPorId: doc.verificadoPorId,
+                observacionesVerificacion: doc.observacionesVerificacion,
+                costoDocumento: doc.costoDocumento,
+                monedaId: doc.monedaId ? BigInt(doc.monedaId) : null,
+              }
+            });
+          }
+        }
       }
+
+      return cotizacionActualizada;
     });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;

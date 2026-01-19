@@ -108,6 +108,7 @@ const crear = async (data) => {
       ...data,
       montoPagado: data.montoPagado || 0,
       saldoPendiente: (data.montoTotal || 0) - (data.montoPagado || 0),
+      esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
       fechaActualizacion: new Date()
     };
 
@@ -133,6 +134,7 @@ const actualizar = async (id, data) => {
       saldoPendiente: data.montoTotal !== undefined && data.montoPagado !== undefined 
         ? data.montoTotal - data.montoPagado 
         : undefined,
+      esGerencial: data.esGerencial,
       fechaActualizacion: new Date()
     };
 

@@ -95,6 +95,25 @@ async function validarEmpresa(data) {
       throw new ValidationError('El margen mínimo no puede ser mayor al margen objetivo');
     }
   }
+
+  // Validar campos de Nubefact
+  if (data.nubefactUrl !== undefined && data.nubefactUrl !== null) {
+    const url = String(data.nubefactUrl).trim();
+    if (url.length > 255) {
+      throw new ValidationError('La URL de Nubefact no puede exceder 255 caracteres');
+    }
+    // Validar formato básico de URL
+    if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+      throw new ValidationError('La URL de Nubefact debe comenzar con http:// o https://');
+    }
+  }
+
+  if (data.nubefactToken !== undefined && data.nubefactToken !== null) {
+    const token = String(data.nubefactToken).trim();
+    if (token.length > 500) {
+      throw new ValidationError('El token de Nubefact no puede exceder 500 caracteres');
+    }
+  }
 }
 
 /**
