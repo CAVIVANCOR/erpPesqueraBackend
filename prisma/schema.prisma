@@ -3183,6 +3183,9 @@ model NovedadPescaConsumo {
   limiteMaximoCapturaTn           Decimal?       @db.Decimal(12, 3)
   numeroResolucion                String?
   referenciaExtra                 String?
+  urlLiquidacionPersonalPesca  String?
+  urlConsolidadoFaenaCalasDescargas String?
+  urlConsolidadoFinal     String?
 
   porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
@@ -3708,6 +3711,9 @@ model TemporadaPesca {
   estadoTemporadaId            BigInt
   toneladasCapturadasTemporada Decimal?
   temporadaPescaIniciada       Boolean        @default(false)
+  urlLiquidacionPersonalPesca  String?
+  urlConsolidadoFaenaCalasDescargas String?
+  urlConsolidadoFinal     String?
 
   porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
