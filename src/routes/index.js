@@ -180,6 +180,9 @@ import tripulanteFaenaConsumoRoutes from '../routes/Pesca/tripulanteFaenaConsumo
 import detDocEmbarcacionPescaConsumoRoutes from '../routes/Pesca/detDocEmbarcacionPescaConsumo.routes.js';
 import entregaARendirPescaConsumoRoutes from '../routes/Pesca/entregaARendirPescaConsumo.routes.js';
 import detMovsEntRendirPescaConsumoRoutes from '../routes/Pesca/detMovsEntRendirPescaConsumo.routes.js';
+import entregaARendirPVentasImpresionRoutes from '../routes/Ventas/entregaARendirPVentasImpresion.routes.js';
+import entregaARendirPComprasImpresionRoutes from '../routes/Compras/entregaARendirPComprasImpresion.routes.js';
+import entregaARendirPescaConsumoImpresionRoutes from '../routes/Pesca/entregaARendirPescaConsumoImpresion.routes.js';
 import calaFaenaConsumoRoutes from '../routes/Pesca/calaFaenaConsumo.routes.js';
 import detCalaPescaConsumoRoutes from '../routes/Pesca/detCalaPescaConsumo.routes.js';
 import calaFaenaConsumoProduceRoutes from '../routes/Pesca/calaFaenaConsumoProduce.routes.js';
@@ -208,7 +211,8 @@ import cotizacionVentasImpresionRoutes from '../routes/Ventas/cotizacionVentasIm
 import videoconferenciaRoutes from '../routes/Videoconferencia/videoconferencia.routes.js';
 import participanteReunionRoutes from '../routes/Videoconferencia/participanteReunion.routes.js';
 import grabacionReunionRoutes from '../routes/Videoconferencia/grabacionReunion.routes.js';
-import notificacionRoutes from '../routes/Notificacion/notificacion.routes.js';
+import notificacionRoutes from './Notificacion/notificacion.routes.js';
+import pdfRoutes from './pdf.routes.js';
 import enumsTesoreriaRoutes from './Tesoreria/enumsTesoreria.routes.js';
 import cuotaPrestamoRoutes from './Tesoreria/cuotaPrestamo.routes.js';
 import lineaCreditoRoutes from './Tesoreria/lineaCredito.routes.js';
@@ -441,6 +445,7 @@ router.use('/detalles-orden-compra', detalleOrdenCompraRoutes);
 router.use('/det-datos-adicionales-orden-compra', detDatosAdicionalesOrdenCompraRoutes);
 // Rutas para EntregaARendirPCompras
 router.use('/entrega-a-rendir-p-compras', entregaARendirPComprasRoutes);
+router.use('/entregas-rendir-compras', entregaARendirPComprasImpresionRoutes);
 // Rutas para DetMovsEntregaRendirPCompras
 router.use('/det-movs-entrega-rendir-p-compras', detMovsEntregaRendirPComprasRoutes);
 // Rutas para CotizacionVentas
@@ -483,6 +488,8 @@ router.use('/docs-requeridas-compras-ventas', docRequeridaComprasVentasRoutes);
 router.use('/det-docs-req-cotiza-ventas', detDocsReqCotizaVentasRoutes);
 // Rutas para EntregaARendirPVentas
 router.use('/entrega-a-rendir-p-ventas', entregaARendirPVentasRoutes);
+router.use('/entregas-rendir-ventas', entregaARendirPVentasImpresionRoutes);
+
 // Rutas para DetMovsEntregaRendirPVentas
 router.use('/det-movs-entrega-rendir-p-ventas', detMovsEntregaRendirPVentasRoutes);
 // Rutas para PreFactura
@@ -558,6 +565,7 @@ router.use('/pesca/tripulantes-faena-consumo', tripulanteFaenaConsumoRoutes);
 router.use('/pesca/det-doc-embarcacion-pesca-consumo', detDocEmbarcacionPescaConsumoRoutes);
 // Rutas para EntregaARendirPescaConsumo
 router.use('/pesca/entregas-a-rendir-pesca-consumo', entregaARendirPescaConsumoRoutes);
+router.use('/entregas-rendir-consumo', entregaARendirPescaConsumoImpresionRoutes);
 // Rutas para DetMovsEntRendirPescaConsumo
 router.use('/pesca/movs-entregarendir-pesca-consumo', detMovsEntRendirPescaConsumoRoutes);
 // Rutas para CalaFaenaConsumo
@@ -637,5 +645,8 @@ router.use('/participantes-reunion', participanteReunionRoutes);
 router.use('/grabaciones-reunion', grabacionReunionRoutes);
 // Rutas para Notificaciones
 router.use('/notificaciones', notificacionRoutes);
+
+// Rutas para Sistema PDF V2 (Unificado)
+router.use('/pdf', pdfRoutes);
 
 export default router;

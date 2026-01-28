@@ -7,46 +7,22 @@ import { autenticarJWT } from '../../middlewares/authMiddleware.js';
 
 const router = Router();
 
-// Carpeta base para PDFs de movimientos de almacén
-const MOVIMIENTOS_ALMACEN_DIR = path.join(process.cwd(), 'uploads', 'movimientos-almacen');
+// ✅ Carpeta base para PDFs de movimientos de almacén - SISTEMA PDF V2
+const MOVIMIENTOS_ALMACEN_DIR = path.join(process.cwd(), 'uploads', 'pdf-system', 'movimientos-almacen');
 if (!fs.existsSync(MOVIMIENTOS_ALMACEN_DIR)) {
   fs.mkdirSync(MOVIMIENTOS_ALMACEN_DIR, { recursive: true });
 }
 
-// Configuración de Multer para guardar PDFs de movimientos
+// ✅ Configuración de Multer - SISTEMA PDF V2 ESTÁNDAR
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     try {
-      // Organiza por año/mes para mejor gestión de archivos
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      
-      // Construir ruta paso a paso
-      const baseDir = MOVIMIENTOS_ALMACEN_DIR;
-      const yearDir = path.join(baseDir, String(year));
-      const finalDir = path.join(yearDir, month);
-      
-      // Crear directorios paso a paso
-      if (!fs.existsSync(baseDir)) {
-        fs.mkdirSync(baseDir, { recursive: true });
+      // ✅ Guardar directamente en la carpeta del módulo (sin subcarpetas año/mes)
+      if (!fs.existsSync(MOVIMIENTOS_ALMACEN_DIR)) {
+        fs.mkdirSync(MOVIMIENTOS_ALMACEN_DIR, { recursive: true });
       }
       
-      if (!fs.existsSync(yearDir)) {
-        fs.mkdirSync(yearDir, { recursive: true });
-      }
-      
-      if (!fs.existsSync(finalDir)) {
-        fs.mkdirSync(finalDir, { recursive: true });
-      }
-      
-      // Verificar que el directorio final existe
-      if (fs.existsSync(finalDir)) {
-        cb(null, finalDir);
-      } else {
-        console.error(`❌ Error: No se pudo crear el directorio ${finalDir}`);
-        cb(new Error(`No se pudo crear el directorio ${finalDir}`), null);
-      }
+      cb(null, MOVIMIENTOS_ALMACEN_DIR);
       
     } catch (error) {
       console.error(`❌ Error en destination:`, error);
@@ -55,18 +31,12 @@ const storage = multer.diskStorage({
   },
   filename: function (req, file, cb) {
     try {
-      // Formato: {ID}-{dia}{mes}{año}.pdf
-      const now = new Date();
-      const dia = String(now.getDate()).padStart(2, '0');
-      const mes = String(now.getMonth() + 1).padStart(2, '0');
-      const año = now.getFullYear();
-      
-      // Generar ID único basado en timestamp
-      const id = Date.now();
+      // ✅ Generar nombre temporal (req.body no está disponible aquí)
+      const timestamp = Date.now();
       const ext = path.extname(file.originalname) || '.pdf';
+      const tempFileName = `temp-${timestamp}${ext}`;
       
-      const fileName = `${id}-${dia}${mes}${año}${ext}`;
-      cb(null, fileName);
+      cb(null, tempFileName);
       
     } catch (error) {
       console.error(`❌ Error en filename:`, error);
@@ -126,29 +96,39 @@ router.post('/upload-pdf', autenticarJWT, (req, res, next) => {
       });
     }
 
-    // Construye la ruta relativa para la BD
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    
-    const rutaRelativa = path.join(
-      '/uploads/movimientos-almacen',
-      String(year),
-      month,
-      req.file.filename
-    ).replace(/\\/g, '/'); // Normaliza para Windows/Linux
-
-    // Si se proporciona movimientoId, actualiza el registro
-    if (movimientoId) {
-      const campoActualizar = incluirCostos === 'true' 
-        ? 'urlMovAlmacenConCostosPdf' 
-        : 'urlMovAlmacenPdf';
-      
-      await prisma.movimientoAlmacen.update({
-        where: { id: BigInt(movimientoId) },
-        data: { [campoActualizar]: rutaRelativa }
+    if (!movimientoId) {
+      return res.status(400).json({ 
+        error: 'movimientoId es requerido.',
+        codigo: 'ERR_MOVIMIENTO_ID_REQUERIDO'
       });
     }
+
+    // ✅ Renombrar archivo con el formato estándar
+    const ext = path.extname(req.file.filename);
+    const prefijo = incluirCostos === 'true' ? 'MovimientoAlmacenConCostos' : 'MovimientoAlmacenSinCostos';
+    const nuevoNombre = `${prefijo}-${movimientoId}${ext}`;
+    
+    const rutaAntigua = req.file.path;
+    const rutaNueva = path.join(MOVIMIENTOS_ALMACEN_DIR, nuevoNombre);
+    
+    // Renombrar el archivo
+    fs.renameSync(rutaAntigua, rutaNueva);
+
+    // ✅ Construye la ruta relativa para la BD - SISTEMA PDF V2 ESTÁNDAR
+    const rutaRelativa = path.join(
+      '/uploads/pdf-system/movimientos-almacen',
+      nuevoNombre
+    ).replace(/\\/g, '/'); // Normaliza para Windows/Linux
+
+    // Actualiza el registro con la ruta del PDF
+    const campoActualizar = incluirCostos === 'true' 
+      ? 'urlMovAlmacenConCostosPdf' 
+      : 'urlMovAlmacenPdf';
+    
+    await prisma.movimientoAlmacen.update({
+      where: { id: BigInt(movimientoId) },
+      data: { [campoActualizar]: rutaRelativa }
+    });
 
     // Respuesta exitosa con la URL para el frontend
     res.json({ 
@@ -158,7 +138,7 @@ router.post('/upload-pdf', autenticarJWT, (req, res, next) => {
       urlMovAlmacenPdf: rutaRelativa,
       urlMovAlmacenConCostosPdf: rutaRelativa,
       url: rutaRelativa,
-      nombreArchivo: req.file.filename,
+      nombreArchivo: nuevoNombre,
       mensaje: 'PDF del movimiento de almacén subido exitosamente.'
     });
 
@@ -187,8 +167,8 @@ router.get('/archivo/*', autenticarJWT, (req, res) => {
       });
     }
 
-    // Construir ruta completa del archivo
-    const rutaCompleta = path.join(process.cwd(), 'uploads', 'movimientos-almacen', rutaArchivo);
+    // ✅ Construir ruta completa del archivo - SISTEMA PDF V2
+    const rutaCompleta = path.join(process.cwd(), 'uploads', 'pdf-system', 'movimientos-almacen', rutaArchivo);
     
     // Verificar que el archivo existe
     if (!fs.existsSync(rutaCompleta)) {

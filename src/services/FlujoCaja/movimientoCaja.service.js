@@ -124,13 +124,17 @@ const incluirRelaciones = {
 };
 
 /**
- * Copia un archivo PDF físicamente a la carpeta de MovimientoCaja.
- * @param {string} rutaOrigen - Ruta relativa del archivo origen (ej: /uploads/comprobantes-det-movs/2024/10/archivo.pdf)
+ * Copia un archivo PDF a la estructura del Sistema PDF V2 para MovimientoCaja.
+ * @param {string} rutaOrigen - Ruta relativa del archivo origen
+ * @param {number|string} movimientoCajaId - ID del MovimientoCaja
  * @returns {Promise<string>} - Ruta relativa del archivo copiado
  */
-async function copiarPdfAMovimientoCaja(rutaOrigen) {
+async function copiarPdfAMovimientoCaja(rutaOrigen, movimientoCajaId) {
   try {
-    if (!rutaOrigen) return null;
+    if (!rutaOrigen || !movimientoCajaId) return null;
+    
+    console.log(`[MOVIMIENTO CAJA] Copiando PDF origen: ${rutaOrigen}`);
+    console.log(`[MOVIMIENTO CAJA] MovimientoCaja ID: ${movimientoCajaId}`);
     
     // Construir ruta absoluta del archivo origen
     const rutaAbsolutaOrigen = path.join(process.cwd(), rutaOrigen);
@@ -138,21 +142,15 @@ async function copiarPdfAMovimientoCaja(rutaOrigen) {
     // Verificar que el archivo origen existe
     if (!fs.existsSync(rutaAbsolutaOrigen)) {
       console.warn(`[MOVIMIENTO CAJA] Archivo origen no existe: ${rutaAbsolutaOrigen}`);
-      return null;
+      return rutaOrigen; // Retornar ruta original como fallback
     }
     
-    // Crear carpeta destino para MovimientoCaja
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const dia = String(now.getDate()).padStart(2, '0');
-    
+    // Crear carpeta destino (Sistema PDF V2)
     const carpetaDestino = path.join(
       process.cwd(),
       'uploads',
-      'comprobantes-movimiento-caja',
-      String(year),
-      month
+      'pdf-system',
+      'movimiento-caja-comprobante'
     );
     
     // Crear directorios si no existen
@@ -160,29 +158,24 @@ async function copiarPdfAMovimientoCaja(rutaOrigen) {
       fs.mkdirSync(carpetaDestino, { recursive: true });
     }
     
-    // Generar nombre único para el archivo destino
-    const timestamp = Date.now();
+    // Generar nombre del archivo según Sistema PDF V2
     const extension = path.extname(rutaOrigen);
-    const nombreArchivo = `${timestamp}-${dia}${month}${year}${extension}`;
+    const nombreArchivo = `MOVIMIENTO-CAJA-COMPROBANTE-${movimientoCajaId}${extension}`;
     
     const rutaAbsolutaDestino = path.join(carpetaDestino, nombreArchivo);
     
     // Copiar el archivo
     fs.copyFileSync(rutaAbsolutaOrigen, rutaAbsolutaDestino);
     
-    // Construir ruta relativa para la BD
-    const rutaRelativa = path.join(
-      '/uploads/comprobantes-movimiento-caja',
-      String(year),
-      month,
-      nombreArchivo
-    ).replace(/\\/g, '/');
+    // Construir ruta relativa para la BD (Sistema PDF V2)
+    const rutaRelativa = `/uploads/pdf-system/movimiento-caja-comprobante/${nombreArchivo}`;
     
+    console.log(`[MOVIMIENTO CAJA] Archivo copiado exitosamente a: ${rutaRelativa}`);
     
     return rutaRelativa;
   } catch (error) {
     console.error('[MOVIMIENTO CAJA] Error al copiar archivo:', error);
-    return null;
+    return rutaOrigen; // Retornar ruta original como fallback
   }
 }
 
@@ -337,8 +330,15 @@ const crear = async (data) => {
     const moduloOrigen = data.moduloOrigenMotivoOperacionId ? Number(data.moduloOrigenMotivoOperacionId) : null;
     const origenId = data.origenMotivoOperacionId;
     
+    console.log(`[MOVIMIENTO CAJA - CREAR] ==========================================`);
+    console.log(`[MOVIMIENTO CAJA - CREAR] moduloOrigen: ${moduloOrigen}`);
+    console.log(`[MOVIMIENTO CAJA - CREAR] origenId: ${origenId}`);
+    console.log(`[MOVIMIENTO CAJA - CREAR] ==========================================`);
+    
     if (moduloOrigen === 2 && origenId) {
       // PESCA INDUSTRIAL - Buscar en DetMovsEntregaRendir
+      console.log(`[MOVIMIENTO CAJA] Buscando detalle en Pesca Industrial, origenId: ${origenId}`);
+      
       const detMov = await prisma.detMovsEntregaRendir.findUnique({
         where: { id: BigInt(origenId) },
         select: { 
@@ -346,6 +346,8 @@ const crear = async (data) => {
           productoId: true
         }
       });
+      
+      console.log(`[MOVIMIENTO CAJA] Detalle encontrado:`, detMov);
       
       if (detMov) {
         // Copiar el productoId si existe
@@ -355,12 +357,31 @@ const crear = async (data) => {
         
         // Copiar físicamente el archivo PDF
         if (detMov.urlComprobanteMovimiento) {
-          const nuevaRuta = await copiarPdfAMovimientoCaja(detMov.urlComprobanteMovimiento);
-          if (nuevaRuta) {
-            data.urlDocumentoMovCaja = nuevaRuta;
-          } else {
-            data.urlDocumentoMovCaja = detMov.urlComprobanteMovimiento;
+          console.log(`[MOVIMIENTO CAJA] URL Comprobante origen: ${detMov.urlComprobanteMovimiento}`);
+          
+          // Primero crear el MovimientoCaja para obtener el ID
+          const movimientoCreado = await prisma.movimientoCaja.create({ data });
+          
+          console.log(`[MOVIMIENTO CAJA] MovimientoCaja creado con ID: ${movimientoCreado.id}`);
+          
+          // Ahora copiar el PDF con el ID del movimiento
+          const nuevaRuta = await copiarPdfAMovimientoCaja(
+            detMov.urlComprobanteMovimiento, 
+            movimientoCreado.id
+          );
+          
+          console.log(`[MOVIMIENTO CAJA] Nueva ruta después de copiar: ${nuevaRuta}`);
+          
+          if (nuevaRuta && nuevaRuta !== detMov.urlComprobanteMovimiento) {
+            // Actualizar el MovimientoCaja con la nueva ruta
+            await prisma.movimientoCaja.update({
+              where: { id: movimientoCreado.id },
+              data: { urlDocumentoMovCaja: nuevaRuta }
+            });
+            console.log(`[MOVIMIENTO CAJA] urlDocumentoMovCaja actualizado: ${nuevaRuta}`);
           }
+          
+          return movimientoCreado;
         }
       }
     } else if (moduloOrigen === 3 && origenId) {
@@ -371,16 +392,27 @@ const crear = async (data) => {
       });
       
       if (detMovConsumo && detMovConsumo.urlComprobanteMovimiento) {
+        // Primero crear el MovimientoCaja
+        const movimientoCreado = await prisma.movimientoCaja.create({ data });
+        
         // Copiar físicamente el archivo PDF
-        const nuevaRuta = await copiarPdfAMovimientoCaja(detMovConsumo.urlComprobanteMovimiento);
-        if (nuevaRuta) {
-          data.urlDocumentoMovCaja = nuevaRuta;
-        } else {
-          data.urlDocumentoMovCaja = detMovConsumo.urlComprobanteMovimiento;
+        const nuevaRuta = await copiarPdfAMovimientoCaja(
+          detMovConsumo.urlComprobanteMovimiento,
+          movimientoCreado.id
+        );
+        
+        if (nuevaRuta && nuevaRuta !== detMovConsumo.urlComprobanteMovimiento) {
+          await prisma.movimientoCaja.update({
+            where: { id: movimientoCreado.id },
+            data: { urlDocumentoMovCaja: nuevaRuta }
+          });
         }
+        
+        return movimientoCreado;
       }
     }
     
+    // Si NO viene de módulo origen, crear normalmente
     return await prisma.movimientoCaja.create({ data });
   } catch (err) {
     // Manejar errores de validación de Prisma
@@ -512,7 +544,7 @@ const validarMovimiento = async (id) => {
           operacionSinFactura: movimiento.operacionSinFactura,
           urlComprobanteOperacionMovCaja: movimiento.urlComprobanteOperacionMovCaja,
           urlComprobanteMovimiento: movimiento.urlDocumentoMovCaja,
-          productoId: movimiento.productoId, // Sincronizar productoId de vuelta
+          productoId: movimiento.productoId,
           actualizadoEn: fechaActual
         }
       });

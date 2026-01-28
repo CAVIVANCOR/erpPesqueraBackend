@@ -1,6 +1,6 @@
 // src/routes/Almacen/detMovsEntregaRendirMovAlmacenPdf.routes.js
-// Rutas para upload y serving de PDFs de Movimientos de Entrega a Rendir de Movimientos de Almacén
-// Patrón profesional replicado EXACTAMENTE de detMovsEntregaRendirContratoPdf.routes.js
+// Rutas para manejo de PDFs de Detalles de Entrega a Rendir - Movimiento Almacén
+// SISTEMA PDF V2 - Estándar profesional
 
 import { Router } from 'express';
 import multer from 'multer';
@@ -14,199 +14,136 @@ const __dirname = path.dirname(__filename);
 
 const router = Router();
 
-// Configuración de multer para PDFs de comprobantes de movimiento
-const storageComprobante = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, '../../../uploads/det-movs-entrega-rendir-mov-almacen/comprobantes-movimiento');
+// Configuración de Multer para subida de PDFs
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const moduleName = req.body.moduleName || "det-movs-entrega-rendir-mov-almacen-comprobante";
     
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
+    let uploadDir;
+    if (moduleName === "det-movs-entrega-rendir-mov-almacen-comprobante") {
+      uploadDir = path.join(__dirname, '../../../uploads/pdf-system/det-movs-entrega-rendir-mov-almacen-comprobante');
+    } else if (moduleName === "det-movs-entrega-rendir-mov-almacen-operacion") {
+      uploadDir = path.join(__dirname, '../../../uploads/pdf-system/det-movs-entrega-rendir-mov-almacen-operacion');
+    } else {
+      return cb(new Error('Módulo no válido'));
+    }
+
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
     }
     
-    cb(null, uploadPath);
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const movimientoId = req.body.movimientoId;
-    const timestamp = Date.now();
-    const extension = path.extname(file.originalname);
-    
-    const filename = `comprobante-mov-almacen-${movimientoId || 'temp'}-${timestamp}${extension}`;
-    cb(null, filename);
+    // Nombre temporal, se renombrará después con el estándar
+    const tempName = `temp-${Date.now()}-${file.originalname}`;
+    cb(null, tempName);
   }
 });
 
-const uploadComprobante = multer({
-  storage: storageComprobante,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Solo se permiten archivos PDF'));
-    }
-  }
-});
-
-// Configuración de multer para PDFs de comprobantes de operación MovCaja
-const storageOperacion = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, '../../../uploads/det-movs-entrega-rendir-mov-almacen/comprobantes-operacion');
-    
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const movimientoId = req.body.movimientoId;
-    const timestamp = Date.now();
-    const extension = path.extname(file.originalname);
-    
-    const filename = `comprobante-operacion-almacen-${movimientoId || 'temp'}-${timestamp}${extension}`;
-    cb(null, filename);
-  }
-});
-
-const uploadOperacion = multer({
-  storage: storageOperacion,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
-      cb(null, true);
-    } else {
-      cb(new Error('Solo se permiten archivos PDF'));
+      cb(new Error('Tipo de archivo no permitido'));
     }
   }
 });
 
 /**
- * POST /upload-pdf-comprobante
- * Sube PDF del comprobante de movimiento (factura, boleta, recibo, etc.)
- * MISMO PATRÓN QUE detMovsEntregaRendirContratoPdf.routes.js
+ * POST /upload
+ * Sube PDF con nombre estándar según el módulo
  */
-router.post('/upload-pdf-comprobante', uploadComprobante.single('documento'), async (req, res) => {
+router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ 
-        error: 'No se recibió ningún archivo',
-        codigo: 'ERR_NO_FILE'
+      return res.status(400).json({ error: 'No se recibió ningún archivo' });
+    }
+
+    const { entityId, moduleName } = req.body;
+
+    if (!entityId) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'entityId es requerido' });
+    }
+
+    // Determinar el nombre estándar según el módulo
+    let standardFileName;
+    let relativePath;
+    let fieldToUpdate;
+    
+    if (moduleName === 'det-movs-entrega-rendir-mov-almacen-comprobante') {
+      standardFileName = `DetMovsEntregaRendirMovAlmacen-Comprobante-${entityId}.pdf`;
+      relativePath = `/uploads/pdf-system/det-movs-entrega-rendir-mov-almacen-comprobante/${standardFileName}`;
+      fieldToUpdate = 'urlComprobanteMovimiento';
+    } else if (moduleName === 'det-movs-entrega-rendir-mov-almacen-operacion') {
+      standardFileName = `DetMovsEntregaRendirMovAlmacen-Operacion-${entityId}.pdf`;
+      relativePath = `/uploads/pdf-system/det-movs-entrega-rendir-mov-almacen-operacion/${standardFileName}`;
+      fieldToUpdate = 'urlComprobanteOperacionMovCaja';
+    } else {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Módulo no válido' });
+    }
+
+    // Renombrar archivo con nombre estándar
+    const finalPath = path.join(path.dirname(req.file.path), standardFileName);
+    fs.renameSync(req.file.path, finalPath);
+
+    // Actualizar base de datos
+    try {
+      await prisma.detMovsEntregaRendirMovAlmacen.update({
+        where: { id: BigInt(entityId) },
+        data: { [fieldToUpdate]: relativePath }
       });
+    } catch (updateError) {
+      console.error('Error actualizando registro:', updateError);
     }
-    
-    const rutaRelativa = `/uploads/det-movs-entrega-rendir-mov-almacen/comprobantes-movimiento/${req.file.filename}`;
-    
-    // Si se proporciona movimientoId, actualiza el registro
-    const movimientoId = req.body.movimientoId;
-    if (movimientoId) {
-      try {
-        await prisma.detMovsEntregaRendirMovAlmacen.update({
-          where: { id: BigInt(movimientoId) },
-          data: { urlComprobanteMovimiento: rutaRelativa }
-        });
-      } catch (updateError) {
-        console.error('Error actualizando movimiento:', updateError);
-      }
-    }
-    
+
     res.json({
-      mensaje: 'PDF del comprobante subido exitosamente',
-      urlDocumento: rutaRelativa,
-      archivo: req.file.filename,
-      tamaño: req.file.size
+      success: true,
+      url: relativePath,
+      filename: standardFileName,
+      message: 'PDF subido correctamente'
     });
   } catch (error) {
     console.error('Error al subir PDF:', error);
-    res.status(500).json({ 
-      error: 'Error interno del servidor al subir PDF',
-      codigo: 'ERR_UPLOAD_PDF'
-    });
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Error al subir el PDF', details: error.message });
   }
 });
 
 /**
- * POST /upload-pdf-operacion
- * Sube PDF del comprobante de operación MovCaja (voucher, transferencia, etc.)
- * MISMO PATRÓN QUE detMovsEntregaRendirContratoPdf.routes.js
+ * GET /file/:moduleName/:filename
+ * Sirve PDF según el módulo
  */
-router.post('/upload-pdf-operacion', uploadOperacion.single('documento'), async (req, res) => {
+router.get('/file/:moduleName/:filename', (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ 
-        error: 'No se recibió ningún archivo',
-        codigo: 'ERR_NO_FILE'
-      });
+    const { moduleName, filename } = req.params;
+    
+    let filePath;
+    if (moduleName === 'det-movs-entrega-rendir-mov-almacen-comprobante') {
+      filePath = path.join(__dirname, '../../../uploads/pdf-system/det-movs-entrega-rendir-mov-almacen-comprobante', filename);
+    } else if (moduleName === 'det-movs-entrega-rendir-mov-almacen-operacion') {
+      filePath = path.join(__dirname, '../../../uploads/pdf-system/det-movs-entrega-rendir-mov-almacen-operacion', filename);
+    } else {
+      return res.status(400).json({ error: 'Módulo no válido' });
     }
-    
-    const rutaRelativa = `/uploads/det-movs-entrega-rendir-mov-almacen/comprobantes-operacion/${req.file.filename}`;
-    
-    // Si se proporciona movimientoId, actualiza el registro
-    const movimientoId = req.body.movimientoId;
-    if (movimientoId) {
-      try {
-        await prisma.detMovsEntregaRendirMovAlmacen.update({
-          where: { id: BigInt(movimientoId) },
-          data: { urlComprobanteOperacionMovCaja: rutaRelativa }
-        });
-      } catch (updateError) {
-        console.error('Error actualizando movimiento:', updateError);
-      }
-    }
-    
-    res.json({
-      mensaje: 'PDF del comprobante de operación subido exitosamente',
-      urlDocumento: rutaRelativa,
-      archivo: req.file.filename,
-      tamaño: req.file.size
-    });
-  } catch (error) {
-    console.error('Error al subir PDF:', error);
-    res.status(500).json({ 
-      error: 'Error interno del servidor al subir PDF',
-      codigo: 'ERR_UPLOAD_PDF'
-    });
-  }
-});
 
-/**
- * GET /archivo-comprobante/:filename
- * Obtiene PDF del comprobante de movimiento
- */
-router.get('/archivo-comprobante/:filename', (req, res) => {
-  try {
-    const { filename } = req.params;
-    const filePath = path.join(__dirname, '../../../uploads/det-movs-entrega-rendir-mov-almacen/comprobantes-movimiento', filename);
-    
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: 'Archivo no encontrado' });
+      return res.status(404).json({ error: 'Archivo no encontrado' });
     }
-    
+
     res.setHeader('Content-Type', 'application/pdf');
     res.sendFile(filePath);
   } catch (error) {
-    console.error('Error al obtener PDF:', error);
-    res.status(500).json({ message: 'Error al obtener el archivo' });
-  }
-});
-
-/**
- * GET /archivo-operacion/:filename
- * Obtiene PDF del comprobante de operación MovCaja
- */
-router.get('/archivo-operacion/:filename', (req, res) => {
-  try {
-    const { filename } = req.params;
-    const filePath = path.join(__dirname, '../../../uploads/det-movs-entrega-rendir-mov-almacen/comprobantes-operacion', filename);
-    
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: 'Archivo no encontrado' });
-    }
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.sendFile(filePath);
-  } catch (error) {
-    console.error('Error al obtener PDF:', error);
-    res.status(500).json({ message: 'Error al obtener el archivo' });
+    console.error('Error al servir PDF:', error);
+    res.status(500).json({ error: 'Error al servir el PDF' });
   }
 });
 
