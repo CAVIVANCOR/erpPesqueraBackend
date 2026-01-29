@@ -57,6 +57,7 @@ app.use(hpp());
  *
  * Esta configuración garantiza una experiencia fluida en desarrollo y seguridad en producción.
  */
+/**
 const isProduction = process.env.NODE_ENV === 'production';
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minuto
@@ -64,6 +65,7 @@ const limiter = rateLimit({
   message: 'Demasiadas peticiones, intenta más tarde.'
 });
 app.use(limiter);
+ */
 
 // Rutas públicas de consultas externas (RENIEC y SUNAT) - ANTES del middleware JWT
 import consultaExternaRoutes from './routes/Maestros/consultaExterna.routes.js';
