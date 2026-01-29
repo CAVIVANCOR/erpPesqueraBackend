@@ -359,7 +359,10 @@ const listarPrestamos = async (lineaCreditoId) => {
 };
 
 /**
- * Obtiene reporte de líneas disponibles por banco.
+ * Obtiene reporte de líneas disponibles con 3 secciones:
+ * 1. Resumen por banco y moneda
+ * 2. Detalle por línea con tipos de préstamo
+ * 3. Factoring indirecto por banco con clientes
  */
 const obtenerReporteLineasDisponibles = async (empresaId) => {
   try {
@@ -371,56 +374,171 @@ const obtenerReporteLineasDisponibles = async (empresaId) => {
       include: {
         banco: true,
         moneda: true,
+        estado: true,
         prestamos: {
           where: {
             estadoId: { in: [80n, 81n] } // DESEMBOLSADO o VIGENTE
+          },
+          include: {
+            tipoPrestamo: true
           }
         }
       }
     });
 
-    // Agrupar por banco y tipo de línea
-    const reporte = {};
+    // ========================================
+    // SECCIÓN 1: RESUMEN POR BANCO Y MONEDA
+    // ========================================
+    const resumenBancos = {};
     
     lineas.forEach(linea => {
-      const key = `${linea.bancoId}-${linea.tipoLinea}`;
-      
-      if (!reporte[key]) {
-        reporte[key] = {
+      const key = `${linea.banco.id}-${linea.moneda.id}`;
+      const montoUtilizado = linea.prestamos.reduce((sum, prestamo) => {
+        return sum + parseFloat(prestamo.saldoCapital || 0);
+      }, 0);
+
+      const montoAprobado = parseFloat(linea.montoAprobado || 0);
+      const montoDisponible = montoAprobado - montoUtilizado;
+
+      if (!resumenBancos[key]) {
+        resumenBancos[key] = {
           banco: linea.banco.nombre,
-          tipoLinea: linea.tipoLinea,
           moneda: linea.moneda.codigo,
           limite: 0,
           utilizado: 0,
           disponible: 0,
-          porcentajeUtilizado: 0,
+          porcentajeUtilizado: 0
+        };
+      }
+
+      resumenBancos[key].limite += montoAprobado;
+      resumenBancos[key].utilizado += montoUtilizado;
+      resumenBancos[key].disponible += montoDisponible;
+    });
+
+    // Calcular porcentajes del resumen
+    const resumen = Object.values(resumenBancos).map(item => {
+      item.porcentajeUtilizado = item.limite > 0 
+        ? parseFloat(((item.utilizado / item.limite) * 100).toFixed(2))
+        : 0;
+      return item;
+    });
+
+    // Totales del resumen
+    const totalesResumen = resumen.reduce((acc, item) => {
+      acc.limite += item.limite;
+      acc.utilizado += item.utilizado;
+      acc.disponible += item.disponible;
+      return acc;
+    }, { limite: 0, utilizado: 0, disponible: 0 });
+
+    totalesResumen.porcentajeUtilizado = totalesResumen.limite > 0 
+      ? parseFloat(((totalesResumen.utilizado / totalesResumen.limite) * 100).toFixed(2))
+      : 0;
+
+    // ========================================
+    // SECCIÓN 2: DETALLE POR BANCO Y LÍNEA
+    // ========================================
+    const detalleBancos = {};
+
+    lineas.forEach(linea => {
+      const bancoId = linea.banco.id.toString();
+      const montoUtilizado = linea.prestamos.reduce((sum, prestamo) => {
+        return sum + parseFloat(prestamo.saldoCapital || 0);
+      }, 0);
+
+      const montoAprobado = parseFloat(linea.montoAprobado || 0);
+      const montoDisponible = montoAprobado - montoUtilizado;
+
+      if (!detalleBancos[bancoId]) {
+        detalleBancos[bancoId] = {
+          banco: linea.banco.nombre,
           lineas: []
         };
       }
-      
-      const utilizado = linea.prestamos.reduce((sum, p) => sum + parseFloat(p.saldoCapital), 0);
-      const limite = parseFloat(linea.montoAprobado);
-      const disponible = limite - utilizado;
-      
-      reporte[key].limite += limite;
-      reporte[key].utilizado += utilizado;
-      reporte[key].disponible += disponible;
-      reporte[key].lineas.push({
+
+      // Agrupar préstamos por tipo
+      const prestamosPorTipo = {};
+      linea.prestamos.forEach(prestamo => {
+        const tipoNombre = prestamo.tipoPrestamo?.nombre || 'SIN TIPO';
+        if (!prestamosPorTipo[tipoNombre]) {
+          prestamosPorTipo[tipoNombre] = {
+            tipo: tipoNombre,
+            saldo: 0
+          };
+        }
+        prestamosPorTipo[tipoNombre].saldo += parseFloat(prestamo.saldoCapital || 0);
+      });
+
+      detalleBancos[bancoId].lineas.push({
         numeroLinea: linea.numeroLinea,
-        limite,
-        utilizado,
-        disponible
+        tipoLinea: linea.tipoLinea,
+        moneda: linea.moneda.codigo,
+        limite: montoAprobado,
+        utilizado: montoUtilizado,
+        disponible: montoDisponible,
+        tasa: parseFloat(linea.tasaInteres || 0),
+        tiposPrestamo: Object.values(prestamosPorTipo)
       });
     });
 
-    // Calcular porcentajes
-    Object.values(reporte).forEach(item => {
-      item.porcentajeUtilizado = item.limite > 0 
-        ? ((item.utilizado / item.limite) * 100).toFixed(2)
-        : 0;
+    const detalle = Object.values(detalleBancos);
+
+    // ========================================
+    // SECCIÓN 3: FACTORING INDIRECTO
+    // ========================================
+    // Buscar préstamos de tipo "FACTORING INDIRECTO"
+    const factoringIndirecto = {};
+
+    for (const linea of lineas) {
+      for (const prestamo of linea.prestamos) {
+        const tipoNombre = prestamo.tipoPrestamo?.nombre || '';
+        
+        // Verificar si es factoring indirecto
+        if (tipoNombre.toUpperCase().includes('FACTORING') && 
+            tipoNombre.toUpperCase().includes('INDIRECTO')) {
+          
+          const bancoId = linea.banco.id.toString();
+          
+          if (!factoringIndirecto[bancoId]) {
+            factoringIndirecto[bancoId] = {
+              banco: linea.banco.nombre,
+              moneda: linea.moneda.codigo,
+              clientes: []
+            };
+          }
+
+          // Obtener información del cliente desde el préstamo
+          // Nota: Necesitarás ajustar esto según tu modelo
+          // Si tienes una relación con EntidadComercial o similar
+          const cliente = {
+            nombre: prestamo.beneficiario || 'CLIENTE NO ESPECIFICADO',
+            monto: parseFloat(prestamo.saldoCapital || 0)
+          };
+
+          factoringIndirecto[bancoId].clientes.push(cliente);
+        }
+      }
+    }
+
+    // Calcular totales por banco en factoring
+    Object.values(factoringIndirecto).forEach(banco => {
+      banco.total = banco.clientes.reduce((sum, cliente) => sum + cliente.monto, 0);
     });
 
-    return Object.values(reporte);
+    const factoring = Object.values(factoringIndirecto);
+
+    // ========================================
+    // RETORNAR ESTRUCTURA COMPLETA
+    // ========================================
+    return {
+      resumen: {
+        bancos: resumen,
+        totales: totalesResumen
+      },
+      detalle: detalle,
+      factoring: factoring
+    };
   } catch (err) {
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos', err.message);
@@ -428,6 +546,7 @@ const obtenerReporteLineasDisponibles = async (empresaId) => {
     throw err;
   }
 };
+
 
 export default {
   listar,
