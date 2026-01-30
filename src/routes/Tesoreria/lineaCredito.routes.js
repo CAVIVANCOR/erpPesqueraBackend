@@ -8,28 +8,28 @@ const router = express.Router();
 /**
  * Rutas para LineaCredito
  * Todas las rutas requieren autenticación Y permisos específicos
- * Ruta del submódulo: 'lineas-credito'
+ * Ruta del submódulo: 'lineaCredito'
  */
 
 // Rutas específicas PRIMERO (antes de /:id)
 router.get(
   '/vigentes', 
   autenticarJWT, 
-  checkPermission('lineas-credito', 'ver'),
+  checkPermission('lineaCredito', 'ver'),
   lineaCreditoController.listarVigentes
 );
 
 router.get(
   '/empresa/:empresaId', 
   autenticarJWT, 
-  checkPermission('lineas-credito', 'ver'),
+  checkPermission('lineaCredito', 'ver'),
   lineaCreditoController.listarPorEmpresa
 );
 
 router.get(
   '/reporte/lineas-disponibles/:empresaId', 
   autenticarJWT, 
-  checkPermission('lineas-credito', 'ver'),
+  checkPermission('lineaCredito', 'ver'),
   lineaCreditoController.obtenerReporteLineasDisponibles
 );
 
@@ -37,35 +37,35 @@ router.get(
 router.get(
   '/', 
   autenticarJWT, 
-  checkPermission('lineas-credito', 'ver'),
+  checkPermission('lineaCredito', 'ver'),
   lineaCreditoController.listar
 );
 
 router.get(
   '/:id', 
   autenticarJWT, 
-  checkPermission('lineas-credito', 'ver'),
+  checkPermission('lineaCredito', 'ver'),
   lineaCreditoController.obtenerPorId
 );
 
 router.post(
   '/', 
   autenticarJWT, 
-  checkPermission('lineas-credito', 'crear'),
+  checkPermission('lineaCredito', 'crear'),
   lineaCreditoController.crear
 );
 
 router.put(
   '/:id', 
   autenticarJWT, 
-  checkPermission('lineas-credito', 'editar'),
+  checkPermission('lineaCredito', 'editar'),
   lineaCreditoController.actualizar
 );
 
 router.delete(
   '/:id', 
   autenticarJWT, 
-  checkPermission('lineas-credito', 'eliminar'),
+  checkPermission('lineaCredito', 'eliminar'),
   lineaCreditoController.eliminar
 );
 
@@ -73,7 +73,7 @@ router.delete(
 router.get(
   '/:id/prestamos', 
   autenticarJWT, 
-  checkPermission('lineas-credito', 'ver'),
+  checkPermission('lineaCredito', 'ver'),
   lineaCreditoController.listarPrestamos
 );
 

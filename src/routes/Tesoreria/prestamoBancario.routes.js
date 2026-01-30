@@ -108,21 +108,21 @@ const upload = multer({
 router.get(
   '/', 
   autenticarJWT, 
-  checkPermission('prestamos-bancarios', 'ver'),
+  checkPermission('prestamoBancario', 'ver'),
   prestamoBancarioController.listar
 );
 
 router.get(
   '/vigentes', 
   autenticarJWT, 
-  checkPermission('prestamos-bancarios', 'ver'),
+  checkPermission('prestamoBancario', 'ver'),
   prestamoBancarioController.listarVigentes
 );
 
 router.get(
   '/empresa/:empresaId', 
   autenticarJWT, 
-  checkPermission('prestamos-bancarios', 'ver'),
+  checkPermission('prestamoBancario', 'ver'),
   prestamoBancarioController.listarPorEmpresa
 );
 
@@ -132,7 +132,7 @@ router.get(
 router.get(
   '/lista-simple', 
   autenticarJWT,
-  checkPermission('prestamos-bancarios', 'ver'),
+  checkPermission('prestamoBancario', 'ver'),
   async (req, res, next) => {
         try {
       const prestamos = await prestamoBancarioService.listarSimple();
@@ -146,42 +146,42 @@ router.get(
 router.get(
   '/:id', 
   autenticarJWT, 
-  checkPermission('prestamos-bancarios', 'ver'),
+  checkPermission('prestamoBancario', 'ver'),
   prestamoBancarioController.obtenerPorId
 );
 
 router.get(
   '/:id/cronograma', 
   autenticarJWT, 
-  checkPermission('prestamos-bancarios', 'ver'),
+  checkPermission('prestamoBancario', 'ver'),
   prestamoBancarioController.obtenerCronograma
 );
 
 router.post(
   '/', 
   autenticarJWT, 
-  checkPermission('prestamos-bancarios', 'crear'),
+  checkPermission('prestamoBancario', 'crear'),
   prestamoBancarioController.crear
 );
 
 router.put(
   '/:id', 
   autenticarJWT, 
-  checkPermission('prestamos-bancarios', 'editar'),
+  checkPermission('prestamoBancario', 'editar'),
   prestamoBancarioController.actualizar
 );
 
 router.delete(
   '/:id', 
   autenticarJWT, 
-  checkPermission('prestamos-bancarios', 'eliminar'),
+  checkPermission('prestamoBancario', 'eliminar'),
   prestamoBancarioController.eliminar
 );
 
 router.post(
   '/:id/recalcular-cuotas', 
   autenticarJWT, 
-  checkPermission('prestamos-bancarios', 'editar'),
+  checkPermission('prestamoBancario', 'editar'),
   prestamoBancarioController.recalcularCuotas
 );
 
@@ -190,7 +190,7 @@ router.post(
  * Sube un PDF del documento de crédito bancario.
  * Retorna la URL relativa para guardar en PrestamoBancario.urlDocumentoPDF
  */
-router.post('/upload', autenticarJWT, checkPermission('prestamos-bancarios', 'crear'), (req, res, next) => {
+router.post('/upload', autenticarJWT, checkPermission('prestamoBancario', 'crear'), (req, res, next) => {
   upload.single('documento')(req, res, function (err) {
     if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
@@ -261,7 +261,7 @@ router.post('/upload', autenticarJWT, checkPermission('prestamos-bancarios', 'cr
  * GET /api/tesoreria/prestamos-bancarios/archivo/*
  * Sirve archivos PDF de préstamos bancarios con autenticación JWT
  */
-router.get('/archivo/*', autenticarJWT, checkPermission('prestamos-bancarios', 'ver'), (req, res) => {
+router.get('/archivo/*', autenticarJWT, checkPermission('prestamoBancario', 'ver'), (req, res) => {
   try {
     // Extraer la ruta del archivo desde la URL
     const rutaArchivo = req.params[0]; // Captura todo después de /archivo/
@@ -327,7 +327,7 @@ router.get('/archivo/*', autenticarJWT, checkPermission('prestamos-bancarios', '
  * Sube un PDF de documentación adicional del préstamo.
  * Retorna la URL relativa para guardar en PrestamoBancario.urlDocAdicionalPDF
  */
-router.post('/upload-adicional', autenticarJWT, checkPermission('prestamos-bancarios', 'crear'), (req, res, next) => {
+router.post('/upload-adicional', autenticarJWT, checkPermission('prestamoBancario', 'crear'), (req, res, next) => {
   upload.single('documento')(req, res, function (err) {
     if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({

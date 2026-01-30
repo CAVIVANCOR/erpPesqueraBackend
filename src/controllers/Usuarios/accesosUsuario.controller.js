@@ -55,10 +55,24 @@ export async function eliminar(req, res, next) {
 
 /**
  * Obtener todos los accesos de un usuario específico
+ * Permite que un usuario vea sus propios accesos
+ * Solo superusuarios pueden ver accesos de otros usuarios
  */
 export async function obtenerPorUsuario(req, res, next) {
   try {
     const usuarioId = Number(req.params.usuarioId);
+    const usuarioAutenticadoId = Number(req.user?.id);
+    
+    // Verificar si el usuario autenticado es superusuario
+    const esSuperUsuario = req.user?.esSuperUsuario || false;
+    
+    // Si no es superusuario, solo puede ver sus propios accesos
+    if (!esSuperUsuario && usuarioId !== usuarioAutenticadoId) {
+      return res.status(403).json({ 
+        mensaje: 'No tiene permisos para ver los accesos de otro usuario' 
+      });
+    }
+    
     const accesos = await accesosUsuarioService.obtenerPorUsuario(usuarioId);
     res.json(toJSONBigInt(accesos));
   } catch (err) {

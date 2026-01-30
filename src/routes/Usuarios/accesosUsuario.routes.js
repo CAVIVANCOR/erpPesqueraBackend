@@ -22,7 +22,6 @@ router.get(
 router.get(
   '/usuario/:usuarioId',
   autenticarJWT,
-  checkPermission('accesosUsuario', 'ver'),
   accesosUsuarioController.obtenerPorUsuario
 );
 
