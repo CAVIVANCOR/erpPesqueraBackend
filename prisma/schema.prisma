@@ -6497,6 +6497,7 @@ model PrestamoBancario {
   fechaContrato         DateTime                                     // Fecha de firma del contrato
   fechaDesembolso       DateTime                                     // Fecha de desembolso real
   fechaVencimiento      DateTime                                     // Fecha de vencimiento final
+  tipoCambioAplicado    Decimal?                 @db.Decimal(7, 4)    // Tipo de cambio aplicado
   
   // ========================================
   // MONTOS PRINCIPALES
