@@ -1,22 +1,48 @@
-// Rutas de Express para TipoReferenciaMovimientoCaja
 import { Router } from 'express';
-import * as controller from '../../controllers/FlujoCaja/tipoReferenciaMovimientoCaja.controller.js';
+import * as tipoReferenciaMovimientoCajaController from '../../controllers/FlujoCaja/tipoReferenciaMovimientoCaja.controller.js';
+import { autenticarJWT } from '../../middlewares/authMiddleware.js';
+import { checkPermission } from '../../middlewares/checkPermission.js';
 
 const router = Router();
 
-// GET /api/tipos-referencia-movimiento-caja
-router.get('/', controller.listar);
+/**
+ * Rutas CRUD para TipoReferenciaMovimientoCaja
+ * Ruta del submódulo: 'tipoReferenciaMovimientoCaja'
+ */
 
-// GET /api/tipos-referencia-movimiento-caja/:id
-router.get('/:id', controller.obtenerPorId);
+router.get(
+  '/', 
+  autenticarJWT, 
+  checkPermission('tipoReferenciaMovimientoCaja', 'ver'),
+  tipoReferenciaMovimientoCajaController.listar
+);
 
-// POST /api/tipos-referencia-movimiento-caja
-router.post('/', controller.crear);
+router.get(
+  '/:id', 
+  autenticarJWT, 
+  checkPermission('tipoReferenciaMovimientoCaja', 'ver'),
+  tipoReferenciaMovimientoCajaController.obtenerPorId
+);
 
-// PUT /api/tipos-referencia-movimiento-caja/:id
-router.put('/:id', controller.actualizar);
+router.post(
+  '/', 
+  autenticarJWT, 
+  checkPermission('tipoReferenciaMovimientoCaja', 'crear'),
+  tipoReferenciaMovimientoCajaController.crear
+);
 
-// DELETE /api/tipos-referencia-movimiento-caja/:id
-router.delete('/:id', controller.eliminar);
+router.put(
+  '/:id', 
+  autenticarJWT, 
+  checkPermission('tipoReferenciaMovimientoCaja', 'editar'),
+  tipoReferenciaMovimientoCajaController.actualizar
+);
+
+router.delete(
+  '/:id', 
+  autenticarJWT, 
+  checkPermission('tipoReferenciaMovimientoCaja', 'eliminar'),
+  tipoReferenciaMovimientoCajaController.eliminar
+);
 
 export default router;

@@ -17,7 +17,7 @@ import { ForbiddenError } from '../utils/errors.js';
 export const checkPermission = (ruta, accion) => {
   return async (req, res, next) => {
     try {
-      const usuarioId = req.usuario?.id; // Del middleware de autenticación JWT
+      const usuarioId = req.user?.id; // ✅ CORREGIDO: Cambiado de req.usuario a req.user
       
       if (!usuarioId) {
         throw new ForbiddenError('Usuario no autenticado');
@@ -112,7 +112,7 @@ export const checkPermission = (ruta, accion) => {
 export const checkAccess = (ruta) => {
   return async (req, res, next) => {
     try {
-      const usuarioId = req.usuario?.id;
+      const usuarioId = req.user?.id; // ✅ CORREGIDO: Cambiado de req.usuario a req.user
       
       if (!usuarioId) {
         throw new ForbiddenError('Usuario no autenticado');

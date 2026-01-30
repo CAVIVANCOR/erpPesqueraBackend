@@ -132,10 +132,6 @@ const incluirRelaciones = {
 async function copiarPdfAMovimientoCaja(rutaOrigen, movimientoCajaId) {
   try {
     if (!rutaOrigen || !movimientoCajaId) return null;
-    
-    console.log(`[MOVIMIENTO CAJA] Copiando PDF origen: ${rutaOrigen}`);
-    console.log(`[MOVIMIENTO CAJA] MovimientoCaja ID: ${movimientoCajaId}`);
-    
     // Construir ruta absoluta del archivo origen
     const rutaAbsolutaOrigen = path.join(process.cwd(), rutaOrigen);
     
@@ -157,21 +153,14 @@ async function copiarPdfAMovimientoCaja(rutaOrigen, movimientoCajaId) {
     if (!fs.existsSync(carpetaDestino)) {
       fs.mkdirSync(carpetaDestino, { recursive: true });
     }
-    
     // Generar nombre del archivo según Sistema PDF V2
     const extension = path.extname(rutaOrigen);
     const nombreArchivo = `MOVIMIENTO-CAJA-COMPROBANTE-${movimientoCajaId}${extension}`;
-    
     const rutaAbsolutaDestino = path.join(carpetaDestino, nombreArchivo);
-    
     // Copiar el archivo
     fs.copyFileSync(rutaAbsolutaOrigen, rutaAbsolutaDestino);
-    
     // Construir ruta relativa para la BD (Sistema PDF V2)
-    const rutaRelativa = `/uploads/pdf-system/movimiento-caja-comprobante/${nombreArchivo}`;
-    
-    console.log(`[MOVIMIENTO CAJA] Archivo copiado exitosamente a: ${rutaRelativa}`);
-    
+    const rutaRelativa = `/uploads/pdf-system/movimiento-caja-comprobante/${nombreArchivo}`;    
     return rutaRelativa;
   } catch (error) {
     console.error('[MOVIMIENTO CAJA] Error al copiar archivo:', error);
@@ -330,25 +319,15 @@ const crear = async (data) => {
     const moduloOrigen = data.moduloOrigenMotivoOperacionId ? Number(data.moduloOrigenMotivoOperacionId) : null;
     const origenId = data.origenMotivoOperacionId;
     
-    console.log(`[MOVIMIENTO CAJA - CREAR] ==========================================`);
-    console.log(`[MOVIMIENTO CAJA - CREAR] moduloOrigen: ${moduloOrigen}`);
-    console.log(`[MOVIMIENTO CAJA - CREAR] origenId: ${origenId}`);
-    console.log(`[MOVIMIENTO CAJA - CREAR] ==========================================`);
-    
     if (moduloOrigen === 2 && origenId) {
-      // PESCA INDUSTRIAL - Buscar en DetMovsEntregaRendir
-      console.log(`[MOVIMIENTO CAJA] Buscando detalle en Pesca Industrial, origenId: ${origenId}`);
-      
+      // PESCA INDUSTRIAL - Buscar en DetMovsEntregaRendir      
       const detMov = await prisma.detMovsEntregaRendir.findUnique({
         where: { id: BigInt(origenId) },
         select: { 
           urlComprobanteMovimiento: true,
           productoId: true
         }
-      });
-      
-      console.log(`[MOVIMIENTO CAJA] Detalle encontrado:`, detMov);
-      
+      });      
       if (detMov) {
         // Copiar el productoId si existe
         if (detMov.productoId) {
@@ -356,29 +335,20 @@ const crear = async (data) => {
         }
         
         // Copiar físicamente el archivo PDF
-        if (detMov.urlComprobanteMovimiento) {
-          console.log(`[MOVIMIENTO CAJA] URL Comprobante origen: ${detMov.urlComprobanteMovimiento}`);
-          
+        if (detMov.urlComprobanteMovimiento) {          
           // Primero crear el MovimientoCaja para obtener el ID
           const movimientoCreado = await prisma.movimientoCaja.create({ data });
-          
-          console.log(`[MOVIMIENTO CAJA] MovimientoCaja creado con ID: ${movimientoCreado.id}`);
-          
           // Ahora copiar el PDF con el ID del movimiento
           const nuevaRuta = await copiarPdfAMovimientoCaja(
             detMov.urlComprobanteMovimiento, 
             movimientoCreado.id
           );
-          
-          console.log(`[MOVIMIENTO CAJA] Nueva ruta después de copiar: ${nuevaRuta}`);
-          
           if (nuevaRuta && nuevaRuta !== detMov.urlComprobanteMovimiento) {
             // Actualizar el MovimientoCaja con la nueva ruta
             await prisma.movimientoCaja.update({
               where: { id: movimientoCreado.id },
               data: { urlDocumentoMovCaja: nuevaRuta }
             });
-            console.log(`[MOVIMIENTO CAJA] urlDocumentoMovCaja actualizado: ${nuevaRuta}`);
           }
           
           return movimientoCreado;

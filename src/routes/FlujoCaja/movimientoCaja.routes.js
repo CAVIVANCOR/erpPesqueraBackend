@@ -6,30 +6,94 @@ import movimientoCajaController, {
   servirArchivoComprobante, 
   servirArchivoDocumento 
 } from '../../controllers/FlujoCaja/movimientoCaja.controller.js';
+import { autenticarJWT } from '../../middlewares/authMiddleware.js';
+import { checkPermission } from '../../middlewares/checkPermission.js';
 
 const router = express.Router();
 
-// Rutas de upload de PDFs (deben ir ANTES de las rutas con parámetros)
-router.post('/upload-comprobante', subirComprobante);
-router.post('/upload-documento', subirDocumento);
+/**
+ * Rutas CRUD para MovimientoCaja
+ * Ruta del submódulo: 'movimientoCaja'
+ */
 
-// Rutas para servir archivos (protegidas con JWT por el middleware global)
-router.get('/archivo-comprobante/*', servirArchivoComprobante);
-router.get('/archivo-documento/*', servirArchivoDocumento);
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (1/8)
+router.post('/upload-comprobante', autenticarJWT, checkPermission('movimientoCaja', 'crear'), subirComprobante);
 
-// Rutas CRUD básicas
-router.get('/', movimientoCajaController.listar);
-router.get('/:id', movimientoCajaController.obtenerPorId);
-router.post('/', movimientoCajaController.crear);
-router.put('/:id', movimientoCajaController.actualizar);
-router.delete('/:id', movimientoCajaController.eliminar);
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (2/8)
+router.post('/upload-documento', autenticarJWT, checkPermission('movimientoCaja', 'crear'), subirDocumento);
 
-// Ruta de validación
-router.post('/:id/validar', movimientoCajaController.validarMovimiento);
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (3/8)
+router.get('/archivo-comprobante/*', autenticarJWT, checkPermission('movimientoCaja', 'ver'), servirArchivoComprobante);
 
-// Rutas de workflow
-router.post('/:id/aprobar', movimientoCajaController.aprobar);
-router.post('/:id/rechazar', movimientoCajaController.rechazar);
-router.post('/:id/revertir', movimientoCajaController.revertir);
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (4/8)
+router.get('/archivo-documento/*', autenticarJWT, checkPermission('movimientoCaja', 'ver'), servirArchivoDocumento);
+
+// ✅ Rutas CRUD básicas (estas SÍ las mantuve correctamente)
+router.get(
+  '/',
+  autenticarJWT,
+  checkPermission('movimientoCaja', 'ver'),
+  movimientoCajaController.listar
+);
+
+router.get(
+  '/:id',
+  autenticarJWT,
+  checkPermission('movimientoCaja', 'ver'),
+  movimientoCajaController.obtenerPorId
+);
+
+router.post(
+  '/',
+  autenticarJWT,
+  checkPermission('movimientoCaja', 'crear'),
+  movimientoCajaController.crear
+);
+
+router.put(
+  '/:id',
+  autenticarJWT,
+  checkPermission('movimientoCaja', 'editar'),
+  movimientoCajaController.actualizar
+);
+
+router.delete(
+  '/:id',
+  autenticarJWT,
+  checkPermission('movimientoCaja', 'eliminar'),
+  movimientoCajaController.eliminar
+);
+
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (5/8)
+router.post(
+  '/:id/validar',
+  autenticarJWT,
+  checkPermission('movimientoCaja', 'editar'),
+  movimientoCajaController.validarMovimiento
+);
+
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (6/8)
+router.post(
+  '/:id/aprobar',
+  autenticarJWT,
+  checkPermission('movimientoCaja', 'aprobar'),
+  movimientoCajaController.aprobar
+);
+
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (7/8)
+router.post(
+  '/:id/rechazar',
+  autenticarJWT,
+  checkPermission('movimientoCaja', 'rechazar'),
+  movimientoCajaController.rechazar
+);
+
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (8/8)
+router.post(
+  '/:id/revertir',
+  autenticarJWT,
+  checkPermission('movimientoCaja', 'editar'),
+  movimientoCajaController.revertir
+);
 
 export default router;

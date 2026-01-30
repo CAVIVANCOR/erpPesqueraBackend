@@ -1,9 +1,16 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
+import lineaCreditoService from "./lineaCredito.service.js";
 
 /**
  * Servicio CRUD para PrestamoBancario
  * Gestiona préstamos bancarios con cronogramas de pago, desembolsos y garantías.
+ * Actualiza automáticamente los saldos de las líneas de crédito vinculadas.
  * Documentado en español.
  */
 
@@ -14,41 +21,69 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 async function validarPrestamoBancario(data) {
   // Validar empresa
   if (data.empresaId) {
-    const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: data.empresaId },
+    });
     if (!empresa) {
-      throw new ValidationError('La empresa referenciada no existe.');
+      throw new ValidationError("La empresa referenciada no existe.");
     }
   }
 
   // Validar banco
   if (data.bancoId) {
-    const banco = await prisma.banco.findUnique({ where: { id: data.bancoId } });
+    const banco = await prisma.banco.findUnique({
+      where: { id: data.bancoId },
+    });
     if (!banco) {
-      throw new ValidationError('El banco referenciado no existe.');
+      throw new ValidationError("El banco referenciado no existe.");
     }
   }
 
   // Validar cuenta corriente si existe
   if (data.cuentaCorrienteId) {
-    const cuenta = await prisma.cuentaCorriente.findUnique({ where: { id: data.cuentaCorrienteId } });
+    const cuenta = await prisma.cuentaCorriente.findUnique({
+      where: { id: data.cuentaCorrienteId },
+    });
     if (!cuenta) {
-      throw new ValidationError('La cuenta corriente referenciada no existe.');
+      throw new ValidationError("La cuenta corriente referenciada no existe.");
     }
   }
 
   // Validar moneda
   if (data.monedaId) {
-    const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
+    const moneda = await prisma.moneda.findUnique({
+      where: { id: data.monedaId },
+    });
     if (!moneda) {
-      throw new ValidationError('La moneda referenciada no existe.');
+      throw new ValidationError("La moneda referenciada no existe.");
     }
   }
 
   // Validar estado
   if (data.estadoId) {
-    const estado = await prisma.estadoMultiFuncion.findUnique({ where: { id: data.estadoId } });
+    const estado = await prisma.estadoMultiFuncion.findUnique({
+      where: { id: data.estadoId },
+    });
     if (!estado) {
-      throw new ValidationError('El estado referenciado no existe.');
+      throw new ValidationError("El estado referenciado no existe.");
+    }
+  }
+
+  // Validar línea de crédito si existe
+  if (data.lineaCreditoId) {
+    const lineaCredito = await prisma.lineaCredito.findUnique({
+      where: { id: data.lineaCreditoId },
+    });
+    if (!lineaCredito) {
+      throw new ValidationError("La línea de crédito referenciada no existe.");
+    }
+
+    // Validar que la línea de crédito esté vigente
+    // Estados: 86=APROBADA, 87=VIGENTE
+    if (![86n, 87n].includes(lineaCredito.estadoId)) {
+      throw new ValidationError(
+        "La línea de crédito seleccionada no está vigente.",
+      );
     }
   }
 
@@ -58,66 +93,90 @@ async function validarPrestamoBancario(data) {
       where: {
         empresaId: data.empresaId,
         numeroPrestamo: data.numeroPrestamo,
-        id: data.id ? { not: data.id } : undefined
-      }
+        id: data.id ? { not: data.id } : undefined,
+      },
     });
     if (existente) {
-      throw new ValidationError(`El número de préstamo "${data.numeroPrestamo}" ya existe para esta empresa.`);
+      throw new ValidationError(
+        `El número de préstamo "${data.numeroPrestamo}" ya existe para esta empresa.`,
+      );
     }
   }
 
   // Validar montos
   if (data.montoDesembolsado && data.montoAprobado) {
     if (data.montoDesembolsado > data.montoAprobado) {
-      throw new ValidationError('El monto desembolsado no puede ser mayor al monto aprobado.');
+      throw new ValidationError(
+        "El monto desembolsado no puede ser mayor al monto aprobado.",
+      );
     }
   }
 
   // Validar fechas
   if (data.fechaContrato && data.fechaVencimiento) {
     if (new Date(data.fechaVencimiento) <= new Date(data.fechaContrato)) {
-      throw new ValidationError('La fecha de vencimiento debe ser posterior a la fecha de contrato.');
+      throw new ValidationError(
+        "La fecha de vencimiento debe ser posterior a la fecha de contrato.",
+      );
     }
   }
 
   // Validar plazo y cuotas
   if (data.plazoMeses && data.numeroCuotas) {
     if (data.numeroCuotas > data.plazoMeses) {
-      throw new ValidationError('El número de cuotas no puede ser mayor al plazo en meses.');
+      throw new ValidationError(
+        "El número de cuotas no puede ser mayor al plazo en meses.",
+      );
     }
   }
 
   // Validar frecuencia de pago
   if (data.frecuenciaPago) {
-    const frecuenciasValidas = ['DIAS', 'MENSUAL', 'BIMESTRAL', 'TRIMESTRAL', 'CUATRIMESTRAL', 'SEMESTRAL', 'ANUAL'];
+    const frecuenciasValidas = [
+      "DIAS",
+      "MENSUAL",
+      "BIMESTRAL",
+      "TRIMESTRAL",
+      "CUATRIMESTRAL",
+      "SEMESTRAL",
+      "ANUAL",
+    ];
     if (!frecuenciasValidas.includes(data.frecuenciaPago)) {
-      throw new ValidationError('La frecuencia de pago no es válida.');
+      throw new ValidationError("La frecuencia de pago no es válida.");
     }
   }
   // Validar tipo de préstamo
   if (data.tipoPrestamoId) {
-    const tipoPrestamo = await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId } });
+    const tipoPrestamo = await prisma.tipoPrestamo.findUnique({
+      where: { id: data.tipoPrestamoId },
+    });
     if (!tipoPrestamo) {
-      throw new ValidationError('El tipo de préstamo referenciado no existe.');
+      throw new ValidationError("El tipo de préstamo referenciado no existe.");
     }
     if (!tipoPrestamo.activo) {
-      throw new ValidationError('El tipo de préstamo seleccionado no está activo.');
+      throw new ValidationError(
+        "El tipo de préstamo seleccionado no está activo.",
+      );
     }
   }
 
   // Validar tipo de amortización
   if (data.tipoAmortizacion) {
-    const tiposValidos = ['FRANCES', 'ALEMAN', 'AMERICANO'];
+    const tiposValidos = ["FRANCES", "ALEMAN", "AMERICANO"];
     if (!tiposValidos.includes(data.tipoAmortizacion)) {
-      throw new ValidationError('El tipo de amortización no es válido.');
+      throw new ValidationError("El tipo de amortización no es válido.");
     }
   }
 
   // Validar préstamo refinanciado si existe
   if (data.prestamoRefinanciadoId) {
-    const prestamoRef = await prisma.prestamoBancario.findUnique({ where: { id: data.prestamoRefinanciadoId } });
+    const prestamoRef = await prisma.prestamoBancario.findUnique({
+      where: { id: data.prestamoRefinanciadoId },
+    });
     if (!prestamoRef) {
-      throw new ValidationError('El préstamo refinanciado referenciado no existe.');
+      throw new ValidationError(
+        "El préstamo refinanciado referenciado no existe.",
+      );
     }
   }
 }
@@ -137,54 +196,60 @@ function calcularCronogramaCuotas(prestamo) {
     tipoAmortizacion,
     comisionMantenimiento,
     seguroDesgravamen,
-    periodoGracia
+    periodoGracia,
   } = prestamo;
 
   const cuotas = [];
   const tasaMensual = tasaInteresAnual / 100 / 12;
   let saldoCapital = parseFloat(montoDesembolsado);
-  
+
   // Calcular meses entre cuotas según frecuencia
-  const mesesEntreCuotas = {
-    'MENSUAL': 1,
-    'BIMESTRAL': 2,
-    'TRIMESTRAL': 3,
-    'CUATRIMESTRAL': 4,
-    'SEMESTRAL': 6,
-    'ANUAL': 12
-  }[frecuenciaPago] || 1;
+  const mesesEntreCuotas =
+    {
+      MENSUAL: 1,
+      BIMESTRAL: 2,
+      TRIMESTRAL: 3,
+      CUATRIMESTRAL: 4,
+      SEMESTRAL: 6,
+      ANUAL: 12,
+    }[frecuenciaPago] || 1;
 
   const tasaPorPeriodo = tasaMensual * mesesEntreCuotas;
   const graciaMeses = periodoGracia || 0;
 
   for (let i = 1; i <= numeroCuotas; i++) {
     const fechaVencimiento = new Date(fechaDesembolso);
-    fechaVencimiento.setMonth(fechaVencimiento.getMonth() + (i * mesesEntreCuotas));
+    fechaVencimiento.setMonth(
+      fechaVencimiento.getMonth() + i * mesesEntreCuotas,
+    );
 
     let montoCapital = 0;
     let montoInteres = saldoCapital * tasaPorPeriodo;
 
     // Aplicar período de gracia
-    const enGracia = i <= (graciaMeses / mesesEntreCuotas);
+    const enGracia = i <= graciaMeses / mesesEntreCuotas;
 
     if (!enGracia) {
       // Calcular amortización según tipo
       switch (tipoAmortizacion) {
-        case 'FRANCES': {
+        case "FRANCES": {
           // Cuota fija
-          const cuotaFija = saldoCapital * (tasaPorPeriodo * Math.pow(1 + tasaPorPeriodo, numeroCuotas - i + 1)) / 
-                           (Math.pow(1 + tasaPorPeriodo, numeroCuotas - i + 1) - 1);
+          const cuotaFija =
+            (saldoCapital *
+              (tasaPorPeriodo *
+                Math.pow(1 + tasaPorPeriodo, numeroCuotas - i + 1))) /
+            (Math.pow(1 + tasaPorPeriodo, numeroCuotas - i + 1) - 1);
           montoCapital = cuotaFija - montoInteres;
           break;
         }
-        case 'ALEMAN': {
+        case "ALEMAN": {
           // Amortización constante
           montoCapital = montoDesembolsado / numeroCuotas;
           break;
         }
-        case 'AMERICANO': {
+        case "AMERICANO": {
           // Solo intereses, capital en última cuota
-          montoCapital = (i === numeroCuotas) ? saldoCapital : 0;
+          montoCapital = i === numeroCuotas ? saldoCapital : 0;
           break;
         }
         default:
@@ -192,9 +257,12 @@ function calcularCronogramaCuotas(prestamo) {
       }
     }
 
-    const montoComision = comisionMantenimiento ? parseFloat(comisionMantenimiento) : 0;
+    const montoComision = comisionMantenimiento
+      ? parseFloat(comisionMantenimiento)
+      : 0;
     const montoSeguro = seguroDesgravamen ? parseFloat(seguroDesgravamen) : 0;
-    const montoTotal = montoCapital + montoInteres + montoComision + montoSeguro;
+    const montoTotal =
+      montoCapital + montoInteres + montoComision + montoSeguro;
 
     const saldoCapitalAntes = saldoCapital;
     saldoCapital -= montoCapital;
@@ -209,14 +277,14 @@ function calcularCronogramaCuotas(prestamo) {
       montoTotal: parseFloat(montoTotal.toFixed(2)),
       saldoCapitalAntes: parseFloat(saldoCapitalAntes.toFixed(2)),
       saldoCapitalDespues: parseFloat(Math.max(0, saldoCapital).toFixed(2)),
-      estadoPago: 'PENDIENTE',
+      estadoPago: "PENDIENTE",
       diasMora: null,
       fechaPago: null,
       montoPagado: null,
       montoMora: null,
       movimientoCajaId: null,
       asientoContableId: null,
-      observaciones: null
+      observaciones: null,
     });
   }
 
@@ -238,20 +306,20 @@ const listar = async () => {
         lineaCredito: true,
         tipoPrestamo: true,
         cuotas: {
-          orderBy: { numeroCuota: 'asc' }
+          orderBy: { numeroCuota: "asc" },
         },
         desembolsos: {
-          orderBy: { fechaDesembolso: 'desc' }
+          orderBy: { fechaDesembolso: "desc" },
         },
         garantias: {
-          where: { activo: true }
-        }
+          where: { activo: true },
+        },
       },
-      orderBy: { fechaContrato: 'desc' }
+      orderBy: { fechaContrato: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -273,22 +341,22 @@ const obtenerPorId = async (id) => {
         lineaCredito: true,
         tipoPrestamo: true,
         cuotas: {
-          orderBy: { numeroCuota: 'asc' }
+          orderBy: { numeroCuota: "asc" },
         },
         desembolsos: {
-          orderBy: { fechaDesembolso: 'desc' }
+          orderBy: { fechaDesembolso: "desc" },
         },
         garantias: true,
         prestamoRefinanciado: true,
-        prestamosRefinanciadores: true
-      }
+        prestamosRefinanciadores: true,
+      },
     });
-    if (!prestamo) throw new NotFoundError('Préstamo bancario no encontrado');
+    if (!prestamo) throw new NotFoundError("Préstamo bancario no encontrado");
     return prestamo;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -296,31 +364,34 @@ const obtenerPorId = async (id) => {
 
 /**
  * Crea un nuevo préstamo bancario con su cronograma de cuotas.
+ * Actualiza automáticamente los saldos de la línea de crédito vinculada.
  */
 const crear = async (data) => {
   try {
     // Validar campos obligatorios con mensajes específicos
     const camposFaltantes = [];
-    
-    if (!data.empresaId) camposFaltantes.push('Empresa');
-    if (!data.bancoId) camposFaltantes.push('Banco');
-    if (!data.numeroPrestamo) camposFaltantes.push('Número de Préstamo');
-    if (!data.fechaContrato) camposFaltantes.push('Fecha de Contrato');
-    if (!data.fechaDesembolso) camposFaltantes.push('Fecha de Desembolso');
-    if (!data.fechaVencimiento) camposFaltantes.push('Fecha de Vencimiento');
-    if (!data.montoAprobado) camposFaltantes.push('Monto Aprobado');
-    if (!data.montoDesembolsado) camposFaltantes.push('Monto Desembolsado');
-    if (!data.monedaId) camposFaltantes.push('Moneda');
-    if (!data.tasaInteresAnual) camposFaltantes.push('Tasa de Interés Anual');
-    if (!data.plazoMeses) camposFaltantes.push('Plazo en Meses');
-    if (!data.numeroCuotas) camposFaltantes.push('Número de Cuotas');
-    if (!data.frecuenciaPago) camposFaltantes.push('Frecuencia de Pago');
-    if (!data.tipoPrestamoId) camposFaltantes.push('Tipo de Préstamo');
-    if (!data.tipoAmortizacion) camposFaltantes.push('Tipo de Amortización');
-    if (!data.estadoId) camposFaltantes.push('Estado');
-    
+
+    if (!data.empresaId) camposFaltantes.push("Empresa");
+    if (!data.bancoId) camposFaltantes.push("Banco");
+    if (!data.numeroPrestamo) camposFaltantes.push("Número de Préstamo");
+    if (!data.fechaContrato) camposFaltantes.push("Fecha de Contrato");
+    if (!data.fechaDesembolso) camposFaltantes.push("Fecha de Desembolso");
+    if (!data.fechaVencimiento) camposFaltantes.push("Fecha de Vencimiento");
+    if (!data.montoAprobado) camposFaltantes.push("Monto Aprobado");
+    if (!data.montoDesembolsado) camposFaltantes.push("Monto Desembolsado");
+    if (!data.monedaId) camposFaltantes.push("Moneda");
+    if (!data.tasaInteresAnual) camposFaltantes.push("Tasa de Interés Anual");
+    if (!data.plazoMeses) camposFaltantes.push("Plazo en Meses");
+    if (!data.numeroCuotas) camposFaltantes.push("Número de Cuotas");
+    if (!data.frecuenciaPago) camposFaltantes.push("Frecuencia de Pago");
+    if (!data.tipoPrestamoId) camposFaltantes.push("Tipo de Préstamo");
+    if (!data.tipoAmortizacion) camposFaltantes.push("Tipo de Amortización");
+    if (!data.estadoId) camposFaltantes.push("Estado");
+
     if (camposFaltantes.length > 0) {
-      throw new ValidationError(`Faltan los siguientes campos obligatorios: ${camposFaltantes.join(', ')}`);
+      throw new ValidationError(
+        `Faltan los siguientes campos obligatorios: ${camposFaltantes.join(", ")}`,
+      );
     }
 
     await validarPrestamoBancario(data);
@@ -342,34 +413,39 @@ const crear = async (data) => {
           saldoCapital,
           saldoInteres,
           capitalPagado,
-          interesPagado
-        }
+          interesPagado,
+        },
       });
 
       // Crear cuotas
       await tx.cuotaPrestamo.createMany({
-        data: cuotas.map(cuota => ({
+        data: cuotas.map((cuota) => ({
           ...cuota,
-          prestamoBancarioId: nuevoPrestamo.id
-        }))
+          prestamoBancarioId: nuevoPrestamo.id,
+        })),
       });
 
       // Si es refinanciamiento, actualizar el préstamo original a estado REFINANCIADO (84)
       if (data.esRefinanciamiento && data.prestamoRefinanciadoId) {
         await tx.prestamoBancario.update({
           where: { id: data.prestamoRefinanciadoId },
-          data: { estadoId: BigInt(84) } // Estado REFINANCIADO
+          data: { estadoId: BigInt(84) }, // Estado REFINANCIADO
         });
       }
 
       return nuevoPrestamo;
     });
 
+    // ⭐ ACTUALIZAR SALDOS DE LÍNEA DE CRÉDITO (SI ESTÁ VINCULADO)
+    if (prestamo.lineaCreditoId) {
+      await lineaCreditoService.actualizarSaldosLinea(prestamo.lineaCreditoId);
+    }
+
     return await obtenerPorId(prestamo.id);
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -377,39 +453,48 @@ const crear = async (data) => {
 
 /**
  * Actualiza un préstamo bancario existente.
+ * Actualiza automáticamente los saldos de las líneas de crédito vinculadas (antigua y nueva si cambió).
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.prestamoBancario.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Préstamo bancario no encontrado');
+    const existente = await prisma.prestamoBancario.findUnique({
+      where: { id },
+    });
+    if (!existente) throw new NotFoundError("Préstamo bancario no encontrado");
 
     // Validar campos obligatorios con mensajes específicos
     const camposFaltantes = [];
-    
-    if (!data.empresaId) camposFaltantes.push('Empresa');
-    if (!data.bancoId) camposFaltantes.push('Banco');
-    if (!data.numeroPrestamo) camposFaltantes.push('Número de Préstamo');
-    if (!data.fechaContrato) camposFaltantes.push('Fecha de Contrato');
-    if (!data.fechaDesembolso) camposFaltantes.push('Fecha de Desembolso');
-    if (!data.fechaVencimiento) camposFaltantes.push('Fecha de Vencimiento');
-    if (!data.montoAprobado) camposFaltantes.push('Monto Aprobado');
-    if (!data.montoDesembolsado) camposFaltantes.push('Monto Desembolsado');
-    if (!data.monedaId) camposFaltantes.push('Moneda');
-    if (!data.tasaInteresAnual) camposFaltantes.push('Tasa de Interés Anual');
-    if (!data.plazoMeses) camposFaltantes.push('Plazo en Meses');
-    if (!data.numeroCuotas) camposFaltantes.push('Número de Cuotas');
-    if (!data.frecuenciaPago) camposFaltantes.push('Frecuencia de Pago');
-    if (!data.tipoPrestamoId) camposFaltantes.push('Tipo de Préstamo');
-    if (!data.tipoAmortizacion) camposFaltantes.push('Tipo de Amortización');
-    if (!data.estadoId) camposFaltantes.push('Estado');
-    
+
+    if (!data.empresaId) camposFaltantes.push("Empresa");
+    if (!data.bancoId) camposFaltantes.push("Banco");
+    if (!data.numeroPrestamo) camposFaltantes.push("Número de Préstamo");
+    if (!data.fechaContrato) camposFaltantes.push("Fecha de Contrato");
+    if (!data.fechaDesembolso) camposFaltantes.push("Fecha de Desembolso");
+    if (!data.fechaVencimiento) camposFaltantes.push("Fecha de Vencimiento");
+    if (!data.montoAprobado) camposFaltantes.push("Monto Aprobado");
+    if (!data.montoDesembolsado) camposFaltantes.push("Monto Desembolsado");
+    if (!data.monedaId) camposFaltantes.push("Moneda");
+    if (!data.tasaInteresAnual) camposFaltantes.push("Tasa de Interés Anual");
+    if (!data.plazoMeses) camposFaltantes.push("Plazo en Meses");
+    if (!data.numeroCuotas) camposFaltantes.push("Número de Cuotas");
+    if (!data.frecuenciaPago) camposFaltantes.push("Frecuencia de Pago");
+    if (!data.tipoPrestamoId) camposFaltantes.push("Tipo de Préstamo");
+    if (!data.tipoAmortizacion) camposFaltantes.push("Tipo de Amortización");
+    if (!data.estadoId) camposFaltantes.push("Estado");
+
     if (camposFaltantes.length > 0) {
-      throw new ValidationError(`Faltan los siguientes campos obligatorios: ${camposFaltantes.join(', ')}`);
+      throw new ValidationError(
+        `Faltan los siguientes campos obligatorios: ${camposFaltantes.join(", ")}`,
+      );
     }
 
     await validarPrestamoBancario({ ...data, id });
 
-    return await prisma.prestamoBancario.update({
+    // Guardar lineaCreditoId anterior para actualizar saldos
+    const lineaCreditoIdAnterior = existente.lineaCreditoId;
+    const lineaCreditoIdNueva = data.lineaCreditoId;
+
+    const prestamoActualizado = await prisma.prestamoBancario.update({
       where: { id },
       data,
       include: {
@@ -418,15 +503,32 @@ const actualizar = async (id, data) => {
         cuentaCorriente: true,
         moneda: true,
         estado: true,
+        lineaCredito: true,
+        tipoPrestamo: true,
         cuotas: {
-          orderBy: { numeroCuota: 'asc' }
-        }
-      }
+          orderBy: { numeroCuota: "asc" },
+        },
+      },
     });
+
+    // ⭐ ACTUALIZAR SALDOS DE LÍNEAS DE CRÉDITO
+    // Si cambió la línea de crédito, actualizar ambas (antigua y nueva)
+    if (
+      lineaCreditoIdAnterior &&
+      lineaCreditoIdAnterior !== lineaCreditoIdNueva
+    ) {
+      await lineaCreditoService.actualizarSaldosLinea(lineaCreditoIdAnterior);
+    }
+    if (lineaCreditoIdNueva) {
+      await lineaCreditoService.actualizarSaldosLinea(lineaCreditoIdNueva);
+    }
+
+    return prestamoActualizado;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -434,7 +536,7 @@ const actualizar = async (id, data) => {
 
 /**
  * Elimina un préstamo bancario por ID.
- * Valida que no tenga cuotas pagadas.
+ * Valida que no tenga cuotas pagadas y actualiza saldos de línea de crédito.
  */
 const eliminar = async (id) => {
   try {
@@ -442,29 +544,44 @@ const eliminar = async (id) => {
       where: { id },
       include: {
         cuotas: true,
-        desembolsos: true
-      }
+        desembolsos: true,
+      },
     });
 
-    if (!existente) throw new NotFoundError('Préstamo bancario no encontrado');
+    if (!existente) throw new NotFoundError("Préstamo bancario no encontrado");
 
     // Validar que no tenga cuotas pagadas
-    const cuotasPagadas = existente.cuotas.filter(c => c.estadoPago === 'PAGADO' || c.estadoPago === 'PARCIAL');
+    const cuotasPagadas = existente.cuotas.filter(
+      (c) => c.estadoPago === "PAGADO" || c.estadoPago === "PARCIAL",
+    );
     if (cuotasPagadas.length > 0) {
-      throw new ConflictError('No se puede eliminar el préstamo porque tiene cuotas pagadas.');
+      throw new ConflictError(
+        "No se puede eliminar el préstamo porque tiene cuotas pagadas.",
+      );
     }
 
     // Validar que no tenga desembolsos registrados
     if (existente.desembolsos && existente.desembolsos.length > 0) {
-      throw new ConflictError('No se puede eliminar el préstamo porque tiene desembolsos registrados.');
+      throw new ConflictError(
+        "No se puede eliminar el préstamo porque tiene desembolsos registrados.",
+      );
     }
 
+    // Guardar lineaCreditoId antes de eliminar
+    const lineaCreditoId = existente.lineaCreditoId;
+
     await prisma.prestamoBancario.delete({ where: { id } });
+
+    // ⭐ ACTUALIZAR SALDOS DE LÍNEA DE CRÉDITO (SI ESTABA VINCULADO)
+    if (lineaCreditoId) {
+      await lineaCreditoService.actualizarSaldosLinea(lineaCreditoId);
+    }
+
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -481,17 +598,19 @@ const listarPorEmpresa = async (empresaId) => {
         banco: true,
         moneda: true,
         estado: true,
+        lineaCredito: true,
+        tipoPrestamo: true,
         cuotas: {
-          where: { estadoPago: 'PENDIENTE' },
-          orderBy: { fechaVencimiento: 'asc' },
-          take: 5
-        }
+          where: { estadoPago: "PENDIENTE" },
+          orderBy: { fechaVencimiento: "asc" },
+          take: 5,
+        },
       },
-      orderBy: { fechaContrato: 'desc' }
+      orderBy: { fechaContrato: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -505,19 +624,21 @@ const listarVigentes = async () => {
     // Estados: 79=APROBADO, 80=DESEMBOLSADO, 81=VIGENTE
     return await prisma.prestamoBancario.findMany({
       where: {
-        estadoId: { in: [79, 80, 81] }
+        estadoId: { in: [79n, 80n, 81n] },
       },
       include: {
         empresa: true,
         banco: true,
         moneda: true,
-        estado: true
+        estado: true,
+        lineaCredito: true,
+        tipoPrestamo: true,
       },
-      orderBy: { fechaVencimiento: 'asc' }
+      orderBy: { fechaVencimiento: "asc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -532,21 +653,49 @@ const obtenerCronograma = async (id) => {
       where: { id },
       include: {
         cuotas: {
-          orderBy: { numeroCuota: 'asc' }
-        }
-      }
+          orderBy: { numeroCuota: "asc" },
+        },
+      },
     });
-    if (!prestamo) throw new NotFoundError('Préstamo bancario no encontrado');
+    if (!prestamo) throw new NotFoundError("Préstamo bancario no encontrado");
     return prestamo.cuotas;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
 };
 
+/**
+ * Lista préstamos bancarios SIN relaciones pesadas (cuotas, desembolsos, garantías).
+ * Optimizado para carga rápida de lista en frontend.
+ */
+const listarSimple = async () => {
+  try {
+    return await prisma.prestamoBancario.findMany({
+      include: {
+        empresa: true,
+        banco: true,
+        cuentaCorriente: true,
+        moneda: true,
+        estado: true,
+        lineaCredito: true,
+        tipoPrestamo: true,
+        // SIN cuotas
+        // SIN desembolsos
+        // SIN garantias
+      },
+      orderBy: { fechaContrato: "desc" },
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
 
 export default {
   listar,
@@ -556,5 +705,6 @@ export default {
   eliminar,
   listarPorEmpresa,
   listarVigentes,
-  obtenerCronograma
+  obtenerCronograma,
+  listarSimple,
 };

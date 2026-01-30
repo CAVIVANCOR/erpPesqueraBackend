@@ -39,48 +39,35 @@ export async function uploadSingle(req, res, next) {
 
 export async function mergeMultiple(req, res, next) {
   try {
-    console.log('=== MERGE MULTIPLE INICIADO ===');
-    console.log('req.body:', req.body);
-    console.log('req.files:', req.files ? `${req.files.length} archivos` : 'NO FILES');
+
     
     const { moduleName } = req.body;
 
     if (!moduleName) {
-      console.log('❌ ERROR: moduleName no proporcionado');
       return res.status(400).json({
         success: false,
         message: 'moduleName es requerido'
       });
     }
 
-    console.log('✅ moduleName:', moduleName);
 
     if (!req.files || req.files.length === 0) {
-      console.log('❌ ERROR: No se recibieron archivos');
       return res.status(400).json({
         success: false,
         message: 'No se recibieron archivos'
       });
     }
 
-    console.log('✅ Archivos recibidos:', req.files.length);
-    req.files.forEach((f, i) => {
-      console.log(`  Archivo ${i + 1}: ${f.originalname} (${f.mimetype}, ${f.size} bytes)`);
-    });
 
-    console.log('🔄 Llamando a pdfMergeService.mergeDocuments...');
     const result = await pdfMergeService.mergeDocuments(
       req.files,
       moduleName,
       req.body
     );
 
-    console.log('✅ Merge exitoso:', result);
     return res.status(200).json(result);
 
   } catch (error) {
-    console.error('❌ ERROR EN MERGE MULTIPLE:', error);
-    console.error('Stack:', error.stack);
     next(error);
   }
 }
@@ -90,8 +77,6 @@ export async function getFile(req, res, next) {
     const { moduleName } = req.params;
     const fileName = req.params[0];
     
-    console.log('📄 [getFile] moduleName:', moduleName);
-    console.log('📄 [getFile] fileName:', fileName);
 
     const filePath = await pdfService.getFilePath(moduleName, fileName);
     
@@ -101,7 +86,6 @@ export async function getFile(req, res, next) {
     res.sendFile(filePath);
 
   } catch (error) {
-    console.error('❌ [getFile] Error:', error);
     next(error);
   }
 }

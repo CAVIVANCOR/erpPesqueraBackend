@@ -217,25 +217,12 @@ const crear = async (data) => {
  */
 const actualizar = async (id, data) => {
   try {
-    console.log('🔍 [actualizar] ID:', id);
-    console.log('🔍 [actualizar] Data recibida:', JSON.stringify(data, null, 2));
-    console.log('🔍 [actualizar] Claves en data:', Object.keys(data));
-    console.log('🔍 [actualizar] Cantidad de claves:', Object.keys(data).length);
-    console.log('🔍 [actualizar] Tiene urlReqCompraPdf?', data.hasOwnProperty('urlReqCompraPdf'));
-    
     const existe = await prisma.requerimientoCompra.findUnique({ where: { id } });
     if (!existe) throw new NotFoundError('RequerimientoCompra no encontrado');
-    
-    console.log('🔍 [actualizar] Estado actual del requerimiento:', existe.estadoId);
-    
     // Verificar si SOLO se está actualizando el campo urlReqCompraPdf
     const soloActualizaPDF = Object.keys(data).length === 1 && data.hasOwnProperty('urlReqCompraPdf');
-    
-    console.log('🔍 [actualizar] ¿Solo actualiza PDF?', soloActualizaPDF);
-    
     // Si NO es solo actualización de PDF, validar que no esté aprobado, anulado o autorizado
     if (!soloActualizaPDF) {
-      console.log('⚠️ [actualizar] NO es solo actualización de PDF, validando estado...');
       
       if (existe.estadoId === BigInt(35)) { // APROBADO
         throw new ValidationError('No se puede modificar un requerimiento aprobado');
@@ -248,10 +235,7 @@ const actualizar = async (id, data) => {
       }
       
       await validarForaneas(data);
-    } else {
-      console.log('✅ [actualizar] Es solo actualización de PDF, omitiendo validaciones de estado');
     }
-    
     const actualizado = await prisma.requerimientoCompra.update({
       where: { id },
       data: {
@@ -271,18 +255,8 @@ const actualizar = async (id, data) => {
         }
       }
     });
-
-    // ✅ AGREGAR ESTOS LOGS AQUÍ:
-console.log('✅ [actualizar] Actualización exitosa');
-console.log('🔍 [actualizar] urlReqCompraPdf en BD después de actualizar:', actualizado.urlReqCompraPdf);
-console.log('🔍 [actualizar] ID del registro actualizado:', actualizado.id);
-
-
-    console.log('✅ [actualizar] Actualización exitosa');
-    
     return actualizado;
   } catch (err) {
-    console.error('❌ [actualizar] Error:', err.message);
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

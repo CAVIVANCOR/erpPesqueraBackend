@@ -45,71 +45,32 @@ const DESCRIPTIVE_NAMES = {
 class PDFMergeService {
   async mergeDocuments(files, moduleName, metadata = {}) {
     try {
-      console.log('📄 [pdfMergeService] Iniciando mergeDocuments');
-      console.log('📄 moduleName:', moduleName);
-      console.log('📄 files.length:', files.length);
-      console.log('📄 metadata:', metadata);
-
       const config = getModuleConfig(moduleName);
-      console.log('📄 Config obtenida:', config);
-
       if (files.length > config.maxFiles) {
         throw new Error(`Máximo ${config.maxFiles} archivos permitidos`);
       }
-
       if (!metadata.entityId) {
         throw new Error('Se requiere entityId para generar el nombre del archivo');
       }
-
-      console.log('📄 Creando PDF principal...');
       const mergedPdf = await PDFDocument.create();
-
-      console.log('📄 Procesando archivos...');
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        console.log(`📄 Procesando archivo ${i + 1}/${files.length}: ${file.originalname} (${file.mimetype})`);
-        
         if (file.mimetype === 'application/pdf') {
-          console.log('📄 Es PDF, agregando...');
           await this.addPdfToMerge(mergedPdf, file.buffer);
-          console.log('✅ PDF agregado');
         } else if (file.mimetype.startsWith('image/')) {
-          console.log('📄 Es imagen, convirtiendo...');
           await this.addImageToMerge(mergedPdf, file.buffer, file.mimetype);
-          console.log('✅ Imagen agregada');
-        } else {
-          console.log('⚠️ Tipo no soportado, saltando');
-        }
+        } 
       }
-
-      console.log('📄 Guardando PDF consolidado...');
       const pdfBytes = await mergedPdf.save();
-      console.log('✅ PDF guardado en memoria, tamaño:', pdfBytes.length, 'bytes');
-      
       const uploadDir = path.join(__dirname, '../../../', config.uploadPath);
-      console.log('📄 Directorio destino:', uploadDir);
-      
       if (!fs.existsSync(uploadDir)) {
-        console.log('📁 Creando directorio...');
         fs.mkdirSync(uploadDir, { recursive: true });
-        console.log('✅ Directorio creado');
-      } else {
-        console.log('✅ Directorio ya existe');
       }
-
       const descriptiveName = DESCRIPTIVE_NAMES[moduleName] || moduleName.toUpperCase();
       const fileName = `${descriptiveName}-${metadata.entityId}.pdf`;
-      console.log('📄 Nombre archivo generado:', fileName);
-      
       const filePath = path.join(uploadDir, fileName);
-      console.log('📄 Ruta completa:', filePath);
-      console.log('📄 Escribiendo archivo...');
       fs.writeFileSync(filePath, pdfBytes);
-      console.log('✅ Archivo escrito en disco');
-
       const urlRelativa = `/${config.uploadPath}/${fileName}`;
-      console.log('📄 URL relativa:', urlRelativa);
-
       const result = {
         success: true,
         url: urlRelativa,
@@ -117,13 +78,9 @@ class PDFMergeService {
         size: pdfBytes.length,
         filesProcessed: files.length
       };
-
-      console.log('✅ [pdfMergeService] Merge completado exitosamente:', result);
       return result;
 
     } catch (error) {
-      console.error('❌ [pdfMergeService] Error en mergeDocuments:', error);
-      console.error('Stack:', error.stack);
       throw error;
     }
   }

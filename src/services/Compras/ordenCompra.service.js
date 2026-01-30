@@ -984,8 +984,21 @@ const regenerarKardex = async (id, usuarioId) => {
         );
       }
 
+
       // ========================================
-      // PASO 2: ELIMINAR MOVIMIENTO EXISTENTE
+      // PASO 2: RESETEAR ORDEN A ESTADO APROBADO
+      // ========================================
+      await tx.ordenCompra.update({
+        where: { id },
+        data: {
+          estadoId: BigInt(39), // APROBADO
+          movIngresoAlmacenId: null,
+          actualizadoEn: new Date(),
+        },
+      });
+
+      // ========================================
+      // PASO 3: ELIMINAR MOVIMIENTO EXISTENTE
       // ========================================
       const { default: eliminarMovimientoAlmacenService } = await import(
         "../Almacen/eliminarMovimientoAlmacen.service.js"
@@ -996,17 +1009,7 @@ const regenerarKardex = async (id, usuarioId) => {
         tx
       );
 
-      // ========================================
-      // PASO 3: RESETEAR ORDEN A ESTADO APROBADO
-      // ========================================
-      await tx.ordenCompra.update({
-        where: { id },
-        data: {
-          estadoId: BigInt(39), // APROBADO
-          movIngresoAlmacenId: null,
-          actualizadoEn: new Date(),
-        },
-      });
+      
 
       // ========================================
       // PASO 4: VALIDAR DIRECCIÓN Y CONCEPTO

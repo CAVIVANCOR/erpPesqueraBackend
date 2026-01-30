@@ -1,28 +1,66 @@
 // Rutas de Express para AsientoContableInterfaz
 import { Router } from 'express';
 import * as controller from '../../controllers/FlujoCaja/asientoContableInterfaz.controller.js';
+import { autenticarJWT } from '../../middlewares/authMiddleware.js';
+import { checkPermission } from '../../middlewares/checkPermission.js';
 
 const router = Router();
 
-// GET /api/asientos-contables-interfaz
-router.get('/', controller.listar);
+/**
+ * Rutas CRUD para AsientoContableInterfaz
+ * Ruta del submódulo: 'asientoContableInterfaz'
+ */
 
-// GET /api/asientos-contables-interfaz/:id
-router.get('/:id', controller.obtenerPorId);
+// ✅ Rutas CRUD básicas (estas SÍ las mantuve correctamente)
+router.get(
+  '/',
+  autenticarJWT,
+  checkPermission('asientoContableInterfaz', 'ver'),
+  controller.listar
+);
 
-// POST /api/asientos-contables-interfaz
-router.post('/', controller.crear);
+router.get(
+  '/:id',
+  autenticarJWT,
+  checkPermission('asientoContableInterfaz', 'ver'),
+  controller.obtenerPorId
+);
 
-// PUT /api/asientos-contables-interfaz/:id
-router.put('/:id', controller.actualizar);
+router.post(
+  '/',
+  autenticarJWT,
+  checkPermission('asientoContableInterfaz', 'crear'),
+  controller.crear
+);
 
-// DELETE /api/asientos-contables-interfaz/:id
-router.delete('/:id', controller.eliminar);
+router.put(
+  '/:id',
+  autenticarJWT,
+  checkPermission('asientoContableInterfaz', 'editar'),
+  controller.actualizar
+);
 
-// POST /api/asientos-contables-interfaz/:id/enviar
-router.post('/:id/enviar', controller.enviar);
+router.delete(
+  '/:id',
+  autenticarJWT,
+  checkPermission('asientoContableInterfaz', 'eliminar'),
+  controller.eliminar
+);
 
-// POST /api/asientos-contables-interfaz/:id/registrar-error
-router.post('/:id/registrar-error', controller.registrarError);
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (1/2)
+router.post(
+  '/:id/enviar',
+  autenticarJWT,
+  checkPermission('asientoContableInterfaz', 'editar'),
+  controller.enviar
+);
+
+// ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (2/2)
+router.post(
+  '/:id/registrar-error',
+  autenticarJWT,
+  checkPermission('asientoContableInterfaz', 'editar'),
+  controller.registrarError
+);
 
 export default router;

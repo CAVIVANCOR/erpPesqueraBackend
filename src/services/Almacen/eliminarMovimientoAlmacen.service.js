@@ -1,15 +1,19 @@
-import prisma from '../../config/prismaClient.js';
-import { ValidationError, DatabaseError, NotFoundError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  ValidationError,
+  DatabaseError,
+  NotFoundError,
+} from "../../utils/errors.js";
 
 /**
  * ============================================================================
  * SERVICIO PROFESIONAL: ELIMINAR MOVIMIENTO DE ALMACÉN COMPLETO
  * ============================================================================
- * 
+ *
  * Elimina un movimiento de almacén, su kardex y regenera los saldos usando
  * las mismas funciones de recálculo que generarKardex.service.js para
  * garantizar saldos 100% correctos y en línea.
- * 
+ *
  * PROCESO:
  * 1. Valida que el movimiento exista
  * 2. Obtiene todas las combinaciones únicas de kardex antes de eliminar
@@ -18,23 +22,25 @@ import { ValidationError, DatabaseError, NotFoundError } from '../../utils/error
  * 5. Regenera saldos generales usando recalcularSaldoGeneralCompleto()
  * 6. Elimina los detalles del movimiento
  * 7. Elimina el movimiento de almacén
- * 
+ *
  * @param {BigInt} movimientoAlmacenId - ID del movimiento de almacén a eliminar
  * @param {PrismaTransaction} transaccion - Transacción de Prisma (opcional)
  * @returns {Promise<Object>} Resultado con información de la eliminación
  */
 const eliminarMovimientoAlmacenCompleto = async (
   movimientoAlmacenId,
-  transaccion = null
+  transaccion = null,
 ) => {
   try {
     const ejecutarEnTransaccion = async (tx) => {
       // ========================================
       // PASO 1: VALIDAR QUE EL MOVIMIENTO EXISTA
       // ========================================
-      
+
       if (!movimientoAlmacenId) {
-        throw new ValidationError('El ID del movimiento de almacén es obligatorio');
+        throw new ValidationError(
+          "El ID del movimiento de almacén es obligatorio",
+        );
       }
 
       const movimiento = await tx.movimientoAlmacen.findUnique({
@@ -51,11 +57,54 @@ const eliminarMovimientoAlmacenCompleto = async (
       });
 
       if (!movimiento) {
-        throw new NotFoundError('Movimiento de almacén no encontrado');
+        throw new NotFoundError("Movimiento de almacén no encontrado");
       }
 
       if (!movimiento.detalles || movimiento.detalles.length === 0) {
-        throw new ValidationError('El movimiento no tiene detalles para eliminar');
+        throw new ValidationError(
+          "El movimiento no tiene detalles para eliminar",
+        );
+      }
+
+      // ========================================
+      // VALIDAR QUE NO TENGA ENTREGA A RENDIR ASOCIADA
+      // ========================================
+
+      const entregaAsociada = await tx.entregaARendirMovAlmacen.findFirst({
+        where: { movimientoAlmacenId: movimiento.id },
+        include: {
+          respEntregaRendir: true,
+          centroCosto: true,
+        },
+      });
+
+      if (entregaAsociada) {
+        throw new ValidationError(
+          `No se puede eliminar el movimiento porque tiene una Entrega a Rendir asociada (ID: ${entregaAsociada.id}). Responsable: ${entregaAsociada.respEntregaRendir?.nombreCompleto || "N/A"}. Primero debe eliminar la Entrega a Rendir.`,
+        );
+      }
+
+      // ========================================
+      // VALIDAR QUE NO TENGA INSUMOS DE OT ASOCIADOS
+      // ========================================
+
+      const detallesIds = movimiento.detalles.map((d) => d.id);
+
+      if (detallesIds.length > 0) {
+        const insumosAsociados = await tx.detInsumosTareaOT.count({
+          where: {
+            OR: [
+              { movimientoAlmacenId: movimiento.id },
+              { detalleMovAlmacenId: { in: detallesIds } },
+            ],
+          },
+        });
+
+        if (insumosAsociados > 0) {
+          throw new ValidationError(
+            `No se puede eliminar el movimiento porque tiene ${insumosAsociados} insumo(s) de Orden de Trabajo asociado(s). Primero debe desvincular los insumos de las OT.`,
+          );
+        }
       }
 
       const resultados = {
@@ -71,7 +120,7 @@ const eliminarMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 2: OBTENER COMBINACIONES ÚNICAS DE KARDEX
       // ========================================
-      
+
       // Obtener todas las combinaciones únicas de kardex ANTES de eliminar
       // para poder regenerar los saldos correctamente después
       const combinacionesKardex = await tx.kardexAlmacen.findMany({
@@ -105,14 +154,14 @@ const eliminarMovimientoAlmacenCompleto = async (
           kardex.productoId?.toString(),
           kardex.clienteId?.toString(),
           kardex.esCustodia,
-          kardex.lote || '',
+          kardex.lote || "",
           kardex.fechaIngreso?.toISOString(),
           kardex.fechaProduccion?.toISOString(),
           kardex.fechaVencimiento?.toISOString(),
           kardex.estadoId?.toString(),
           kardex.estadoCalidadId?.toString(),
-          kardex.numContenedor || '',
-          kardex.nroSerie || '',
+          kardex.numContenedor || "",
+          kardex.nroSerie || "",
         ]);
         combinacionesDetalladas.add(keyDet);
 
@@ -130,7 +179,7 @@ const eliminarMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 3: ELIMINAR KARDEX DEL MOVIMIENTO
       // ========================================
-      
+
       const kardexEliminados = await tx.kardexAlmacen.deleteMany({
         where: { movimientoAlmacenId: movimiento.id },
       });
@@ -140,11 +189,11 @@ const eliminarMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 4: REGENERAR SALDOS DETALLADOS
       // ========================================
-      
+
       // Regenerar cada combinación de saldo detallado
       for (const keyDet of combinacionesDetalladas) {
         const combo = JSON.parse(keyDet);
-        
+
         const filtro = {
           empresaId: BigInt(combo[0]),
           almacenId: BigInt(combo[1]),
@@ -169,7 +218,10 @@ const eliminarMovimientoAlmacenCompleto = async (
           where: filtro,
         });
 
-        if (Number(saldoDet.saldoCantidad) === 0 && Number(saldoDet.saldoPeso) === 0) {
+        if (
+          Number(saldoDet.saldoCantidad) === 0 &&
+          Number(saldoDet.saldoPeso) === 0
+        ) {
           // Si el saldo es cero, eliminar el registro
           if (saldoDetExistente) {
             await tx.saldosDetProductoCliente.delete({
@@ -205,11 +257,11 @@ const eliminarMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 5: REGENERAR SALDOS GENERALES
       // ========================================
-      
+
       // Regenerar cada combinación de saldo general
       for (const keyGen of combinacionesGenerales) {
         const combo = JSON.parse(keyGen);
-        
+
         const filtro = {
           empresaId: BigInt(combo[0]),
           almacenId: BigInt(combo[1]),
@@ -232,7 +284,10 @@ const eliminarMovimientoAlmacenCompleto = async (
           },
         });
 
-        if (Number(saldoGen.saldoCantidad) === 0 && Number(saldoGen.saldoPeso) === 0) {
+        if (
+          Number(saldoGen.saldoCantidad) === 0 &&
+          Number(saldoGen.saldoPeso) === 0
+        ) {
           // Si el saldo es cero, eliminar el registro
           if (saldoGenExistente) {
             await tx.saldosProductoCliente.delete({
@@ -272,15 +327,17 @@ const eliminarMovimientoAlmacenCompleto = async (
       }
 
       // Registrar productos afectados
-      const productosUnicos = [...new Set(combinacionesKardex.map(k => k.productoId))];
-      resultados.productosAfectados = productosUnicos.map(prodId => ({
+      const productosUnicos = [
+        ...new Set(combinacionesKardex.map((k) => k.productoId)),
+      ];
+      resultados.productosAfectados = productosUnicos.map((prodId) => ({
         productoId: prodId,
       }));
 
       // ========================================
       // PASO 6: ELIMINAR DETALLES DEL MOVIMIENTO
       // ========================================
-      
+
       const detallesEliminados = await tx.detalleMovimientoAlmacen.deleteMany({
         where: { movimientoAlmacenId: movimiento.id },
       });
@@ -290,7 +347,7 @@ const eliminarMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 7: ELIMINAR EL MOVIMIENTO DE ALMACÉN
       // ========================================
-      
+
       await tx.movimientoAlmacen.delete({
         where: { id: movimiento.id },
       });
@@ -298,10 +355,11 @@ const eliminarMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 8: RETORNAR RESULTADO
       // ========================================
-      
+
       return {
         success: true,
-        mensaje: 'Movimiento de almacén eliminado exitosamente y saldos regenerados correctamente',
+        mensaje:
+          "Movimiento de almacén eliminado exitosamente y saldos regenerados correctamente",
         resultados: resultados,
       };
     };
@@ -311,13 +369,14 @@ const eliminarMovimientoAlmacenCompleto = async (
     } else {
       return await prisma.$transaction(ejecutarEnTransaccion);
     }
-
   } catch (error) {
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
-    console.error('Error al eliminar movimiento de almacén:', error);
-    throw new DatabaseError('Error al eliminar movimiento de almacén: ' + error.message);
+    console.error("Error al eliminar movimiento de almacén:", error);
+    throw new DatabaseError(
+      "Error al eliminar movimiento de almacén: " + error.message,
+    );
   }
 };
 
@@ -325,10 +384,10 @@ const eliminarMovimientoAlmacenCompleto = async (
  * ============================================================================
  * FUNCIÓN: RECALCULAR SALDO DETALLADO COMPLETO
  * ============================================================================
- * 
+ *
  * Recalcula el saldo detallado (con variables de control) desde el kardex.
  * Esta es la MISMA función que usa generarKardex.service.js
- * 
+ *
  * @param {PrismaTransaction} tx - Transacción de Prisma
  * @param {Object} filtro - Filtro con todas las variables de control
  * @returns {Promise<Object>} Saldo calculado { saldoCantidad, saldoPeso }
@@ -352,9 +411,9 @@ async function recalcularSaldoDetalladoCompleto(tx, filtro) {
   const kardexRegistros = await tx.kardexAlmacen.findMany({
     where: whereClause,
     orderBy: [
-      { fechaMovimientoAlmacen: 'asc' },
-      { esIngresoEgreso: 'desc' },
-      { id: 'asc' },
+      { fechaMovimientoAlmacen: "asc" },
+      { esIngresoEgreso: "desc" },
+      { id: "asc" },
     ],
   });
 
@@ -364,11 +423,17 @@ async function recalcularSaldoDetalladoCompleto(tx, filtro) {
   for (const kardex of kardexRegistros) {
     if (kardex.esIngresoEgreso) {
       // Usar ingresoCantVariables para saldos con trazabilidad
-      saldoCantidad += Number(kardex.ingresoCantVariables || kardex.ingresoCant || 0);
-      saldoPeso += Number(kardex.ingresoPesoVariables || kardex.ingresoPeso || 0);
+      saldoCantidad += Number(
+        kardex.ingresoCantVariables || kardex.ingresoCant || 0,
+      );
+      saldoPeso += Number(
+        kardex.ingresoPesoVariables || kardex.ingresoPeso || 0,
+      );
     } else {
       // Usar egresoCantVariables para saldos con trazabilidad
-      saldoCantidad -= Number(kardex.egresoCantVariables || kardex.egresoCant || 0);
+      saldoCantidad -= Number(
+        kardex.egresoCantVariables || kardex.egresoCant || 0,
+      );
       saldoPeso -= Number(kardex.egresoPesoVariables || kardex.egresoPeso || 0);
     }
   }
@@ -383,21 +448,24 @@ async function recalcularSaldoDetalladoCompleto(tx, filtro) {
  * ============================================================================
  * FUNCIÓN: RECALCULAR SALDO GENERAL COMPLETO
  * ============================================================================
- * 
+ *
  * Recalcula el saldo general (sin variables de control) desde el kardex.
  * Esta es la MISMA función que usa generarKardex.service.js
- * 
+ *
  * @param {PrismaTransaction} tx - Transacción de Prisma
  * @param {Object} filtro - Filtro { empresaId, almacenId, productoId, clienteId, esCustodia }
  * @returns {Promise<Object>} Saldo calculado { saldoCantidad, saldoPeso, costoUnitarioPromedio }
  */
-async function recalcularSaldoGeneralCompleto(tx, { empresaId, almacenId, productoId, clienteId, esCustodia }) {
+async function recalcularSaldoGeneralCompleto(
+  tx,
+  { empresaId, almacenId, productoId, clienteId, esCustodia },
+) {
   const kardexRegistros = await tx.kardexAlmacen.findMany({
     where: { empresaId, almacenId, productoId, esCustodia },
     orderBy: [
-      { fechaMovimientoAlmacen: 'asc' },
-      { esIngresoEgreso: 'desc' },
-      { id: 'asc' },
+      { fechaMovimientoAlmacen: "asc" },
+      { esIngresoEgreso: "desc" },
+      { id: "asc" },
     ],
   });
 
@@ -413,7 +481,8 @@ async function recalcularSaldoGeneralCompleto(tx, { empresaId, almacenId, produc
       saldoCantidad += ingresoCant;
       saldoPeso += Number(kardex.ingresoPeso || 0);
       costoTotalAcumulado += ingresoCant * ingresoCostoUnit;
-      costoUnitarioPromedio = saldoCantidad > 0 ? costoTotalAcumulado / saldoCantidad : 0;
+      costoUnitarioPromedio =
+        saldoCantidad > 0 ? costoTotalAcumulado / saldoCantidad : 0;
     } else {
       const egresoCant = Number(kardex.egresoCant || 0);
       saldoCantidad -= egresoCant;
@@ -430,5 +499,5 @@ async function recalcularSaldoGeneralCompleto(tx, { empresaId, almacenId, produc
 }
 
 export default {
-  eliminarMovimientoAlmacenCompleto
+  eliminarMovimientoAlmacenCompleto,
 };
