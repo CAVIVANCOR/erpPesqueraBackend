@@ -6,7 +6,7 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import lineaCreditoService from "./lineaCredito.service.js";
-
+const { obtenerTipoCambio } = lineaCreditoService;
 /**
  * Servicio CRUD para PrestamoBancario
  * Gestiona préstamos bancarios con cronogramas de pago, desembolsos y garantías.
@@ -396,6 +396,13 @@ const crear = async (data) => {
 
     await validarPrestamoBancario(data);
 
+    // Calcular tipo de cambio si no viene en data
+    let tipoCambioAplicado = data.tipoCambioAplicado;
+    if (!tipoCambioAplicado && data.fechaDesembolso) {
+      const tc = await obtenerTipoCambio(new Date(data.fechaDesembolso));
+      tipoCambioAplicado = tc.venta; // Usar TC venta para conversiones
+    }
+
     // Calcular saldos iniciales
     const saldoCapital = parseFloat(data.montoDesembolsado);
     const saldoInteres = 0;
@@ -410,6 +417,7 @@ const crear = async (data) => {
       const nuevoPrestamo = await tx.prestamoBancario.create({
         data: {
           ...data,
+          tipoCambioAplicado,
           saldoCapital,
           saldoInteres,
           capitalPagado,
@@ -490,13 +498,33 @@ const actualizar = async (id, data) => {
 
     await validarPrestamoBancario({ ...data, id });
 
+    // Calcular tipo de cambio SOLO si el usuario NO lo estableció manualmente
+    let tipoCambioAplicado;
+    
+    // REGLA: Si el usuario envió un TC (cualquier valor), SIEMPRE respetarlo
+    if (data.tipoCambioAplicado !== null && data.tipoCambioAplicado !== undefined) {
+      // Usuario estableció un valor (puede ser 3.00, 3.361, etc.)
+      tipoCambioAplicado = data.tipoCambioAplicado;
+    } else if (data.fechaDesembolso && data.fechaDesembolso !== existente.fechaDesembolso) {
+      // Usuario cambió la fecha pero no tiene TC, calcular
+      const tc = await obtenerTipoCambio(new Date(data.fechaDesembolso));
+      tipoCambioAplicado = tc.venta;
+    } else {
+      // No cambió nada, mantener el existente
+      tipoCambioAplicado = existente.tipoCambioAplicado;
+    }
+    
     // Guardar lineaCreditoId anterior para actualizar saldos
     const lineaCreditoIdAnterior = existente.lineaCreditoId;
+
     const lineaCreditoIdNueva = data.lineaCreditoId;
 
     const prestamoActualizado = await prisma.prestamoBancario.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        tipoCambioAplicado: tipoCambioAplicado,
+      },
       include: {
         empresa: true,
         banco: true,
@@ -683,9 +711,6 @@ const listarSimple = async () => {
         estado: true,
         lineaCredito: true,
         tipoPrestamo: true,
-        // SIN cuotas
-        // SIN desembolsos
-        // SIN garantias
       },
       orderBy: { fechaContrato: "desc" },
     });

@@ -92,3 +92,13 @@ export async function obtenerReporteLineasDisponibles(req, res, next) {
     next(err);
   }
 }
+
+export async function obtenerTipoCambio(req, res, next) {
+  try {
+    const { fecha } = req.params;
+    const tc = await lineaCreditoService.obtenerTipoCambio(new Date(fecha));
+    res.json(toJSONBigInt(tc));
+  } catch (err) {
+    next(err);
+  }
+}

@@ -33,6 +33,14 @@ router.get(
   lineaCreditoController.obtenerReporteLineasDisponibles
 );
 
+router.get(
+  '/tipo-cambio/:fecha', 
+  autenticarJWT, 
+  checkPermission('lineaCredito', 'ver'),
+  lineaCreditoController.obtenerTipoCambio
+);
+
+
 // CRUD básico con permisos granulares
 router.get(
   '/', 
@@ -41,12 +49,14 @@ router.get(
   lineaCreditoController.listar
 );
 
+
 router.get(
   '/:id', 
   autenticarJWT, 
   checkPermission('lineaCredito', 'ver'),
   lineaCreditoController.obtenerPorId
 );
+
 
 router.post(
   '/', 

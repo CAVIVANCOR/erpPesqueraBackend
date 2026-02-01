@@ -181,14 +181,6 @@ async function obtenerTipoCambio(fecha) {
     // Si la fecha es futura, usar la fecha de hoy
     const fechaConsulta = fechaFormateada > hoy ? hoy : fechaFormateada;
 
-    if (fechaFormateada > hoy) {
-      console.log(
-        `⚠️ Fecha futura detectada: ${fechaFormateada}, usando fecha actual: ${hoy}`,
-      );
-    }
-
-    console.log(`\n🔍 Consultando TC para: ${fechaConsulta}`);
-
     // Intentar obtener TC de la fecha exacta
     let url = `https://api.decolecta.com/v1/tipo-cambio/sunat?date=${fechaConsulta}`;
 
@@ -200,21 +192,12 @@ async function obtenerTipoCambio(fecha) {
       },
     });
 
-    console.log(
-      `📥 Response status: ${response.status} ${response.statusText}`,
-    );
-
     // Si encontró el TC de la fecha exacta, retornarlo
     if (response.ok) {
       const data = await response.json();
-      
       // La API devuelve buy_price y sell_price, no compra y venta
       const compra = parseFloat(data.buy_price || 3.75);
       const venta = parseFloat(data.sell_price || 3.75);
-      
-      console.log(
-        `✅ TC encontrado: Compra=${compra}, Venta=${venta}, Fecha=${data.date}`,
-      );
       return {
         compra,
         venta,
@@ -224,23 +207,11 @@ async function obtenerTipoCambio(fecha) {
 
     // Si la respuesta no es OK, mostrar el error
     const errorText = await response.text();
-    console.warn(
-      `⚠️ Error API (${response.status}): ${errorText.substring(0, 200)}`,
-    );
-
-    // Si no encontró, buscar TC del mes completo y filtrar el más cercano
-    console.warn(
-      `⚠️ No se encontró TC para ${fechaConsulta}, buscando TC más cercano...`,
-    );
-
     const fechaObj = new Date(fechaConsulta);
     const month = fechaObj.getMonth() + 1;
     const year = fechaObj.getFullYear();
 
     url = `https://api.decolecta.com/v1/tipo-cambio/sunat?month=${month}&year=${year}`;
-
-    console.log(`📡 Consultando mes completo: ${url}`);
-
     response = await fetch(url, {
       method: "GET",
       headers: {
@@ -249,29 +220,12 @@ async function obtenerTipoCambio(fecha) {
       },
     });
 
-    console.log(
-      `📥 Response status mes: ${response.status} ${response.statusText}`,
-    );
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(
-        `❌ Error API mes (${response.status}): ${errorText.substring(0, 200)}`,
-      );
-      console.warn(
-        `⚠️ Error consultando TC del mes ${month}/${year}, usando TC por defecto 3.75`,
-      );
       return { compra: 3.75, venta: 3.75, fecha: fechaConsulta };
     }
-
     const dataArray = await response.json();
-
-    console.log(`📊 Registros encontrados: ${dataArray.length}`);
-
     if (!Array.isArray(dataArray) || dataArray.length === 0) {
-      console.warn(
-        `⚠️ No hay datos de TC para ${month}/${year}, usando TC por defecto 3.75`,
-      );
       return { compra: 3.75, venta: 3.75, fecha: fechaConsulta };
     }
 
@@ -280,22 +234,12 @@ async function obtenerTipoCambio(fecha) {
       (tc) => tc.date <= fechaConsulta,
     );
 
-    console.log(
-      `🔎 Registros anteriores a ${fechaConsulta}: ${tiposCambioAnteriores.length}`,
-    );
-
     if (tiposCambioAnteriores.length === 0) {
       // Si no hay anteriores, usar el más reciente disponible
-      console.warn(
-        `⚠️ No hay TC anterior a ${fechaConsulta}, usando el más reciente del mes`,
-      );
       dataArray.sort((a, b) => b.date.localeCompare(a.date));
       const tcMasReciente = dataArray[0];
       const compra = parseFloat(tcMasReciente.buy_price || 3.75);
       const venta = parseFloat(tcMasReciente.sell_price || 3.75);
-      console.log(
-        `✅ TC más reciente: ${tcMasReciente.date} - Compra=${compra}, Venta=${venta}`,
-      );
       return {
         compra,
         venta,
@@ -306,22 +250,14 @@ async function obtenerTipoCambio(fecha) {
     // Ordenar por fecha descendente y tomar el más reciente (más cercano)
     tiposCambioAnteriores.sort((a, b) => b.date.localeCompare(a.date));
     const tcMasCercano = tiposCambioAnteriores[0];
-    
     const compra = parseFloat(tcMasCercano.buy_price || 3.75);
     const venta = parseFloat(tcMasCercano.sell_price || 3.75);
-
-    console.log(
-      `✅ TC más cercano: ${tcMasCercano.date} - Compra=${compra}, Venta=${venta}`,
-    );
-
     return {
       compra,
       venta,
       fecha: tcMasCercano.date,
     };
   } catch (error) {
-    console.error("❌ Error obteniendo tipo de cambio:", error.message);
-    console.error("Stack:", error.stack);
     return {
       compra: 3.75,
       venta: 3.75,
@@ -367,15 +303,6 @@ const listar = async () => {
     const lineasConSaldos = await Promise.all(
       lineas.map(async (linea) => {
         const monedaLinea = linea.moneda; // Moneda de la línea de crédito
-
-        // 🔍 DEBUG: Log para analizar el problema
-        console.log("\n=== LÍNEA DE CRÉDITO ===");
-        console.log("Número:", linea.numeroLinea);
-        console.log("Banco:", linea.banco?.nombre);
-        console.log("Moneda Línea:", monedaLinea?.codigoSunat);
-        console.log("Monto Aprobado:", linea.montoAprobado);
-        console.log("Préstamos vigentes:", linea.prestamos.length);
-
         // Sumar el MONTO DESEMBOLSADO de todos los préstamos vigentes CON CONVERSIÓN
         let montoUtilizado = 0;
 
@@ -404,63 +331,21 @@ const listar = async () => {
             ) {
               // Convertir PEN a USD: dividir por tipo de cambio venta
               montoEnMonedaLinea = montoDesembolsado / tipoCambio.venta;
-              console.log(`  - Préstamo ${prestamo.numeroPrestamo} (PEN):`);
-              console.log(
-                `    Monto Original: PEN ${montoDesembolsado.toFixed(2)}`,
-              );
-              console.log(`    Fecha TC: ${formatearFechaISO(fechaTC)}`);
-              console.log(`    TC Venta: ${tipoCambio.venta}`);
-              console.log(
-                `    Convertido a USD: ${montoEnMonedaLinea.toFixed(2)}`,
-              );
             } else if (
               monedaLinea.codigoSunat === "PEN" &&
               monedaPrestamo.codigoSunat === "USD"
             ) {
               // Convertir USD a PEN: multiplicar por tipo de cambio compra
               montoEnMonedaLinea = montoDesembolsado * tipoCambio.compra;
-              console.log(`  - Préstamo ${prestamo.numeroPrestamo} (USD):`);
-              console.log(
-                `    Monto Original: USD ${montoDesembolsado.toFixed(2)}`,
-              );
-              console.log(`    Fecha TC: ${formatearFechaISO(fechaTC)}`);
-              console.log(`    TC Compra: ${tipoCambio.compra}`);
-              console.log(
-                `    Convertido a PEN: ${montoEnMonedaLinea.toFixed(2)}`,
-              );
             } else {
-              console.log(
-                `  - Préstamo ${prestamo.numeroPrestamo} (${monedaPrestamo.codigoSunat}):`,
-              );
-              console.log(
-                `    ⚠️ Conversión no soportada entre ${monedaPrestamo.codigoSunat} y ${monedaLinea.codigoSunat}`,
-              );
-              console.log(`    Monto: ${montoDesembolsado.toFixed(2)}`);
             }
           } else {
-            // Misma moneda, no convertir
-            console.log(
-              `  - Préstamo ${prestamo.numeroPrestamo} (${monedaPrestamo?.codigoSunat || "N/A"}):`,
-            );
-            console.log(
-              `    Monto: ${montoDesembolsado.toFixed(2)} (sin conversión)`,
-            );
           }
 
           montoUtilizado += montoEnMonedaLinea;
         }
-
-        console.log(
-          `TOTAL UTILIZADO (${monedaLinea?.codigoSunat}):`,
-          montoUtilizado.toFixed(2),
-        );
-
         const montoAprobado = parseFloat(linea.montoAprobado || 0);
         const montoDisponible = montoAprobado - montoUtilizado;
-
-        console.log("Monto Disponible:", montoDisponible.toFixed(2));
-        console.log("=========================\n");
-
         return {
           ...linea,
           montoUtilizado,
@@ -920,4 +805,5 @@ export default {
   listarPrestamos,
   obtenerReporteLineasDisponibles,
   actualizarSaldosLinea,
+  obtenerTipoCambio,
 };
