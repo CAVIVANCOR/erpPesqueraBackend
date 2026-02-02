@@ -649,6 +649,8 @@ model CotizacionVentas {
   fechaActualizacion          DateTime?   @updatedAt
   creadoPor                   BigInt?
   actualizadoPor              BigInt?
+  unidadNegocioId   BigInt?
+
 
   // Relaciones
   empresa                     Empresa                  @relation(fields: [empresaId], references: [id])
@@ -669,6 +671,8 @@ model CotizacionVentas {
 
   cotizacionPadre             CotizacionVentas?        @relation("VersionesCotizacion", fields: [cotizacionPadreId], references: [id])
   versiones                   CotizacionVentas[]       @relation("VersionesCotizacion")
+  unidadNegocio     UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+
   
   detallesProductos           DetCotizacionVentas[]
   costosExportacion           CostosExportacionCotizacion[]
@@ -681,6 +685,8 @@ model CotizacionVentas {
   @@index([estadoId])
   @@index([clienteId])
   @@index([codigo])
+  @@index([unidadNegocioId])
+
 }
 
 model TipoContenedor {
@@ -976,17 +982,24 @@ model DetMovsEntregaRendirPVentas {
   creadoPor                   BigInt?
   actualizadoPor              BigInt?
 
+  detalleGastosPlanificados    String?     @db.Text
+  asignacionOrigenId           BigInt?
+
   entregaARendirPVentas       EntregaARendirPVentas @relation(fields: [entregaARendirPVentasId], references: [id], onDelete: Cascade)
   tipoMovimiento              TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   producto                    Producto? @relation("MovimientoGastoExportacion", fields: [productoId], references: [id])
   entidadComercial            EntidadComercial? @relation("ProveedorMovPVentas", fields: [entidadComercialId], references: [id])
   moneda                      Moneda @relation(fields: [monedaId], references: [id])
   tipoDocumento               TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
+
+  asignacionOrigen             DetMovsEntregaRendirPVentas? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
+  gastosAsociados              DetMovsEntregaRendirPVentas[] @relation("GastosDeAsignacion")
   
   costosEstimadosVinculados   CostosExportacionCotizacion[]          // Relación inversa para vincular con estimados
   
   @@index([entregaARendirPVentasId])
   @@index([productoId])
+  @@index([asignacionOrigenId])
 }
 
 
@@ -1099,6 +1112,8 @@ model PreFactura {
   fechaActualizacion          DateTime?   @updatedAt                       // Fecha de última actualización
   creadoPor                   BigInt?                                      // Usuario que creó el registro
   actualizadoPor              BigInt?                                      // Usuario que actualizó el registro
+  unidadNegocioId   BigInt?
+
   
   // Relaciones
   empresa                     Empresa                 @relation(fields: [empresaId], references: [id])
@@ -1119,6 +1134,8 @@ model PreFactura {
   cotizacionVenta             CotizacionVentas?       @relation(fields: [cotizacionVentaId], references: [id])
   contratoServicio            ContratoServicio?       @relation("PreFacturaContrato", fields: [contratoServicioId], references: [id])
   movSalidaAlmacen            MovimientoAlmacen?      @relation("MovimientoAlmacenToPreFactura", fields: [movSalidaAlmacenId], references: [id])
+  unidadNegocio     UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+
   
   // ========================================
   // ⭐ RELACIONES NUEVAS - FACTURACIÓN ELECTRÓNICA
@@ -1152,6 +1169,8 @@ model PreFactura {
   @@index([esGerencial])                                                 // ⭐ NUEVO: Filtrar Gerenciales (Negras) vs Formales (Blancas)
   @@index([preFacturaOrigenId])                                          // ⭐ NUEVO: Trazabilidad de particiones
   @@index([esParticionada])                                              // ⭐ NUEVO: Filtrar PreFacturas particionadas
+  @@index([unidadNegocioId])
+
 }
 
 
@@ -1570,12 +1589,20 @@ model DetMovsEntRendirPescaConsumo {
   formaParteCalculoLiquidacionTripulantes Boolean? @default(false)
   formaParteCalculoEntregaARendir Boolean? @default(false)
 
+  detalleGastosPlanificados    String?     @db.Text
+  asignacionOrigenId           BigInt?
+
   entregaARendirPescaConsumo EntregaARendirPescaConsumo @relation(fields: [entregaARendirPescaConsumoId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   entidadComercial EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
   moneda Moneda? @relation(fields: [monedaId], references: [id])
   tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto Producto? @relation(fields: [productoId], references: [id])
+
+  asignacionOrigen             DetMovsEntRendirPescaConsumo? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
+  gastosAsociados              DetMovsEntRendirPescaConsumo[] @relation("GastosDeAsignacion")
+
+  @@index([asignacionOrigenId])
 }
 
 model DetMovsEntregaRendir {
@@ -1607,12 +1634,20 @@ model DetMovsEntregaRendir {
   formaParteCalculoLiquidacionTripulantes Boolean? @default(false)
   formaParteCalculoEntregaARendir Boolean? @default(false)
 
+  detalleGastosPlanificados    String?     @db.Text
+  asignacionOrigenId           BigInt?
+
   entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   entidadComercial EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
   moneda Moneda? @relation(fields: [monedaId], references: [id])
   tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto Producto? @relation(fields: [productoId], references: [id])
+
+  asignacionOrigen             DetMovsEntregaRendir? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
+  gastosAsociados              DetMovsEntregaRendir[] @relation("GastosDeAsignacion")
+
+  @@index([asignacionOrigenId])
 }
 
 model DetMovsEntregaRendirPCompras {
@@ -1643,6 +1678,8 @@ model DetMovsEntregaRendirPCompras {
   centroCostoId            BigInt                                      // Centro de costo del movimiento
   creadoEn                 DateTime    @default(now())
   actualizadoEn            DateTime    @updatedAt
+  detalleGastosPlanificados    String?     @db.Text
+  asignacionOrigenId           BigInt?
   
   entregaARendirPCompras   EntregaARendirPCompras @relation(fields: [entregaARendirPComprasId], references: [id], onDelete: Cascade)
   tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1650,6 +1687,10 @@ model DetMovsEntregaRendirPCompras {
   moneda Moneda? @relation(fields: [monedaId], references: [id])
   tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto Producto? @relation(fields: [productoId], references: [id])
+  asignacionOrigen             DetMovsEntregaRendirPCompras? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
+  gastosAsociados              DetMovsEntregaRendirPCompras[] @relation("GastosDeAsignacion")
+
+  @@index([asignacionOrigenId])
 }
 
 model DetPermisoGestionadoOT {
@@ -1822,6 +1863,9 @@ model RequerimientoCompra {
   actualizadoPor        BigInt?                                 // Usuario que actualizó por última vez
   porcentajeIGV         Decimal?                                // Porcentaje de IGV
   esExoneradoAlIGV      Boolean?   @default(false)             // Es exonerado al IGV
+
+  unidadNegocioId   BigInt?
+
   
   tipoProducto          TipoProducto @relation(fields: [tipoProductoId], references: [id])
   tipoEstadoProducto    TipoEstadoProducto @relation(fields: [tipoEstadoProductoId], references: [id])
@@ -1834,6 +1878,8 @@ model RequerimientoCompra {
   empresa               Empresa @relation(fields: [empresaId], references: [id])
   moneda                Moneda? @relation(fields: [monedaId], references: [id])
   estado                EstadoMultiFuncion @relation(fields: [estadoId], references: [id])
+  unidadNegocio     UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+
   
   cotizacionesProveedores CotizacionProveedor[]                 // Cotizaciones recibidas (si aplica)
   detalles              DetalleReqCompra[]                      // Items del requerimiento
@@ -1843,6 +1889,8 @@ model RequerimientoCompra {
   @@index([empresaId, fechaDocumento])
   @@index([estadoId])
   @@index([proveedorId])
+  @@index([unidadNegocioId])
+
 }
 
 
@@ -2482,6 +2530,9 @@ model DetMovsEntregaRendirMovAlmacen {
   centroCostoId            BigInt                                      // Centro de costo del movimiento
   creadoEn                 DateTime    @default(now())
   actualizadoEn            DateTime    @updatedAt
+
+  detalleGastosPlanificados    String?     @db.Text
+  asignacionOrigenId           BigInt?
   
   entregaARendirMovAlmacen   EntregaARendirMovAlmacen @relation(fields: [entregaARendirMovAlmacenId], references: [id], onDelete: Cascade)
   tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2491,11 +2542,16 @@ model DetMovsEntregaRendirMovAlmacen {
   tipoDocumento            TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto                 Producto? @relation(fields: [productoId], references: [id])
   centroCosto              CentroCosto @relation("DetMovInventario", fields: [centroCostoId], references: [id])
+
+  asignacionOrigen             DetMovsEntregaRendirMovAlmacen? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
+  gastosAsociados              DetMovsEntregaRendirMovAlmacen[] @relation("GastosDeAsignacion")
   
   @@index([entregaARendirMovAlmacenId])
   @@index([tipoMovimientoId])
   @@index([responsableId])
   @@index([fechaMovimiento])
+
+  @@index([asignacionOrigenId])
 }
 
 
@@ -2552,6 +2608,9 @@ model DetMovsEntregaRendirContratoServicios {
   centroCostoId                        BigInt                                      // Centro de costo del movimiento
   creadoEn                             DateTime    @default(now())
   actualizadoEn                        DateTime    @updatedAt
+
+  detalleGastosPlanificados    String?     @db.Text
+  asignacionOrigenId           BigInt?
   
   entregaARendirContratoServicio       EntregaARendirContratoServicios @relation(fields: [entregaARendirContratoServicioId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2561,11 +2620,15 @@ model DetMovsEntregaRendirContratoServicios {
   tipoDocumento                        TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto                             Producto? @relation(fields: [productoId], references: [id])
   centroCosto                          CentroCosto @relation("DetMovContratoServicio", fields: [centroCostoId], references: [id])
+
+  asignacionOrigen             DetMovsEntregaRendirContratoServicios? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
+  gastosAsociados              DetMovsEntregaRendirContratoServicios[] @relation("GastosDeAsignacion")
   
   @@index([entregaARendirContratoServicioId])
   @@index([tipoMovimientoId])
   @@index([responsableId])
   @@index([fechaMovimiento])
+  @@index([asignacionOrigenId])
 }
 
 model EntregaARendirOTMantenimiento {
@@ -2621,6 +2684,9 @@ model DetMovsEntregaRendirOTMantenimiento {
   centroCostoId                        BigInt                                      // Centro de costo del movimiento
   creadoEn                             DateTime    @default(now())
   actualizadoEn                        DateTime    @updatedAt
+
+  detalleGastosPlanificados    String?     @db.Text
+  asignacionOrigenId           BigInt?
   
   entregaARendirOTMantenimiento       EntregaARendirOTMantenimiento @relation(fields: [entregaARendirOTMantenimientoId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2630,11 +2696,16 @@ model DetMovsEntregaRendirOTMantenimiento {
   tipoDocumento                        TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto                             Producto? @relation(fields: [productoId], references: [id])
   centroCosto                          CentroCosto @relation("DetMovOTMantenimiento", fields: [centroCostoId], references: [id])
+
+  asignacionOrigen             DetMovsEntregaRendirOTMantenimiento? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
+  gastosAsociados              DetMovsEntregaRendirOTMantenimiento[] @relation("GastosDeAsignacion")
   
   @@index([entregaARendirOTMantenimientoId])
   @@index([tipoMovimientoId])
   @@index([responsableId])
   @@index([fechaMovimiento])
+
+  @@index([asignacionOrigenId])
 }
 
 model EntregaARendirPescaConsumo {
@@ -2786,6 +2857,7 @@ model FaenaPescaConsumo {
   fechaHoraFondeo                DateTime?
   puertoFondeoId                 BigInt?
 
+
   // Relaciones principales
   novedadPescaConsumo            NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
   embarcacion                    Embarcacion?        @relation("EmbarcacionFaenasConsumo", fields: [embarcacionId], references: [id])
@@ -2812,6 +2884,8 @@ model FaenaPescaConsumo {
   descargaFaenaConsumo           DescargaFaenaConsumo?
   accionesPrevias                DetAccionesPreviasFaenaConsumo[]
 
+
+
   // Índices para performance
   @@index([novedadPescaConsumoId])
   @@index([embarcacionId])
@@ -2820,6 +2894,7 @@ model FaenaPescaConsumo {
   @@index([patronId])
   @@index([estadoFaenaId])
   @@index([fechaSalida])
+
 }
 
 model FamiliaProducto {
@@ -3038,6 +3113,8 @@ model MovimientoAlmacen {
   actualizadoPor           BigInt?
   urlMovAlmacenPdf         String?
   urlMovAlmacenConCostosPdf String?
+  unidadNegocioId   BigInt?
+
 
   empresa Empresa @relation(fields: [empresaId], references: [id])
   tipoDocumento       TipoDocumento         @relation(fields: [tipoDocumentoId], references: [id])
@@ -3056,6 +3133,9 @@ model MovimientoAlmacen {
   // Relaciones con Descargas (Salida)
   descargasSalidaFaenaPesca     DescargaFaenaPesca[]   @relation("DescargaMovimientoSalida")
   descargasSalidaFaenaConsumo   DescargaFaenaConsumo[] @relation("DescargaConsumoMovimientoSalida")
+  unidadNegocio     UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+
+@@index([unidadNegocioId])
 
 }
 
@@ -3199,6 +3279,8 @@ model NovedadPescaConsumo {
   liqComisionPangueroReal Decimal? @default(0.00) @db.Decimal(10,2)
   liqTotalPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
   precioxKgCalculoComisionPatron Decimal? @default(0.00) @db.Decimal(10,2)
+  unidadNegocioId   BigInt?
+
 
   // Relaciones
   empresa                         Empresa            @relation(fields: [empresaId], references: [id])
@@ -3206,12 +3288,16 @@ model NovedadPescaConsumo {
   estadoNovedad                   EstadoMultiFuncion @relation("NovedadPescaConsumoEstado", fields: [estadoNovedadPescaConsumoId], references: [id])
   faenas                          FaenaPescaConsumo[]
   entregasARendir                 EntregaARendirPescaConsumo[]
+  unidadNegocio     UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+
  
   // Índices para performance
   @@index([empresaId])
   @@index([BahiaId])
   @@index([estadoNovedadPescaConsumoId])
   @@index([fechaInicio])
+  @@index([unidadNegocioId])
+
 }
 
 
@@ -3732,18 +3818,23 @@ model TemporadaPesca {
   liqComisionPangueroReal Decimal? @default(0.00) @db.Decimal(10,2)
   liqTotalPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
 
+  unidadNegocioId   BigInt?
+
+
   // Relaciones
   empresa                      Empresa            @relation(fields: [empresaId], references: [id])
   bahiaComercial               Personal           @relation("TemporadaPescaBahia", fields: [BahiaId], references: [id])
   estadoTemporada              EstadoMultiFuncion @relation("TemporadaPescaEstado", fields: [estadoTemporadaId], references: [id])
   faenas                       FaenaPesca[]       @relation("FaenaTemporadas")
   entregasARendir              EntregaARendir[]
+  unidadNegocio                UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
 
   // Índices para performance
   @@index([empresaId])
   @@index([BahiaId])
   @@index([estadoTemporadaId])
   @@index([fechaInicio])
+  @@index([unidadNegocioId])
 }
 
 model TipoAccesoInstalacion {
@@ -4273,6 +4364,7 @@ model Usuario {
   motivoInactivacion String?         // Razón de desactivación (opcional)
   inactivadoPor     BigInt?          // Quién desactivó (auditoría)
   fechaInactivacion DateTime?        // Cuándo se desactivó
+  dashboardPorDefecto  String  @default("modular")  @db.VarChar(60)
 
   personal          Personal? @relation(fields: [personalId], references: [id])
   empresa           Empresa @relation(fields: [empresaId], references: [id])
@@ -4335,6 +4427,8 @@ model ContratoServicio {
   creadoEn                DateTime              @default(now())
   actualizadoPor          BigInt?
   actualizadoEn           DateTime              @updatedAt
+  unidadNegocioId   BigInt?
+
   
   // Relaciones
   empresa                 Empresa               @relation("ContratoServicioEmpresa", fields: [empresaId], references: [id])
@@ -4352,12 +4446,15 @@ model ContratoServicio {
   entregaARendir          EntregaARendirContratoServicios? @relation("EntregaRendirContrato")
   detallesServicios       DetServicioContrato[]
   prefacturas             PreFactura[]          @relation("PreFacturaContrato")
-  
+  unidadNegocio     UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+
   @@index([empresaId, clienteId])
   @@index([almacenId])
   @@index([estadoContratoId])
   @@index([fechaInicioCobro])
   @@index([responsableId])
+  @@index([unidadNegocioId])
+
 }
 
 model DetServicioContrato {
@@ -5617,6 +5714,9 @@ model OrdenCompra {
 
   direccionRecepcionAlmacenId BigInt?
   contactoProveedorId         BigInt?
+
+  unidadNegocioId   BigInt?
+
   
   // ========================================
   // RELACIONES EXISTENTES
@@ -5647,6 +5747,8 @@ model OrdenCompra {
   // ========================================
   cuentaPorPagar       CuentaPorPagar?                                                                                              // ⭐ NUEVO: 1:1 - Cuenta por pagar generada
   
+  unidadNegocio     UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+
   percepciones         Percepcion[]
   datosAdicionales     DetDatosAdicionalesOrdenCompra[]
   detalles             DetalleOrdenCompra[]
@@ -5668,6 +5770,8 @@ model OrdenCompra {
   @@index([esGerencial])                                                 // ⭐ NUEVO: Filtrar Gerenciales (Negras) vs Formales (Blancas)
   @@index([ordenCompraOrigenId])                                         // ⭐ NUEVO: Trazabilidad de particiones
   @@index([esParticionada])                                              // ⭐ NUEVO: Filtrar OCs particionadas
+  @@index([unidadNegocioId])
+
 }
 
 
@@ -7112,6 +7216,32 @@ model TipoPrestamo {
   @@index([activo])
   @@index([esComercioExterior])
 }
+
+
+model UnidadNegocio {
+  id                BigInt    @id @default(autoincrement())
+  nombre            String    @db.VarChar(100)
+  icono             String?   @db.VarChar(50)
+  color             String?   @db.VarChar(20)
+  activo            Boolean   @default(true)
+  orden             Int       @default(0)
+  fechaCreacion     DateTime  @default(now())
+  fechaModificacion DateTime  @updatedAt
+  
+   // 🆕 AGREGAR ESTAS 8 RELACIONES INVERSAS:
+  cotizacionesVentas       CotizacionVentas[]
+  preFacturas              PreFactura[]
+  requerimientosCompra     RequerimientoCompra[]
+  ordenesCompra            OrdenCompra[]
+  movimientosAlmacen       MovimientoAlmacen[]
+  novedadesPescaConsumo    NovedadPescaConsumo[]
+  temporadasPesca          TemporadaPesca[]
+  contratosServicio        ContratoServicio[]
+  
+  @@index([activo])
+}
+
+
 
 // ============================================
 // ENUMS PARA TESORERÍA AVANZADA
