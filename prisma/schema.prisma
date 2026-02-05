@@ -984,6 +984,8 @@ model DetMovsEntregaRendirPVentas {
 
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
+  formaParteCalculoEntregaARendir Boolean? @default(false)
+
 
   entregaARendirPVentas       EntregaARendirPVentas @relation(fields: [entregaARendirPVentasId], references: [id], onDelete: Cascade)
   tipoMovimiento              TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1680,6 +1682,8 @@ model DetMovsEntregaRendirPCompras {
   actualizadoEn            DateTime    @updatedAt
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
+  formaParteCalculoEntregaARendir Boolean? @default(false)
+
   
   entregaARendirPCompras   EntregaARendirPCompras @relation(fields: [entregaARendirPComprasId], references: [id], onDelete: Cascade)
   tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2533,6 +2537,8 @@ model DetMovsEntregaRendirMovAlmacen {
 
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
+  formaParteCalculoEntregaARendir Boolean? @default(false)
+
   
   entregaARendirMovAlmacen   EntregaARendirMovAlmacen @relation(fields: [entregaARendirMovAlmacenId], references: [id], onDelete: Cascade)
   tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2611,6 +2617,8 @@ model DetMovsEntregaRendirContratoServicios {
 
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
+  formaParteCalculoEntregaARendir Boolean? @default(false)
+
   
   entregaARendirContratoServicio       EntregaARendirContratoServicios @relation(fields: [entregaARendirContratoServicioId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2687,6 +2695,8 @@ model DetMovsEntregaRendirOTMantenimiento {
 
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
+  formaParteCalculoEntregaARendir Boolean? @default(false)
+
   
   entregaARendirOTMantenimiento       EntregaARendirOTMantenimiento @relation(fields: [entregaARendirOTMantenimientoId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
