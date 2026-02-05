@@ -26,7 +26,7 @@ async function validarClavesForaneas(data) {
     validaciones.push(
       prisma.moduloSistema.findUnique({
         where: { id: data.moduloOrigenMovCajaId },
-      })
+      }),
     );
   }
 
@@ -35,16 +35,7 @@ async function validarClavesForaneas(data) {
     validaciones.push(
       prisma.entidadComercial.findUnique({
         where: { id: data.entidadComercialId },
-      })
-    );
-  }
-
-  // Agregar validación de Moneda si se proporciona monedaId
-  if (data.monedaId) {
-    validaciones.push(
-      prisma.moneda.findUnique({
-        where: { id: data.monedaId },
-      })
+      }),
     );
   }
 
@@ -55,7 +46,6 @@ async function validarClavesForaneas(data) {
     centroCosto,
     moduloSistema,
     entidadComercial,
-    moneda,
   ] = await Promise.all(validaciones);
 
   if (!entrega) throw new ValidationError("El entregaARendirId no existe.");
@@ -67,8 +57,6 @@ async function validarClavesForaneas(data) {
     throw new ValidationError("El moduloOrigenMovCajaId no existe.");
   if (data.entidadComercialId && !entidadComercial)
     throw new ValidationError("El entidadComercialId no existe.");
-  if (data.monedaId && !moneda)
-    throw new ValidationError("El monedaId no existe.");
 }
 
 const listar = async () => {
@@ -110,12 +98,31 @@ const crear = async (data) => {
       "tipoMovimientoId",
       "centroCostoId",
       "monto",
+      "monedaId",
     ];
     for (const campo of obligatorios) {
       if (typeof data[campo] === "undefined" || data[campo] === null) {
         throw new ValidationError(`El campo ${campo} es obligatorio.`);
       }
     }
+
+    // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
+    if (data.tipoMovimientoId === 1 || data.tipoMovimientoId === 2) {
+      data.formaParteCalculoEntregaARendir = true;
+    }
+
+    // Validación: Si NO es asignación Y formaParteCalculoEntregaARendir=true → asignacionOrigenId es obligatorio
+    if (
+      data.tipoMovimientoId !== 1 &&
+      data.tipoMovimientoId !== 2 &&
+      data.formaParteCalculoEntregaARendir === true &&
+      (!data.asignacionOrigenId || data.asignacionOrigenId === null)
+    ) {
+      throw new ValidationError(
+        "Debe especificar una asignación origen cuando el movimiento forma parte del cálculo de entrega a rendir.",
+      );
+    }
+
     await validarClavesForaneas(data);
     return await prisma.detMovsEntregaRendir.create({ data });
   } catch (err) {
@@ -133,6 +140,34 @@ const actualizar = async (id, data) => {
     });
     if (!existente)
       throw new NotFoundError("DetMovsEntregaRendir no encontrado");
+
+    // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
+    if (data.tipoMovimientoId === 1 || data.tipoMovimientoId === 2) {
+      data.formaParteCalculoEntregaARendir = true;
+    }
+
+    // Validación: Si NO es asignación Y formaParteCalculoEntregaARendir=true → asignacionOrigenId es obligatorio
+    const tipoMovFinal = data.tipoMovimientoId || existente.tipoMovimientoId;
+    const formaParteCalculo =
+      data.formaParteCalculoEntregaARendir !== undefined
+        ? data.formaParteCalculoEntregaARendir
+        : existente.formaParteCalculoEntregaARendir;
+    const asignacionOrigen =
+      data.asignacionOrigenId !== undefined
+        ? data.asignacionOrigenId
+        : existente.asignacionOrigenId;
+
+    if (
+      tipoMovFinal !== 1 &&
+      tipoMovFinal !== 2 &&
+      formaParteCalculo === true &&
+      (!asignacionOrigen || asignacionOrigen === null)
+    ) {
+      throw new ValidationError(
+        "Debe especificar una asignación origen cuando el movimiento forma parte del cálculo de entrega a rendir.",
+      );
+    }
+
     // Validar claves foráneas si cambian
     const claves = [
       "entregaARendirId",
@@ -146,7 +181,7 @@ const actualizar = async (id, data) => {
     if (claves.some((k) => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    
+
     // Preparar datos con SOLO campos escalares permitidos
     const datosActualizacion = {
       entregaARendirId: data.entregaARendirId,
@@ -172,11 +207,17 @@ const actualizar = async (id, data) => {
       tipoDocumentoId: data.tipoDocumentoId,
       numeroSerieComprobante: data.numeroSerieComprobante,
       numeroCorrelativoComprobante: data.numeroCorrelativoComprobante,
-      formaParteCalculoLiquidacionTripulantes: data.formaParteCalculoLiquidacionTripulantes,
+      formaParteCalculoLiquidacionTripulantes:
+        data.formaParteCalculoLiquidacionTripulantes,
       formaParteCalculoEntregaARendir: data.formaParteCalculoEntregaARendir,
+      detalleGastosPlanificados: data.detalleGastosPlanificados,
+      asignacionOrigenId: data.asignacionOrigenId,
     };
-    
-    return await prisma.detMovsEntregaRendir.update({ where: { id }, data: datosActualizacion });
+
+    return await prisma.detMovsEntregaRendir.update({
+      where: { id },
+      data: datosActualizacion,
+    });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;

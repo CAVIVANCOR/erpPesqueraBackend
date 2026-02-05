@@ -23,18 +23,18 @@ async function calcularCuotasPorEmpresa(empresaId, limiteMaximoCapturaTn) {
   const detalles = await prisma.detCuotaPesca.findMany({
     where: {
       empresaId,
-      activo: true
-    }
+      activo: true,
+    },
   });
 
   // Sumar porcentajes de cuotas propias
   const totalPropiaPorcentaje = detalles
-    .filter(d => d.cuotaPropia)
+    .filter((d) => d.cuotaPropia)
     .reduce((sum, d) => sum + Number(d.porcentajeCuota), 0);
 
   // Sumar porcentajes de cuotas alquiladas
   const totalAlquiladaPorcentaje = detalles
-    .filter(d => !d.cuotaPropia)
+    .filter((d) => !d.cuotaPropia)
     .reduce((sum, d) => sum + Number(d.porcentajeCuota), 0);
 
   // Calcular toneladas
@@ -44,7 +44,7 @@ async function calcularCuotasPorEmpresa(empresaId, limiteMaximoCapturaTn) {
 
   return {
     cuotaPropiaTon,
-    cuotaAlquiladaTon
+    cuotaAlquiladaTon,
   };
 }
 
@@ -87,7 +87,7 @@ const listar = async (filtros = {}) => {
   try {
     // Construir cláusula WHERE de forma profesional
     const where = {};
-    
+
     // Filtro por empresa (validado)
     if (filtros.empresaId !== undefined && filtros.empresaId !== null) {
       const empresaId = Number(filtros.empresaId);
@@ -95,15 +95,18 @@ const listar = async (filtros = {}) => {
         where.empresaId = empresaId;
       }
     }
-    
+
     // Filtro por estado de novedad (validado)
-    if (filtros.estadoNovedadPescaConsumoId !== undefined && filtros.estadoNovedadPescaConsumoId !== null) {
+    if (
+      filtros.estadoNovedadPescaConsumoId !== undefined &&
+      filtros.estadoNovedadPescaConsumoId !== null
+    ) {
       const estadoId = Number(filtros.estadoNovedadPescaConsumoId);
       if (!isNaN(estadoId) && estadoId > 0) {
         where.estadoNovedadPescaConsumoId = estadoId;
       }
     }
-    
+
     // Filtro por bahía (validado)
     if (filtros.bahiaId !== undefined && filtros.bahiaId !== null) {
       const bahiaId = Number(filtros.bahiaId);
@@ -111,16 +114,16 @@ const listar = async (filtros = {}) => {
         where.BahiaId = bahiaId;
       }
     }
-    
+
     // Filtro por rango de fechas (validado)
     if (filtros.fechaDesde || filtros.fechaHasta) {
       where.fechaInicio = {};
-      
+
       if (filtros.fechaDesde) {
         // Fecha de inicio >= fechaDesde
         where.fechaInicio.gte = new Date(filtros.fechaDesde);
       }
-      
+
       if (filtros.fechaHasta) {
         // Fecha de inicio <= fechaHasta (fin del día)
         const fechaHastaFin = new Date(filtros.fechaHasta);
@@ -128,23 +131,23 @@ const listar = async (filtros = {}) => {
         where.fechaInicio.lte = fechaHastaFin;
       }
     }
-    
+
     // Consulta con ordenamiento profesional y relaciones
     return await prisma.novedadPescaConsumo.findMany({
       where,
       include: {
         empresa: true,
         bahiaComercial: true,
-        estadoNovedad: true
+        estadoNovedad: true,
       },
-      orderBy: [
-        { fechaInicio: 'desc' },
-        { id: 'desc' }
-      ]
+      orderBy: [{ fechaInicio: "desc" }, { id: "desc" }],
     });
   } catch (err) {
     if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos al listar novedades de pesca consumo", err.message);
+      throw new DatabaseError(
+        "Error de base de datos al listar novedades de pesca consumo",
+        err.message,
+      );
     }
     throw err;
   }
@@ -158,7 +161,7 @@ const obtenerPorId = async (id) => {
         faenas: true,
         empresa: true,
         bahiaComercial: true,
-        estadoNovedad: true
+        estadoNovedad: true,
       },
     });
     if (!novedad) throw new NotFoundError("NovedadPescaConsumo no encontrada");
@@ -168,7 +171,7 @@ const obtenerPorId = async (id) => {
       ...novedad,
       toneladasCapturadas: novedad.faenas.reduce(
         (total, faena) => total + (parseFloat(faena.toneladasDescargadas) || 0),
-        0
+        0,
       ),
     };
   } catch (err) {
@@ -196,7 +199,10 @@ const crear = async (data) => {
 
     // Calcular cuotas automáticamente si se proporciona limiteMaximoCapturaTn
     if (data.limiteMaximoCapturaTn) {
-      const cuotas = await calcularCuotasPorEmpresa(data.empresaId, data.limiteMaximoCapturaTn);
+      const cuotas = await calcularCuotasPorEmpresa(
+        data.empresaId,
+        data.limiteMaximoCapturaTn,
+      );
       data.cuotaPropiaTon = cuotas.cuotaPropiaTon;
       data.cuotaAlquiladaTon = cuotas.cuotaAlquiladaTon;
     }
@@ -232,8 +238,9 @@ const actualizar = async (id, data) => {
     // Recalcular cuotas si cambia limiteMaximoCapturaTn o empresaId
     if (data.limiteMaximoCapturaTn || data.empresaId) {
       const empresaId = data.empresaId || existente.empresaId;
-      const limiteMaximo = data.limiteMaximoCapturaTn || existente.limiteMaximoCapturaTn;
-      
+      const limiteMaximo =
+        data.limiteMaximoCapturaTn || existente.limiteMaximoCapturaTn;
+
       if (limiteMaximo) {
         const cuotas = await calcularCuotasPorEmpresa(empresaId, limiteMaximo);
         data.cuotaPropiaTon = cuotas.cuotaPropiaTon;
@@ -249,6 +256,7 @@ const actualizar = async (id, data) => {
       "fechaInicio",
       "fechaFin",
       "estadoNovedadPescaConsumoId",
+      "unidadNegocioId",
       "toneladasCapturadas",
       "novedadPescaConsumoIniciada",
       "urlResolucionPdf",
@@ -286,7 +294,7 @@ const eliminar = async (id) => {
   try {
     if (await tieneDependencias(id)) {
       throw new ConflictError(
-        "No se puede eliminar porque tiene dependencias asociadas."
+        "No se puede eliminar porque tiene dependencias asociadas.",
       );
     }
     await prisma.novedadPescaConsumo.delete({ where: { id } });
@@ -325,18 +333,18 @@ const iniciar = async (id) => {
       where: {
         tipoProvieneDeId: 8, // Faena Pesca Consumo
         descripcion: "INICIADA",
-        cesado: false
-      }
+        cesado: false,
+      },
     });
-   
+
     if (!estadoEnProceso) {
       throw new ValidationError(
-        "No se encontró el estado 'EN PROCESO' para NOVEDAD PESCA CONSUMO. Verifique que exista en EstadoMultiFuncion con tipoProvieneDeId=7"
+        "No se encontró el estado 'EN PROCESO' para NOVEDAD PESCA CONSUMO. Verifique que exista en EstadoMultiFuncion con tipoProvieneDeId=7",
       );
     }
     if (!estadoFaenaIniciada) {
       throw new ValidationError(
-        "No se encontró el estado 'INICIADA' para FAENA PESCA CONSUMO. Verifique que exista en EstadoMultiFuncion con tipoProvieneDeId=8"
+        "No se encontró el estado 'INICIADA' para FAENA PESCA CONSUMO. Verifique que exista en EstadoMultiFuncion con tipoProvieneDeId=8",
       );
     }
 
@@ -377,19 +385,19 @@ const iniciar = async (id) => {
     // Validar que se encontraron los registros requeridos
     if (!motorista) {
       throw new ValidationError(
-        "No se encontró un motorista activo para la empresa"
+        "No se encontró un motorista activo para la empresa",
       );
     }
 
     if (!patron) {
       throw new ValidationError(
-        "No se encontró un patrón activo para la empresa"
+        "No se encontró un patrón activo para la empresa",
       );
     }
 
     if (!embarcacion) {
       throw new ValidationError(
-        "No se encontró una embarcación de tipo Pesca Consumo"
+        "No se encontró una embarcación de tipo Pesca Consumo",
       );
     }
 
@@ -486,7 +494,7 @@ const iniciar = async (id) => {
 
     if (!responsable) {
       throw new ValidationError(
-        "No se encontró al responsable PESCA DE CONSUMO"
+        "No se encontró al responsable PESCA DE CONSUMO",
       );
     }
 
@@ -502,7 +510,7 @@ const iniciar = async (id) => {
 
     if (!verificador) {
       throw new ValidationError(
-        "No se encontró al Verificador Responsable para PESCA DE CONSUMO"
+        "No se encontró al Verificador Responsable para PESCA DE CONSUMO",
       );
     }
 
@@ -622,7 +630,7 @@ const iniciar = async (id) => {
       where: { id },
       data: {
         novedadPescaConsumoIniciada: true,
-        estadoNovedadPescaConsumoId: Number(estadoEnProceso.id),  // ← AGREGAR
+        estadoNovedadPescaConsumoId: Number(estadoEnProceso.id), // ← AGREGAR
         fechaActualizacion: new Date(),
       },
     });
@@ -645,23 +653,26 @@ const iniciar = async (id) => {
   }
 };
 
-
 const finalizar = async (id) => {
   try {
-    const novedad = await prisma.novedadPescaConsumo.findUnique({ where: { id } });
-    if (!novedad) throw new NotFoundError('NovedadPescaConsumo no encontrada');
+    const novedad = await prisma.novedadPescaConsumo.findUnique({
+      where: { id },
+    });
+    if (!novedad) throw new NotFoundError("NovedadPescaConsumo no encontrada");
 
     // Buscar el estado "FINALIZADA" para Novedad Pesca Consumo
     const estadoFinalizada = await prisma.estadoMultiFuncion.findFirst({
       where: {
         tipoProvieneDeId: 7, // Novedad Pesca Consumo
         descripcion: "FINALIZADA",
-        cesado: false
-      }
+        cesado: false,
+      },
     });
 
     if (!estadoFinalizada) {
-      throw new ValidationError('No se encontró el estado "FINALIZADA" para Novedad Pesca Consumo');
+      throw new ValidationError(
+        'No se encontró el estado "FINALIZADA" para Novedad Pesca Consumo',
+      );
     }
 
     // Actualizar el estado de la novedad a "FINALIZADA"
@@ -669,34 +680,40 @@ const finalizar = async (id) => {
       where: { id: Number(id) },
       data: {
         estadoNovedadPescaConsumoId: Number(estadoFinalizada.id),
-        updatedAt: new Date()
-      }
+        updatedAt: new Date(),
+      },
     });
 
     return novedadActualizada;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
 
 const cancelar = async (id) => {
   try {
-    const novedad = await prisma.novedadPescaConsumo.findUnique({ where: { id } });
-    if (!novedad) throw new NotFoundError('NovedadPescaConsumo no encontrada');
+    const novedad = await prisma.novedadPescaConsumo.findUnique({
+      where: { id },
+    });
+    if (!novedad) throw new NotFoundError("NovedadPescaConsumo no encontrada");
 
     // Buscar el estado "CANCELADA" para Novedad Pesca Consumo
     const estadoCancelada = await prisma.estadoMultiFuncion.findFirst({
       where: {
         tipoProvieneDeId: 7, // Novedad Pesca Consumo
         descripcion: "CANCELADA",
-        cesado: false
-      }
+        cesado: false,
+      },
     });
 
     if (!estadoCancelada) {
-      throw new ValidationError('No se encontró el estado "CANCELADA" para Novedad Pesca Consumo');
+      throw new ValidationError(
+        'No se encontró el estado "CANCELADA" para Novedad Pesca Consumo',
+      );
     }
 
     // Actualizar el estado de la novedad a "CANCELADA"
@@ -704,14 +721,16 @@ const cancelar = async (id) => {
       where: { id: Number(id) },
       data: {
         estadoNovedadPescaConsumoId: Number(estadoCancelada.id),
-        updatedAt: new Date()
-      }
+        updatedAt: new Date(),
+      },
     });
 
     return novedadActualizada;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };

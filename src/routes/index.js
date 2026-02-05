@@ -222,6 +222,7 @@ import movimientoInversionRoutes from './Tesoreria/movimientoInversion.routes.js
 import tipoPrestamoRoutes from './Tesoreria/tipoPrestamo.routes.js';
 import tarifaCostoExportacionRutaRoutes from './Ventas/tarifaCostoExportacionRuta.routes.js';
 import medioPagoRoutes from '../routes/Maestros/medioPago.routes.js';
+import unidadNegocioRoutes from './Usuarios/unidadNegocio.routes.js';
 
 const router = express.Router();
 
@@ -259,6 +260,8 @@ router.use(autenticarJWT);
 router.use('/usuarios', usuarioRoutes);
 // Rutas para Personal
 router.use('/personal', personalRoutes);
+router.use('/unidades-negocio', unidadNegocioRoutes);
+
 // Rutas para CargosPersonal
 router.use('/cargos-personal', cargosPersonalRoutes);
 // Rutas para AccesosUsuario
