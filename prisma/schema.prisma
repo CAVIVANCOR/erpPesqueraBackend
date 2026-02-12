@@ -4918,7 +4918,8 @@ desembolsosPrestamo   DesembolsoPrestamo[]
 inversionesLiquidadas InversionFinanciera[]
 movimientosInversion  MovimientoInversion[]
 prestamos             PrestamoBancario[]    @relation("AsientoPrestamo")
-
+  cuentasPorCobrar      CuentaPorCobrar[]       // Relación inversa
+  cuentasPorPagar       CuentaPorPagar[]        // Relación inversa
   // ========================================
   // ÍNDICES - CRÍTICO: índice en tipoLibro para filtrado rápido
   // ========================================
@@ -5403,7 +5404,6 @@ model EnvioOSE {
   @@index([aceptadoPorSunat])
 }
 
-
 // ============================================
 // CuentaPorCobrar
 // Registro de deudas de clientes
@@ -5413,75 +5413,115 @@ model EnvioOSE {
 model CuentaPorCobrar {
   id                        BigInt      @id @default(autoincrement())
   
-  // Origen
+  // ========================================
+  // ORIGEN DEL DOCUMENTO
+  // ========================================
   preFacturaId              BigInt?     @unique                          // Opcional: PreFactura origen (null para saldos iniciales)
   empresaId                 BigInt                                       // Empresa acreedora
   clienteId                 BigInt                                       // Cliente deudor
   
-  // Documento
+  // ========================================
+  // DOCUMENTO
+  // ========================================
   numeroPreFactura          String      @db.VarChar(30)                  // Número de PreFactura o código de saldo inicial
   fechaEmision              DateTime                                     // Fecha de emisión de la deuda
   fechaVencimiento          DateTime                                     // Fecha de vencimiento del pago
   
-  // Montos almacenados (estilo SAP FI)
+  // ========================================
+  // MONTOS ALMACENADOS (estilo SAP FI)
+  // ========================================
   montoTotal                Decimal     @db.Decimal(18, 2)               // Total de la deuda original
   montoPagado               Decimal     @default(0.00) @db.Decimal(18, 2) // Se actualiza con cada pago
   saldoPendiente            Decimal     @db.Decimal(18, 2)               // montoTotal - montoPagado (se recalcula con cada pago)
   
-  // Flags especiales
+  // ========================================
+  // DETRACCIÓN SPOT (SUNAT PERÚ)
+  // ========================================
+  tieneDetraccion           Boolean     @default(false)                  // Aplica si producto está sujeto a detracción
+  montoDetraccion           Decimal     @default(0) @db.Decimal(18, 2)  // Monto detraído por el cliente
+  porcentajeDetraccion      Decimal?    @db.Decimal(5, 2)                // % de detracción (4%, 10%, 12%, etc.)
+  numeroConstanciaDetraccion String?    @db.VarChar(50)                  // Número de constancia de depósito SUNAT
+  fechaDetraccion           DateTime?                                    // Fecha de depósito de la detracción
+  
+  // ========================================
+  // RETENCIÓN (SUNAT PERÚ)
+  // ========================================
+  tieneRetencion            Boolean     @default(false)                  // Aplica si cliente es agente de retención
+  montoRetencion            Decimal     @default(0) @db.Decimal(18, 2)  // Monto retenido por el cliente (3% del IGV)
+  numeroComprobanteRetencion String?    @db.VarChar(50)                  // Número de comprobante de retención
+  fechaRetencion            DateTime?                                    // Fecha de la retención
+  
+  // ========================================
+  // PERCEPCIÓN (SUNAT PERÚ)
+  // ========================================
+  tienePercepcion           Boolean     @default(false)                  // Aplica si empresa es agente de percepción
+  montoPercepcion           Decimal     @default(0) @db.Decimal(18, 2)  // Monto adicional percibido (generalmente 2%)
+  porcentajePercepcion      Decimal?    @db.Decimal(5, 2)                // % de percepción
+  numeroComprobantePercepcion String?   @db.VarChar(50)                  // Número de comprobante de percepción
+  fechaPercepcion           DateTime?                                    // Fecha de la percepción
+  
+  // ========================================
+  // FLAGS ESPECIALES
+  // ========================================
   esSaldoInicial            Boolean     @default(false)                  // true = Saldo inicial de migración (sin PreFactura)
+  esGerencial               Boolean     @default(false)                  // true = CxC Negra (Gerencial/No SUNAT), false = CxC Blanca (Formal/SUNAT)
+  comprobanteElectronicoId  BigInt?                                      // Solo para CxC Blanca (tiene comprobante SUNAT asociado)
   
   // ========================================
-  // ⭐ CAMPOS NUEVOS - TIPO DE FACTURACIÓN
+  // MONEDA Y TIPO DE VENTA
   // ========================================
-  esGerencial               Boolean     @default(false)                  // ⭐ NUEVO: true = CxC Negra (Gerencial/No SUNAT), false = CxC Blanca (Formal/SUNAT)
-  comprobanteElectronicoId  BigInt?                                      // ⭐ NUEVO: Solo para CxC Blanca (tiene comprobante SUNAT asociado)
-  
-  // Referencia a moneda
   monedaId                  BigInt                                       // Moneda de la deuda (PEN, USD, EUR)
-  
-  // Tipo de venta
   esContado                 Boolean                                      // true = Venta al contado, false = Venta al crédito
-  
-  // Estado
   estadoId                  BigInt                                       // Estado de la CxC (PENDIENTE, PAGADA, VENCIDA, PARCIAL, ANULADA)
-  
   observaciones             String?     @db.Text                         // Observaciones generales
+
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  asientoContableId         BigInt?                                      // Asiento contable generado al crear la CxC
   
-  // Auditoría
+  // ========================================
+  // AUDITORÍA
+  // ========================================
   creadoEn                  DateTime    @default(now())                  // Fecha de creación del registro
   actualizadoEn             DateTime    @updatedAt                       // Fecha de última actualización
   
-  // Relaciones
-  preFactura                PreFactura?             @relation(fields: [preFacturaId], references: [id])              // Opcional: PreFactura origen
+  // ========================================
+  // RELACIONES
+  // ========================================
+  preFactura                PreFactura?             @relation(fields: [preFacturaId], references: [id])
   empresa                   Empresa                 @relation(fields: [empresaId], references: [id])
   cliente                   EntidadComercial        @relation(fields: [clienteId], references: [id])
   moneda                    Moneda                  @relation(fields: [monedaId], references: [id])
   estado                    EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
+  comprobanteElectronico    ComprobanteElectronico? @relation(fields: [comprobanteElectronicoId], references: [id])
+  asientoContable           AsientoContable?        @relation(fields: [asientoContableId], references: [id])
   
   // ========================================
-  // ⭐ RELACIÓN NUEVA - COMPROBANTE ELECTRÓNICO
+  // RELACIONES INVERSAS
   // ========================================
-  comprobanteElectronico    ComprobanteElectronico? @relation(fields: [comprobanteElectronicoId], references: [id])  // ⭐ NUEVO: Solo para CxC Blanca
-  
-  // Relaciones inversas
   pagos                     PagoCuentaPorCobrar[]                        // Pagos recibidos
   detallesFlujoCaja         DetalleFlujoCajaProyectado[]                 // Proyección de flujo de caja
   letrasCambio              LetraCambio[]                                // Letras de cambio generadas
   
-  // Índices
+  // ========================================
+  // ÍNDICES
+  // ========================================
   @@index([empresaId, fechaVencimiento])
   @@index([clienteId])
   @@index([estadoId])
   @@index([fechaVencimiento])
   @@index([esContado])
-  @@index([esSaldoInicial])                                              // Para filtrar saldos iniciales
-  @@index([saldoPendiente])                                              // Para reportes de cobranza
-  @@index([esGerencial])                                                 // ⭐ NUEVO: Filtrar CxC Gerenciales vs Formales
-  @@index([comprobanteElectronicoId])                                    // ⭐ NUEVO: Búsqueda por comprobante
-  @@index([preFacturaId])                                                // Búsqueda por PreFactura
+  @@index([esSaldoInicial])
+  @@index([saldoPendiente])
+  @@index([esGerencial])
+  @@index([comprobanteElectronicoId])
+  @@index([preFacturaId])
+  @@index([asientoContableId])
+  @@index([tieneDetraccion])
+  @@index([tieneRetencion])
+  @@index([tienePercepcion])
 }
-
 
 // ============================================
 // PagoCuentaPorCobrar
@@ -5527,84 +5567,136 @@ model PagoCuentaPorCobrar {
   @@index([movimientoCajaId])
 }
 
+// ============================================
+// CuentaPorPagar
+// Registro de deudas con proveedores
+// Puede originarse de OrdenCompra o ser saldo inicial
+// ============================================
+
 model CuentaPorPagar {
   id                    BigInt      @id @default(autoincrement())
   
-  // 🆕 CAMBIO: Ahora opcional para permitir saldos iniciales
-  ordenCompraId         BigInt?     @unique
-  empresaId             BigInt
-  proveedorId           BigInt
-  
-  // Documento
-  numeroOrdenCompra     String      @db.VarChar(30)
-  fechaEmision          DateTime
-  fechaVencimiento      DateTime
-  
-  // Factura del proveedor
-  numeroFacturaProveedor String?    @db.VarChar(50)
-  fechaFacturaProveedor  DateTime?
-  
-  // 🆕 NUEVO: Montos almacenados (estilo SAP FI)
-  montoTotal            Decimal     @db.Decimal(18, 2)      // Total de la deuda original
-  montoPagado           Decimal     @default(0.00) @db.Decimal(18, 2)  // Se actualiza con cada pago
-  saldoPendiente        Decimal     @db.Decimal(18, 2)      // montoTotal - montoPagado
-  
-  // 🆕 NUEVO: Flag para saldos iniciales (migración)
-  esSaldoInicial        Boolean     @default(false)
+  // ========================================
+  // ORIGEN DEL DOCUMENTO
+  // ========================================
+  ordenCompraId         BigInt?     @unique                          // Opcional: Orden de Compra origen (null para saldos iniciales)
+  empresaId             BigInt                                       // Empresa deudora
+  proveedorId           BigInt                                       // Proveedor acreedor
   
   // ========================================
-  // ⭐ NUEVO CAMPO - TIPO DE FACTURACIÓN
+  // DOCUMENTO
   // ========================================
-  esGerencial           Boolean?    @default(false)         // ⭐ NUEVO: true = CxP Negra (Gerencial), false = CxP Blanca (Formal)
+  numeroOrdenCompra     String      @db.VarChar(30)                  // Número de OC o código de saldo inicial
+  fechaEmision          DateTime                                     // Fecha de emisión de la deuda
+  fechaVencimiento      DateTime                                     // Fecha de vencimiento del pago
   
-  // Referencia a moneda
-  monedaId              BigInt
+  // ========================================
+  // FACTURA DEL PROVEEDOR
+  // ========================================
+  numeroFacturaProveedor String?    @db.VarChar(50)                  // Número de factura del proveedor
+  fechaFacturaProveedor  DateTime?                                   // Fecha de factura del proveedor
   
-  // Tipo de compra
-  esContado             Boolean
+  // ========================================
+  // MONTOS ALMACENADOS (estilo SAP FI)
+  // ========================================
+  montoTotal            Decimal     @db.Decimal(18, 2)               // Total de la deuda original
+  montoPagado           Decimal     @default(0.00) @db.Decimal(18, 2) // Se actualiza con cada pago
+  saldoPendiente        Decimal     @db.Decimal(18, 2)               // montoTotal - montoPagado
   
-  // Estado
-  estadoId              BigInt
+  // ========================================
+  // DETRACCIÓN SPOT (SUNAT PERÚ)
+  // ========================================
+  tieneDetraccion           Boolean     @default(false)              // Aplica si producto/servicio está sujeto a detracción
+  montoDetraccion           Decimal     @default(0) @db.Decimal(18, 2)  // Monto que TÚ detraes al proveedor
+  porcentajeDetraccion      Decimal?    @db.Decimal(5, 2)            // % de detracción (4%, 10%, 12%, etc.)
+  numeroConstanciaDetraccion String?    @db.VarChar(50)              // Número de constancia de depósito SUNAT
+  fechaDetraccion           DateTime?                                // Fecha de depósito de la detracción
   
-  observaciones         String?     @db.Text
+  // ========================================
+  // RETENCIÓN (SUNAT PERÚ)
+  // ========================================
+  tieneRetencion            Boolean     @default(false)              // Aplica si TÚ eres agente de retención
+  montoRetencion            Decimal     @default(0) @db.Decimal(18, 2)  // Monto que TÚ retienes al proveedor (3% del IGV)
+  numeroComprobanteRetencion String?    @db.VarChar(50)              // Número de comprobante de retención
+  fechaRetencion            DateTime?                                // Fecha de la retención
   
-  // Auditoría
-  creadoEn              DateTime    @default(now())
-  actualizadoEn         DateTime    @updatedAt
+  // ========================================
+  // PERCEPCIÓN (SUNAT PERÚ)
+  // ========================================
+  tienePercepcion           Boolean     @default(false)              // Aplica si proveedor es agente de percepción
+  montoPercepcion           Decimal     @default(0) @db.Decimal(18, 2)  // Monto adicional que TÚ pagas (generalmente 2%)
+  porcentajePercepcion      Decimal?    @db.Decimal(5, 2)            // % de percepción
+  numeroComprobantePercepcion String?   @db.VarChar(50)              // Número de comprobante de percepción
+  fechaPercepcion           DateTime?                                // Fecha de la percepción
+  
+  // ========================================
+  // FLAGS ESPECIALES
+  // ========================================
+  esSaldoInicial        Boolean     @default(false)                  // true = Saldo inicial de migración (sin OC)
+  esGerencial           Boolean?    @default(false)                  // true = CxP Negra (Gerencial), false = CxP Blanca (Formal)
+  
+  // ========================================
+  // MONEDA Y TIPO DE COMPRA
+  // ========================================
+  monedaId              BigInt                                       // Moneda de la deuda (PEN, USD, EUR)
+  esContado             Boolean                                      // true = Compra al contado, false = Compra al crédito
+  
+  // ========================================
+  // ESTADO
+  // ========================================
+  estadoId              BigInt                                       // Estado de la CxP (PENDIENTE, PAGADA, VENCIDA, PARCIAL, ANULADA)
+  
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  asientoContableId     BigInt?                                      // Asiento contable generado al crear la CxP
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?     @db.Text                         // Observaciones generales
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime    @default(now())                  // Fecha de creación del registro
+  actualizadoEn         DateTime    @updatedAt                       // Fecha de última actualización
   
   // ========================================
   // RELACIONES
   // ========================================
-  // 🆕 CAMBIO: Ahora opcional (puede no existir en saldos iniciales)
-  ordenCompra           OrdenCompra?        @relation(fields: [ordenCompraId], references: [id])
-  empresa               Empresa             @relation(fields: [empresaId], references: [id])
-  proveedor             EntidadComercial    @relation(fields: [proveedorId], references: [id])
-  moneda                Moneda              @relation(fields: [monedaId], references: [id])
-  estado                EstadoMultiFuncion  @relation(fields: [estadoId], references: [id])
-  
-  pagos                 PagoCuentaPorPagar[]
-  detallesFlujoCaja     DetalleFlujoCajaProyectado[]
-  letrasCambio          LetraCambio[]
-  retenciones           Retencion[]
-  percepciones          Percepcion[]
+  ordenCompra           OrdenCompra?            @relation(fields: [ordenCompraId], references: [id])
+  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
+  proveedor             EntidadComercial        @relation(fields: [proveedorId], references: [id])
+  moneda                Moneda                  @relation(fields: [monedaId], references: [id])
+  estado                EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
+  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
   
   // ========================================
-  // ÍNDICES EXISTENTES
+  // RELACIONES INVERSAS
+  // ========================================
+  pagos                 PagoCuentaPorPagar[]                         // Pagos realizados
+  detallesFlujoCaja     DetalleFlujoCajaProyectado[]                 // Proyección de flujo de caja
+  letrasCambio          LetraCambio[]                                // Letras de cambio generadas
+  retenciones           Retencion[]                                  // ⭐ AGREGAR ESTA LÍNEA
+  percepciones          Percepcion[]                                 // ⭐ AGREGAR ESTA LÍNEA
+  // ========================================
+  // ÍNDICES
   // ========================================
   @@index([empresaId, fechaVencimiento])
   @@index([proveedorId])
   @@index([estadoId])
   @@index([fechaVencimiento])
   @@index([esContado])
-  @@index([esSaldoInicial])      // YA EXISTE: Para filtrar saldos iniciales
-  @@index([saldoPendiente])      // YA EXISTE: Para reportes de tesorería
-  
-  // ========================================
-  // ⭐ ÍNDICE NUEVO
-  // ========================================
-  @@index([esGerencial])         // ⭐ NUEVO: Filtrar CxP Gerenciales vs Formales
+  @@index([esSaldoInicial])
+  @@index([saldoPendiente])
+  @@index([esGerencial])
+  @@index([ordenCompraId])
+  @@index([asientoContableId])
+  @@index([tieneDetraccion])
+  @@index([tieneRetencion])
+  @@index([tienePercepcion])
 }
-
 
 // ============================================
 // PagoCuentaPorPagar
