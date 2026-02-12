@@ -54,6 +54,16 @@ export async function eliminar(req, res, next) {
   }
 }
 
+export async function anular(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const anulada = await preFacturaService.anular(id);
+    res.json(toJSONBigInt(anulada));
+  } catch (err) {
+    next(err);
+  }
+}
+
 /**
  * Obtiene series de documentos filtradas
  * Query params: empresaId, tipoDocumentoId

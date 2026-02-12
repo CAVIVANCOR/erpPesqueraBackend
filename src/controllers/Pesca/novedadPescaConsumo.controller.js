@@ -99,7 +99,8 @@ export async function iniciar(req, res, next) {
 export async function finalizar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const novedad = await novedadPescaConsumoService.finalizar(id);
+    const usuarioId = req.user?.personalId ? BigInt(req.user.personalId) : null;
+    const novedad = await novedadPescaConsumoService.finalizar(id, usuarioId);
     res.json(toJSONBigInt(novedad));
   } catch (err) {
     next(err);

@@ -36,11 +36,8 @@ async function validarClavesForaneas(data) {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
   
-  if (data.movIngresoAlmacenId) {
-    validaciones.push(prisma.movimientoAlmacen.findUnique({ where: { id: data.movIngresoAlmacenId } }));
-  } else {
-    validaciones.push(Promise.resolve(true)); // placeholder
-  }
+  // movIngresoAlmacenId es gestionado automáticamente, no requiere validación
+  validaciones.push(Promise.resolve(true)); // placeholder
   
   if (data.especieId) {
     validaciones.push(prisma.especie.findUnique({ where: { id: data.especieId } }));
@@ -57,11 +54,11 @@ async function validarClavesForaneas(data) {
   if (!motorista) throw new ValidationError('El motoristaId no existe.');
   if (!bahia) throw new ValidationError('El bahiaId no existe en la tabla personal.');
   
-  // Validar campos opcionales solo si se proporcionaron
+  // Validar campos opcionales solo si se proporcionaron (y no son null)
   if (data.puertoDescargaId && !puerto) throw new ValidationError('El puertoDescargaId no existe.');
   if (data.puertoFondeoId && !puertoFondeo) throw new ValidationError('El puertoFondeoId no existe.');
   if (data.clienteId && !cliente) throw new ValidationError('El clienteId no existe.');
-  if (data.movIngresoAlmacenId && !movIngresoAlmacen) throw new ValidationError('El movIngresoAlmacenId no existe.');
+  // movIngresoAlmacenId no se valida porque es gestionado automáticamente por el sistema
   if (data.especieId && !especie) throw new ValidationError('El especieId no existe.');
 }
 
@@ -221,15 +218,22 @@ const actualizar = async (id, data) => {
       'patronId', 'motoristaId', 'bahiaId', 'movIngresoAlmacenId', 'especieId'
     ];
     if (claves.some(k => data[k] !== undefined && data[k] !== existente[k])) {
-      await validarClavesForaneas({ ...existente, ...data });
+      // Preservar movIngresoAlmacenId del existente si no está en data
+      const dataParaValidar = { ...existente, ...data };
+      if (!('movIngresoAlmacenId' in data)) {
+        dataParaValidar.movIngresoAlmacenId = existente.movIngresoAlmacenId;
+      }
+      await validarClavesForaneas(dataParaValidar);
       if (data.faenaPescaId && data.faenaPescaId !== existente.faenaPescaId) {
         await validarUnicidadFaenaPescaId(data.faenaPescaId, id);
       }
     }
     
     // Agregar timestamp automático para actualizadoEn
+    // Excluir movIngresoAlmacenId porque es gestionado automáticamente por el sistema
+    const { movIngresoAlmacenId, ...dataParaActualizar } = data;
     const dataConTimestamp = {
-      ...data,
+      ...dataParaActualizar,
       actualizadoEn: new Date()
     };
     
@@ -243,7 +247,11 @@ const actualizar = async (id, data) => {
     return descargaActualizada;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith('P')) {
+      console.error('❌ Error de base de datos en actualizar:', err);
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    console.error('❌ Error desconocido en actualizar:', err);
     throw err;
   }
 };

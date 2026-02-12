@@ -10,4 +10,7 @@ router.post('/', descargaFaenaConsumoController.crear);
 router.put('/:id', descargaFaenaConsumoController.actualizar);
 router.delete('/:id', descargaFaenaConsumoController.eliminar);
 
+// Ruta para finalizar descarga con generación de movimientos
+router.post('/:id/finalizar', descargaFaenaConsumoController.finalizarDescarga);
+
 export default router;

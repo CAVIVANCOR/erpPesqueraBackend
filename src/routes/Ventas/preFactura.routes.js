@@ -20,5 +20,6 @@ router.get('/:id', preFacturaController.obtenerPorId);
 router.post('/', preFacturaController.crear);
 router.put('/:id', preFacturaController.actualizar);
 router.delete('/:id', preFacturaController.eliminar);
+router.put('/:id/anular', preFacturaController.anular);
 
 export default router;

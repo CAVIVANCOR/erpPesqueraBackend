@@ -50,12 +50,17 @@ async function validarForaneas(data) {
 async function construirDescripcionArmada(data) {
   const partes = [];
 
-  // Prefijo si es custodia
+  // 1. Prefijo si es custodia (PRIMERO)
   if (data.esCustodia) {
     partes.push('CUSTODIA');
   }
 
-  // Tipo Concepto - Solo si es TRANSFERENCIA
+  // 2. Descripción (SEGUNDO, después de CUSTODIA)
+  if (data.descripcion) {
+    partes.push(data.descripcion);
+  }
+
+  // 3. Tipo Concepto - Solo si es TRANSFERENCIA
   if (data.tipoConceptoId) {
     const tipoConcepto = await prisma.tipoConcepto.findUnique({ where: { id: data.tipoConceptoId } });
     if (tipoConcepto && tipoConcepto.nombre === 'TRANSFERENCIA') {
@@ -63,19 +68,19 @@ async function construirDescripcionArmada(data) {
     }
   }
 
-  // Tipo Movimiento
+  // 4. Tipo Movimiento
   if (data.tipoMovimientoId) {
     const tipoMovimiento = await prisma.tipoMovimientoAlmacen.findUnique({ where: { id: data.tipoMovimientoId } });
     if (tipoMovimiento) partes.push(tipoMovimiento.nombre);
   }
 
-  // Tipo Almacén
+  // 5. Tipo Almacén
   if (data.tipoAlmacenId) {
     const tipoAlmacen = await prisma.tipoAlmacen.findUnique({ where: { id: data.tipoAlmacenId } });
     if (tipoAlmacen) partes.push(tipoAlmacen.nombre);
   }
 
-  // Almacén Origen
+  // 6. Almacén Origen
   if (data.almacenOrigenId) {
     const almacenOrigen = await prisma.almacen.findUnique({ where: { id: data.almacenOrigenId } });
     if (almacenOrigen) {
@@ -84,18 +89,13 @@ async function construirDescripcionArmada(data) {
     }
   }
 
-  // Almacén Destino
+  // 7. Almacén Destino
   if (data.almacenDestinoId) {
     const almacenDestino = await prisma.almacen.findUnique({ where: { id: data.almacenDestinoId } });
     if (almacenDestino) {
       partes.push('A');
       partes.push(almacenDestino.nombre);
     }
-  }
-
-  // Descripción
-  if (data.descripcion) {
-    partes.push(data.descripcion);
   }
 
   return partes.join(' ');
@@ -112,7 +112,10 @@ const listar = async () => {
         tipoMovimiento: true,
         tipoAlmacen: true,
         movimientos: true 
-      } 
+      },
+      orderBy: {
+        id: 'desc' // Ordenar por ID descendente (últimos primero)
+      }
     });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

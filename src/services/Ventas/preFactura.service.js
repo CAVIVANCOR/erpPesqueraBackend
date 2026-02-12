@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { validarTipoCambio } from '../../utils/tipoCambio.util.js';
 
 /**
  * Servicio CRUD para PreFactura
@@ -51,8 +52,10 @@ async function validarClavesForaneas(data) {
     prisma.formaPago.findUnique({ where: { id: data.formaPagoId } }),
     prisma.estadoMultiFuncion.findUnique({ where: { id: data.estadoId } }),
     data.serieDocId ? prisma.serieDoc.findUnique({ where: { id: data.serieDocId } }) : Promise.resolve(true),
+    data.preFacturaOrigenId ? prisma.preFactura.findUnique({ where: { id: data.preFacturaOrigenId } }) : Promise.resolve(true),
     data.cotizacionVentaId ? prisma.cotizacionVentas.findUnique({ where: { id: data.cotizacionVentaId } }) : Promise.resolve(true),
     data.movSalidaAlmacenId ? prisma.movimientoAlmacen.findUnique({ where: { id: data.movSalidaAlmacenId } }) : Promise.resolve(true),
+    data.contratoServicioId ? prisma.contratoServicio.findUnique({ where: { id: data.contratoServicioId } }) : Promise.resolve(true),
     data.paisDestinoId ? prisma.pais.findUnique({ where: { id: data.paisDestinoId } }) : Promise.resolve(true),
     data.puertoEmbarqueId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoEmbarqueId } }) : Promise.resolve(true),
     data.puertoDestinoId ? prisma.puertoPesca.findUnique({ where: { id: data.puertoDestinoId } }) : Promise.resolve(true),
@@ -62,16 +65,17 @@ async function validarClavesForaneas(data) {
     data.monedaId ? prisma.moneda.findUnique({ where: { id: data.monedaId } }) : Promise.resolve(true),
     data.centroCostoId ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }) : Promise.resolve(true)
   ];
-  const [empresa, cliente, tipoDoc, formaPago, estado, serieDoc, cotizacion, movSalida, paisDestino, puertoEmbarque, puertoDestino, incoterm, agenteAduana, banco, moneda, centroCosto] = await Promise.all(checks);
-  
+const [empresa, cliente, tipoDoc, formaPago, estado, serieDoc, preFacturaOrigen, cotizacion, movSalida, contratoServicio, paisDestino, puertoEmbarque, puertoDestino, incoterm, agenteAduana, banco, moneda, centroCosto] = await Promise.all(checks);
   if (!empresa) throw new ValidationError('El empresaId no existe.');
   if (!cliente) throw new ValidationError('El clienteId no existe.');
   if (!tipoDoc) throw new ValidationError('El tipoDocumentoId no existe.');
   if (!formaPago) throw new ValidationError('El formaPagoId no existe.');
   if (!estado) throw new ValidationError('El estadoId no existe.');
   if (data.serieDocId && !serieDoc) throw new ValidationError('El serieDocId no existe.');
+  if (data.preFacturaOrigenId && !preFacturaOrigen) throw new ValidationError('La PreFactura Origen no existe.');
   if (data.cotizacionVentaId && !cotizacion) throw new ValidationError('El cotizacionVentaId no existe.');
   if (data.movSalidaAlmacenId && !movSalida) throw new ValidationError('El movSalidaAlmacenId no existe.');
+  if (data.contratoServicioId && !contratoServicio) throw new ValidationError('El Contrato de Servicio no existe.');
   if (data.paisDestinoId && !paisDestino) throw new ValidationError('El paisDestinoId no existe.');
   if (data.puertoEmbarqueId && !puertoEmbarque) throw new ValidationError('El puertoEmbarqueId no existe.');
   if (data.puertoDestinoId && !puertoDestino) throw new ValidationError('El puertoDestinoId no existe.');
@@ -206,6 +210,12 @@ const crear = async (data) => {
       throw new ValidationError('El campo serieDocId es obligatorio.');
     }
 
+    // ✅ Validar y obtener tipo de cambio si es necesario
+    const tipoCambioFinal = await validarTipoCambio(
+      data.tipoCambio,
+      data.fechaDocumento || new Date(),
+    );
+
     // Usar transacción para generar número y actualizar correlativo atómicamente
     return await prisma.$transaction(async (tx) => {
       // 1. Generar código único
@@ -294,7 +304,7 @@ const crear = async (data) => {
         formaPagoId: data.formaPagoId,
         bancoId: data.bancoId,
         monedaId: data.monedaId,
-        tipoCambio: data.tipoCambio,
+        tipoCambio: tipoCambioFinal, // ✅ Usar valor validado
         subtotal: data.subtotal,
         totalDescuentos: data.totalDescuentos,
         totalIGV: data.totalIGV,
@@ -305,6 +315,7 @@ const crear = async (data) => {
         motivoRechazo: data.motivoRechazo,
         fechaAprobacion: data.fechaAprobacion,
         aprobadoPorId: data.aprobadoPorId,
+        preFacturaOrigenId: data.preFacturaOrigenId,
         cotizacionVentaId: data.cotizacionVentaId,
         incotermId: data.incotermId,
         puertoEmbarqueId: data.puertoEmbarqueId,
@@ -361,9 +372,17 @@ const actualizar = async (id, data) => {
       await validarUnicidadCodigo(data.codigo, id);
     }
     // Validar claves foráneas si cambian
-    const claves = ['empresaId','clienteId','tipoDocumentoId','formaPagoId','estadoId','serieDocId','cotizacionVentaId','movSalidaAlmacenId','paisDestinoId','puertoEmbarqueId','puertoDestinoId','incotermId','agenteAduanaId','bancoId','monedaId','centroCostoId'];
+    const claves = ['empresaId','clienteId','tipoDocumentoId','formaPagoId','estadoId','serieDocId','preFacturaOrigenId','cotizacionVentaId','contratoServicioId','movSalidaAlmacenId','paisDestinoId','puertoEmbarqueId','puertoDestinoId','incotermId','agenteAduanaId','bancoId','monedaId','centroCostoId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
+    }
+
+    // ✅ Validar y obtener tipo de cambio si es necesario
+    if (data.hasOwnProperty('tipoCambio')) {
+      data.tipoCambio = await validarTipoCambio(
+        data.tipoCambio,
+        data.fechaDocumento || existente.fechaDocumento,
+      );
     }
     
     // Asegurar campos de auditoría
@@ -992,6 +1011,66 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
     throw err;
   }
 };
+/**
+ * Anular una PreFactura
+ * Si tiene movimiento de almacén asociado, lo elimina
+ */
+const anular = async (id) => {
+  return await prisma.$transaction(async (tx) => {
+    try {
+      // 1. Obtener la PreFactura
+      const preFactura = await tx.preFactura.findUnique({
+        where: { id },
+        include: { detalles: true }
+      });
+
+      if (!preFactura) throw new NotFoundError('PreFactura no encontrada');
+      
+      // Verificar si ya está anulada (estadoId 40 = ANULADO)
+      if (Number(preFactura.estadoId) === 40) {
+        throw new ValidationError('La PreFactura ya está anulada');
+      }
+
+      // 2. Si tiene movimiento de almacén, eliminarlo
+      if (preFactura.movSalidaAlmacenId) {
+        const { default: eliminarMovimientoAlmacenService } =
+          await import('../Almacen/eliminarMovimientoAlmacen.service.js');
+
+        await eliminarMovimientoAlmacenService.eliminarMovimientoAlmacenCompleto(
+          preFactura.movSalidaAlmacenId,
+          tx
+        );
+      }
+
+      // 3. Actualizar PreFactura a estado ANULADO
+      const anulada = await tx.preFactura.update({
+        where: { id },
+        data: {
+          estadoId: BigInt(40), // ANULADO
+          movSalidaAlmacenId: null,
+          fechaActualizacion: new Date(),
+        },
+        include: {
+          empresa: true,
+          cliente: true,
+          tipoDocumento: true,
+          moneda: true,
+          detalles: {
+            include: {
+              producto: true,
+            },
+          },
+        },
+      });
+
+      return anulada;
+    } catch (err) {
+      if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+      if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+      throw err;
+    }
+  });
+};
 
 export default {
   listar,
@@ -1004,5 +1083,6 @@ export default {
   generarFacturaDesdePreFactura,
   generarBoletaDesdePreFactura,
   partirPreFactura,
-  facturarPreFacturaNegra
+  facturarPreFacturaNegra,
+  anular,
 };

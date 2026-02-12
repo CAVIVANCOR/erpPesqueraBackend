@@ -653,11 +653,19 @@ const iniciar = async (id) => {
   }
 };
 
-const finalizar = async (id) => {
+const finalizar = async (id, usuarioId = null) => {
   try {
     const novedad = await prisma.novedadPescaConsumo.findUnique({
       where: { id },
+      include: {
+        faenas: {
+          include: {
+            descarga: true
+          }
+        }
+      }
     });
+    
     if (!novedad) throw new NotFoundError("NovedadPescaConsumo no encontrada");
 
     // Buscar el estado "FINALIZADA" para Novedad Pesca Consumo
@@ -675,6 +683,51 @@ const finalizar = async (id) => {
       );
     }
 
+    // ============================================
+    // NUEVO: Generar movimientos y PreFactura para cada descarga
+    // ============================================
+    const resultadosDescargas = [];
+    
+    if (novedad.faenas && novedad.faenas.length > 0 && usuarioId) {
+      // Importar servicio de finalización de descargas
+      const { default: finalizarDescargaConsumoService } = 
+        await import('./finalizarDescargaConsumoConMovimientos.service.js');
+      
+      // Procesar cada faena que tenga descarga
+      for (const faena of novedad.faenas) {
+        if (faena.descarga) {
+          try {
+            console.log(`📦 Procesando descarga ID: ${faena.descarga.id} de faena ID: ${faena.id}`);
+            
+            const resultadoDescarga = await finalizarDescargaConsumoService.finalizarDescargaConsumoConMovimientos(
+              faena.descarga.id,
+              id,
+              usuarioId
+            );
+            
+            resultadosDescargas.push({
+              descargaId: faena.descarga.id,
+              faenaId: faena.id,
+              exito: true,
+              resultado: resultadoDescarga
+            });
+            
+            console.log(`✅ Descarga ${faena.descarga.id} procesada exitosamente`);
+          } catch (errorDescarga) {
+            console.error(`❌ Error procesando descarga ${faena.descarga.id}:`, errorDescarga.message);
+            
+            // Registrar error pero continuar con otras descargas
+            resultadosDescargas.push({
+              descargaId: faena.descarga.id,
+              faenaId: faena.id,
+              exito: false,
+              error: errorDescarga.message
+            });
+          }
+        }
+      }
+    }
+
     // Actualizar el estado de la novedad a "FINALIZADA"
     const novedadActualizada = await prisma.novedadPescaConsumo.update({
       where: { id: Number(id) },
@@ -684,7 +737,20 @@ const finalizar = async (id) => {
       },
     });
 
-    return novedadActualizada;
+    // Retornar resultado completo
+    const resultado = {
+      novedad: novedadActualizada,
+      descargasProcesadas: resultadosDescargas.length,
+      descargasExitosas: resultadosDescargas.filter(d => d.exito).length,
+      descargasConError: resultadosDescargas.filter(d => !d.exito).length,
+    };
+
+    // Incluir detalles si se procesaron descargas
+    if (resultadosDescargas.length > 0) {
+      resultado.detallesDescargas = resultadosDescargas;
+    }
+
+    return resultado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;

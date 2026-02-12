@@ -84,7 +84,7 @@ export async function finalizarDescargaConMovimientos(req, res, next) {
   try {
     const descargaId = BigInt(req.params.id);
     const { temporadaPescaId } = req.body;
-    const usuarioId = BigInt(req.user?.id || 1);
+    const usuarioId = req.user?.personalId ? BigInt(req.user.personalId) : null;
 
     if (!temporadaPescaId) {
       return res.status(400).json({
@@ -113,7 +113,7 @@ export async function finalizarDescargaConMovimientos(req, res, next) {
 export async function eliminarMovimientosDescarga(req, res, next) {
   try {
     const descargaId = BigInt(req.params.id);
-    const usuarioId = BigInt(req.user?.id || 1);
+    const usuarioId = req.user?.personalId ? BigInt(req.user.personalId) : null;
 
     // Importar servicio de eliminación
     const eliminarMovimientosService = await import('../../services/Pesca/eliminarMovimientosDescarga.service.js');
@@ -140,7 +140,7 @@ export async function regenerarMovimientosDescarga(req, res, next) {
   try {
     const descargaId = BigInt(req.params.id);
     const { temporadaPescaId } = req.body;
-    const usuarioId = BigInt(req.user?.id || 1);
+    const usuarioId = req.user?.personalId ? BigInt(req.user.personalId) : null;
 
     if (!temporadaPescaId) {
       return res.status(400).json({

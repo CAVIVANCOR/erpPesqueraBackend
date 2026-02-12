@@ -36,11 +36,8 @@ async function validarClavesForaneas(data) {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
   
-  if (data.movIngresoAlmacenId) {
-    validaciones.push(prisma.movimientoAlmacen.findUnique({ where: { id: data.movIngresoAlmacenId } }));
-  } else {
-    validaciones.push(Promise.resolve(true)); // placeholder
-  }
+  // movIngresoAlmacenId es gestionado automáticamente, no requiere validación
+  validaciones.push(Promise.resolve(true)); // placeholder
   
   if (data.especieId) {
     validaciones.push(prisma.especie.findUnique({ where: { id: data.especieId } }));
@@ -65,7 +62,7 @@ async function validarClavesForaneas(data) {
   if (data.puertoDescargaId && !puerto) throw new ValidationError('El puertoDescargaId no existe.');
   if (data.puertoFondeoId && !puertoFondeo) throw new ValidationError('El puertoFondeoId no existe.');
   if (data.clienteId && !cliente) throw new ValidationError('El clienteId no existe.');
-  if (data.movIngresoAlmacenId && !movIngreso) throw new ValidationError('El movIngresoAlmacenId no existe.');
+  // movIngresoAlmacenId no se valida porque es gestionado automáticamente por el sistema
   if (data.especieId && !especie) throw new ValidationError('El especieId no existe.');
   if (data.katanaTripulacionId && !katanaTripulacion) throw new ValidationError('El katanaTripulacionId no existe.');
 }
@@ -197,8 +194,10 @@ const actualizar = async (id, data) => {
     await validarClavesForaneas(data);
     
     // Agregar timestamp automático para actualizadoEn
+    // Excluir movIngresoAlmacenId porque es gestionado automáticamente por el sistema
+    const { movIngresoAlmacenId, ...dataParaActualizar } = data;
     const dataConTimestamp = {
-      ...data,
+      ...dataParaActualizar,
       actualizadoEn: new Date()
     };
     

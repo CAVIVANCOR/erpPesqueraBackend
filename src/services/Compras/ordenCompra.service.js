@@ -5,6 +5,7 @@ import {
   ValidationError,
 } from "../../utils/errors.js";
 import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
+import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
 
 async function validarForaneas(data) {
   if (data.empresaId) {
@@ -29,7 +30,7 @@ async function validarForaneas(data) {
     });
     if (!serieDoc)
       throw new ValidationError(
-        "La serie de documento referenciada no existe."
+        "La serie de documento referenciada no existe.",
       );
   }
 
@@ -47,7 +48,7 @@ async function validarForaneas(data) {
     });
     if (!req)
       throw new ValidationError(
-        "El requerimiento de compra referenciado no existe."
+        "El requerimiento de compra referenciado no existe.",
       );
   }
 }
@@ -63,6 +64,7 @@ const listar = async () => {
         proveedor: true,
         formaPago: true,
         moneda: true,
+        unidadNegocio: true,
         detalles: {
           include: {
             producto: true,
@@ -108,6 +110,7 @@ const obtenerPorId = async (id) => {
         },
         formaPago: true,
         moneda: true,
+        unidadNegocio: true,
         estado: true,
         detalles: {
           include: {
@@ -126,7 +129,7 @@ const obtenerPorId = async (id) => {
             imprimirEnOC: true,
           },
           orderBy: {
-            id: 'asc',
+            id: "asc",
           },
         },
       },
@@ -208,7 +211,7 @@ const crear = async (data) => {
   try {
     if (!data.empresaId || !data.tipoDocumentoId || !data.proveedorId) {
       throw new ValidationError(
-        "Los campos empresaId, tipoDocumentoId y proveedorId son obligatorios."
+        "Los campos empresaId, tipoDocumentoId y proveedorId son obligatorios.",
       );
     }
     if (!data.serieDocId) {
@@ -216,6 +219,12 @@ const crear = async (data) => {
     }
 
     await validarForaneas(data);
+
+    // ✅ Validar y obtener tipo de cambio si es necesario
+    const tipoCambioFinal = await validarTipoCambio(
+      data.tipoCambio,
+      data.fechaDocumento || new Date(),
+    );
 
     return await prisma.$transaction(async (tx) => {
       const empresa = await tx.empresa.findUnique({
@@ -237,11 +246,11 @@ const crear = async (data) => {
       const nuevoCorrelativo = Number(serie.correlativo) + 1;
       const numSerie = String(serie.serie).padStart(
         serie.numCerosIzqSerie,
-        "0"
+        "0",
       );
       const numCorre = String(nuevoCorrelativo).padStart(
         serie.numCerosIzqCorre,
-        "0"
+        "0",
       );
       const numeroDocumento = `${numSerie}-${numCorre}`;
 
@@ -256,7 +265,7 @@ const crear = async (data) => {
 
       if (!estadoInicial) {
         throw new ValidationError(
-          "No se encontró el estado inicial PENDIENTE (id=38)"
+          "No se encontró el estado inicial PENDIENTE (id=38)",
         );
       }
 
@@ -272,7 +281,7 @@ const crear = async (data) => {
         proveedorId: data.proveedorId,
         formaPagoId: data.formaPagoId,
         monedaId: data.monedaId,
-        tipoCambio: data.tipoCambio,
+        tipoCambio: tipoCambioFinal, // ✅ Usar valor validado
         fechaEntrega: data.fechaEntrega,
         fechaRecepcion: data.fechaRecepcion,
         solicitanteId: data.solicitanteId,
@@ -282,6 +291,7 @@ const crear = async (data) => {
         movIngresoAlmacenId: data.movIngresoAlmacenId,
         observaciones: data.observaciones,
         urlOrdenCompraPdf: data.urlOrdenCompraPdf,
+        unidadNegocioId: data.unidadNegocioId,
         creadoEn: data.creadoEn || new Date(),
         actualizadoEn: data.actualizadoEn || new Date(),
         creadoPor: data.creadoPor,
@@ -305,7 +315,8 @@ const crear = async (data) => {
         fechaFacturacion: data.fechaFacturacion,
         esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
         ordenCompraOrigenId: data.ordenCompraOrigenId,
-        esParticionada: data.esParticionada !== undefined ? data.esParticionada : false,
+        esParticionada:
+          data.esParticionada !== undefined ? data.esParticionada : false,
       };
       const ordenCreada = await tx.ordenCompra.create({
         data: datosLimpios,
@@ -315,6 +326,7 @@ const crear = async (data) => {
           serieDoc: true,
           proveedor: true,
           moneda: true,
+          unidadNegocio: true,
         },
       });
 
@@ -339,6 +351,14 @@ const actualizar = async (id, data) => {
 
     await validarForaneas(data);
 
+    // ✅ Validar y obtener tipo de cambio si es necesario
+    if (data.hasOwnProperty("tipoCambio")) {
+      data.tipoCambio = await validarTipoCambio(
+        data.tipoCambio,
+        data.fechaDocumento || existe.fechaDocumento,
+      );
+    }
+
     const actualizado = await prisma.$transaction(async (tx) => {
       // Objeto para edición (CON relaciones para validación)
       const dataParaEdicion = {
@@ -360,6 +380,7 @@ const actualizar = async (id, data) => {
         aprobadoPorId: data.aprobadoPorId,
         estadoId: data.estadoId,
         centroCostoId: data.centroCostoId,
+        unidadNegocioId: data.unidadNegocioId,
         movIngresoAlmacenId: data.movIngresoAlmacenId,
         observaciones: data.observaciones,
         urlOrdenCompraPdf: data.urlOrdenCompraPdf,
@@ -401,6 +422,7 @@ const actualizar = async (id, data) => {
         aprobadoPorId: data.aprobadoPorId,
         estadoId: data.estadoId,
         centroCostoId: data.centroCostoId,
+        unidadNegocioId: data.unidadNegocioId,
         movIngresoAlmacenId: data.movIngresoAlmacenId,
         observaciones: data.observaciones,
         urlOrdenCompraPdf: data.urlOrdenCompraPdf,
@@ -432,6 +454,7 @@ const actualizar = async (id, data) => {
           serieDoc: true,
           proveedor: true,
           moneda: true,
+          unidadNegocio: true,
           detalles: {
             include: {
               producto: true,
@@ -534,21 +557,21 @@ const aprobar = async (id) => {
 
     if (Number(orden.estadoId) !== 38) {
       throw new ValidationError(
-        "Solo se pueden aprobar órdenes en estado PENDIENTE"
+        "Solo se pueden aprobar órdenes en estado PENDIENTE",
       );
     }
 
     // ⭐ VALIDACIÓN OBLIGATORIA: Contacto del Proveedor
     if (!orden.contactoProveedorId) {
       throw new ValidationError(
-        "Debe seleccionar un contacto del proveedor antes de aprobar la orden de compra"
+        "Debe seleccionar un contacto del proveedor antes de aprobar la orden de compra",
       );
     }
 
     // ⭐ VALIDACIÓN OBLIGATORIA: Dirección de Recepción de Mercadería
     if (!orden.direccionRecepcionAlmacenId) {
       throw new ValidationError(
-        "Debe seleccionar una dirección de recepción de mercadería antes de aprobar la orden de compra"
+        "Debe seleccionar una dirección de recepción de mercadería antes de aprobar la orden de compra",
       );
     }
 
@@ -559,13 +582,13 @@ const aprobar = async (id) => {
 
     if (!direccion) {
       throw new ValidationError(
-        "La dirección de recepción seleccionada no existe"
+        "La dirección de recepción seleccionada no existe",
       );
     }
 
     if (!direccion.conceptoAlmacenCompraId) {
       throw new ValidationError(
-        "La dirección de recepción no tiene un concepto de almacén de compra configurado. Por favor, configure el concepto de almacén en la dirección."
+        "La dirección de recepción no tiene un concepto de almacén de compra configurado. Por favor, configure el concepto de almacén en la dirección.",
       );
     }
 
@@ -579,7 +602,7 @@ const aprobar = async (id) => {
 
     if (!parametroAprobador) {
       throw new ValidationError(
-        "No se encontró un aprobador configurado para el módulo de Compras en esta empresa"
+        "No se encontró un aprobador configurado para el módulo de Compras en esta empresa",
       );
     }
 
@@ -627,13 +650,12 @@ const anular = async (id) => {
 
       // ✅ SI TIENE KARDEX, USAR FUNCIÓN GENÉRICA
       if (orden.movIngresoAlmacenId) {
-        const { default: eliminarMovimientoAlmacenService } = await import(
-          "../Almacen/eliminarMovimientoAlmacen.service.js"
-        );
+        const { default: eliminarMovimientoAlmacenService } =
+          await import("../Almacen/eliminarMovimientoAlmacen.service.js");
 
         await eliminarMovimientoAlmacenService.eliminarMovimientoAlmacenCompleto(
           orden.movIngresoAlmacenId,
-          tx
+          tx,
         );
       }
 
@@ -678,8 +700,13 @@ const calcularPesoDetalle = (detalle) => {
   }
 
   // Si el producto tiene unidad de medida con factor de conversión
-  if (detalle.producto.unidadMedida && detalle.producto.unidadMedida.factorConversion) {
-    const factorConversion = Number(detalle.producto.unidadMedida.factorConversion);
+  if (
+    detalle.producto.unidadMedida &&
+    detalle.producto.unidadMedida.factorConversion
+  ) {
+    const factorConversion = Number(
+      detalle.producto.unidadMedida.factorConversion,
+    );
     const cantidad = Number(detalle.cantidad);
     return cantidad * factorConversion;
   }
@@ -694,7 +721,7 @@ const calcularPesoDetalle = (detalle) => {
  * 2. Si tiene más de una → buscar almacenPrincipal=true
  * 3. Si hay varias principales → asignar la primera
  * 4. Si no hay principal → asignar la primera activa
- * 
+ *
  * @param {BigInt} proveedorId - ID del proveedor
  * @param {Object} tx - Transacción de Prisma
  * @returns {BigInt|null} - ID de la dirección o null
@@ -707,7 +734,7 @@ const obtenerDireccionProveedor = async (proveedorId, tx) => {
       activo: true,
     },
     orderBy: {
-      id: 'asc',
+      id: "asc",
     },
   });
 
@@ -722,7 +749,9 @@ const obtenerDireccionProveedor = async (proveedorId, tx) => {
   }
 
   // Si tiene más de una, buscar la principal (almacenPrincipal=true)
-  const direccionPrincipal = direcciones.find(d => d.almacenPrincipal === true);
+  const direccionPrincipal = direcciones.find(
+    (d) => d.almacenPrincipal === true,
+  );
 
   // Si encontró una principal, retornarla
   if (direccionPrincipal) {
@@ -760,26 +789,26 @@ const generarKardex = async (id, usuarioId) => {
 
       if (Number(orden.estadoId) !== 39) {
         throw new ValidationError(
-          "Solo se puede generar kardex para órdenes aprobadas"
+          "Solo se puede generar kardex para órdenes aprobadas",
         );
       }
 
       if (orden.movIngresoAlmacenId) {
         throw new ValidationError(
-          "Esta orden ya tiene un movimiento de almacén generado"
+          "Esta orden ya tiene un movimiento de almacén generado",
         );
       }
 
       if (!orden.detalles || orden.detalles.length === 0) {
         throw new ValidationError(
-          "La orden no tiene detalles para generar el kardex"
+          "La orden no tiene detalles para generar el kardex",
         );
       }
 
       // ⭐ VALIDAR que tenga dirección de recepción
       if (!orden.direccionRecepcionAlmacenId) {
         throw new ValidationError(
-          "La orden no tiene dirección de recepción configurada"
+          "La orden no tiene dirección de recepción configurada",
         );
       }
 
@@ -791,14 +820,12 @@ const generarKardex = async (id, usuarioId) => {
       });
 
       if (!direccion) {
-        throw new ValidationError(
-          "La dirección de recepción no existe"
-        );
+        throw new ValidationError("La dirección de recepción no existe");
       }
 
       if (!direccion.conceptoAlmacenCompraId) {
         throw new ValidationError(
-          "La dirección de recepción no tiene concepto de almacén de compra configurado"
+          "La dirección de recepción no tiene concepto de almacén de compra configurado",
         );
       }
 
@@ -814,7 +841,7 @@ const generarKardex = async (id, usuarioId) => {
 
       if (!parametroAprobador || !parametroAprobador.personalRespId) {
         throw new ValidationError(
-          "No se encontró responsable de almacén configurado"
+          "No se encontró responsable de almacén configurado",
         );
       }
 
@@ -823,7 +850,7 @@ const generarKardex = async (id, usuarioId) => {
       // ========================================
       if (!orden.serieDoc || !orden.serieDoc.serie) {
         throw new ValidationError(
-          "La orden de compra no tiene serie configurada"
+          "La orden de compra no tiene serie configurada",
         );
       }
 
@@ -838,14 +865,17 @@ const generarKardex = async (id, usuarioId) => {
 
       if (!serieMovAlmacen) {
         throw new ValidationError(
-          `No se encontró una serie de Nota de Ingreso activa para la empresa ${orden.empresaId} con la serie "${orden.serieDoc.serie}"`
+          `No se encontró una serie de Nota de Ingreso activa para la empresa ${orden.empresaId} con la serie "${orden.serieDoc.serie}"`,
         );
       }
 
       // ========================================
       // PASO 4.5: OBTENER DIRECCIÓN ORIGEN (PROVEEDOR)
       // ========================================
-      const direccionOrigenId = await obtenerDireccionProveedor(orden.proveedorId, tx);
+      const direccionOrigenId = await obtenerDireccionProveedor(
+        orden.proveedorId,
+        tx,
+      );
 
       // ========================================
       // PASO 5: PREPARAR CABECERA DEL MOVIMIENTO
@@ -896,12 +926,13 @@ const generarKardex = async (id, usuarioId) => {
       // ========================================
       // PASO 7: CREAR MOVIMIENTO DE ALMACÉN CON KARDEX
       // ========================================
-      const resultado = await crearMovimientoAlmacenService.crearMovimientoAlmacenCompleto(
-        cabecera,
-        detalles,
-        usuarioId,
-        tx // Pasar la transacción actual
-      );
+      const resultado =
+        await crearMovimientoAlmacenService.crearMovimientoAlmacenCompleto(
+          cabecera,
+          detalles,
+          usuarioId,
+          tx, // Pasar la transacción actual
+        );
 
       // ========================================
       // PASO 8: ACTUALIZAR ORDEN DE COMPRA
@@ -941,7 +972,6 @@ const generarKardex = async (id, usuarioId) => {
   }
 };
 
-
 /**
  * Regenera el kardex de una orden de compra
  * Elimina el movimiento existente y crea uno nuevo
@@ -974,16 +1004,15 @@ const regenerarKardex = async (id, usuarioId) => {
       // ✅ Validar que la orden esté APROBADA (39) y tenga kardex generado
       if (Number(orden.estadoId) !== 39) {
         throw new ValidationError(
-          "Solo se puede regenerar kardex de órdenes aprobadas"
+          "Solo se puede regenerar kardex de órdenes aprobadas",
         );
       }
 
       if (!orden.movIngresoAlmacenId) {
         throw new ValidationError(
-          "La orden no tiene movimiento de almacén asociado para regenerar"
+          "La orden no tiene movimiento de almacén asociado para regenerar",
         );
       }
-
 
       // ========================================
       // PASO 2: RESETEAR ORDEN A ESTADO APROBADO
@@ -1000,23 +1029,20 @@ const regenerarKardex = async (id, usuarioId) => {
       // ========================================
       // PASO 3: ELIMINAR MOVIMIENTO EXISTENTE
       // ========================================
-      const { default: eliminarMovimientoAlmacenService } = await import(
-        "../Almacen/eliminarMovimientoAlmacen.service.js"
-      );
+      const { default: eliminarMovimientoAlmacenService } =
+        await import("../Almacen/eliminarMovimientoAlmacen.service.js");
 
       await eliminarMovimientoAlmacenService.eliminarMovimientoAlmacenCompleto(
         orden.movIngresoAlmacenId,
-        tx
+        tx,
       );
-
-      
 
       // ========================================
       // PASO 4: VALIDAR DIRECCIÓN Y CONCEPTO
       // ========================================
       if (!orden.direccionRecepcionAlmacenId) {
         throw new ValidationError(
-          "La orden no tiene dirección de recepción configurada"
+          "La orden no tiene dirección de recepción configurada",
         );
       }
 
@@ -1030,7 +1056,7 @@ const regenerarKardex = async (id, usuarioId) => {
 
       if (!direccion.conceptoAlmacenCompraId) {
         throw new ValidationError(
-          "La dirección de recepción no tiene concepto de almacén de compra configurado"
+          "La dirección de recepción no tiene concepto de almacén de compra configurado",
         );
       }
 
@@ -1046,7 +1072,7 @@ const regenerarKardex = async (id, usuarioId) => {
 
       if (!parametroAprobador || !parametroAprobador.personalRespId) {
         throw new ValidationError(
-          "No se encontró responsable de almacén configurado"
+          "No se encontró responsable de almacén configurado",
         );
       }
 
@@ -1055,7 +1081,7 @@ const regenerarKardex = async (id, usuarioId) => {
       // ========================================
       if (!orden.serieDoc || !orden.serieDoc.serie) {
         throw new ValidationError(
-          "La orden de compra no tiene serie configurada"
+          "La orden de compra no tiene serie configurada",
         );
       }
 
@@ -1070,14 +1096,17 @@ const regenerarKardex = async (id, usuarioId) => {
 
       if (!serieMovAlmacen) {
         throw new ValidationError(
-          `No se encontró una serie de Nota de Ingreso activa para la empresa ${orden.empresaId} con la serie "${orden.serieDoc.serie}"`
+          `No se encontró una serie de Nota de Ingreso activa para la empresa ${orden.empresaId} con la serie "${orden.serieDoc.serie}"`,
         );
       }
 
       // ========================================
       // PASO 6.5: OBTENER DIRECCIÓN ORIGEN (PROVEEDOR)
       // ========================================
-      const direccionOrigenId = await obtenerDireccionProveedor(orden.proveedorId, tx);
+      const direccionOrigenId = await obtenerDireccionProveedor(
+        orden.proveedorId,
+        tx,
+      );
 
       // ========================================
       // PASO 7: PREPARAR CABECERA DEL MOVIMIENTO
@@ -1128,12 +1157,13 @@ const regenerarKardex = async (id, usuarioId) => {
       // ========================================
       // PASO 9: CREAR NUEVO MOVIMIENTO CON KARDEX
       // ========================================
-      const resultado = await crearMovimientoAlmacenService.crearMovimientoAlmacenCompleto(
-        cabecera,
-        detalles,
-        usuarioId,
-        tx
-      );
+      const resultado =
+        await crearMovimientoAlmacenService.crearMovimientoAlmacenCompleto(
+          cabecera,
+          detalles,
+          usuarioId,
+          tx,
+        );
 
       // ========================================
       // PASO 10: ACTUALIZAR ORDEN CON NUEVO MOVIMIENTO
@@ -1196,7 +1226,7 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
 
       if (requerimiento.estadoId !== BigInt(35)) {
         throw new ValidationError(
-          "Solo se pueden generar órdenes desde requerimientos aprobados"
+          "Solo se pueden generar órdenes desde requerimientos aprobados",
         );
       }
 
@@ -1212,7 +1242,7 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
             throw new ValidationError(
               `El detalle del producto ${
                 detalle.producto?.nombre || detalle.productoId
-              } no tiene proveedor asignado`
+              } no tiene proveedor asignado`,
             );
           }
 
@@ -1228,7 +1258,7 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
             tx,
             requerimiento,
             BigInt(proveedorId),
-            detalles
+            detalles,
           );
           ordenesGeneradas.push(orden);
         }
@@ -1275,7 +1305,7 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
 
         if (itemsPorProveedorMoneda.size === 0) {
           throw new ValidationError(
-            "No hay items seleccionados para generar órdenes de compra"
+            "No hay items seleccionados para generar órdenes de compra",
           );
         }
 
@@ -1285,7 +1315,7 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
             requerimiento,
             data.proveedorId,
             data.monedaId,
-            data.detalles
+            data.detalles,
           );
           ordenesGeneradas.push(orden);
         }
@@ -1314,7 +1344,7 @@ async function crearOrdenCompraDirecta(
   tx,
   requerimiento,
   proveedorId,
-  detalles
+  detalles,
 ) {
   const serieOrden = await tx.serieDoc.findFirst({
     where: {
@@ -1329,18 +1359,18 @@ async function crearOrdenCompraDirecta(
   if (!serieOrden) {
     throw new ValidationError(
       `No se encontró una serie activa para Orden de Compra con los criterios: ` +
-        `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`
+        `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`,
     );
   }
 
   const nuevoCorrelativo = Number(serieOrden.correlativo) + 1;
   const numSerie = String(serieOrden.serie).padStart(
     serieOrden.numCerosIzqSerie,
-    "0"
+    "0",
   );
   const numCorre = String(nuevoCorrelativo).padStart(
     serieOrden.numCerosIzqCorre,
-    "0"
+    "0",
   );
   const numeroDocumento = `${numSerie}-${numCorre}`;
 
@@ -1367,6 +1397,8 @@ async function crearOrdenCompraDirecta(
       solicitanteId: requerimiento.solicitanteId,
       estadoId: BigInt(38),
       centroCostoId: requerimiento.centroCostoId,
+      unidadNegocioId: requerimiento.unidadNegocioId,
+      observaciones: requerimiento.observaciones,
       porcentajeIGV: requerimiento.porcentajeIGV,
       esExoneradoAlIGV: requerimiento.esExoneradoAlIGV,
       detalles: {
@@ -1396,7 +1428,7 @@ async function crearOrdenCompraConCotizacion(
   requerimiento,
   proveedorId,
   monedaId,
-  detallesCotizacion
+  detallesCotizacion,
 ) {
   const serieOrden = await tx.serieDoc.findFirst({
     where: {
@@ -1411,18 +1443,18 @@ async function crearOrdenCompraConCotizacion(
   if (!serieOrden) {
     throw new ValidationError(
       `No se encontró una serie activa para Orden de Compra con los criterios: ` +
-        `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`
+        `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`,
     );
   }
 
   const nuevoCorrelativo = Number(serieOrden.correlativo) + 1;
   const numSerie = String(serieOrden.serie).padStart(
     serieOrden.numCerosIzqSerie,
-    "0"
+    "0",
   );
   const numCorre = String(nuevoCorrelativo).padStart(
     serieOrden.numCerosIzqCorre,
-    "0"
+    "0",
   );
   const numeroDocumento = `${numSerie}-${numCorre}`;
 
@@ -1449,6 +1481,8 @@ async function crearOrdenCompraConCotizacion(
       solicitanteId: requerimiento.solicitanteId,
       estadoId: BigInt(38),
       centroCostoId: requerimiento.centroCostoId,
+      unidadNegocioId: requerimiento.unidadNegocioId,
+      observaciones: requerimiento.observaciones,
       porcentajeIGV: requerimiento.porcentajeIGV,
       esExoneradoAlIGV: requerimiento.esExoneradoAlIGV,
       detalles: {

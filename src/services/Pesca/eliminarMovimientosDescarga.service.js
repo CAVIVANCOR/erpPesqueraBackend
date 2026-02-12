@@ -38,9 +38,59 @@ const eliminarMovimientosDescarga = async (descargaId, usuarioId) => {
       }
 
       const movimientosEliminados = [];
+      let preFacturaEliminada = null;
 
       // ============================================
-      // PASO 2: ELIMINAR MOVIMIENTO DE SALIDA (PRIMERO)
+      // PASO 2: ELIMINAR PREFACTURA ASOCIADA (SI EXISTE)
+      // ============================================
+      
+      if (descarga.movSalidaAlmacenId) {
+        // Buscar PreFactura asociada al movimiento de salida
+        const preFactura = await tx.preFactura.findFirst({
+          where: { movSalidaAlmacenId: descarga.movSalidaAlmacenId },
+          include: { 
+            detalles: true,
+            estadoDoc: true
+          }
+        });
+
+        if (preFactura) {
+          // Validar que la PreFactura esté en estado PENDIENTE (id=45)
+          if (Number(preFactura.estadoId) !== 45) {
+            const estadoNombre = preFactura.estadoDoc?.descripcion || 'Desconocido';
+            throw new ValidationError(
+              `No se puede eliminar la PreFactura ${preFactura.numeroDocumento} porque está en estado "${estadoNombre}". ` +
+              `Solo se pueden eliminar PreFacturas en estado PENDIENTE.`
+            );
+          }
+
+          try {
+            // Eliminar detalles de PreFactura
+            await tx.detallePreFactura.deleteMany({
+              where: { preFacturaId: preFactura.id }
+            });
+            console.log(`✅ Eliminados ${preFactura.detalles.length} detalle(s) de PreFactura ${preFactura.codigo}`);
+
+            // Eliminar PreFactura
+            await tx.preFactura.delete({
+              where: { id: preFactura.id }
+            });
+            console.log(`✅ PreFactura ${preFactura.codigo} eliminada`);
+
+            preFacturaEliminada = {
+              id: preFactura.id,
+              codigo: preFactura.codigo,
+              numeroDocumento: preFactura.numeroDocumento
+            };
+          } catch (error) {
+            console.error('❌ Error eliminando PreFactura:', error);
+            throw new ValidationError(`Error al eliminar PreFactura: ${error.message}`);
+          }
+        }
+      }
+
+      // ============================================
+      // PASO 3: ELIMINAR MOVIMIENTO DE SALIDA
       // ============================================
       
       if (descarga.movSalidaAlmacenId) {
@@ -61,7 +111,7 @@ const eliminarMovimientosDescarga = async (descargaId, usuarioId) => {
       }
 
       // ============================================
-      // PASO 3: ELIMINAR MOVIMIENTO DE INGRESO (DESPUÉS)
+      // PASO 4: ELIMINAR MOVIMIENTO DE INGRESO (DESPUÉS)
       // ============================================
       
       if (descarga.movIngresoAlmacenId) {
@@ -98,13 +148,16 @@ const eliminarMovimientosDescarga = async (descargaId, usuarioId) => {
       // PASO 5: RETORNAR RESULTADO
       // ============================================
       
+      const mensaje = `Se eliminaron ${movimientosEliminados.length} movimiento(s) de almacén exitosamente.${preFacturaEliminada ? ` PreFactura ${preFacturaEliminada.numeroDocumento} eliminada.` : ''} Los saldos fueron regenerados.`;
+      
       return {
         descarga: {
           id: descarga.id,
           faenaPescaId: descarga.faenaPescaId
         },
         movimientosEliminados: movimientosEliminados,
-        mensaje: `Se eliminaron ${movimientosEliminados.length} movimiento(s) de almacén exitosamente. Los saldos fueron regenerados.`
+        preFacturaEliminada: preFacturaEliminada,
+        mensaje: mensaje
       };
 
     } catch (error) {
@@ -147,6 +200,29 @@ const regenerarMovimientosDescarga = async (descargaId, temporadaPescaId, usuari
 
       if (!descarga.movIngresoAlmacenId && !descarga.movSalidaAlmacenId) {
         throw new ValidationError('Esta descarga no tiene movimientos de almacén para regenerar. Use la función de finalizar descarga.');
+      }
+
+      // ============================================
+      // PASO 1.5: VALIDAR ESTADO DE PREFACTURA (SI EXISTE)
+      // ============================================
+      
+      if (descarga.movSalidaAlmacenId) {
+        const preFactura = await tx.preFactura.findFirst({
+          where: { movSalidaAlmacenId: descarga.movSalidaAlmacenId },
+          include: { estadoDoc: true }
+        });
+
+        if (preFactura) {
+          // Validar que la PreFactura esté en estado PENDIENTE (id=45)
+          if (Number(preFactura.estadoId) !== 45) {
+            const estadoNombre = preFactura.estadoDoc?.descripcion || 'Desconocido';
+            throw new ValidationError(
+              `No se pueden regenerar los movimientos porque la PreFactura ${preFactura.numeroDocumento} está en estado "${estadoNombre}". ` +
+              `Solo se pueden regenerar movimientos si la PreFactura está en estado PENDIENTE. ` +
+              `Si la PreFactura ya fue aprobada o facturada, no se puede modificar.`
+            );
+          }
+        }
       }
 
       // ============================================

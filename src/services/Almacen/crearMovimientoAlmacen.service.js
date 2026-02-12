@@ -182,6 +182,7 @@ const crearMovimientoAlmacenCompleto = async (
           personalRespAlmacen: cabecera.personalRespAlmacen || null,
           ordenCompraId: cabecera.ordenCompraId || null,
           pedidoVentaId: cabecera.pedidoVentaId || null,
+          unidadNegocioId: cabecera.unidadNegocioId || null,
           observaciones: cabecera.observaciones || null,
           
           detalles: {

@@ -52,3 +52,32 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Finaliza una descarga de consumo y genera automáticamente:
+ * - Movimiento de INGRESO (De MEGUI a Almacén)
+ * - Movimiento de SALIDA (De Almacén a Cliente)
+ * - PreFactura (si existe precio configurado)
+ * - Kardex para ambos movimientos
+ */
+export async function finalizarDescarga(req, res, next) {
+  try {
+    const descargaId = Number(req.params.id);
+    const { novedadPescaConsumoId } = req.body;
+    const usuarioId = req.user?.personalId ? BigInt(req.user.personalId) : null;
+
+    // Importar el servicio de finalización
+    const { default: finalizarDescargaConsumoService } = 
+      await import('../../services/Pesca/finalizarDescargaConsumoConMovimientos.service.js');
+
+    const resultado = await finalizarDescargaConsumoService.finalizarDescargaConsumoConMovimientos(
+      descargaId,
+      novedadPescaConsumoId,
+      usuarioId
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

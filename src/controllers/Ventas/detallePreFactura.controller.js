@@ -7,6 +7,15 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  */
 export async function listar(req, res, next) {
   try {
+    const { preFacturaId } = req.query;
+    
+    // Si viene preFacturaId, filtrar por ese ID
+    if (preFacturaId) {
+      const dets = await detallePreFacturaService.obtenerPorPreFactura(BigInt(preFacturaId));
+      return res.json(toJSONBigInt(dets));
+    }
+    
+    // Si no, devolver todos
     const dets = await detallePreFacturaService.listar();
     res.json(toJSONBigInt(dets));
   } catch (err) {

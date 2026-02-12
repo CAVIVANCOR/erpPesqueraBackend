@@ -61,7 +61,8 @@ export async function login(username, password) {
     esSuperUsuario: usuario.esSuperUsuario,
     esAdmin: usuario.esAdmin,
     esUsuario: usuario.esUsuario,
-    empresaId: usuario.empresaId.toString()
+    empresaId: usuario.empresaId.toString(),
+    personalId: usuario.personalId ? usuario.personalId.toString() : null  // ⭐ AGREGAR
   };
   const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
@@ -141,7 +142,8 @@ export async function refrescarAccessToken(refreshTokenString) {
     esSuperUsuario: usuario.esSuperUsuario,
     esAdmin: usuario.esAdmin,
     esUsuario: usuario.esUsuario,
-    empresaId: usuario.empresaId.toString()
+    empresaId: usuario.empresaId.toString(),
+    personalId: usuario.personalId ? usuario.personalId.toString() : null
   };
   const nuevoToken = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
   return { token: nuevoToken };

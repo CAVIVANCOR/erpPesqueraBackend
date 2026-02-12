@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { validarTipoCambio } from '../../utils/tipoCambio.util.js';
 
 /**
  * Servicio CRUD para ContratoServicio
@@ -192,6 +193,12 @@ const crear = async (data) => {
       );
     }
 
+    // ✅ Validar y obtener tipo de cambio si es necesario
+    const tipoCambioFinal = await validarTipoCambio(
+      data.tipoCambio,
+      data.fechaCelebracion || new Date(),
+    );
+
     // Usar transacción para generar número y actualizar correlativo atómicamente
     return await prisma.$transaction(async (tx) => {
       // 1. Validar existencia de empresa
@@ -269,7 +276,7 @@ const crear = async (data) => {
         porcentajeRecargoLuz: data.porcentajeRecargoLuz,
         costoPorKilovatio: data.costoPorKilovatio,
         monedaId,
-        tipoCambio: data.tipoCambio,
+        tipoCambio: tipoCambioFinal, // ✅ Usar valor validado
         estadoContratoId,
         creadoPor,
         creadoEn: data.creadoEn || new Date(),
@@ -332,6 +339,14 @@ const actualizar = async (id, data) => {
     if (data.aprobadorId && data.aprobadorId !== existente.aprobadorId) {
       const aprobador = await prisma.personal.findUnique({ where: { id: data.aprobadorId } });
       if (!aprobador) throw new ValidationError('Aprobador no existente.');
+    }
+
+    // ✅ Validar y obtener tipo de cambio si es necesario
+    if (data.hasOwnProperty('tipoCambio')) {
+      data.tipoCambio = await validarTipoCambio(
+        data.tipoCambio,
+        data.fechaCelebracion || existente.fechaCelebracion,
+      );
     }
 
     // Extraer y remover campos que no deben actualizarse

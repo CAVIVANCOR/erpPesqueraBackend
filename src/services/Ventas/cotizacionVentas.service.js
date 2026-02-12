@@ -1,5 +1,11 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
+import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
 
 /**
  * Servicio CRUD para CotizacionVentas
@@ -15,28 +21,28 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 async function generarCodigoCotizacion(empresaId, version = 1) {
   const año = new Date().getFullYear();
-  
+
   // Buscar la última cotización del año (solo versión 1)
   const ultimaCotizacion = await prisma.cotizacionVentas.findFirst({
     where: {
       empresaId,
       codigo: {
         startsWith: `COT-${año}-`,
-        endsWith: '-V1'
+        endsWith: "-V1",
       },
-      version: 1
+      version: 1,
     },
-    orderBy: { id: 'desc' }
+    orderBy: { id: "desc" },
   });
 
   let correlativo = 1;
   if (ultimaCotizacion) {
     // Extraer el correlativo del código: COT-2024-000001-V1
-    const partes = ultimaCotizacion.codigo.split('-');
+    const partes = ultimaCotizacion.codigo.split("-");
     correlativo = parseInt(partes[2]) + 1;
   }
 
-  return `COT-${año}-${String(correlativo).padStart(6, '0')}-V${version}`;
+  return `COT-${año}-${String(correlativo).padStart(6, "0")}-V${version}`;
 }
 
 /**
@@ -62,26 +68,27 @@ const listar = async () => {
         tipoContenedor: true,
         detallesProductos: {
           include: {
-            producto: true
-          }
+            producto: true,
+          },
         },
         costosExportacion: {
           include: {
             producto: true,
-            moneda: true
-          }
+            moneda: true,
+          },
         },
         documentosRequeridos: {
           include: {
             docRequeridaVentas: true,
-            moneda: true
-          }
-        }
+            moneda: true,
+          },
+        },
       },
-      orderBy: { fechaDocumento: 'desc' }
+      orderBy: { fechaDocumento: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -115,26 +122,26 @@ const obtenerPorId = async (id) => {
             producto: {
               include: {
                 familia: true,
-                unidadMedida: true
-              }
-            }
+                unidadMedida: true,
+              },
+            },
           },
-          orderBy: { item: 'asc' }
+          orderBy: { item: "asc" },
         },
         costosExportacion: {
           include: {
             producto: true,
             moneda: true,
             proveedor: true,
-            movimientoEntregaRendir: true
+            movimientoEntregaRendir: true,
           },
-          orderBy: { orden: 'asc' }
+          orderBy: { orden: "asc" },
         },
         documentosRequeridos: {
           include: {
             docRequeridaVentas: true,
-            moneda: true
-          }
+            moneda: true,
+          },
         },
         entregaARendir: {
           include: {
@@ -142,17 +149,18 @@ const obtenerPorId = async (id) => {
               include: {
                 tipoMovimiento: true,
                 producto: true,
-                moneda: true
-              }
-            }
-          }
-        }
-      }
+                moneda: true,
+              },
+            },
+          },
+        },
+      },
     });
-    if (!cotizacion) throw new NotFoundError('Cotización no encontrada');
+    if (!cotizacion) throw new NotFoundError("Cotización no encontrada");
     return cotizacion;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -168,12 +176,13 @@ const obtenerPorCliente = async (clienteId) => {
         empresa: true,
         moneda: true,
         incoterms: true,
-        tipoProducto: true
+        tipoProducto: true,
       },
-      orderBy: { fechaDocumento: 'desc' }
+      orderBy: { fechaDocumento: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -184,13 +193,27 @@ const obtenerPorCliente = async (clienteId) => {
 const crear = async (data) => {
   try {
     // Validar campos obligatorios
-    if (!data.empresaId || !data.clienteId || !data.tipoDocumentoId || !data.monedaId || !data.formaPagoId) {
-      throw new ValidationError('Faltan campos obligatorios: empresaId, clienteId, tipoDocumentoId, monedaId, formaPagoId');
+    if (
+      !data.empresaId ||
+      !data.clienteId ||
+      !data.tipoDocumentoId ||
+      !data.monedaId ||
+      !data.formaPagoId
+    ) {
+      throw new ValidationError(
+        "Faltan campos obligatorios: empresaId, clienteId, tipoDocumentoId, monedaId, formaPagoId",
+      );
     }
-    
+
     if (!data.serieDocId) {
-      throw new ValidationError('El campo serieDocId es obligatorio.');
+      throw new ValidationError("El campo serieDocId es obligatorio.");
     }
+
+    // ✅ Validar y obtener tipo de cambio si es necesario
+    const tipoCambioFinal = await validarTipoCambio(
+      data.tipoCambio,
+      data.fechaDocumento || new Date(),
+    );
 
     // Usar transacción para generar número y actualizar correlativo atómicamente
     return await prisma.$transaction(async (tx) => {
@@ -202,46 +225,60 @@ const crear = async (data) => {
       }
 
       // 2. Validar existencia de empresa
-      const empresa = await tx.empresa.findUnique({ where: { id: data.empresaId } });
-      if (!empresa) throw new ValidationError('Empresa no existente.');
+      const empresa = await tx.empresa.findUnique({
+        where: { id: data.empresaId },
+      });
+      if (!empresa) throw new ValidationError("Empresa no existente.");
 
       // 3. Validar existencia de cliente
-      const cliente = await tx.entidadComercial.findUnique({ where: { id: data.clienteId } });
-      if (!cliente) throw new ValidationError('Cliente no existente.');
+      const cliente = await tx.entidadComercial.findUnique({
+        where: { id: data.clienteId },
+      });
+      if (!cliente) throw new ValidationError("Cliente no existente.");
 
       // 4. Validar Incoterm si se proporciona
       if (data.incotermsId) {
-        const incoterm = await tx.incoterm.findUnique({ where: { id: data.incotermsId } });
-        if (!incoterm) throw new ValidationError('Incoterm no existente.');
+        const incoterm = await tx.incoterm.findUnique({
+          where: { id: data.incotermsId },
+        });
+        if (!incoterm) throw new ValidationError("Incoterm no existente.");
       }
 
       // 5. Obtener la serie seleccionada
       const serie = await tx.serieDoc.findUnique({
-        where: { id: BigInt(data.serieDocId) }
+        where: { id: BigInt(data.serieDocId) },
       });
-      
+
       if (!serie) {
-        throw new ValidationError('Serie de documento no encontrada.');
+        throw new ValidationError("Serie de documento no encontrada.");
       }
-      
+
       // 6. Calcular nuevo correlativo
       const nuevoCorrelativo = Number(serie.correlativo) + 1;
-      
+
       // 7. Generar números con formato
-      const numSerie = String(serie.serie).padStart(serie.numCerosIzqSerie, '0');
-      const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, '0');
+      const numSerie = String(serie.serie).padStart(
+        serie.numCerosIzqSerie,
+        "0",
+      );
+      const numCorre = String(nuevoCorrelativo).padStart(
+        serie.numCerosIzqCorre,
+        "0",
+      );
       const numeroDocumento = `${numSerie}-${numCorre}`;
-      
+
       // 8. Actualizar el correlativo en SerieDoc
       await tx.serieDoc.update({
         where: { id: BigInt(data.serieDocId) },
-        data: { correlativo: BigInt(nuevoCorrelativo) }
+        data: { correlativo: BigInt(nuevoCorrelativo) },
       });
 
       // 9. Calcular fechaVencimiento si no viene (30 días después de fechaDocumento)
       let fechaVencimiento = data.fechaVencimiento;
       if (!fechaVencimiento) {
-        const fechaDoc = data.fechaDocumento ? new Date(data.fechaDocumento) : new Date();
+        const fechaDoc = data.fechaDocumento
+          ? new Date(data.fechaDocumento)
+          : new Date();
         fechaVencimiento = new Date(fechaDoc);
         fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
       }
@@ -290,7 +327,7 @@ const crear = async (data) => {
         formaPagoId: data.formaPagoId,
         bancoId: data.bancoId,
         monedaId: data.monedaId,
-        tipoCambio: data.tipoCambio,
+        tipoCambio: tipoCambioFinal, // ✅ Usar valor validado
         esExportacion: data.esExportacion,
         paisDestinoId: data.paisDestinoId,
         incotermsId: data.incotermsId,
@@ -329,6 +366,7 @@ const crear = async (data) => {
         urlCotizacionPdf: data.urlCotizacionPdf,
         urlDocumentacionRequeridaPdf: data.urlDocumentacionRequeridaPdf,
         centroCostoId: data.centroCostoId,
+        unidadNegocioId: data.unidadNegocioId,
         fechaCreacion: data.fechaCreacion || new Date(),
         fechaActualizacion: data.fechaActualizacion || new Date(),
         creadoPor: data.creadoPor,
@@ -345,15 +383,17 @@ const crear = async (data) => {
           serieDoc: true,
           moneda: true,
           formaPago: true,
-          incoterms: true
-        }
+          incoterms: true,
+        },
       });
 
       return cotizacionCreada;
     });
   } catch (err) {
-    if (err instanceof ValidationError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof ValidationError || err instanceof ConflictError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -363,23 +403,39 @@ const crear = async (data) => {
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.cotizacionVentas.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Cotización no encontrada');
+    const existente = await prisma.cotizacionVentas.findUnique({
+      where: { id },
+    });
+    if (!existente) throw new NotFoundError("Cotización no encontrada");
 
     // Validar referencias si cambian
     if (data.empresaId && data.empresaId !== existente.empresaId) {
-      const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
-      if (!empresa) throw new ValidationError('Empresa no existente.');
+      const empresa = await prisma.empresa.findUnique({
+        where: { id: data.empresaId },
+      });
+      if (!empresa) throw new ValidationError("Empresa no existente.");
     }
 
     if (data.clienteId && data.clienteId !== existente.clienteId) {
-      const cliente = await prisma.entidadComercial.findUnique({ where: { id: data.clienteId } });
-      if (!cliente) throw new ValidationError('Cliente no existente.');
+      const cliente = await prisma.entidadComercial.findUnique({
+        where: { id: data.clienteId },
+      });
+      if (!cliente) throw new ValidationError("Cliente no existente.");
     }
 
     if (data.incotermsId && data.incotermsId !== existente.incotermsId) {
-      const incoterm = await prisma.incoterm.findUnique({ where: { id: data.incotermsId } });
-      if (!incoterm) throw new ValidationError('Incoterm no existente.');
+      const incoterm = await prisma.incoterm.findUnique({
+        where: { id: data.incotermsId },
+      });
+      if (!incoterm) throw new ValidationError("Incoterm no existente.");
+    }
+
+    // ✅ Validar y obtener tipo de cambio si es necesario
+    if (data.hasOwnProperty("tipoCambio")) {
+      data.tipoCambio = await validarTipoCambio(
+        data.tipoCambio,
+        data.fechaDocumento || existente.fechaDocumento,
+      );
     }
 
     // Extraer y remover campos que no deben actualizarse
@@ -401,7 +457,8 @@ const actualizar = async (id, data) => {
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...dataSinCamposInmutables,
-      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      fechaCreacion:
+        data.fechaCreacion || existente.fechaCreacion || new Date(),
       creadoPor: data.creadoPor || existente.creadoPor || null,
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
@@ -419,8 +476,8 @@ const actualizar = async (id, data) => {
           serieDoc: true,
           moneda: true,
           formaPago: true,
-          incoterms: true
-        }
+          incoterms: true,
+        },
       });
 
       // 2. Procesar documentos si vienen en el payload
@@ -431,38 +488,46 @@ const actualizar = async (id, data) => {
             await tx.detDocsReqCotizaVentas.update({
               where: { id: BigInt(doc.id) },
               data: {
-                docRequeridaVentasId: doc.docRequeridaVentasId ? BigInt(doc.docRequeridaVentasId) : undefined,
+                docRequeridaVentasId: doc.docRequeridaVentasId
+                  ? BigInt(doc.docRequeridaVentasId)
+                  : undefined,
                 numeroDocumento: doc.numeroDocumento,
                 urlDocumento: doc.urlDocumento,
                 fechaEmision: doc.fechaEmision,
                 fechaVencimiento: doc.fechaVencimiento,
                 esObligatorio: doc.esObligatorio,
                 verificado: doc.verificado,
-                fechaVerificacion: doc.verificado ? (doc.fechaVerificacion || new Date()) : null,
+                fechaVerificacion: doc.verificado
+                  ? doc.fechaVerificacion || new Date()
+                  : null,
                 verificadoPorId: doc.verificadoPorId,
                 observacionesVerificacion: doc.observacionesVerificacion,
                 costoDocumento: doc.costoDocumento,
                 monedaId: doc.monedaId ? BigInt(doc.monedaId) : null,
-              }
+              },
             });
           } else {
             // Crear nuevo documento
             await tx.detDocsReqCotizaVentas.create({
               data: {
                 cotizacionVentasId: id,
-                docRequeridaVentasId: doc.docRequeridaVentasId ? BigInt(doc.docRequeridaVentasId) : undefined,
+                docRequeridaVentasId: doc.docRequeridaVentasId
+                  ? BigInt(doc.docRequeridaVentasId)
+                  : undefined,
                 numeroDocumento: doc.numeroDocumento,
                 urlDocumento: doc.urlDocumento,
                 fechaEmision: doc.fechaEmision,
                 fechaVencimiento: doc.fechaVencimiento,
                 esObligatorio: doc.esObligatorio || false,
                 verificado: doc.verificado || false,
-                fechaVerificacion: doc.verificado ? (doc.fechaVerificacion || new Date()) : null,
+                fechaVerificacion: doc.verificado
+                  ? doc.fechaVerificacion || new Date()
+                  : null,
                 verificadoPorId: doc.verificadoPorId,
                 observacionesVerificacion: doc.observacionesVerificacion,
                 costoDocumento: doc.costoDocumento,
                 monedaId: doc.monedaId ? BigInt(doc.monedaId) : null,
-              }
+              },
             });
           }
         }
@@ -471,8 +536,10 @@ const actualizar = async (id, data) => {
       return cotizacionActualizada;
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -489,33 +556,47 @@ const eliminar = async (id) => {
         costosExportacion: true,
         documentosRequeridos: true,
         entregaARendir: true,
-        versiones: true
-      }
+        versiones: true,
+      },
     });
-    if (!existente) throw new NotFoundError('Cotización no encontrada');
+    if (!existente) throw new NotFoundError("Cotización no encontrada");
 
     // Validar que no tenga dependencias
     if (existente.detallesProductos && existente.detallesProductos.length > 0) {
-      throw new ConflictError('No se puede eliminar porque tiene productos asociados.');
+      throw new ConflictError(
+        "No se puede eliminar porque tiene productos asociados.",
+      );
     }
     if (existente.costosExportacion && existente.costosExportacion.length > 0) {
-      throw new ConflictError('No se puede eliminar porque tiene costos de exportación asociados.');
+      throw new ConflictError(
+        "No se puede eliminar porque tiene costos de exportación asociados.",
+      );
     }
-    if (existente.documentosRequeridos && existente.documentosRequeridos.length > 0) {
-      throw new ConflictError('No se puede eliminar porque tiene documentos requeridos asociados.');
+    if (
+      existente.documentosRequeridos &&
+      existente.documentosRequeridos.length > 0
+    ) {
+      throw new ConflictError(
+        "No se puede eliminar porque tiene documentos requeridos asociados.",
+      );
     }
     if (existente.entregaARendir) {
-      throw new ConflictError('No se puede eliminar porque tiene una entrega a rendir asociada.');
+      throw new ConflictError(
+        "No se puede eliminar porque tiene una entrega a rendir asociada.",
+      );
     }
     if (existente.versiones && existente.versiones.length > 0) {
-      throw new ConflictError('No se puede eliminar porque tiene versiones asociadas.');
+      throw new ConflictError(
+        "No se puede eliminar porque tiene versiones asociadas.",
+      );
     }
 
     await prisma.cotizacionVentas.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -532,17 +613,18 @@ const crearVersion = async (cotizacionPadreId, data) => {
       include: {
         detallesProductos: true,
         costosExportacion: true,
-        documentosRequeridos: true
-      }
+        documentosRequeridos: true,
+      },
     });
 
-    if (!cotizacionPadre) throw new NotFoundError('Cotización padre no encontrada');
+    if (!cotizacionPadre)
+      throw new NotFoundError("Cotización padre no encontrada");
 
     // Extraer el correlativo base del código padre
     // COT-2024-000001-V1 → extraer "COT-2024-000001"
-    const partesCodigo = cotizacionPadre.codigo.split('-V');
+    const partesCodigo = cotizacionPadre.codigo.split("-V");
     const codigoBase = partesCodigo[0]; // "COT-2024-000001"
-    
+
     // Incrementar versión
     const nuevaVersion = cotizacionPadre.version + 1;
     const nuevoCodigo = `${codigoBase}-V${nuevaVersion}`;
@@ -554,7 +636,7 @@ const crearVersion = async (cotizacionPadreId, data) => {
         version: nuevaVersion,
         cotizacionPadreId,
         fechaCreacion: new Date(),
-        fechaActualizacion: new Date()
+        fechaActualizacion: new Date(),
       },
       include: {
         empresa: true,
@@ -562,14 +644,16 @@ const crearVersion = async (cotizacionPadreId, data) => {
         tipoDocumento: true,
         serieDoc: true,
         moneda: true,
-        incoterms: true
-      }
+        incoterms: true,
+      },
     });
 
     return nuevaCotizacion;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -586,22 +670,23 @@ const crearVersion = async (cotizacionPadreId, data) => {
 const obtenerSeriesDoc = async (empresaId, tipoDocumentoId) => {
   try {
     const where = {
-      activo: true // Solo series activas
+      activo: true, // Solo series activas
     };
-    
+
     if (empresaId) where.empresaId = BigInt(empresaId);
     if (tipoDocumentoId) where.tipoDocumentoId = BigInt(tipoDocumentoId);
-    
+
     const series = await prisma.serieDoc.findMany({
       where,
       orderBy: {
-        serie: 'asc'
-      }
+        serie: "asc",
+      },
     });
-    
+
     return series;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -619,44 +704,46 @@ const cargarCostosSegunIncoterm = async (cotizacionId) => {
     const cotizacion = await prisma.cotizacionVentas.findUnique({
       where: { id: cotizacionId },
       include: {
-        costosExportacion: true
-      }
+        costosExportacion: true,
+      },
     });
 
     if (!cotizacion) {
-      throw new NotFoundError('Cotización no encontrada');
+      throw new NotFoundError("Cotización no encontrada");
     }
 
     if (!cotizacion.incotermsId) {
-      throw new ValidationError('La cotización no tiene un Incoterm seleccionado');
+      throw new ValidationError(
+        "La cotización no tiene un Incoterm seleccionado",
+      );
     }
 
     // 2. Obtener los costos configurados para el Incoterm con todas las relaciones
     const costosIncoterm = await prisma.costoExportacionPorIncoterm.findMany({
       where: {
         incotermId: cotizacion.incotermsId,
-        activo: true
+        activo: true,
       },
       include: {
         producto: true,
         proveedorDefault: true,
         monedaDefault: true,
-        documentoAsociado: true
+        documentoAsociado: true,
       },
       orderBy: {
-        orden: 'asc'
-      }
+        orden: "asc",
+      },
     });
 
     if (costosIncoterm.length === 0) {
       throw new ValidationError(
-        'No hay costos de exportación configurados para el Incoterm seleccionado'
+        "No hay costos de exportación configurados para el Incoterm seleccionado",
       );
     }
 
     // 3. Crear mapa de costos existentes por productoId
     const costosExistentesMap = new Map(
-      cotizacion.costosExportacion.map(c => [Number(c.productoId), c])
+      cotizacion.costosExportacion.map((c) => [Number(c.productoId), c]),
     );
 
     // 4. Procesar costos: crear o actualizar según corresponda
@@ -676,7 +763,7 @@ const cargarCostosSegunIncoterm = async (cotizacionId) => {
           proveedorId: costoIncoterm.proveedorDefaultId || null,
           requiereDocumento: costoIncoterm.requiereDocumento || false,
           documentoAsociadoId: costoIncoterm.documentoAsociadoId || null,
-          fechaActualizacion: new Date()
+          fechaActualizacion: new Date(),
         };
 
         if (costoExistente) {
@@ -686,23 +773,22 @@ const cargarCostosSegunIncoterm = async (cotizacionId) => {
             data: datosBase,
             include: {
               producto: true,
-              moneda: true
-            }
+              moneda: true,
+            },
           });
           actualizados.push(costoActualizado);
         } else {
           // Crear nuevo costo con valores por defecto del Incoterm
           const monedaId = costoIncoterm.monedaDefaultId || cotizacion.monedaId;
-          const montoEstimado = costoIncoterm.valorVentaDefault 
-            ? Number(costoIncoterm.valorVentaDefault) 
+          const montoEstimado = costoIncoterm.valorVentaDefault
+            ? Number(costoIncoterm.valorVentaDefault)
             : 0;
-          
+
           // Calcular tipo de cambio y monto en moneda base
-          const tipoCambio = monedaId === cotizacion.monedaId 
-            ? 1 
-            : (cotizacion.tipoCambio || 1);
+          const tipoCambio =
+            monedaId === cotizacion.monedaId ? 1 : cotizacion.tipoCambio || 1;
           const montoEstimadoMonedaBase = montoEstimado * tipoCambio;
-          
+
           const nuevoCosto = await tx.costosExportacionCotizacion.create({
             data: {
               cotizacionVentasId: cotizacionId,
@@ -712,13 +798,13 @@ const cargarCostosSegunIncoterm = async (cotizacionId) => {
               tipoCambioAplicado: tipoCambio,
               montoEstimadoMonedaBase: montoEstimadoMonedaBase,
               ...datosBase,
-              fechaCreacion: new Date()
+              fechaCreacion: new Date(),
             },
             include: {
               producto: true,
               moneda: true,
-              proveedor: true
-            }
+              proveedor: true,
+            },
           });
           creados.push(nuevoCosto);
         }
@@ -732,8 +818,8 @@ const cargarCostosSegunIncoterm = async (cotizacionId) => {
     if (err instanceof NotFoundError || err instanceof ValidationError) {
       throw err;
     }
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -752,20 +838,22 @@ const generarDocumentosRequeridos = async (cotizacionId, usuarioId) => {
     const cotizacion = await prisma.cotizacionVentas.findUnique({
       where: { id: cotizacionId },
       include: {
-        moneda: true
-      }
+        moneda: true,
+      },
     });
 
     if (!cotizacion) {
-      throw new NotFoundError('Cotización no encontrada');
+      throw new NotFoundError("Cotización no encontrada");
     }
 
     if (!cotizacion.esExportacion) {
-      throw new ValidationError('Esta cotización no es de exportación');
+      throw new ValidationError("Esta cotización no es de exportación");
     }
 
     if (!cotizacion.paisDestinoId || !cotizacion.tipoProductoId) {
-      throw new ValidationError('La cotización debe tener país destino y tipo de producto definidos');
+      throw new ValidationError(
+        "La cotización debe tener país destino y tipo de producto definidos",
+      );
     }
 
     // 2. Buscar documentos requeridos según país y tipo de producto
@@ -774,34 +862,37 @@ const generarDocumentosRequeridos = async (cotizacionId, usuarioId) => {
         paisId: cotizacion.paisDestinoId,
         OR: [
           { tipoProductoId: cotizacion.tipoProductoId },
-          { tipoProductoId: null } // Documentos universales
+          { tipoProductoId: null }, // Documentos universales
         ],
-        esObligatorio: true
+        esObligatorio: true,
       },
       include: {
         docRequeridaVentas: {
           include: {
-            moneda: true
-          }
-        }
-      }
+            moneda: true,
+          },
+        },
+      },
     });
 
     if (requisitos.length === 0) {
       return {
         documentosCreados: [],
         documentosExistentes: [],
-        mensaje: 'No se encontraron documentos requeridos para este país y tipo de producto'
+        mensaje:
+          "No se encontraron documentos requeridos para este país y tipo de producto",
       };
     }
 
     // 3. Obtener documentos ya existentes en la cotización
     const documentosExistentes = await prisma.detDocsReqCotizaVentas.findMany({
       where: { cotizacionVentasId: cotizacionId },
-      select: { docRequeridaVentasId: true }
+      select: { docRequeridaVentasId: true },
     });
 
-    const idsExistentes = new Set(documentosExistentes.map(d => d.docRequeridaVentasId.toString()));
+    const idsExistentes = new Set(
+      documentosExistentes.map((d) => d.docRequeridaVentasId.toString()),
+    );
 
     // 4. Crear solo los documentos que no existen
     const documentosCreados = [];
@@ -814,7 +905,7 @@ const generarDocumentosRequeridos = async (cotizacionId, usuarioId) => {
         documentosYaExistentes.push({
           id: docId,
           nombre: requisito.docRequeridaVentas.nombre,
-          mensaje: 'Ya existe en la cotización'
+          mensaje: "Ya existe en la cotización",
         });
         continue;
       }
@@ -825,19 +916,20 @@ const generarDocumentosRequeridos = async (cotizacionId, usuarioId) => {
           cotizacionVentasId: cotizacionId,
           docRequeridaVentasId: docId,
           esObligatorio: requisito.esObligatorio,
-          monedaId: requisito.docRequeridaVentas.monedaId || cotizacion.monedaId,
+          monedaId:
+            requisito.docRequeridaVentas.monedaId || cotizacion.monedaId,
           costoDocumento: requisito.docRequeridaVentas.costoEstimado || 0,
           observacionesVerificacion: requisito.observaciones,
           verificado: false,
           fechaCreacion: new Date(),
           fechaActualizacion: new Date(),
           creadoPor: usuarioId,
-          actualizadoPor: usuarioId
+          actualizadoPor: usuarioId,
         },
         include: {
           docRequeridaVentas: true,
-          moneda: true
-        }
+          moneda: true,
+        },
       });
 
       documentosCreados.push({
@@ -846,7 +938,7 @@ const generarDocumentosRequeridos = async (cotizacionId, usuarioId) => {
         nombre: requisito.docRequeridaVentas.nombre,
         esObligatorio: requisito.esObligatorio,
         costoDocumento: nuevoDoc.costoDocumento,
-        moneda: nuevoDoc.moneda.simbolo || 'USD'
+        moneda: nuevoDoc.moneda.simbolo || "USD",
       });
     }
 
@@ -855,15 +947,17 @@ const generarDocumentosRequeridos = async (cotizacionId, usuarioId) => {
       documentosExistentes: documentosYaExistentes,
       totalCreados: documentosCreados.length,
       totalExistentes: documentosYaExistentes.length,
-      mensaje: `Se crearon ${documentosCreados.length} documentos. ${documentosYaExistentes.length} ya existían.`
+      mensaje: `Se crearon ${documentosCreados.length} documentos. ${documentosYaExistentes.length} ya existían.`,
     };
-
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) {
       throw err;
     }
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos al generar documentos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError(
+        "Error de base de datos al generar documentos",
+        err.message,
+      );
     }
     throw err;
   }
@@ -879,5 +973,5 @@ export default {
   crearVersion,
   obtenerSeriesDoc,
   cargarCostosSegunIncoterm,
-  generarDocumentosRequeridos
+  generarDocumentosRequeridos,
 };
