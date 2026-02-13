@@ -11,8 +11,10 @@ router.get('/series-doc', preFacturaController.obtenerSeriesDoc);
 // ========================================
 router.post('/:id/generar-factura', preFacturaController.generarFactura);
 router.post('/:id/generar-boleta', preFacturaController.generarBoleta);
-router.post('/:id/partir', preFacturaController.partirPreFactura);
+router.put('/:id/partir', preFacturaController.partirPreFactura);
 router.post('/:id/facturar-negra', preFacturaController.facturarPreFacturaNegra);
+router.post('/:id/facturar-blanca', preFacturaController.facturarPreFacturaBlanca);
+router.put('/:id/aprobar', preFacturaController.aprobar);
 
 // Rutas CRUD para PreFactura
 router.get('/', preFacturaController.listar);

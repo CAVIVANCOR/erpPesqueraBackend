@@ -23,6 +23,13 @@ async function validarCuentaPorPagar(data) {
     if (!orden) throw new ValidationError('La orden de compra referenciada no existe.');
   }
 
+  if (data.asientoContableId) {
+    const asiento = await prisma.asientoContable.findUnique({ 
+      where: { id: data.asientoContableId } 
+    });
+    if (!asiento) throw new ValidationError('El asiento contable referenciado no existe.');
+  }
+
   if (data.monedaId) {
     const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
     if (!moneda) throw new ValidationError('La moneda referenciada no existe.');
@@ -43,6 +50,26 @@ async function validarCuentaPorPagar(data) {
 
   if (data.montoPagado !== undefined && data.montoTotal !== undefined && data.montoPagado > data.montoTotal) {
     throw new ValidationError('El monto pagado no puede ser mayor al monto total.');
+  }
+
+  if (data.montoDetraccion !== undefined && data.montoDetraccion < 0) {
+    throw new ValidationError('El monto de detracción no puede ser negativo.');
+  }
+
+  if (data.montoRetencion !== undefined && data.montoRetencion < 0) {
+    throw new ValidationError('El monto de retención no puede ser negativo.');
+  }
+
+  if (data.montoPercepcion !== undefined && data.montoPercepcion < 0) {
+    throw new ValidationError('El monto de percepción no puede ser negativo.');
+  }
+
+  if (data.porcentajeDetraccion !== undefined && (data.porcentajeDetraccion < 0 || data.porcentajeDetraccion > 100)) {
+    throw new ValidationError('El porcentaje de detracción debe estar entre 0 y 100.');
+  }
+
+  if (data.porcentajePercepcion !== undefined && (data.porcentajePercepcion < 0 || data.porcentajePercepcion > 100)) {
+    throw new ValidationError('El porcentaje de percepción debe estar entre 0 y 100.');
   }
 }
 
@@ -109,6 +136,12 @@ const crear = async (data) => {
       montoPagado: data.montoPagado || 0,
       saldoPendiente: (data.montoTotal || 0) - (data.montoPagado || 0),
       esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
+      tieneDetraccion: data.tieneDetraccion || false,
+      montoDetraccion: data.montoDetraccion || 0,
+      tieneRetencion: data.tieneRetencion || false,
+      montoRetencion: data.montoRetencion || 0,
+      tienePercepcion: data.tienePercepcion || false,
+      montoPercepcion: data.montoPercepcion || 0,
       fechaActualizacion: new Date()
     };
 

@@ -25,6 +25,13 @@ async function validarCuentaPorCobrar(data) {
     if (!comprobante) throw new ValidationError('El comprobante electrónico referenciado no existe.');
   }
 
+  if (data.asientoContableId) {
+    const asiento = await prisma.asientoContable.findUnique({ 
+      where: { id: data.asientoContableId } 
+    });
+    if (!asiento) throw new ValidationError('El asiento contable referenciado no existe.');
+  }
+
   if (data.monedaId) {
     const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
     if (!moneda) throw new ValidationError('La moneda referenciada no existe.');
@@ -46,7 +53,63 @@ async function validarCuentaPorCobrar(data) {
   if (data.montoPagado !== undefined && data.montoTotal !== undefined && data.montoPagado > data.montoTotal) {
     throw new ValidationError('El monto pagado no puede ser mayor al monto total.');
   }
+
+  if (data.montoDetraccion !== undefined && data.montoDetraccion < 0) {
+    throw new ValidationError('El monto de detracción no puede ser negativo.');
+  }
+
+  if (data.montoRetencion !== undefined && data.montoRetencion < 0) {
+    throw new ValidationError('El monto de retención no puede ser negativo.');
+  }
+
+  if (data.montoPercepcion !== undefined && data.montoPercepcion < 0) {
+    throw new ValidationError('El monto de percepción no puede ser negativo.');
+  }
+
+  if (data.porcentajeDetraccion !== undefined && (data.porcentajeDetraccion < 0 || data.porcentajeDetraccion > 100)) {
+    throw new ValidationError('El porcentaje de detracción debe estar entre 0 y 100.');
+  }
+
+  if (data.porcentajePercepcion !== undefined && (data.porcentajePercepcion < 0 || data.porcentajePercepcion > 100)) {
+    throw new ValidationError('El porcentaje de percepción debe estar entre 0 y 100.');
+  }
 }
+
+/**
+ * Calcula el estado automático de una Cuenta por Cobrar
+ * Estados automáticos: 100, 101, 102, 103
+ * Estados manuales (se respetan): 104 (ANULADO), 105 (CANJEADO)
+ */
+const calcularEstadoCxC = (montoTotal, montoPagado, saldoPendiente, fechaVencimiento, estadoActual = null) => {
+  // Si el estado actual es ANULADO (104) o CANJEADO (105), NO recalcular
+  if (estadoActual && (Number(estadoActual) === 104 || Number(estadoActual) === 105)) {
+    return estadoActual;
+  }
+
+  const total = Number(montoTotal || 0);
+  const pagado = Number(montoPagado || 0);
+  const saldo = Number(saldoPendiente || 0);
+  const hoy = new Date();
+  const vencimiento = fechaVencimiento ? new Date(fechaVencimiento) : null;
+
+  // 103 - VENCIDO: Ya pasó la fecha de vencimiento y aún hay saldo pendiente
+  if (vencimiento && vencimiento < hoy && saldo > 0) {
+    return BigInt(103);
+  }
+
+  // 102 - PAGADO: Saldo pendiente es 0 y se pagó al menos el total
+  if (saldo === 0 && pagado >= total) {
+    return BigInt(102);
+  }
+
+  // 101 - PAGO PARCIAL: Hay al menos un pago pero aún queda saldo
+  if (pagado > 0 && saldo > 0) {
+    return BigInt(101);
+  }
+
+  // 100 - PENDIENTE DE PAGO: No hay ningún pago (estado por defecto)
+  return BigInt(100);
+};
 
 const listar = async () => {
   try {
@@ -100,16 +163,35 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    if (!data.empresaId || !data.clienteId || !data.fechaEmision || !data.montoTotal || !data.monedaId || !data.estadoId) {
+    if (!data.empresaId || !data.clienteId || !data.fechaEmision || !data.montoTotal || !data.monedaId) {
       throw new ValidationError('Faltan campos obligatorios.');
     }
 
     await validarCuentaPorCobrar(data);
 
+    const montoPagado = data.montoPagado || 0;
+    const saldoPendiente = (data.montoTotal || 0) - montoPagado;
+
+    // Calcular estado automáticamente (solo si no es ANULADO o CANJEADO)
+    const estadoCalculado = calcularEstadoCxC(
+      data.montoTotal,
+      montoPagado,
+      saldoPendiente,
+      data.fechaVencimiento,
+      data.estadoId
+    );
+
     const cuentaData = {
       ...data,
-      montoPagado: data.montoPagado || 0,
-      saldoPendiente: (data.montoTotal || 0) - (data.montoPagado || 0),
+      montoPagado,
+      saldoPendiente,
+      estadoId: estadoCalculado,
+      tieneDetraccion: data.tieneDetraccion || false,
+      montoDetraccion: data.montoDetraccion || 0,
+      tieneRetencion: data.tieneRetencion || false,
+      montoRetencion: data.montoRetencion || 0,
+      tienePercepcion: data.tienePercepcion || false,
+      montoPercepcion: data.montoPercepcion || 0,
       fechaActualizacion: new Date()
     };
 
@@ -130,11 +212,26 @@ const actualizar = async (id, data) => {
 
     await validarCuentaPorCobrar({ ...data, id });
 
+    // Calcular saldo pendiente
+    const montoTotal = data.montoTotal !== undefined ? data.montoTotal : existente.montoTotal;
+    const montoPagado = data.montoPagado !== undefined ? data.montoPagado : existente.montoPagado;
+    const saldoPendiente = Number(montoTotal) - Number(montoPagado);
+    const fechaVencimiento = data.fechaVencimiento !== undefined ? data.fechaVencimiento : existente.fechaVencimiento;
+
+    // Calcular estado automáticamente (respetando ANULADO y CANJEADO)
+    const estadoActual = data.estadoId !== undefined ? data.estadoId : existente.estadoId;
+    const estadoCalculado = calcularEstadoCxC(
+      montoTotal,
+      montoPagado,
+      saldoPendiente,
+      fechaVencimiento,
+      estadoActual
+    );
+
     const cuentaData = {
       ...data,
-      saldoPendiente: data.montoTotal !== undefined && data.montoPagado !== undefined 
-        ? data.montoTotal - data.montoPagado 
-        : undefined,
+      saldoPendiente,
+      estadoId: estadoCalculado,
       fechaActualizacion: new Date()
     };
 

@@ -54,6 +54,16 @@ export async function eliminar(req, res, next) {
   }
 }
 
+export async function aprobar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const aprobada = await preFacturaService.aprobar(id);
+    res.json(toJSONBigInt(aprobada));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function anular(req, res, next) {
   try {
     const id = Number(req.params.id);
@@ -143,23 +153,18 @@ export async function generarBoleta(req, res, next) {
 }
 
 /**
- * Partir PreFactura en Blanca y Negra
- * POST /api/prefactura/:id/partir
+ * Particionar PreFactura: Clona en DOS copias idénticas con estado PENDIENTE
+ * PUT /api/pre-facturas/:id/partir
  */
 export async function partirPreFactura(req, res, next) {
   try {
-    const preFacturaId = Number(req.params.id);
-    const { porcentajeNegro, porcentajeBlanco } = req.body;
+    const id = BigInt(req.params.id);
+    const resultado = await preFacturaService.partirPreFactura(id);
     
-    const resultado = await preFacturaService.partirPreFactura(preFacturaId, {
-      porcentajeNegro,
-      porcentajeBlanco
-    });
-    
-    res.status(201).json(toJSONBigInt({
+    res.status(200).json(toJSONBigInt({
       success: true,
-      mensaje: 'PreFactura partida exitosamente',
-      resultado
+      mensaje: resultado.mensaje,
+      data: resultado
     }));
   } catch (err) {
     next(err);
@@ -172,14 +177,32 @@ export async function partirPreFactura(req, res, next) {
  */
 export async function facturarPreFacturaNegra(req, res, next) {
   try {
-    const preFacturaId = Number(req.params.id);
+    const id = BigInt(req.params.id);
+    const resultado = await preFacturaService.facturarPreFacturaNegra(id);
     
-    const resultado = await preFacturaService.facturarPreFacturaNegra(preFacturaId);
-    
-    res.status(201).json(toJSONBigInt({
+    res.status(200).json(toJSONBigInt({
       success: true,
-      mensaje: 'PreFactura Negra facturada exitosamente',
-      resultado
+      mensaje: "CxC Negra (Gerencial) generada exitosamente",
+      data: resultado
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Facturar PreFactura Blanca (SUNAT)
+ * POST /api/prefactura/:id/facturar-blanca
+ */
+export async function facturarPreFacturaBlanca(req, res, next) {
+  try {
+    const id = BigInt(req.params.id);
+    const resultado = await preFacturaService.facturarPreFacturaBlanca(id);
+    
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "CxC Blanca y Comprobante Electrónico generados exitosamente",
+      data: resultado
     }));
   } catch (err) {
     next(err);
