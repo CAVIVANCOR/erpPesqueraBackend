@@ -2077,6 +2077,7 @@ model Empresa {
   representantelegalId BigInt?
   cuentaDetraccion     String?
   montoMinimoRetencion Decimal?
+  montoMinimoDetraccion Decimal?            @default(700.00) @db.Decimal(10, 2)  // Monto mínimo para aplicar detracción (default S/ 700)
   porcentajeRetencion  Decimal?
   soyAgentePercepcion  Boolean              @default(false)
   soyAgenteRetencion   Boolean              @default(false)
