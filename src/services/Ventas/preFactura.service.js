@@ -1168,7 +1168,11 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         include: {
           cliente: true,
           moneda: true,
-          detalles: true,
+          detalles: {
+            include: {
+              producto: true, // Necesario para analizar detracción
+            },
+          },
           empresa: true,
           serieDoc: true,
           tipoDocumento: true,
@@ -1248,11 +1252,6 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           formaPagoId: preFactura.formaPagoId || BigInt(1), // Default contado
           montoPendientePago: preFactura.total,
           
-          // Montos
-          subtotal: preFactura.subtotal,
-          igv: preFactura.totalIGV,
-          total: preFactura.total,
-          
           // Estados
           estadoOSEId: BigInt(50), // PENDIENTE
           estadoSUNATId: BigInt(60), // ACTIVO
@@ -1262,7 +1261,65 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         },
       });
 
-      // 5. Crear CuentaPorCobrar BLANCA (con comprobante SUNAT)
+      // 5. ANALIZAR DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN (REGLAS SUNAT)
+      
+      // 5.1 Analizar DETRACCIÓN (basado en productos y monto mínimo)
+      let tieneDetraccion = false;
+      let porcentajeDetraccion = null;
+      let montoDetraccion = 0;
+      
+      // Verificar si algún producto está sujeto a detracción
+      for (const detalle of preFactura.detalles) {
+        if (detalle.producto?.sujetoDetraccion && detalle.producto?.porcentajeDetraccion) {
+          tieneDetraccion = true;
+          // Usar el porcentaje del primer producto sujeto a detracción
+          if (!porcentajeDetraccion) {
+            porcentajeDetraccion = Number(detalle.producto.porcentajeDetraccion);
+          }
+        }
+      }
+      
+      // Calcular monto de detracción si aplica Y monto >= montoMinimoDetraccion
+      const montoMinimoDetraccion = Number(preFactura.empresa.montoMinimoDetraccion) || 700; // Default S/ 700
+      
+      if (tieneDetraccion && porcentajeDetraccion && Number(preFactura.total) >= montoMinimoDetraccion) {
+        montoDetraccion = Number(preFactura.total) * (porcentajeDetraccion / 100);
+      } else if (tieneDetraccion && Number(preFactura.total) < montoMinimoDetraccion) {
+        // Si el monto es menor al mínimo configurado, no aplica detracción
+        tieneDetraccion = false;
+        porcentajeDetraccion = null;
+      }
+      
+      // 5.2 Analizar RETENCIÓN (basado en cliente) - SOLO SI NO HAY DETRACCIÓN
+      // REGLA: Detracción + Retención = Solo Detracción (prioridad)
+      let tieneRetencion = false;
+      let montoRetencion = 0;
+      
+      if (!tieneDetraccion) {
+        // Solo aplica retención si NO hay detracción
+        if (preFactura.cliente.esAgenteRetencion) {
+          tieneRetencion = true;
+          const porcentajeRetencion = 3; // Retención estándar 3% del IGV
+          // Calcular sobre el IGV (no sobre el total)
+          const montoIGV = Number(preFactura.totalIGV) || 0;
+          montoRetencion = montoIGV * (porcentajeRetencion / 100);
+        }
+      }
+      
+      // 5.3 Analizar PERCEPCIÓN (basado en cliente y empresa) - INDEPENDIENTE
+      // REGLA: Percepción puede coexistir con Detracción o Retención
+      let tienePercepcion = false;
+      let porcentajePercepcion = null;
+      let montoPercepcion = 0;
+      
+      // Si el cliente está sujeto a percepción y la empresa es agente de percepción
+      if (preFactura.cliente.sujetoPercepcion && preFactura.empresa.soyAgentePercepcion) {
+        tienePercepcion = true;
+        porcentajePercepcion = 2; // Percepción estándar 2%
+        montoPercepcion = Number(preFactura.total) * (porcentajePercepcion / 100);
+      }
+      
+      // 6. Crear CuentaPorCobrar BLANCA (con comprobante SUNAT)
       const cuentaPorCobrar = await tx.cuentaPorCobrar.create({
         data: {
           // ORIGEN DEL DOCUMENTO
@@ -1280,23 +1337,23 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           montoPagado: 0,
           saldoPendiente: preFactura.total,
           
-          // DETRACCIÓN SPOT (SUNAT PERÚ)
-          tieneDetraccion: false,
-          montoDetraccion: 0,
-          porcentajeDetraccion: null,
+          // DETRACCIÓN SPOT (SUNAT PERÚ) - CALCULADO
+          tieneDetraccion,
+          montoDetraccion,
+          porcentajeDetraccion,
           numeroConstanciaDetraccion: null,
           fechaDetraccion: null,
           
-          // RETENCIÓN (SUNAT PERÚ)
-          tieneRetencion: false,
-          montoRetencion: 0,
+          // RETENCIÓN (SUNAT PERÚ) - CALCULADO
+          tieneRetencion,
+          montoRetencion,
           numeroComprobanteRetencion: null,
           fechaRetencion: null,
           
-          // PERCEPCIÓN (SUNAT PERÚ)
-          tienePercepcion: false,
-          montoPercepcion: 0,
-          porcentajePercepcion: null,
+          // PERCEPCIÓN (SUNAT PERÚ) - CALCULADO
+          tienePercepcion,
+          montoPercepcion,
+          porcentajePercepcion,
           numeroComprobantePercepcion: null,
           fechaPercepcion: null,
           
@@ -1316,7 +1373,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         },
       });
 
-      // 6. Actualizar PreFactura a EMITIDA (estado 96)
+      // 7. Actualizar PreFactura a EMITIDA (estado 96)
       await tx.preFactura.update({
         where: { id: preFactura.id },
         data: {
@@ -1352,12 +1409,18 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
 const facturarPreFacturaNegra = async (preFacturaId) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      // 1. Obtener PreFactura
+      // 1. Obtener PreFactura con todas las relaciones necesarias
       const preFactura = await tx.preFactura.findUnique({
         where: { id: preFacturaId },
         include: {
           cliente: true,
           moneda: true,
+          detalles: {
+            include: {
+              producto: true, // Necesario para analizar detracción
+            },
+          },
+          empresa: true,
         },
       });
 
@@ -1393,7 +1456,65 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         );
       }
 
-      // 3. Crear CuentaPorCobrar NEGRA (Gerencial)
+      // 3. ANALIZAR DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN (REGLAS SUNAT)
+      
+      // 3.1 Analizar DETRACCIÓN (basado en productos y monto mínimo)
+      let tieneDetraccion = false;
+      let porcentajeDetraccion = null;
+      let montoDetraccion = 0;
+      
+      // Verificar si algún producto está sujeto a detracción
+      for (const detalle of preFactura.detalles) {
+        if (detalle.producto?.sujetoDetraccion && detalle.producto?.porcentajeDetraccion) {
+          tieneDetraccion = true;
+          // Usar el porcentaje del primer producto sujeto a detracción
+          if (!porcentajeDetraccion) {
+            porcentajeDetraccion = Number(detalle.producto.porcentajeDetraccion);
+          }
+        }
+      }
+      
+      // Calcular monto de detracción si aplica Y monto >= montoMinimoDetraccion
+      const montoMinimoDetraccion = Number(preFactura.empresa.montoMinimoDetraccion) || 700; // Default S/ 700
+      
+      if (tieneDetraccion && porcentajeDetraccion && Number(preFactura.total) >= montoMinimoDetraccion) {
+        montoDetraccion = Number(preFactura.total) * (porcentajeDetraccion / 100);
+      } else if (tieneDetraccion && Number(preFactura.total) < montoMinimoDetraccion) {
+        // Si el monto es menor al mínimo configurado, no aplica detracción
+        tieneDetraccion = false;
+        porcentajeDetraccion = null;
+      }
+      
+      // 3.2 Analizar RETENCIÓN (basado en cliente) - SOLO SI NO HAY DETRACCIÓN
+      // REGLA: Detracción + Retención = Solo Detracción (prioridad)
+      let tieneRetencion = false;
+      let montoRetencion = 0;
+      
+      if (!tieneDetraccion) {
+        // Solo aplica retención si NO hay detracción
+        if (preFactura.cliente.esAgenteRetencion) {
+          tieneRetencion = true;
+          const porcentajeRetencion = 3; // Retención estándar 3% del IGV
+          // Calcular sobre el IGV (no sobre el total)
+          const montoIGV = Number(preFactura.totalIGV) || 0;
+          montoRetencion = montoIGV * (porcentajeRetencion / 100);
+        }
+      }
+      
+      // 3.3 Analizar PERCEPCIÓN (basado en cliente y empresa) - INDEPENDIENTE
+      // REGLA: Percepción puede coexistir con Detracción o Retención
+      let tienePercepcion = false;
+      let porcentajePercepcion = null;
+      let montoPercepcion = 0;
+      
+      // Si el cliente está sujeto a percepción y la empresa es agente de percepción
+      if (preFactura.cliente.sujetoPercepcion && preFactura.empresa.soyAgentePercepcion) {
+        tienePercepcion = true;
+        porcentajePercepcion = 2; // Percepción estándar 2%
+        montoPercepcion = Number(preFactura.total) * (porcentajePercepcion / 100);
+      }
+      
+      // 4. Crear CuentaPorCobrar NEGRA (Gerencial)
       const cuentaPorCobrar = await tx.cuentaPorCobrar.create({
         data: {
           // ORIGEN DEL DOCUMENTO
@@ -1411,23 +1532,23 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
           montoPagado: 0,
           saldoPendiente: preFactura.total,
           
-          // DETRACCIÓN SPOT (SUNAT PERÚ)
-          tieneDetraccion: false,
-          montoDetraccion: 0,
-          porcentajeDetraccion: null,
+          // DETRACCIÓN SPOT (SUNAT PERÚ) - CALCULADO
+          tieneDetraccion,
+          montoDetraccion,
+          porcentajeDetraccion,
           numeroConstanciaDetraccion: null,
           fechaDetraccion: null,
           
-          // RETENCIÓN (SUNAT PERÚ)
-          tieneRetencion: false,
-          montoRetencion: 0,
+          // RETENCIÓN (SUNAT PERÚ) - CALCULADO
+          tieneRetencion,
+          montoRetencion,
           numeroComprobanteRetencion: null,
           fechaRetencion: null,
           
-          // PERCEPCIÓN (SUNAT PERÚ)
-          tienePercepcion: false,
-          montoPercepcion: 0,
-          porcentajePercepcion: null,
+          // PERCEPCIÓN (SUNAT PERÚ) - CALCULADO
+          tienePercepcion,
+          montoPercepcion,
+          porcentajePercepcion,
           numeroComprobantePercepcion: null,
           fechaPercepcion: null,
           
@@ -1447,7 +1568,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         },
       });
 
-      // 4. Actualizar PreFactura a FACTURADA (estado 95)
+      // 5. Actualizar PreFactura a FACTURADA (estado 95)
       await tx.preFactura.update({
         where: { id: preFactura.id },
         data: {
