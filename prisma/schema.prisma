@@ -2770,8 +2770,6 @@ faenasPescaConsumo                FaenaPescaConsumo[]  @relation("FaenaPescaCons
   // ========================================
   periodosContables               PeriodoContable[]
   asientosContables               AsientoContable[]
-  comprobantesOSE                 ComprobanteElectronico[]    @relation("EstadoOSE")
-  comprobantesSUNAT               ComprobanteElectronico[]    @relation("EstadoSUNAT")
   cuentasPorCobrar                CuentaPorCobrar[]
   cuentasPorPagar                 CuentaPorPagar[]
   flujosProyectados               FlujoCajaProyectado[]
@@ -5269,8 +5267,6 @@ model ComprobanteElectronico {
   tipoDocumentoCliente      TiposDocIdentidad       @relation(fields: [tipoDocumentoClienteId], references: [id])
   moneda                    Moneda                  @relation(fields: [monedaId], references: [id])
   formaPago                 FormaPago               @relation(fields: [formaPagoId], references: [id])
-  estadoOSE                 EstadoMultiFuncion      @relation("EstadoOSE", fields: [estadoOSEId], references: [id])
-  estadoSUNAT               EstadoMultiFuncion      @relation("EstadoSUNAT", fields: [estadoSUNATId], references: [id])
   comprobanteModifica       ComprobanteElectronico? @relation("NotasModificacion", fields: [comprobanteModificaId], references: [id])
   
   // ========================================
