@@ -117,6 +117,24 @@ async function validarProducto(data, excluirId = null) {
       throw new ValidationError('La subfamilia seleccionada no pertenece a la familia indicada.');
     }
   }
+
+  // Validar y sincronizar automáticamente sujetoDetraccion con porcentajeDetraccion
+  if (data.porcentajeDetraccion !== undefined && data.porcentajeDetraccion !== null) {
+    const porcentaje = Number(data.porcentajeDetraccion);
+    if (porcentaje < 0) {
+      throw new ValidationError('El porcentaje de detracción no puede ser negativo.');
+    }
+    if (porcentaje > 100) {
+      throw new ValidationError('El porcentaje de detracción no puede exceder 100%.');
+    }
+    // Sincronizar automáticamente sujetoDetraccion
+    data.sujetoDetraccion = porcentaje > 0;
+  }
+
+  // Validar que exoneradoRetencion sea booleano
+  if (data.exoneradoRetencion !== undefined && typeof data.exoneradoRetencion !== 'boolean') {
+    throw new ValidationError('exoneradoRetencion debe ser un valor booleano.');
+  }
 }
 
 /**

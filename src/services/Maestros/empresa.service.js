@@ -96,6 +96,14 @@ async function validarEmpresa(data) {
     }
   }
 
+  // Validar montoMinimoDetraccion
+  if (data.montoMinimoDetraccion !== undefined && data.montoMinimoDetraccion !== null) {
+    const monto = Number(data.montoMinimoDetraccion);
+    if (monto < 0) {
+      throw new ValidationError('El monto mínimo de detracción no puede ser negativo');
+    }
+  }
+
   // Validar campos de Nubefact
   if (data.nubefactUrl !== undefined && data.nubefactUrl !== null) {
     const url = String(data.nubefactUrl).trim();
