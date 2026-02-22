@@ -1856,16 +1856,18 @@ model DetalleMovimientoAlmacen {
   actualizadoPor      BigInt?
   detalleReqCompraId  BigInt?
   costoUnitario       Decimal?
-  ubicacionFisicaId       BigInt?  
-
+ ubicacionFisicaOrigenId   BigInt?
+ ubicacionFisicaDestinoId  BigInt?
 
   movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
   producto              Producto @relation(fields: [productoId], references: [id])
   detalleReqCompra      DetalleReqCompra? @relation(fields: [detalleReqCompraId], references: [id])
   insumosOT  DetInsumosTareaOT[] @relation("DetMovAlmacenInsumoOT")
-  ubicacionFisica         UbicacionFisica? @relation(fields: [ubicacionFisicaId], references: [id])
-
-  @@index([ubicacionFisicaId], name: "idx_det_mov_ubicacion")
+  ubicacionFisicaOrigen   UbicacionFisica? @relation("DetMovAlmacenUbicacionOrigen", fields: [ubicacionFisicaOrigenId], references: [id])
+  ubicacionFisicaDestino  UbicacionFisica? @relation("DetMovAlmacenUbicacionDestino", fields: [ubicacionFisicaDestinoId], references: [id])
+ 
+  @@index([ubicacionFisicaOrigenId], name: "idx_det_mov_ubicacion_origen")
+  @@index([ubicacionFisicaDestinoId], name: "idx_det_mov_ubicacion_destino")
 
 }
 
@@ -1883,7 +1885,8 @@ model UbicacionFisica {
   
   // Relaciones
   almacen           Almacen @relation(fields: [almacenId], references: [id])
-  detallesMovimiento DetalleMovimientoAlmacen[]
+  detallesMovimientoOrigen   DetalleMovimientoAlmacen[] @relation("DetMovAlmacenUbicacionOrigen")
+  detallesMovimientoDestino  DetalleMovimientoAlmacen[] @relation("DetMovAlmacenUbicacionDestino")
   kardex            KardexAlmacen[]
   saldosDetalle     SaldosDetProductoCliente[]
   
