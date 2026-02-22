@@ -402,6 +402,7 @@ model Almacen {
   tipoAlmacenamiento TipoAlmacenamiento @relation(fields: [tipoAlmacenamientoId], references: [id])
   tipoAlmacen TipoAlmacen @relation(fields: [tipoAlmacenId], references: [id])
   contratosServicio       ContratoServicio[]    @relation("ContratoServicioAlmacen")
+  ubicacionesFisicas UbicacionFisica[]
 
 }
 
@@ -998,7 +999,8 @@ model DetMovsEntregaRendirPVentas {
   gastosAsociados              DetMovsEntregaRendirPVentas[] @relation("GastosDeAsignacion")
   
   costosEstimadosVinculados   CostosExportacionCotizacion[]          // Relación inversa para vincular con estimados
-  
+  gastosPlanificados DetGastosPlanificados[]
+
   @@index([entregaARendirPVentasId])
   @@index([productoId])
   @@index([asignacionOrigenId])
@@ -1023,6 +1025,7 @@ model PreFactura {
   numCorreDoc                 String?     @db.VarChar(40)                  // Correlativo (ej: "000123")
   fechaDocumento              DateTime    @default(now())                  // Fecha de emisión de la PreFactura
   fechaVencimiento            DateTime?                                    // Fecha de vencimiento del pago
+  nroLiquidacionFacturacion   String?     @db.VarChar(40)
   
   // ========================================
   // ⭐ CAMPOS NUEVOS - DOCUMENTO FINAL (COMPROBANTE ELECTRÓNICO)
@@ -1600,6 +1603,8 @@ model DetMovsEntRendirPescaConsumo {
   moneda Moneda? @relation(fields: [monedaId], references: [id])
   tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto Producto? @relation(fields: [productoId], references: [id])
+  gastosPlanificados DetGastosPlanificados[]
+
 
   asignacionOrigen             DetMovsEntRendirPescaConsumo? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntRendirPescaConsumo[] @relation("GastosDeAsignacion")
@@ -1648,9 +1653,58 @@ model DetMovsEntregaRendir {
 
   asignacionOrigen             DetMovsEntregaRendir? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendir[] @relation("GastosDeAsignacion")
+  gastosPlanificados DetGastosPlanificados[]
 
   @@index([asignacionOrigenId])
 }
+
+model DetGastosPlanificados {
+  id                              BigInt   @id @default(autoincrement())
+  
+  // Solo UNO de estos campos debe tener valor (validar en backend)
+  detMovEntregaRendirTemporadaPescaId     BigInt?
+  detMovEntRendirPescaConsumoId           BigInt?
+  detMovEntregaRendirPComprasId           BigInt?
+  detMovEntregaRendirPVentasId            BigInt?
+  detMovEntregaRendirMovAlmacenId         BigInt?
+  detMovEntregaRendirContratoId           BigInt?
+  detMovEntregaRendirOTId                 BigInt?
+  
+  // Datos del gasto planificado
+  productoId        BigInt   // El gasto planificado (producto que representa el gasto)
+  monedaId          BigInt   // Moneda del gasto
+  montoPlanificado  Decimal  // Monto estimado para este gasto
+  descripcion       String?  // Descripción adicional opcional
+  
+  // Auditoría
+  creadoEn          DateTime @default(now())
+  actualizadoEn     DateTime @updatedAt
+  
+  // Relaciones con los diferentes tipos de entregas a rendir
+  detMovEntregaRendirTemporadaPesca DetMovsEntregaRendir? @relation(fields: [detMovEntregaRendirTemporadaPescaId], references: [id], onDelete: Cascade)
+  detMovEntRendirPescaConsumo       DetMovsEntRendirPescaConsumo? @relation(fields: [detMovEntRendirPescaConsumoId], references: [id], onDelete: Cascade)
+  detMovEntregaRendirPCompras       DetMovsEntregaRendirPCompras? @relation(fields: [detMovEntregaRendirPComprasId], references: [id], onDelete: Cascade)
+  detMovEntregaRendirPVentas        DetMovsEntregaRendirPVentas? @relation(fields: [detMovEntregaRendirPVentasId], references: [id], onDelete: Cascade)
+  detMovEntregaRendirMovAlmacen     DetMovsEntregaRendirMovAlmacen? @relation(fields: [detMovEntregaRendirMovAlmacenId], references: [id], onDelete: Cascade)
+  detMovEntregaRendirContrato       DetMovsEntregaRendirContratoServicios? @relation(fields: [detMovEntregaRendirContratoId], references: [id], onDelete: Cascade)
+  detMovEntregaRendirOT             DetMovsEntregaRendirOTMantenimiento? @relation(fields: [detMovEntregaRendirOTId], references: [id], onDelete: Cascade)
+  
+  // Relaciones con catálogos
+  producto          Producto @relation(fields: [productoId], references: [id])
+  moneda            Moneda @relation(fields: [monedaId], references: [id])
+  
+  // Índices para performance
+  @@index([detMovEntregaRendirTemporadaPescaId])
+  @@index([detMovEntRendirPescaConsumoId])
+  @@index([detMovEntregaRendirPComprasId])
+  @@index([detMovEntregaRendirPVentasId])
+  @@index([detMovEntregaRendirMovAlmacenId])
+  @@index([detMovEntregaRendirContratoId])
+  @@index([detMovEntregaRendirOTId])
+  @@index([productoId])
+  @@index([monedaId])
+}
+
 
 model DetMovsEntregaRendirPCompras {
   id                       BigInt      @id @default(autoincrement())
@@ -1693,6 +1747,7 @@ model DetMovsEntregaRendirPCompras {
   producto Producto? @relation(fields: [productoId], references: [id])
   asignacionOrigen             DetMovsEntregaRendirPCompras? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendirPCompras[] @relation("GastosDeAsignacion")
+  gastosPlanificados DetGastosPlanificados[]
 
   @@index([asignacionOrigenId])
 }
@@ -1801,13 +1856,41 @@ model DetalleMovimientoAlmacen {
   actualizadoPor      BigInt?
   detalleReqCompraId  BigInt?
   costoUnitario       Decimal?
+  ubicacionFisicaId       BigInt?  
+
 
   movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
   producto              Producto @relation(fields: [productoId], references: [id])
   detalleReqCompra      DetalleReqCompra? @relation(fields: [detalleReqCompraId], references: [id])
   insumosOT  DetInsumosTareaOT[] @relation("DetMovAlmacenInsumoOT")
+  ubicacionFisica         UbicacionFisica? @relation(fields: [ubicacionFisicaId], references: [id])
+
+  @@index([ubicacionFisicaId], name: "idx_det_mov_ubicacion")
 
 }
+
+
+model UbicacionFisica {
+  id                BigInt   @id @default(autoincrement())
+  descripcion       String   @db.VarChar(200)
+  almacenId         BigInt
+  
+  // Auditoría
+  fechaCreacion     DateTime @default(now())
+  fechaActualizacion DateTime? @updatedAt
+  creadoPor         BigInt?
+  actualizadoPor    BigInt?
+  
+  // Relaciones
+  almacen           Almacen @relation(fields: [almacenId], references: [id])
+  detallesMovimiento DetalleMovimientoAlmacen[]
+  kardex            KardexAlmacen[]
+  saldosDetalle     SaldosDetProductoCliente[]
+  
+  @@index([almacenId], name: "idx_ubicacion_almacen")
+}
+
+
 
 model DetalleOrdenCompra {
   id             BigInt      @id @default(autoincrement())
@@ -2552,7 +2635,8 @@ model DetMovsEntregaRendirMovAlmacen {
 
   asignacionOrigen             DetMovsEntregaRendirMovAlmacen? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendirMovAlmacen[] @relation("GastosDeAsignacion")
-  
+  gastosPlanificados DetGastosPlanificados[]
+
   @@index([entregaARendirMovAlmacenId])
   @@index([tipoMovimientoId])
   @@index([responsableId])
@@ -2632,7 +2716,8 @@ model DetMovsEntregaRendirContratoServicios {
 
   asignacionOrigen             DetMovsEntregaRendirContratoServicios? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendirContratoServicios[] @relation("GastosDeAsignacion")
-  
+  gastosPlanificados DetGastosPlanificados[]
+
   @@index([entregaARendirContratoServicioId])
   @@index([tipoMovimientoId])
   @@index([responsableId])
@@ -2710,7 +2795,8 @@ model DetMovsEntregaRendirOTMantenimiento {
 
   asignacionOrigen             DetMovsEntregaRendirOTMantenimiento? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendirOTMantenimiento[] @relation("GastosDeAsignacion")
-  
+  gastosPlanificados DetGastosPlanificados[]
+
   @@index([entregaARendirOTMantenimientoId])
   @@index([tipoMovimientoId])
   @@index([responsableId])
@@ -2977,21 +3063,26 @@ model KardexAlmacen {
   nroSerie                   String            @default("") @db.VarChar(40)  // Número de serie
   estadoId                   BigInt?           // Estado de la mercadería (null si no aplica)
   estadoCalidadId            BigInt?           // Estado de calidad (null si no aplica)
+  ubicacionFisicaId          BigInt?           // Ubicacion Fisica (Por default 1)
 
   // RELACIONES
   producto           Producto           @relation(fields: [productoId], references: [id])
   cliente            EntidadComercial?  @relation(fields: [clienteId], references: [id])
   conceptoMovAlmacen ConceptoMovAlmacen @relation(fields: [conceptoMovAlmacenId], references: [id])
+  ubicacionFisica UbicacionFisica? @relation(fields: [ubicacionFisicaId], references: [id])
+
 
   // ÍNDICES OPTIMIZADOS - Ordenamiento: fecha DESC, INGRESOS primero (esIngresoEgreso DESC), id DESC
   @@index([empresaId, almacenId, productoId, esCustodia, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_propio_general")
   @@index([empresaId, almacenId, productoId, clienteId, esCustodia, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_custodia_general")
-  @@index([empresaId, almacenId, productoId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_propio_detallado")
-  @@index([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_custodia_detallado")
+  @@index([empresaId, almacenId, productoId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie,ubicacionFisicaId, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_propio_detallado")
+  @@index([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie, ubicacionFisicaId, fechaMovimientoAlmacen, esIngresoEgreso, id], name: "idx_kardex_custodia_detallado")
   @@index([empresaId, almacenId, fechaMovimientoAlmacen, productoId, esCustodia], name: "idx_kardex_reportes_fecha")
   @@index([productoId], name: "idx_kardex_producto")
   @@index([clienteId], name: "idx_kardex_cliente")
   @@index([movimientoAlmacenId], name: "idx_kardex_movimiento")
+    @@index([ubicacionFisicaId], name: "idx_kardex_ubicacion")
+
 }
 
 
@@ -3067,6 +3158,7 @@ model Moneda {
   inversiones InversionFinanciera[]
     // Relación inversa para TarifaCostoExportacionRuta
   tarifasRuta TarifaCostoExportacionRuta[] @relation("MonedaTarifaRuta")
+  gastosPlanificados DetGastosPlanificados[]
 
 }
 
@@ -3574,6 +3666,8 @@ model Producto {
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
   detallesComprobante             DetalleComprobante[]
+  gastosPlanificados DetGastosPlanificados[]
+
 }
 
 model Provincia {
@@ -3660,6 +3754,7 @@ model SaldosDetProductoCliente {
   nroSerie         String    @default("") @db.VarChar(40)  // Número de serie (productos individuales)
   estadoId         BigInt?   // Estado de la mercadería (null si no aplica)
   estadoCalidadId  BigInt?   // Estado de calidad (null si no aplica)
+  ubicacionFisicaId BigInt?
   
   // Saldos - Siempre valores numéricos
   saldoCantidad    Decimal   @default(0) // Saldo en unidades
@@ -3669,13 +3764,15 @@ model SaldosDetProductoCliente {
   // RELACIONES
   producto Producto         @relation(fields: [productoId], references: [id])
   cliente  EntidadComercial @relation(fields: [clienteId], references: [id])
+  ubicacionFisica UbicacionFisica? @relation(fields: [ubicacionFisicaId], references: [id])
+
 
   // ❌ CONSTRAINT ÚNICO ELIMINADO: PostgreSQL no maneja bien nulls en constraints únicos compuestos
   // Solución profesional: Usar findFirst + update/create en lugar de upsert
   
   // ✅ ÍNDICES OPTIMIZADOS para performance (sin restricción de unicidad)
-  @@index([empresaId, almacenId, productoId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie], name: "idx_saldo_det_propio_completo")
-  @@index([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie], name: "idx_saldo_det_custodia_completo")
+  @@index([empresaId, almacenId, productoId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie, ubicacionFisicaId], name: "idx_saldo_det_propio_completo")
+  @@index([empresaId, almacenId, productoId, clienteId, esCustodia, lote, fechaIngreso, fechaProduccion, fechaVencimiento, estadoId, estadoCalidadId, numContenedor, nroSerie, ubicacionFisicaId], name: "idx_saldo_det_custodia_completo")
   @@index([empresaId, almacenId, productoId, esCustodia], name: "idx_saldo_det_general")
 }
 
@@ -3826,6 +3923,8 @@ model TemporadaPesca {
   liqComisionMotoristaReal Decimal? @default(0.00) @db.Decimal(10,2)
   liqComisionPangueroReal Decimal? @default(0.00) @db.Decimal(10,2)
   liqTotalPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
+  precioPorTonDolares Decimal? @default(0.00) @db.Decimal(10,2)
+  
 
   unidadNegocioId   BigInt?
 
