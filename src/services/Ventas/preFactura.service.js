@@ -205,8 +205,6 @@ const obtenerPorId = async (id) => {
         comprobantesElectronicos: {
           include: {
             tipoComprobante: true,
-            estadoOSE: true,
-            estadoSUNAT: true,
           },
         },
         detalles: {
@@ -440,6 +438,7 @@ const crear = async (data) => {
         fechaActualizacion: data.fechaActualizacion || new Date(),
         creadoPor: data.creadoPor,
         actualizadoPor: data.actualizadoPor,
+        nroLiquidacionFacturacion: data.nroLiquidacionFacturacion?.trim() || null,
       };
 
       // 11. Crear la pre-factura con los números generados (patrón estándar)
@@ -514,6 +513,7 @@ const actualizar = async (id, data) => {
         data.fechaCreacion || existente.fechaCreacion || new Date(),
       creadoPor: data.creadoPor || existente.creadoPor || null,
       fechaActualizacion: data.fechaActualizacion || new Date(),
+        nroLiquidacionFacturacion: data.nroLiquidacionFacturacion?.trim() || null,  // ← AGREGAR AQUÍ
     };
 
     return await prisma.preFactura.update({

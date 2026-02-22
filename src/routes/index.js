@@ -104,6 +104,7 @@ import kardexAlmacenRoutes from '../routes/Almacen/kardexAlmacen.routes.js';
 import saldosProductoClienteRoutes from '../routes/Almacen/saldosProductoCliente.routes.js';
 import saldosDetProductoClienteRoutes from '../routes/Almacen/saldosDetProductoCliente.routes.js';
 import generarKardexRoutes from '../routes/Almacen/generarKardex.routes.js';
+import ubicacionFisicaRoutes from '../routes/Almacen/ubicacionFisica.routes.js';
 import entregaARendirMovAlmacenRoutes from '../routes/Almacen/entregaARendirMovAlmacen.routes.js';
 import detMovsEntregaRendirMovAlmacenRoutes from '../routes/Almacen/detMovsEntregaRendirMovAlmacen.routes.js';
 import detMovsEntregaRendirMovAlmacenPdfRoutes from '../routes/Almacen/detMovsEntregaRendirMovAlmacenPdf.routes.js';
@@ -196,6 +197,7 @@ import tipoMovEntregaRendirRoutes from '../routes/Pesca/tipoMovEntregaRendir.rou
 import recalcularToneladasRoutes from '../routes/Pesca/recalcularToneladas.routes.js';
 import testRecalculoRoutes from '../routes/Pesca/testRecalculo.routes.js';
 import detCuotaPescaRoutes from '../routes/Pesca/detCuotaPesca.routes.js';
+import detGastosPlanificadosRoutes from '../routes/Pesca/detGastosPlanificados.routes.js';
 import empresaReporteRoutes from '../routes/Maestros/empresa.reporte.routes.js';
 import productoRoutes from '../routes/Maestros/producto.routes.js';
 import centrosAlmacenRoutes from './Almacen/centrosAlmacen.routes.js';
@@ -402,6 +404,8 @@ router.use('/saldos-producto-cliente', saldosProductoClienteRoutes);
 router.use('/saldos-det-producto-cliente', saldosDetProductoClienteRoutes);
 // Rutas para Generar Kardex
 router.use('/generar-kardex', generarKardexRoutes);
+// Rutas para UbicacionFisica
+router.use('/ubicaciones-fisicas', ubicacionFisicaRoutes);
 // Rutas para EntregaARendirMovAlmacen
 router.use('/entregas-rendir-mov-almacen', entregaARendirMovAlmacenImpresionRoutes);
 router.use('/entregas-rendir-mov-almacen', entregaARendirMovAlmacenRoutes);
@@ -594,6 +598,8 @@ router.use('/recalcular-toneladas', recalcularToneladasRoutes);
 router.use('/test-recalculo', testRecalculoRoutes);
 // Rutas para DetCuotaPesca
 router.use('/pesca/detalles-cuota-pesca', detCuotaPescaRoutes);
+// Rutas para DetGastosPlanificados
+router.use('/gastos-planificados', detGastosPlanificadosRoutes);
 router.use('/movimientos-caja', movimientoCajaRoutes);
 router.use('/cuentas-corrientes', cuentaCorrienteRoutes);
 router.use('/saldos-cuenta-corriente', saldoCuentaCorrienteRoutes);

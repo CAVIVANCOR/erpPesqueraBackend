@@ -161,6 +161,7 @@ async function procesarKardexOrigen(
     nroSerie: detalle.nroSerie || "",
     estadoId: detalle.estadoMercaderiaId,
     estadoCalidadId: detalle.estadoCalidadId,
+    ubicacionFisicaId: detalle.ubicacionFisicaId,
   };
   if (kardexExistentes.length === 1) {
     await tx.kardexAlmacen.update({
@@ -244,6 +245,7 @@ async function procesarKardexDestino(
     nroSerie: detalle.nroSerie || "",
     estadoId: detalle.estadoMercaderiaId,
     estadoCalidadId: detalle.estadoCalidadId,
+    ubicacionFisicaId: detalle.ubicacionFisicaId,
   };
   if (kardexExistentes.length === 1) {
     await tx.kardexAlmacen.update({
@@ -381,6 +383,7 @@ async function actualizarSaldos(tx, movimiento) {
       estadoCalidadId: true,
       numContenedor: true,
       nroSerie: true,
+      ubicacionFisicaId: true,
     },
   });
 
@@ -398,6 +401,7 @@ async function actualizarSaldos(tx, movimiento) {
     const loteNormalizado = combo.lote || "";
     const numContenedorNormalizado = combo.numContenedor || "";
     const nroSerieNormalizado = combo.nroSerie || "";
+    const ubicacionFisicaIdNormalizado = combo.ubicacionFisicaId || null;  // ← AGREGAR AQUÍ
     const fechaIngresoNormalizada = combo.fechaIngreso || null;
     const fechaProduccionNormalizada = combo.fechaProduccion || null;
     const fechaVencimientoNormalizada = combo.fechaVencimiento || null;
@@ -418,6 +422,7 @@ async function actualizarSaldos(tx, movimiento) {
       estadoCalidadId: estadoCalidadIdNormalizado,
       numContenedor: numContenedorNormalizado,
       nroSerie: nroSerieNormalizado,
+      ubicacionFisicaId: ubicacionFisicaIdNormalizado,
     });
 
     const whereDet = {
@@ -434,6 +439,7 @@ async function actualizarSaldos(tx, movimiento) {
       estadoCalidadId: estadoCalidadIdNormalizado,
       numContenedor: numContenedorNormalizado,
       nroSerie: nroSerieNormalizado,
+      ubicacionFisicaId: ubicacionFisicaIdNormalizado,  // ← AGREGAR AQUÍ
     };
 
     // Crear clave única para SaldoDet (convertir BigInt a string)
@@ -450,7 +456,8 @@ async function actualizarSaldos(tx, movimiento) {
       estadoIdNormalizado?.toString(),
       estadoCalidadIdNormalizado?.toString(),
       numContenedorNormalizado,
-      nroSerieNormalizado
+      nroSerieNormalizado,
+      ubicacionFisicaIdNormalizado?.toString(),
     ]);
     
     saldosDetUnicos.add(keyDet);
@@ -703,6 +710,7 @@ async function calcularSaldosKardexConVariables(tx, movimiento) {
       fechaIngreso: true,
       numContenedor: true,
       nroSerie: true,
+      ubicacionFisicaId: true,
       estadoId: true,
       estadoCalidadId: true,
     },
@@ -717,6 +725,7 @@ async function calcularSaldosKardexConVariables(tx, movimiento) {
       "fechaIngreso",
       "numContenedor",
       "nroSerie",
+      "ubicacionFisicaId",
       "estadoId",
       "estadoCalidadId",
     ],
@@ -740,6 +749,7 @@ async function calcularSaldosProductoConVariables(tx, combo) {
       fechaIngreso: combo.fechaIngreso || null,
       numContenedor: combo.numContenedor || "",  // String siempre ""
       nroSerie: combo.nroSerie || "",            // String siempre ""
+      ubicacionFisicaId: combo.ubicacionFisicaId || null,  // ← AGREGAR AQUÍ
       estadoId: combo.estadoId || null,
       estadoCalidadId: combo.estadoCalidadId || null,
     },
