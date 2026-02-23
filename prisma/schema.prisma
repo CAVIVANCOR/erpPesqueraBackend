@@ -3582,6 +3582,8 @@ inversionesActualizadas InversionFinanciera[]  @relation("InversionActualizador"
 movimientosInversionCreados MovimientoInversion[]
 tiposPrestamoCreados      TipoPrestamo[]      @relation("TipoPrestamoCreador")
 tiposPrestamoActualizados TipoPrestamo[]      @relation("TipoPrestamoActualizador")
+  sublineasCreditoCreadas      SublineaCredito[]   @relation("SublineaCreditoCreador")
+  sublineasCreditoActualizadas SublineaCredito[]   @relation("SublineaCreditoActualizador")
 }
 
 model Producto {
@@ -6770,6 +6772,8 @@ model PrestamoBancario {
   // RELACIÓN CON LÍNEA DE CRÉDITO (NUEVO)
   // ========================================
   lineaCreditoId        BigInt?                 // FK a LineaCredito (nullable para préstamos directos)
+  sublineaCreditoId     BigInt?                 // 🆕 NUEVO: FK a SublineaCredito
+
     // ========================================
   // INTEGRACIÓN FINANCIERA (migrado de UtilizacionLineaCredito)
   // ========================================
@@ -6890,6 +6894,8 @@ model PrestamoBancario {
   prestamosRefinanciadores PrestamoBancario[]   @relation("RefinanciamientoPrestamo")
     // NUEVA RELACIÓN:
   lineaCredito          LineaCredito?           @relation(fields: [lineaCreditoId], references: [id])
+  sublineaCredito       SublineaCredito?        @relation(fields: [sublineaCreditoId], references: [id])  // 🆕 NUEVO
+
     // AGREGAR ESTAS RELACIONES:
   movimientoCajaDesembolso  MovimientoCaja?   @relation("DesembolsoPrestamo", fields: [movimientoCajaDesembolsoId], references: [id])
   asientoContable           AsientoContable?  @relation("AsientoPrestamo", fields: [asientoContableId], references: [id])
@@ -6911,6 +6917,7 @@ model PrestamoBancario {
   @@index([cuentaCorrienteId])
     // AGREGAR ESTOS ÍNDICES:
   @@index([lineaCreditoId])
+  @@index([sublineaCreditoId])          // 🆕 NUEVO índice
   @@index([movimientoCajaDesembolsoId])
   @@index([asientoContableId])
   @@index([tipoPrestamoId])
@@ -7139,10 +7146,9 @@ model LineaCredito {
   bancoId               BigInt
   numeroLinea           String                  @db.VarChar(50)      // Número de línea de crédito
   
-  // ========================================
-  // TIPO DE LÍNEA
-  // ========================================
-  tipoLinea             TipoLineaCredito                             // REVOLVENTE | CARTA_CREDITO | GARANTIA_BANCARIA
+  // ❌ ELIMINADO: tipoLinea TipoLineaCredito
+  // ❌ ELIMINADO: comisionMantenimiento
+  // ❌ ELIMINADO: comisionUtilizacion
   
   // ========================================
   // MONTOS
@@ -7153,9 +7159,7 @@ model LineaCredito {
   // ========================================
   // CONDICIONES FINANCIERAS
   // ========================================
-  tasaInteres           Decimal                 @db.Decimal(7, 4)    // Tasa de interés anual
-  comisionMantenimiento Decimal?                @db.Decimal(18, 2)   // Comisión mensual
-  comisionUtilizacion   Decimal?                @db.Decimal(7, 4)    // % sobre monto utilizado
+  tasaInteres           Decimal                 @db.Decimal(7, 4)    // Tasa de interés anual base
   
   // ========================================
   // VIGENCIA
@@ -7193,6 +7197,7 @@ model LineaCredito {
   personalActualizador  Personal?               @relation("LineaCreditoActualizador", fields: [actualizadoPor], references: [id])
   
   prestamos             PrestamoBancario[]      // Préstamos que consumen esta línea
+  sublineas             SublineaCredito[]       // 🆕 NUEVO: Sublíneas por tipo de préstamo
   
   // ========================================
   // ÍNDICES
@@ -7205,6 +7210,65 @@ model LineaCredito {
   @@index([empresaId, estadoId])
 }
 
+// ============================================
+// MODELO 2.6: Sublínea de Crédito
+// Subdivide una LineaCredito por TipoPrestamo
+// Ejemplo: COMEX U$300k, Factoring U$375k, etc.
+// ============================================
+
+model SublineaCredito {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // RELACIÓN CON LÍNEA MAESTRA
+  // ========================================
+  lineaCreditoId        BigInt                  // 🆕 FK a LineaCredito
+  
+  // ========================================
+  // TIPO DE SUBLÍNEA
+  // ========================================
+  tipoPrestamoId        BigInt                  // 🆕 FK a TipoPrestamo (COMEX, Factoring, Warrant, etc.)
+  descripcion           String?                 @db.VarChar(200)     // 🆕 Descripción adicional opcional
+  
+  // ========================================
+  // MONTOS ASIGNADOS
+  // ========================================
+  montoAsignado         Decimal                 @db.Decimal(18, 2)   // 🆕 Monto asignado a esta sublínea
+  montoUtilizado        Decimal                 @default(0.00) @db.Decimal(18, 2)  // 🆕 Monto utilizado
+  montoDisponible       Decimal                 @db.Decimal(18, 2)   // 🆕 Disponible = Asignado - Utilizado
+  
+  // ========================================
+  // ESTADO
+  // ========================================
+  activo                Boolean                 @default(true)       // 🆕 Si la sublínea está activa
+  observaciones         String?                 @db.Text             // 🆕 Observaciones
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  lineaCredito          LineaCredito            @relation(fields: [lineaCreditoId], references: [id])
+  tipoPrestamo          TipoPrestamo            @relation(fields: [tipoPrestamoId], references: [id])
+  personalCreador       Personal?               @relation("SublineaCreditoCreador", fields: [creadoPor], references: [id])
+  personalActualizador  Personal?               @relation("SublineaCreditoActualizador", fields: [actualizadoPor], references: [id])
+  
+  prestamos             PrestamoBancario[]      // 🆕 Préstamos que consumen esta sublínea
+  
+  // ========================================
+  // ÍNDICES Y CONSTRAINTS
+  // ========================================
+  @@unique([lineaCreditoId, tipoPrestamoId], name: "unique_sublinea_tipo")  // 🆕 Una sublínea por tipo en cada línea
+  @@index([lineaCreditoId])
+  @@index([tipoPrestamoId])
+  @@index([activo])
+}
 
 // ============================================
 // MODELO 2.7: Inversión Financiera
@@ -7412,7 +7476,8 @@ model TipoPrestamo {
   personalActualizador  Personal?               @relation("TipoPrestamoActualizador", fields: [actualizadoPor], references: [id])
   
   prestamos             PrestamoBancario[]      @relation("PrestamoBancarioTipoPrestamo")
-  
+  sublineas             SublineaCredito[]       // 🆕 NUEVO: Sublíneas que usan este tipo
+
   // ========================================
   // INDICES
   // ========================================
