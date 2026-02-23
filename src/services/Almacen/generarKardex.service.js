@@ -161,7 +161,7 @@ async function procesarKardexOrigen(
     nroSerie: detalle.nroSerie || "",
     estadoId: detalle.estadoMercaderiaId,
     estadoCalidadId: detalle.estadoCalidadId,
-    ubicacionFisicaId: detalle.ubicacionFisicaId,
+    ubicacionFisicaId: detalle.ubicacionFisicaOrigenId,
   };
   if (kardexExistentes.length === 1) {
     await tx.kardexAlmacen.update({
@@ -245,7 +245,7 @@ async function procesarKardexDestino(
     nroSerie: detalle.nroSerie || "",
     estadoId: detalle.estadoMercaderiaId,
     estadoCalidadId: detalle.estadoCalidadId,
-    ubicacionFisicaId: detalle.ubicacionFisicaId,
+    ubicacionFisicaId: detalle.ubicacionFisicaDestinoId,
   };
   if (kardexExistentes.length === 1) {
     await tx.kardexAlmacen.update({

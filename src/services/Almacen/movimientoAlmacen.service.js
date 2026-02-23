@@ -83,7 +83,9 @@ const obtenerPorId = async (id) => {
                 color: true,
                 tipoAlmacenamiento: true
               }
-            }
+            },
+            ubicacionFisicaOrigen: true,
+            ubicacionFisicaDestino: true
           }
         },
         preFacturas: true 
