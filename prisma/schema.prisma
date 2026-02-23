@@ -3861,6 +3861,8 @@ model SubfamiliaProducto {
   familiaId BigInt
   id        BigInt     @id @default(autoincrement())
   nombre    String     @db.VarChar(120)
+  llevaKardex   Boolean    @default(false)  // ← NUEVO CAMPO
+
   productos  Producto[]
   tiposProducto TipoProducto[]
 
