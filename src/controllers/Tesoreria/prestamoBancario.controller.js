@@ -92,3 +92,67 @@ export async function recalcularCuotas(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Lista préstamos bancarios por sublínea de crédito.
+ */
+export async function listarPorSublinea(req, res, next){
+  try {
+    const { sublineaCreditoId } = req.params;
+    const prestamos = await prestamoBancarioService.listarPorSublinea(
+      BigInt(sublineaCreditoId)
+    );
+    res.json(toJSONBigInt(prestamos));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export const obtenerPrestamosDisponiblesParaSublinea = async (req, res, next) => {
+  try {
+    const { lineaCreditoId, tipoPrestamoId } = req.query;
+    
+    if (!lineaCreditoId || !tipoPrestamoId) {
+      return res.status(400).json({ 
+        message: 'Se requieren lineaCreditoId y tipoPrestamoId' 
+      });
+    }
+
+    const prestamos = await prestamoBancarioService.obtenerDisponiblesParaSublinea(
+      BigInt(lineaCreditoId),
+      BigInt(tipoPrestamoId)
+    );
+    
+    res.json(toJSONBigInt(prestamos));  // CORRECTO - Serializa BigInt
+  } catch (error) {
+    next(error);
+  }
+};
+
+export async function asignarPrestamoASublinea(req, res, next){
+  try {
+    const { id } = req.params;
+    const { sublineaCreditoId } = req.body;
+    
+    const prestamo = await prestamoBancarioService.asignarASublinea(
+      BigInt(id),
+      BigInt(sublineaCreditoId)
+    );
+    
+    res.json(toJSONBigInt(prestamo));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export async function desvincularPrestamoDeSublinea(req, res, next){
+  try {
+    const { id } = req.params;
+    
+    const prestamo = await prestamoBancarioService.desvincularDeSublinea(BigInt(id));
+    
+    res.json(toJSONBigInt(prestamo));
+  } catch (error) {
+    next(error);
+  }
+};

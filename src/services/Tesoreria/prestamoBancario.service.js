@@ -722,6 +722,127 @@ const listarSimple = async () => {
   }
 };
 
+/**
+ * Lista préstamos bancarios por sublínea de crédito.
+ * @param {BigInt} sublineaCreditoId - ID de la sublínea de crédito
+ */
+const listarPorSublinea = async (sublineaCreditoId) => {
+  try {
+    return await prisma.prestamoBancario.findMany({
+      where: { sublineaCreditoId },
+      include: {
+        empresa: true,
+        banco: true,
+        moneda: true,
+        estado: true,
+        tipoPrestamo: true,
+        lineaCredito: {
+          include: {
+            moneda: true,
+          },
+        },
+      },
+      orderBy: { fechaDesembolso: "desc" },
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+const obtenerDisponiblesParaSublinea = async (lineaCreditoId, tipoPrestamoId) => {
+  try {
+    const prestamos = await prisma.prestamoBancario.findMany({
+      where: {
+        lineaCreditoId: lineaCreditoId,
+        sublineaCreditoId: null,
+        tipoPrestamoId: tipoPrestamoId,
+      },
+      include: {
+        estado: {
+          select: {
+            id: true,
+            descripcion: true,
+          },
+        },
+        tipoPrestamo: {
+          select: {
+            id: true,
+            descripcion: true,
+          },
+        },
+        moneda: {
+          select: {
+            id: true,
+            codigoSunat: true,
+            nombreLargo: true,  // ✅ CAMPO CORRECTO
+            simbolo: true,
+          },
+        },
+      },
+      orderBy: {
+        fechaDesembolso: 'desc',
+      },
+    });
+
+    return prestamos;
+  } catch (error) {
+    console.error('Error al obtener préstamos disponibles:', error);
+    throw error;
+  }
+};
+
+const asignarASublinea = async (prestamoId, sublineaCreditoId) => {
+  try {
+    const prestamo = await prisma.prestamoBancario.update({
+      where: { id: prestamoId },
+      data: {
+        sublineaCreditoId: sublineaCreditoId,
+        actualizadoEn: new Date(),
+      },
+      include: {
+        estado: true,
+        tipoPrestamo: true,
+        sublineaCredito: true,
+      },
+    });
+
+    return prestamo;
+  } catch (error) {
+    console.error('Error al asignar préstamo a sublínea:', error);
+    throw error;
+  }
+};
+
+const desvincularDeSublinea = async (prestamoId) => {
+  try {
+    const prestamo = await prisma.prestamoBancario.update({
+      where: { id: prestamoId },
+      data: {
+        sublineaCreditoId: null,
+        actualizadoEn: new Date(),
+      },
+      include: {
+        estado: true,
+        tipoPrestamo: true,
+      },
+    });
+
+    return prestamo;
+  } catch (error) {
+    console.error('Error al desvincular préstamo de sublínea:', error);
+    throw error;
+  }
+};
+
+export {
+  // ... funciones existentes
+  obtenerDisponiblesParaSublinea,
+  asignarASublinea,
+  desvincularDeSublinea,
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -732,4 +853,8 @@ export default {
   listarVigentes,
   obtenerCronograma,
   listarSimple,
+  listarPorSublinea,
+  obtenerDisponiblesParaSublinea,
+  asignarASublinea,
+  desvincularDeSublinea
 };

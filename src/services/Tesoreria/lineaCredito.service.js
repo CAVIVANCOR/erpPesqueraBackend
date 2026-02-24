@@ -87,18 +87,6 @@ async function validarLineaCredito(data) {
     }
   }
 
-  // Validar tipo de línea
-  if (data.tipoLinea) {
-    const tiposValidos = [
-      "REVOLVENTE",
-      "CARTA_CREDITO",
-      "GARANTIA_BANCARIA",
-      "SOBREGIRO",
-    ];
-    if (!tiposValidos.includes(data.tipoLinea)) {
-      throw new ValidationError("El tipo de línea de crédito no es válido.");
-    }
-  }
 
   // Validar fechas
   if (data.fechaAprobacion && data.fechaVencimiento) {
@@ -401,11 +389,10 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     // Validar campos obligatorios
-    if (
+     if (
       !data.empresaId ||
       !data.bancoId ||
       !data.numeroLinea ||
-      !data.tipoLinea ||
       !data.montoAprobado ||
       !data.monedaId ||
       !data.tasaInteres ||
@@ -713,9 +700,8 @@ const obtenerReporteLineasDisponibles = async (empresaId) => {
         );
       });
 
-      detalleBancos[bancoId].lineas.push({
+       detalleBancos[bancoId].lineas.push({
         numeroLinea: linea.numeroLinea,
-        tipoLinea: linea.tipoLinea,
         moneda: linea.moneda.codigoSunat,
         limite: montoAprobado,
         utilizado: montoUtilizado,
