@@ -230,10 +230,10 @@ const crear = async (data) => {
     });
 
     if (sublineaExistente) {
-      throw new ConflictError('Ya existe una sublínea para este tipo de préstamo en esta línea de crédito.');
+      throw new ConflictError('Ya existe una sublínea para este tipo de préstamo. Si desea crear variantes, edite la sublínea existente y modifique su descripción.');
     }
 
-    // Validar que la suma de sublíneas no exceda el monto aprobado de la línea
+        // Validar que la suma de sublíneas no exceda el monto aprobado de la línea
     const lineaCredito = await prisma.lineaCredito.findUnique({
       where: { id: data.lineaCreditoId },
       include: {
@@ -241,7 +241,7 @@ const crear = async (data) => {
       }
     });
 
-    // Agrupar sublíneas actuales por descripción y calcular suma de máximos
+    // Agrupar sublíneas actuales por descripción
     const gruposPorDescripcion = lineaCredito.sublineas.reduce((grupos, sublinea) => {
       const descripcion = sublinea.descripcion || 'Sin descripción';
       if (!grupos[descripcion]) {
@@ -251,21 +251,27 @@ const crear = async (data) => {
       return grupos;
     }, {});
 
-    // Calcular suma de máximos actuales
+    // Calcular suma de máximos actuales (ordenar por monto descendente y tomar el primero)
     let sumaMaximosActuales = 0;
     Object.values(gruposPorDescripcion).forEach(grupo => {
-      const maxAsignado = Math.max(...grupo.map(s => parseFloat(s.montoAsignado || 0)));
-      sumaMaximosActuales += maxAsignado;
+      // Ordenar por monto descendente y tomar el primero
+      const sublineaMaxima = grupo.sort((a, b) => parseFloat(b.montoAsignado || 0) - parseFloat(a.montoAsignado || 0))[0];
+      sumaMaximosActuales += parseFloat(sublineaMaxima.montoAsignado || 0);
     });
 
     // Simular agregar la nueva sublínea y recalcular
     const descripcionNueva = data.descripcion || 'Sin descripción';
     const grupoNuevo = gruposPorDescripcion[descripcionNueva] || [];
-    const montosGrupo = [...grupoNuevo.map(s => parseFloat(s.montoAsignado || 0)), parseFloat(data.montoAsignado)];
-    const maxNuevoGrupo = Math.max(...montosGrupo);
+    const grupoConNueva = [...grupoNuevo, { montoAsignado: data.montoAsignado }];
+    
+    // Ordenar por monto descendente y tomar el primero
+    const sublineaMaximaGrupo = grupoConNueva.sort((a, b) => parseFloat(b.montoAsignado || 0) - parseFloat(a.montoAsignado || 0))[0];
+    const maxNuevoGrupo = parseFloat(sublineaMaximaGrupo.montoAsignado || 0);
     
     // Restar el máximo anterior del grupo (si existía) y sumar el nuevo máximo
-    const maxAnteriorGrupo = grupoNuevo.length > 0 ? Math.max(...grupoNuevo.map(s => parseFloat(s.montoAsignado || 0))) : 0;
+    const maxAnteriorGrupo = grupoNuevo.length > 0 
+      ? parseFloat(grupoNuevo.sort((a, b) => parseFloat(b.montoAsignado || 0) - parseFloat(a.montoAsignado || 0))[0].montoAsignado || 0)
+      : 0;
     const nuevaSuma = sumaMaximosActuales - maxAnteriorGrupo + maxNuevoGrupo;
 
     if (nuevaSuma > parseFloat(lineaCredito.montoAprobado)) {
@@ -344,7 +350,7 @@ const actualizar = async (id, data) => {
       }
     }
 
-    // Si se cambia el monto asignado, validar que no exceda el límite de la línea
+       // Si se cambia el monto asignado, validar que no exceda el límite de la línea
     if (data.montoAsignado !== undefined) {
       // Agrupar sublíneas por descripción (excluyendo la que se está actualizando)
       const otrasSublíneas = sublineaExistente.lineaCredito.sublineas.filter(s => s.id !== id);
@@ -360,19 +366,25 @@ const actualizar = async (id, data) => {
       // Calcular suma de máximos actuales (sin la sublínea que se actualiza)
       let sumaMaximosActuales = 0;
       Object.values(gruposPorDescripcion).forEach(grupo => {
-        const maxAsignado = Math.max(...grupo.map(s => parseFloat(s.montoAsignado || 0)));
-        sumaMaximosActuales += maxAsignado;
+        // Ordenar por monto descendente y tomar el primero
+        const sublineaMaxima = grupo.sort((a, b) => parseFloat(b.montoAsignado || 0) - parseFloat(a.montoAsignado || 0))[0];
+        sumaMaximosActuales += parseFloat(sublineaMaxima.montoAsignado || 0);
       });
 
       // Simular actualizar la sublínea y recalcular
       const descripcionActualizada = data.descripcion !== undefined ? data.descripcion : sublineaExistente.descripcion;
       const descripcionKey = descripcionActualizada || 'Sin descripción';
       const grupoActualizado = gruposPorDescripcion[descripcionKey] || [];
-      const montosGrupo = [...grupoActualizado.map(s => parseFloat(s.montoAsignado || 0)), parseFloat(data.montoAsignado)];
-      const maxNuevoGrupo = Math.max(...montosGrupo);
+      const grupoConActualizada = [...grupoActualizado, { montoAsignado: data.montoAsignado }];
+      
+      // Ordenar por monto descendente y tomar el primero
+      const sublineaMaximaGrupo = grupoConActualizada.sort((a, b) => parseFloat(b.montoAsignado || 0) - parseFloat(a.montoAsignado || 0))[0];
+      const maxNuevoGrupo = parseFloat(sublineaMaximaGrupo.montoAsignado || 0);
       
       // Restar el máximo anterior del grupo (si existía) y sumar el nuevo máximo
-      const maxAnteriorGrupo = grupoActualizado.length > 0 ? Math.max(...grupoActualizado.map(s => parseFloat(s.montoAsignado || 0))) : 0;
+      const maxAnteriorGrupo = grupoActualizado.length > 0
+        ? parseFloat(grupoActualizado.sort((a, b) => parseFloat(b.montoAsignado || 0) - parseFloat(a.montoAsignado || 0))[0].montoAsignado || 0)
+        : 0;
       const nuevaSuma = sumaMaximosActuales - maxAnteriorGrupo + maxNuevoGrupo;
 
       if (nuevaSuma > parseFloat(sublineaExistente.lineaCredito.montoAprobado)) {

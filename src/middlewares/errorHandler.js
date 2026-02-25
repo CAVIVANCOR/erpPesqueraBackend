@@ -19,6 +19,7 @@ export function errorHandler(err, req, res, next) {
   });
 
   res.status(err.status || 500).json({
+    message: err.message || 'Error interno del servidor',
     mensaje: err.message || 'Error interno del servidor',
     codigo: err.codigo || 'ERR_INTERNO',
     detalles: process.env.NODE_ENV === 'development' ? (err.detalles || err.stack) : undefined,
