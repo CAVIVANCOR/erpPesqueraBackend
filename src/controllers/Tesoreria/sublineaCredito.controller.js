@@ -77,3 +77,58 @@ export async function actualizarMontoUtilizado(req, res, next) {
     next(err);
   }
 }
+
+
+// ============================================
+// GESTIÓN DE SOBREGIROS
+// ============================================
+
+export async function crearSobregiro(req, res, next) {
+  try {
+    const { sublineaId } = req.params;
+    const sobregiro = await sublineaCreditoService.crearSobregiro(BigInt(sublineaId), req.body);
+    res.status(201).json(toJSONBigInt(sobregiro));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function actualizarSobregiro(req, res, next) {
+  try {
+    const { sobregiroid } = req.params;
+    const sobregiro = await sublineaCreditoService.actualizarSobregiro(BigInt(sobregiroid), req.body);
+    res.json(toJSONBigInt(sobregiro));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelarSobregiro(req, res, next) {
+  try {
+    const { sobregiroid } = req.params;
+    const sobregiro = await sublineaCreditoService.cancelarSobregiro(BigInt(sobregiroid));
+    res.json(toJSONBigInt(sobregiro));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function obtenerSobregiros(req, res, next) {
+  try {
+    const { sublineaId } = req.params;
+    const sobregiros = await sublineaCreditoService.obtenerSobregiros(BigInt(sublineaId));
+    res.json(toJSONBigInt(sobregiros));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function obtenerSobregiosVigentes(req, res, next) {
+  try {
+    const { sublineaId } = req.params;
+    const sobregiros = await sublineaCreditoService.obtenerSobregiosVigentes(BigInt(sublineaId));
+    res.json(toJSONBigInt(sobregiros));
+  } catch (err) {
+    next(err);
+  }
+}

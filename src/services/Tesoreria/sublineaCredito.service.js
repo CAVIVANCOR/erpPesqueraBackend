@@ -100,41 +100,61 @@ const listar = async () => {
   }
 };
 
-/**
- * Listar sublíneas de una línea de crédito específica
- * @param {BigInt} lineaCreditoId - ID de la línea de crédito
- */
 const listarPorLinea = async (lineaCreditoId) => {
   try {
     const sublineas = await prisma.sublineaCredito.findMany({
-      where: { lineaCreditoId },
+      where: { lineaCreditoId: lineaCreditoId },
       include: {
         tipoPrestamo: true,
-        personalCreador: {
+        sobregiros: {
+          where: {
+            activo: true,
+          },
+        },
+        prestamos: {
+          where: {
+            estado: {
+              descripcion: 'VIGENTE'
+            }
+          },
           select: {
             id: true,
-            nombres: true,
-            apellidos: true,
+            saldoCapital: true,
           }
-        },
-        personalActualizador: {
-          select: {
-            id: true,
-            nombres: true,
-            apellidos: true,
-          }
-        },
+        }
       },
-      orderBy: {
-        tipoPrestamoId: 'asc'
-      }
+      orderBy: { creadoEn: 'desc' },
     });
-    return sublineas;
+
+    // Calcular montos para cada sublínea
+    const sublineasConCalculos = sublineas.map(sublinea => {
+      // Calcular total de sobregiros activos (con o sin aprobación)
+      const totalSobregiros = sublinea.sobregiros.reduce((sum, sobregiro) => {
+        return sum + parseFloat(sobregiro.montoAutorizado || 0);
+      }, 0);
+
+      // Calcular monto utilizado (suma de saldos de capital de préstamos vigentes)
+      const montoUtilizado = sublinea.prestamos.reduce((sum, prestamo) => {
+        return sum + parseFloat(prestamo.saldoCapital || 0);
+      }, 0);
+
+      // Calcular monto disponible (asignado + sobregiros - utilizado)
+      const montoAsignado = parseFloat(sublinea.montoAsignado || 0);
+      const montoDisponible = montoAsignado + totalSobregiros - montoUtilizado;
+
+      return {
+        ...sublinea,
+        totalSobregiros,
+        montoUtilizado,
+        montoDisponible,
+      };
+    });
+
+    return sublineasConCalculos;
   } catch (error) {
-    throw new DatabaseError('Error al listar sublíneas por línea de crédito: ' + error.message);
+    throw new DatabaseError('Error al listar sublíneas por línea: ' + error.message);
   }
 };
-
 /**
  * Listar sublíneas activas
  */
@@ -505,6 +525,178 @@ const actualizarMontoUtilizado = async (id) => {
   }
 };
 
+
+
+// ============================================
+// GESTIÓN DE SOBREGIROS
+// ============================================
+
+/**
+ * Crear un sobregiro autorizado para una sublínea
+ * @param {BigInt} sublineaCreditoId - ID de la sublínea
+ * @param {Object} data - Datos del sobregiro
+ * @returns {Object} Sobregiro creado
+ */
+const crearSobregiro = async (sublineaCreditoId, data) => {
+  try {
+    // Validar que la sublínea existe
+    const sublinea = await prisma.sublineaCredito.findUnique({
+      where: { id: sublineaCreditoId },
+    });
+
+    if (!sublinea) {
+      throw new NotFoundError('La sublínea de crédito no existe.');
+    }
+
+    // Validar monto autorizado
+    if (!data.montoAutorizado || parseFloat(data.montoAutorizado) <= 0) {
+      throw new ValidationError('El monto autorizado debe ser mayor a cero.');
+    }
+
+    // Crear sobregiro
+    const sobregiro = await prisma.sobregiroAutorizado.create({
+      data: {
+        sublineaCreditoId: sublineaCreditoId,
+        montoAutorizado: data.montoAutorizado,
+        fechaSolicitud: data.fechaSolicitud || new Date(),
+        fechaAprobacion: data.fechaAprobacion || null,
+        autorizadoPorBanco: data.autorizadoPorBanco || null,
+        numeroAutorizacionBanco: data.numeroAutorizacionBanco || null,
+        motivoSolicitud: data.motivoSolicitud || null,
+        creadoPor: data.creadoPor || null,
+        activo: true,
+      },
+    });
+
+    return sobregiro;
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    throw new DatabaseError('Error al crear sobregiro: ' + error.message);
+  }
+};
+
+/**
+ * Actualizar un sobregiro autorizado
+ * @param {BigInt} sobregiroid - ID del sobregiro
+ * @param {Object} data - Datos a actualizar
+ * @returns {Object} Sobregiro actualizado
+ */
+const actualizarSobregiro = async (sobregiroid, data) => {
+  try {
+    // Verificar que el sobregiro existe
+    const sobregiroidExistente = await prisma.sobregiroAutorizado.findUnique({
+      where: { id: sobregiroid },
+    });
+
+    if (!sobregiroidExistente) {
+      throw new NotFoundError('El sobregiro no existe.');
+    }
+
+    // Preparar datos a actualizar
+    const dataToUpdate = {};
+
+    if (data.montoAutorizado !== undefined) {
+      if (parseFloat(data.montoAutorizado) <= 0) {
+        throw new ValidationError('El monto autorizado debe ser mayor a cero.');
+      }
+      dataToUpdate.montoAutorizado = data.montoAutorizado;
+    }
+
+    if (data.fechaAprobacion !== undefined) dataToUpdate.fechaAprobacion = data.fechaAprobacion;
+    if (data.autorizadoPorBanco !== undefined) dataToUpdate.autorizadoPorBanco = data.autorizadoPorBanco;
+    if (data.numeroAutorizacionBanco !== undefined) dataToUpdate.numeroAutorizacionBanco = data.numeroAutorizacionBanco;
+    if (data.motivoSolicitud !== undefined) dataToUpdate.motivoSolicitud = data.motivoSolicitud;
+    if (data.actualizadoPor !== undefined) dataToUpdate.actualizadoPor = data.actualizadoPor;
+
+    // Actualizar
+    const sobregiroidActualizado = await prisma.sobregiroAutorizado.update({
+      where: { id: sobregiroid },
+      data: dataToUpdate,
+    });
+
+    return sobregiroidActualizado;
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    throw new DatabaseError('Error al actualizar sobregiro: ' + error.message);
+  }
+};
+
+/**
+ * Cancelar un sobregiro (marcar como inactivo)
+ * @param {BigInt} sobregiroid - ID del sobregiro
+ * @returns {Object} Sobregiro cancelado
+ */
+const cancelarSobregiro = async (sobregiroid) => {
+  try {
+    // Verificar que el sobregiro existe
+    const sobregiroidExistente = await prisma.sobregiroAutorizado.findUnique({
+      where: { id: sobregiroid },
+    });
+
+    if (!sobregiroidExistente) {
+      throw new NotFoundError('El sobregiro no existe.');
+    }
+
+    // Marcar como inactivo
+    const sobregiroCancelado = await prisma.sobregiroAutorizado.update({
+      where: { id: sobregiroid },
+      data: { activo: false },
+    });
+
+    return sobregiroCancelado;
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new DatabaseError('Error al cancelar sobregiro: ' + error.message);
+  }
+};
+
+/**
+ * Obtener sobregiros de una sublínea
+ * @param {BigInt} sublineaCreditoId - ID de la sublínea
+ * @returns {Array} Lista de sobregiros
+ */
+const obtenerSobregiros = async (sublineaCreditoId) => {
+  try {
+    const sobregiros = await prisma.sobregiroAutorizado.findMany({
+      where: { sublineaCreditoId: sublineaCreditoId },
+      orderBy: { creadoEn: 'desc' },
+    });
+
+    return sobregiros;
+  } catch (error) {
+    throw new DatabaseError('Error al obtener sobregiros: ' + error.message);
+  }
+};
+
+/**
+ * Obtener sobregiros vigentes de una sublínea
+ * @param {BigInt} sublineaCreditoId - ID de la sublínea
+ * @returns {Array} Lista de sobregiros vigentes
+ */
+const obtenerSobregiosVigentes = async (sublineaCreditoId) => {
+  try {
+    const sobregiros = await prisma.sobregiroAutorizado.findMany({
+      where: {
+        sublineaCreditoId: sublineaCreditoId,
+        activo: true,
+        fechaAprobacion: { not: null },
+      },
+      orderBy: { fechaAprobacion: 'desc' },
+    });
+
+    return sobregiros;
+  } catch (error) {
+    throw new DatabaseError('Error al obtener sobregiros vigentes: ' + error.message);
+  }
+};
+
+
 export default {
   listar,
   listarPorLinea,
@@ -514,4 +706,9 @@ export default {
   actualizar,
   eliminar,
   actualizarMontoUtilizado,
+  crearSobregiro,
+  actualizarSobregiro,
+  cancelarSobregiro,
+  obtenerSobregiros,
+  obtenerSobregiosVigentes,
 };

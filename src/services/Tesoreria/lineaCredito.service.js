@@ -87,7 +87,6 @@ async function validarLineaCredito(data) {
     }
   }
 
-
   // Validar fechas
   if (data.fechaAprobacion && data.fechaVencimiento) {
     if (new Date(data.fechaVencimiento) <= new Date(data.fechaAprobacion)) {
@@ -283,6 +282,15 @@ const listar = async () => {
             },
           },
         },
+        sublineas: {
+          include: {
+            sobregiros: {
+              where: {
+                activo: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { fechaAprobacion: "desc" },
     });
@@ -333,11 +341,25 @@ const listar = async () => {
           montoUtilizado += montoEnMonedaLinea;
         }
         const montoAprobado = parseFloat(linea.montoAprobado || 0);
+
+        // Calcular total de sobregiros de todas las sublíneas
+        let totalSobregiros = 0;
+        if (linea.sublineas) {
+          linea.sublineas.forEach((sublinea) => {
+            if (sublinea.sobregiros) {
+              sublinea.sobregiros.forEach((sobregiro) => {
+                totalSobregiros += parseFloat(sobregiro.montoAutorizado || 0);
+              });
+            }
+          });
+        }
+
         const montoDisponible = montoAprobado - montoUtilizado;
         return {
           ...linea,
           montoUtilizado,
           montoDisponible,
+          totalSobregiros,
         };
       }),
     );
@@ -389,7 +411,7 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     // Validar campos obligatorios
-     if (
+    if (
       !data.empresaId ||
       !data.bancoId ||
       !data.numeroLinea ||
@@ -700,7 +722,7 @@ const obtenerReporteLineasDisponibles = async (empresaId) => {
         );
       });
 
-       detalleBancos[bancoId].lineas.push({
+      detalleBancos[bancoId].lineas.push({
         numeroLinea: linea.numeroLinea,
         moneda: linea.moneda.codigoSunat,
         limite: montoAprobado,

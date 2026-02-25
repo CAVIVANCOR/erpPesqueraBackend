@@ -12,4 +12,13 @@ router.post('/:id/actualizar-monto', sublineaCreditoController.actualizarMontoUt
 router.put('/:id', sublineaCreditoController.actualizar);
 router.delete('/:id', sublineaCreditoController.eliminar);
 
+// ============================================
+// RUTAS DE SOBREGIROS
+// ============================================
+router.post('/:sublineaId/sobregiros', sublineaCreditoController.crearSobregiro);
+router.put('/sobregiros/:sobregiroid', sublineaCreditoController.actualizarSobregiro);
+router.delete('/sobregiros/:sobregiroid', sublineaCreditoController.cancelarSobregiro);
+router.get('/:sublineaId/sobregiros', sublineaCreditoController.obtenerSobregiros);
+router.get('/:sublineaId/sobregiros/vigentes', sublineaCreditoController.obtenerSobregiosVigentes);
+
 export default router;
