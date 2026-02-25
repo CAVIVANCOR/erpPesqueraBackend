@@ -241,15 +241,17 @@ const crear = async (data) => {
       }
     });
 
-    // Agrupar sublíneas actuales por descripción
-    const gruposPorDescripcion = lineaCredito.sublineas.reduce((grupos, sublinea) => {
-      const descripcion = sublinea.descripcion || 'Sin descripción';
-      if (!grupos[descripcion]) {
-        grupos[descripcion] = [];
-      }
-      grupos[descripcion].push(sublinea);
-      return grupos;
-    }, {});
+    // Agrupar sublíneas actuales por descripción (excluir las marcadas como excluirDeCalculo)
+    const gruposPorDescripcion = lineaCredito.sublineas
+      .filter(s => !s.excluirDeCalculo)
+      .reduce((grupos, sublinea) => {
+        const descripcion = sublinea.descripcion || 'Sin descripción';
+        if (!grupos[descripcion]) {
+          grupos[descripcion] = [];
+        }
+        grupos[descripcion].push(sublinea);
+        return grupos;
+      }, {});
 
     // Calcular suma de máximos actuales (ordenar por monto descendente y tomar el primero)
     let sumaMaximosActuales = 0;
@@ -352,8 +354,9 @@ const actualizar = async (id, data) => {
 
        // Si se cambia el monto asignado, validar que no exceda el límite de la línea
     if (data.montoAsignado !== undefined) {
-      // Agrupar sublíneas por descripción (excluyendo la que se está actualizando)
-      const otrasSublíneas = sublineaExistente.lineaCredito.sublineas.filter(s => s.id !== id);
+      // Agrupar sublíneas por descripción (excluyendo la que se está actualizando y las excluidas)
+      const otrasSublíneas = sublineaExistente.lineaCredito.sublineas
+        .filter(s => s.id !== id && !s.excluirDeCalculo);
       const gruposPorDescripcion = otrasSublíneas.reduce((grupos, sublinea) => {
         const descripcion = sublinea.descripcion || 'Sin descripción';
         if (!grupos[descripcion]) {
@@ -402,6 +405,7 @@ const actualizar = async (id, data) => {
     if (data.montoAsignado !== undefined) dataToUpdate.montoAsignado = data.montoAsignado;
     if (data.montoUtilizado !== undefined) dataToUpdate.montoUtilizado = data.montoUtilizado;
     if (data.activo !== undefined) dataToUpdate.activo = data.activo;
+    if (data.excluirDeCalculo !== undefined) dataToUpdate.excluirDeCalculo = data.excluirDeCalculo;
     if (data.observaciones !== undefined) dataToUpdate.observaciones = data.observaciones;
     if (data.actualizadoPor !== undefined) dataToUpdate.actualizadoPor = data.actualizadoPor;
 
