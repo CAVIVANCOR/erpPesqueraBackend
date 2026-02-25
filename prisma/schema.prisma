@@ -7261,13 +7261,37 @@ model SublineaCredito {
   personalActualizador  Personal?               @relation("SublineaCreditoActualizador", fields: [actualizadoPor], references: [id])
   
   prestamos             PrestamoBancario[]      // 🆕 Préstamos que consumen esta sublínea
-  
+  sobregiros          SobregiroAutorizado[]
+
   // ========================================
   // ÍNDICES Y CONSTRAINTS
   // ========================================
   @@unique([lineaCreditoId, tipoPrestamoId], name: "unique_sublinea_tipo")  // 🆕 Una sublínea por tipo en cada línea
   @@index([lineaCreditoId])
   @@index([tipoPrestamoId])
+  @@index([activo])
+}
+
+model SobregiroAutorizado {
+  id                      BigInt    @id @default(autoincrement())
+  sublineaCreditoId       BigInt
+  montoAutorizado         Decimal   @db.Decimal(18, 2)
+  fechaSolicitud          DateTime  @default(now())
+  fechaAprobacion         DateTime?
+  autorizadoPorBanco      String?
+  numeroAutorizacionBanco String?
+  motivoSolicitud         String?   @db.Text
+  creadoPor               BigInt?
+  actualizadoPor          BigInt?
+  creadoEn                DateTime  @default(now())
+  actualizadoEn           DateTime  @updatedAt
+  activo                  Boolean   @default(true)
+  
+  // Relaciones
+  sublineaCredito         SublineaCredito @relation(fields: [sublineaCreditoId], references: [id])
+  
+  // Índices
+  @@index([sublineaCreditoId])
   @@index([activo])
 }
 
