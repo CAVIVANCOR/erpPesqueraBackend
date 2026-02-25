@@ -7242,7 +7242,8 @@ model SublineaCredito {
   // ========================================
   activo                Boolean                 @default(true)       // 🆕 Si la sublínea está activa
   observaciones         String?                 @db.Text             // 🆕 Observaciones
-  
+  excluirDeCalculo      Boolean                 @default(false)      // 🆕 Excluir esta sublínea del cálculo de totales
+
   // ========================================
   // AUDITORÍA
   // ========================================
