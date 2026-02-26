@@ -2257,6 +2257,8 @@ model DetCuotaPesca {
   idPersonaActualiza  BigInt
   cuotaPropia  Boolean @default(false)
   precioPorTonDolares Decimal? @default(0) @db.Decimal(10,2) 
+  zona                ZonaPesca @default(NORTE)
+  esAlquiler          Boolean   @default(false) // false=PESCA, true=ALQUILER
 
   // Relaciones
   empresa             Empresa   @relation(fields: [empresaId], references: [id])
@@ -2265,6 +2267,13 @@ model DetCuotaPesca {
   // Índices para performance
   @@index([empresaId])
   @@index([idPersonaActualiza])
+  @@index([zona])
+  @@index([esAlquiler])
+}
+
+enum ZonaPesca {
+  NORTE
+  SUR
 }
 
 model EmpresaCentroCosto {
@@ -3932,6 +3941,9 @@ model TemporadaPesca {
   liqTotalPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
   precioPorTonDolares Decimal? @default(0.00) @db.Decimal(10,2)
   
+  zona                        ZonaPesca @default(NORTE)
+  ingresosPorAlquilerCuotaSur Decimal?  @default(0) @db.Decimal(12,2)
+
 
   unidadNegocioId   BigInt?
 
