@@ -203,6 +203,16 @@ router.get('/sunat/tipo-cambio', async (req, res) => {
           error: 'Parámetros de fecha no válidos'
         });
       }
+      if (response.status === 401 || response.status === 403) {
+        return res.status(401).json({
+          error: 'Token de API SUNAT vencido o inválido. Contacte al administrador del sistema para renovar el token.'
+        });
+      }
+      if (response.status === 404 || response.status === 422) {
+        return res.status(404).json({
+          error: 'Tipo de cambio no disponible para la fecha indicada'
+        });
+      }
       throw new Error(`Error API SUNAT: ${response.status}`);
     }
     const data = await response.json();

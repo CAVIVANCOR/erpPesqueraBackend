@@ -50,6 +50,22 @@ async function validarDetCuotaPesca(data) {
       throw new ValidationError('El precio por tonelada no puede ser negativo');
     }
   }
+
+    // Validar zona
+  if (data.zona !== undefined && data.zona !== null) {
+    const zonasValidas = ['NORTE', 'SUR'];
+    if (!zonasValidas.includes(data.zona)) {
+      throw new ValidationError('La zona debe ser NORTE o SUR');
+    }
+  }
+
+  // Validar esAlquiler (debe ser boolean)
+  if (data.esAlquiler !== undefined && data.esAlquiler !== null) {
+    if (typeof data.esAlquiler !== 'boolean') {
+      throw new ValidationError('El campo esAlquiler debe ser verdadero o falso');
+    }
+  }
+
 }
 
 /**
@@ -77,8 +93,8 @@ async function validarSumaPorcentajes(empresaId, porcentajeCuota, idExcluir = nu
 
 /**
  * Lista todos los detalles de cuota de pesca.
- * Puede filtrar por empresaId si se proporciona.
- * @param {Object} filtros - Filtros opcionales { empresaId }
+ * Puede filtrar por empresaId, zona y esAlquiler si se proporcionan.
+ * @param {Object} filtros - Filtros opcionales { empresaId, zona, esAlquiler }
  */
 const listar = async (filtros = {}) => {
   try {
@@ -86,6 +102,16 @@ const listar = async (filtros = {}) => {
     
     if (filtros.empresaId) {
       where.empresaId = Number(filtros.empresaId);
+    }
+
+    // Filtrar por zona si se proporciona
+    if (filtros.zona) {
+      where.zona = filtros.zona;
+    }
+
+    // Filtrar por esAlquiler si se proporciona
+    if (filtros.esAlquiler !== undefined && filtros.esAlquiler !== null) {
+      where.esAlquiler = filtros.esAlquiler === true || filtros.esAlquiler === 'true';
     }
 
     return await prisma.detCuotaPesca.findMany({
@@ -96,6 +122,7 @@ const listar = async (filtros = {}) => {
       },
       orderBy: [
         { empresaId: 'asc' },
+        { zona: 'asc' },
         { cuotaPropia: 'desc' },
         { id: 'desc' }
       ]
@@ -127,69 +154,79 @@ const obtenerPorId = async (id) => {
 };
 
 /**
- * Crea un detalle de cuota validando empresaId, idPersonaActualiza y porcentajes.
+ * Crea un nuevo detalle de cuota de pesca.
+ * Valida relaciones y suma de porcentajes.
+ * @param {Object} data - Datos del nuevo detalle
+ * @returns {Object} Detalle de cuota creado con relaciones
  */
 const crear = async (data) => {
   try {
     await validarDetCuotaPesca(data);
     await validarSumaPorcentajes(data.empresaId, data.porcentajeCuota);
 
-    const payload = {
-      empresaId: data.empresaId,
-      nombre: data.nombre,
-      porcentajeCuota: data.porcentajeCuota,
-      activo: data.activo !== undefined ? data.activo : true,
-      cuotaPropia: data.cuotaPropia !== undefined ? data.cuotaPropia : false,
-      precioPorTonDolares: data.precioPorTonDolares !== undefined ? data.precioPorTonDolares : 0,
-      idPersonaActualiza: data.idPersonaActualiza,
-      fechaCreacion: new Date(),
-      fechaActualizacion: new Date()
-    };
-
-    return await prisma.detCuotaPesca.create({
-      data: payload,
+    const nuevoDetalle = await prisma.detCuotaPesca.create({
+      data: {
+        empresaId: data.empresaId,
+        nombre: data.nombre.trim().toUpperCase(),
+        porcentajeCuota: data.porcentajeCuota,
+        precioPorTonDolares: data.precioPorTonDolares || 0,
+        cuotaPropia: data.cuotaPropia ?? false,
+        activo: data.activo ?? true,
+        idPersonaActualiza: data.idPersonaActualiza,
+        zona: data.zona || 'NORTE',
+        esAlquiler: data.esAlquiler ?? false,
+      },
       include: {
         empresa: true,
         personaActualiza: true
       }
     });
+    return nuevoDetalle;
   } catch (err) {
-    if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
 };
 
 /**
- * Actualiza un detalle de cuota existente, validando existencia y porcentajes.
+ * Actualiza un detalle de cuota de pesca existente.
+ * Valida relaciones y suma de porcentajes.
+ * @param {BigInt} id - ID del detalle a actualizar
+ * @param {Object} data - Datos actualizados
+ * @returns {Object} Detalle actualizado con relaciones
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.detCuotaPesca.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Detalle de cuota de pesca no encontrado');
+    const detalleExistente = await prisma.detCuotaPesca.findUnique({ where: { id } });
+    if (!detalleExistente) throw new NotFoundError('Detalle de cuota de pesca no encontrado');
 
     await validarDetCuotaPesca(data);
 
-    // Validar suma de porcentajes solo si se está cambiando el porcentaje
-    if (data.porcentajeCuota !== undefined && data.porcentajeCuota !== null) {
-      await validarSumaPorcentajes(existente.empresaId, data.porcentajeCuota, id);
+    if (data.porcentajeCuota !== undefined) {
+      await validarSumaPorcentajes(data.empresaId || detalleExistente.empresaId, data.porcentajeCuota, id);
     }
 
-    const payload = {
-      ...data,
-      fechaActualizacion: new Date()
-    };
-
-    return await prisma.detCuotaPesca.update({
+    const detalleActualizado = await prisma.detCuotaPesca.update({
       where: { id },
-      data: payload,
+      data: {
+        empresaId: data.empresaId,
+        nombre: data.nombre ? data.nombre.trim().toUpperCase() : undefined,
+        porcentajeCuota: data.porcentajeCuota,
+        precioPorTonDolares: data.precioPorTonDolares !== undefined ? data.precioPorTonDolares : undefined,
+        cuotaPropia: data.cuotaPropia !== undefined ? data.cuotaPropia : undefined,
+        activo: data.activo !== undefined ? data.activo : undefined,
+        idPersonaActualiza: data.idPersonaActualiza,
+        zona: data.zona !== undefined ? data.zona : undefined,
+        esAlquiler: data.esAlquiler !== undefined ? data.esAlquiler : undefined,
+        fechaActualizacion: new Date(),
+      },
       include: {
         empresa: true,
         personaActualiza: true
       }
     });
+    return detalleActualizado;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

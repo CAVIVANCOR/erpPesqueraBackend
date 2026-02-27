@@ -5,6 +5,7 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
+import recalcularToneladasService from "./recalcularToneladas.service.js";  // ⭐ AGREGAR ESTE IMPORT
 
 /**
  * Servicio CRUD para TemporadaPesca
@@ -180,19 +181,14 @@ const obtenerPorId = async (id) => {
         empresa: true,
         bahiaComercial: true,
         estadoTemporada: true,
+        unidadNegocio: true,  // ⭐ CRÍTICO: Incluir unidadNegocio
       },
     });
     if (!temp) throw new NotFoundError("TemporadaPesca no encontrada");
 
-    // Calcular toneladas capturadas dinámicamente
-    return {
-      ...temp,
-      toneladasCapturadasTemporada: temp.faenas.reduce(
-        (total, faena) =>
-          total + (parseFloat(faena.toneladasCapturadasFaena) || 0),
-        0,
-      ),
-    };
+    // ⚠️ RETORNAR EXACTAMENTE LO QUE ESTÁ EN LA BASE DE DATOS
+    // NO recalcular - el valor ya está actualizado por el servicio de recálculo
+    return temp;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -241,11 +237,13 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.temporadaPesca.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError("TemporadaPesca no encontrada");
+    
     // Validar claves foráneas si cambian
     const claves = ["empresaId", "BahiaId"];
     if (claves.some((k) => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
+    
     // Validar solapamiento si cambian nombre, fechas, empresa o estadoTemporadaId
     if (
       data.nombre ||
@@ -270,7 +268,27 @@ const actualizar = async (id, data) => {
       }
     }
 
-    return await prisma.temporadaPesca.update({ where: { id }, data });
+       const temporadaActualizada = await prisma.temporadaPesca.update({ where: { id }, data });
+    
+    // ⭐ RECALCULAR TONELADAS CAPTURADAS AUTOMÁTICAMENTE DESPUÉS DE ACTUALIZAR
+    try {
+      await recalcularToneladasService.recalcularToneladasTemporada(BigInt(id));
+      console.log(`✅ Toneladas recalculadas automáticamente para temporada ${id}`);
+    } catch (recalcError) {
+      console.error(`⚠️ Error al recalcular toneladas para temporada ${id}:`, recalcError);
+      // No lanzar error, solo registrar - la actualización de temporada ya se completó
+    }
+    
+    // ⭐ RECALCULAR PORCENTAJE JUVENILES PARA TODAS LAS FAENAS DE LA TEMPORADA
+    try {
+      await recalcularToneladasService.actualizarPorcentajeJuvenilesTemporada(BigInt(id));
+      console.log(`✅ Porcentaje juveniles recalculado automáticamente para temporada ${id}`);
+    } catch (juvenilesError) {
+      console.error(`⚠️ Error al recalcular porcentaje juveniles para temporada ${id}:`, juvenilesError);
+      // No lanzar error, solo registrar - la actualización de temporada ya se completó
+    }
+    
+    return temporadaActualizada;
   } catch (err) {
     if (
       err instanceof NotFoundError ||
@@ -879,6 +897,30 @@ const calcularLiquidaciones = async (id) => {
       liqComisionPangueroEstimado;
     const liqComisionAlquilerCuota = cuotaAlquiladaTon * precioPorTonAlquilada;
 
+    // 6.1. CALCULAR INGRESOS POR ALQUILER DE CUOTAS DE LA OTRA ZONA
+    // Buscar cuotas propias de la zona diferente que están marcadas para alquilar
+    const cuotasParaAlquilar = await prisma.detCuotaPesca.findMany({
+      where: {
+        empresaId: temporada.empresaId,
+        activo: true,
+        cuotaPropia: true,
+        zona: temporada.zona === 'NORTE' ? 'SUR' : 'NORTE', // Zona diferente
+        esAlquiler: true,
+      },
+    });
+
+    // Calcular ingresos por cada cuota y sumar
+    let ingresosPorAlquilerCuotaSur = 0;
+    const limiteMaximoCaptura = Number(temporada.limiteMaximoCapturaTn || 0);
+    
+    for (const cuota of cuotasParaAlquilar) {
+      const porcentaje = Number(cuota.porcentajeCuota || 0);
+      const precio = Number(cuota.precioPorTonDolares || 0);
+      const toneladas = limiteMaximoCaptura * (porcentaje / 100);
+      const ingresos = toneladas * precio;
+      ingresosPorAlquilerCuotaSur += ingresos;
+    }
+
     // 7. CÁLCULOS REALES (basados en toneladas capturadas)
     const valorTotalReal = toneladasReales * precioPorTonPropia;
     const baseLiquidacionReal = valorTotalReal * porcentajeBaseLiqPesca;
@@ -907,6 +949,7 @@ const calcularLiquidaciones = async (id) => {
         liqComisionPangueroEstimado,
         liqTotalPescaEstimada,
         liqComisionAlquilerCuota,
+        ingresosPorAlquilerCuotaSur,
         liqComisionPatronReal,
         liqComisionMotoristaReal,
         liqComisionPangueroReal,

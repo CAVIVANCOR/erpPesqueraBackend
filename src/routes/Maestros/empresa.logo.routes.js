@@ -189,7 +189,133 @@ router.get('/:id/logo', async (req, res) => {
     });
   }
 });
+/**
+ * GET /api/empresas-logo/:id/logo-base64
+ * Retorna el logo de la empresa en formato Base64 junto con los datos de la empresa.
+ * Endpoint genérico para uso en reportes PDF y Excel.
+ * 
+ * @param {string} id - ID de la empresa
+ * @returns {Object} { empresa: {...}, logoBase64: "data:image/png;base64,..." }
+ * @throws {404} Si la empresa no existe o no tiene logo
+ * @throws {500} Error interno del servidor
+ */
+router.get('/:id/logo-base64', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Validar que el ID sea un número válido
+    if (!id || isNaN(parseInt(id))) {
+      return res.status(400).json({
+        error: 'ID de empresa inválido',
+        codigo: 'INVALID_EMPRESA_ID'
+      });
+    }
+    
+    // Obtener datos de la empresa
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: parseInt(id) },
+      select: {
+        id: true,
+        razonSocial: true,
+        ruc: true,
+        direccion: true,
+        logo: true,
+        nombreComercial: true,
+        telefono: true,
+        email: true
+      }
+    });
+    
+    if (!empresa) {
+      return res.status(404).json({
+        error: 'Empresa no encontrada',
+        codigo: 'EMPRESA_NOT_FOUND'
+      });
+    }
+    
+    let logoBase64 = null;
+    
+    // Si tiene logo, convertirlo a Base64
+    if (empresa.logo) {
+      const logoPath = path.join(LOGO_DIR, empresa.logo);
+      
+      if (fs.existsSync(logoPath)) {
+        try {
+          // Leer archivo como buffer
+          const logoBuffer = fs.readFileSync(logoPath);
+          
+          // Determinar MIME type
+          const ext = path.extname(empresa.logo).toLowerCase();
+          let mimeType = 'image/jpeg';
+          switch (ext) {
+            case '.png':
+              mimeType = 'image/png';
+              break;
+            case '.jpg':
+            case '.jpeg':
+              mimeType = 'image/jpeg';
+              break;
+            case '.gif':
+              mimeType = 'image/gif';
+              break;
+            case '.webp':
+              mimeType = 'image/webp';
+              break;
+            case '.svg':
+              mimeType = 'image/svg+xml';
+              break;
+          }
+          
+          // Convertir a Base64
+          logoBase64 = `data:${mimeType};base64,${logoBuffer.toString('base64')}`;
+        } catch (error) {
+          console.error('Error al convertir logo a Base64:', error);
+        }
+      }
+    }
+    
+    // Headers CORS
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    // Retornar datos de empresa con logo en Base64
+       // Retornar datos de empresa con logo en Base64
+    res.json({
+      empresa: {
+        id: Number(empresa.id),
+        razonSocial: empresa.razonSocial,
+        ruc: empresa.ruc,
+        direccion: empresa.direccion,
+        nombreComercial: empresa.nombreComercial,
+        telefono: empresa.telefono,
+        email: empresa.email,
+        logo: empresa.logo
+      },
+      logoBase64
+    });
+    
+  } catch (error) {
+    console.error('Error en endpoint GET /empresas-logo/:id/logo-base64:', error);
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      codigo: 'INTERNAL_SERVER_ERROR',
+      detalle: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
 
+/**
+ * OPTIONS /api/empresas-logo/:id/logo-base64
+ * Maneja las solicitudes preflight de CORS.
+ */
+router.options('/:id/logo-base64', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Max-Age', '86400');
+  res.status(200).end();
+});
 /**
  * OPTIONS /api/empresas/:id/logo
  * Maneja las solicitudes preflight de CORS para el endpoint de logos.
