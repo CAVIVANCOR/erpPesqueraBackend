@@ -3940,6 +3940,8 @@ model TemporadaPesca {
   liqComisionPangueroReal Decimal? @default(0.00) @db.Decimal(10,2)
   liqTotalPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
   precioPorTonDolares Decimal? @default(0.00) @db.Decimal(10,2)
+  precioPorTonAlquilerDolares Decimal? @default(0.00) @db.Decimal(10,2)
+
   
   zona                        ZonaPesca @default(NORTE)
   ingresosPorAlquilerCuotaSur Decimal?  @default(0) @db.Decimal(12,2)
