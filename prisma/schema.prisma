@@ -1643,6 +1643,7 @@ model DetMovsEntregaRendir {
 
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
+  formaParteCalculoLiqAlquilerCuota Boolean? @default(false)
 
   entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2259,10 +2260,13 @@ model DetCuotaPesca {
   precioPorTonDolares Decimal? @default(0) @db.Decimal(10,2) 
   zona                ZonaPesca @default(NORTE)
   esAlquiler          Boolean   @default(false) // false=PESCA, true=ALQUILER
+  entidadEmpresarialId BigInt?
 
   // Relaciones
   empresa             Empresa   @relation(fields: [empresaId], references: [id])
   personaActualiza    Personal  @relation("DetCuotaPescaActualizador", fields: [idPersonaActualiza], references: [id])
+  entidadEmpresarial   EntidadComercial? @relation("EntidadEmpresarialDetCuotaPesca", fields: [entidadEmpresarialId], references: [id])
+
 
   // Índices para performance
   @@index([empresaId])
@@ -2377,6 +2381,7 @@ descargasFaenaConsumo DescargaFaenaConsumo[]
   detallesAsientos                DetalleAsientoContable[]
     // Relación inversa para TarifaCostoExportacionRuta
   tarifasRutaProveedor TarifaCostoExportacionRuta[] @relation("ProveedorTarifaRuta")
+  detCuotasPesca       DetCuotaPesca[]   @relation("EntidadEmpresarialDetCuotaPesca")
 }
 
 model LineaCreditoEntidad {
