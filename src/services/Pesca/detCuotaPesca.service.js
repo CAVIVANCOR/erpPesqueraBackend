@@ -66,6 +66,12 @@ async function validarDetCuotaPesca(data) {
     }
   }
 
+  // Validar entidadEmpresarial
+  if (data.entidadEmpresarialId !== undefined && data.entidadEmpresarialId !== null) {
+    const entidad = await prisma.entidadComercial.findUnique({ where: { id: BigInt(data.entidadEmpresarialId) } });
+    if (!entidad) throw new ValidationError('Entidad empresarial no existente para el campo entidadEmpresarialId.');
+  }
+
 }
 
 /**
@@ -118,7 +124,8 @@ const listar = async (filtros = {}) => {
       where,
       include: {
         empresa: true,
-        personaActualiza: true
+        personaActualiza: true,
+        entidadEmpresarial: true
       },
       orderBy: [
         { empresaId: 'asc' },
@@ -142,7 +149,8 @@ const obtenerPorId = async (id) => {
       where: { id },
       include: {
         empresa: true,
-        personaActualiza: true
+        personaActualiza: true,
+        entidadEmpresarial: true
       }
     });
     if (!detalle) throw new NotFoundError('Detalle de cuota de pesca no encontrado');
@@ -175,10 +183,12 @@ const crear = async (data) => {
         idPersonaActualiza: data.idPersonaActualiza,
         zona: data.zona || 'NORTE',
         esAlquiler: data.esAlquiler ?? false,
+        entidadEmpresarialId: data.entidadEmpresarialId || null,
       },
       include: {
         empresa: true,
-        personaActualiza: true
+        personaActualiza: true,
+        entidadEmpresarial: true
       }
     });
     return nuevoDetalle;
@@ -218,11 +228,13 @@ const actualizar = async (id, data) => {
         idPersonaActualiza: data.idPersonaActualiza,
         zona: data.zona !== undefined ? data.zona : undefined,
         esAlquiler: data.esAlquiler !== undefined ? data.esAlquiler : undefined,
+        entidadEmpresarialId: data.entidadEmpresarialId !== undefined ? (data.entidadEmpresarialId || null) : undefined,
         fechaActualizacion: new Date(),
       },
       include: {
         empresa: true,
-        personaActualiza: true
+        personaActualiza: true,
+        entidadEmpresarial: true
       }
     });
     return detalleActualizado;

@@ -210,6 +210,7 @@ const actualizar = async (id, data) => {
       formaParteCalculoLiquidacionTripulantes:
         data.formaParteCalculoLiquidacionTripulantes,
       formaParteCalculoEntregaARendir: data.formaParteCalculoEntregaARendir,
+      formaParteCalculoLiqAlquilerCuota: data.formaParteCalculoLiqAlquilerCuota,
       detalleGastosPlanificados: data.detalleGastosPlanificados,
       asignacionOrigenId: data.asignacionOrigenId,
     };
