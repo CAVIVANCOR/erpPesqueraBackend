@@ -72,6 +72,20 @@ async function validarDetCuotaPesca(data) {
     if (!entidad) throw new ValidationError('Entidad empresarial no existente para el campo entidadEmpresarialId.');
   }
 
+  // Validar precio por tonelada comisión alquiler
+  if (data.precioPorTonComisionAlquiler !== undefined && data.precioPorTonComisionAlquiler !== null) {
+    const precio = Number(data.precioPorTonComisionAlquiler);
+    if (precio < 0) {
+      throw new ValidationError('El precio de comisión por alquiler no puede ser negativo');
+    }
+  }
+
+  // Validar entidad comisionista alquiler
+  if (data.entidadComercialComisionistaAlquiler !== undefined && data.entidadComercialComisionistaAlquiler !== null) {
+    const entidadComisionista = await prisma.entidadComercial.findUnique({ where: { id: BigInt(data.entidadComercialComisionistaAlquiler) } });
+    if (!entidadComisionista) throw new ValidationError('Entidad comisionista no existente para el campo entidadComercialComisionistaAlquiler.');
+  }
+
 }
 
 /**
@@ -125,7 +139,8 @@ const listar = async (filtros = {}) => {
       include: {
         empresa: true,
         personaActualiza: true,
-        entidadEmpresarial: true
+        entidadEmpresarial: true,
+        entidadComercialComisionista: true
       },
       orderBy: [
         { empresaId: 'asc' },
@@ -150,7 +165,8 @@ const obtenerPorId = async (id) => {
       include: {
         empresa: true,
         personaActualiza: true,
-        entidadEmpresarial: true
+        entidadEmpresarial: true,
+        entidadComercialComisionista: true
       }
     });
     if (!detalle) throw new NotFoundError('Detalle de cuota de pesca no encontrado');
@@ -184,11 +200,14 @@ const crear = async (data) => {
         zona: data.zona || 'NORTE',
         esAlquiler: data.esAlquiler ?? false,
         entidadEmpresarialId: data.entidadEmpresarialId || null,
+        precioPorTonComisionAlquiler: data.precioPorTonComisionAlquiler || 0,
+        entidadComercialComisionistaAlquiler: data.entidadComercialComisionistaAlquiler || null,
       },
       include: {
         empresa: true,
         personaActualiza: true,
-        entidadEmpresarial: true
+        entidadEmpresarial: true,
+        entidadComercialComisionista: true
       }
     });
     return nuevoDetalle;
@@ -229,12 +248,15 @@ const actualizar = async (id, data) => {
         zona: data.zona !== undefined ? data.zona : undefined,
         esAlquiler: data.esAlquiler !== undefined ? data.esAlquiler : undefined,
         entidadEmpresarialId: data.entidadEmpresarialId !== undefined ? (data.entidadEmpresarialId || null) : undefined,
+        precioPorTonComisionAlquiler: data.precioPorTonComisionAlquiler !== undefined ? data.precioPorTonComisionAlquiler : undefined,
+        entidadComercialComisionistaAlquiler: data.entidadComercialComisionistaAlquiler !== undefined ? (data.entidadComercialComisionistaAlquiler || null) : undefined,
         fechaActualizacion: new Date(),
       },
       include: {
         empresa: true,
         personaActualiza: true,
-        entidadEmpresarial: true
+        entidadEmpresarial: true,
+        entidadComercialComisionista: true
       }
     });
     return detalleActualizado;
