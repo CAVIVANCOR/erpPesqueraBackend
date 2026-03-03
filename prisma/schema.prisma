@@ -2386,6 +2386,8 @@ descargasFaenaConsumo DescargaFaenaConsumo[]
   tarifasRutaProveedor TarifaCostoExportacionRuta[] @relation("ProveedorTarifaRuta")
   detCuotasPesca       DetCuotaPesca[]   @relation("EntidadEmpresarialDetCuotaPesca")
   detCuotasPescaComisionista DetCuotaPesca[] @relation("EntidadComisionistaAlquilerDetCuotaPesca")
+  temporadasPescaAlquiladas TemporadaPesca[] @relation("EntidadEmpresarialAlquiladaTemporadaPesca")
+temporadasPescaComisionista TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
 
 }
 
@@ -3951,6 +3953,9 @@ model TemporadaPesca {
   liqTotalPescaReal Decimal? @default(0.00) @db.Decimal(10,2)
   precioPorTonDolares Decimal? @default(0.00) @db.Decimal(10,2)
   precioPorTonAlquilerDolares Decimal? @default(0.00) @db.Decimal(10,2)
+  precioPorTonComisionAlquilerDolares Decimal? @default(0.00) @db.Decimal(10,2)
+  entidadEmpresarialAlquiladaId BigInt?
+  entidadComercialComisionistaAlquiler BigInt?
 
   
   zona                        ZonaPesca @default(NORTE)
@@ -3967,6 +3972,9 @@ model TemporadaPesca {
   faenas                       FaenaPesca[]       @relation("FaenaTemporadas")
   entregasARendir              EntregaARendir[]
   unidadNegocio                UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+  entidadEmpresarialAlquilada  EntidadComercial? @relation("EntidadEmpresarialAlquiladaTemporadaPesca", fields: [entidadEmpresarialAlquiladaId], references:[id])
+  entidadComercialComisionistaAlq  EntidadComercial? @relation("EntidadComercialComisionistaAlquilerTemporadaPesca", fields: [entidadComercialComisionistaAlquiler], references:[id])
+
 
   // Índices para performance
   @@index([empresaId])
