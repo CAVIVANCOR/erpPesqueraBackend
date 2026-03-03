@@ -2261,11 +2261,14 @@ model DetCuotaPesca {
   zona                ZonaPesca @default(NORTE)
   esAlquiler          Boolean   @default(false) // false=PESCA, true=ALQUILER
   entidadEmpresarialId BigInt?
+  precioPorTonComisionAlquiler Decimal? @default(0) @db.Decimal(10,2)
+  entidadComercialComisionistaAlquiler BigInt?
 
   // Relaciones
   empresa             Empresa   @relation(fields: [empresaId], references: [id])
   personaActualiza    Personal  @relation("DetCuotaPescaActualizador", fields: [idPersonaActualiza], references: [id])
   entidadEmpresarial   EntidadComercial? @relation("EntidadEmpresarialDetCuotaPesca", fields: [entidadEmpresarialId], references: [id])
+  entidadComercialComisionista EntidadComercial? @relation("EntidadComisionistaAlquilerDetCuotaPesca", fields: [entidadComercialComisionistaAlquiler], references:[id])
 
 
   // Índices para performance
@@ -2382,6 +2385,8 @@ descargasFaenaConsumo DescargaFaenaConsumo[]
     // Relación inversa para TarifaCostoExportacionRuta
   tarifasRutaProveedor TarifaCostoExportacionRuta[] @relation("ProveedorTarifaRuta")
   detCuotasPesca       DetCuotaPesca[]   @relation("EntidadEmpresarialDetCuotaPesca")
+  detCuotasPescaComisionista DetCuotaPesca[] @relation("EntidadComisionistaAlquilerDetCuotaPesca")
+
 }
 
 model LineaCreditoEntidad {
