@@ -275,7 +275,6 @@ const actualizar = async (id, data) => {
     // ⭐ RECALCULAR TONELADAS CAPTURADAS AUTOMÁTICAMENTE DESPUÉS DE ACTUALIZAR
     try {
       await recalcularToneladasService.recalcularToneladasTemporada(BigInt(id));
-      console.log(`✅ Toneladas recalculadas automáticamente para temporada ${id}`);
     } catch (recalcError) {
       console.error(`⚠️ Error al recalcular toneladas para temporada ${id}:`, recalcError);
       // No lanzar error, solo registrar - la actualización de temporada ya se completó
@@ -284,7 +283,6 @@ const actualizar = async (id, data) => {
     // ⭐ RECALCULAR PORCENTAJE JUVENILES PARA TODAS LAS FAENAS DE LA TEMPORADA
     try {
       await recalcularToneladasService.actualizarPorcentajeJuvenilesTemporada(BigInt(id));
-      console.log(`✅ Porcentaje juveniles recalculado automáticamente para temporada ${id}`);
     } catch (juvenilesError) {
       console.error(`⚠️ Error al recalcular porcentaje juveniles para temporada ${id}:`, juvenilesError);
       // No lanzar error, solo registrar - la actualización de temporada ya se completó

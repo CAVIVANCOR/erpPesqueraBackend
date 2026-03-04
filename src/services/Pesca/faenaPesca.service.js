@@ -206,9 +206,6 @@ const actualizar = async (id, data) => {
       await recalcularToneladasService.actualizarPorcentajeJuvenilesFaena(
         BigInt(id),
       );
-      console.log(
-        `✅ Porcentaje juveniles recalculado automáticamente para faena ${id}`,
-      );
     } catch (juvenilesError) {
       console.error(
         `⚠️ Error al recalcular porcentaje juveniles para faena ${id}:`,

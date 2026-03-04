@@ -99,10 +99,6 @@ async function recalcularToneladasTemporada(temporadaId) {
     toneladasCalculadas += toneladas;
   });
 
-  console.log(
-    `📊 Temporada ${temporadaId}: ${descargasTemporada.length} descargas encontradas, Total: ${toneladasCalculadas} TN`,
-  );
-
   // Actualizar el campo toneladasCapturadasTemporada de la temporada
   await prisma.temporadaPesca.update({
     where: { id: BigInt(temporadaId) },
@@ -223,10 +219,6 @@ async function actualizarPorcentajeJuvenilesFaena(faenaId) {
     promedioJuveniles = suma / porcentajesJuveniles.length;
   }
 
-  console.log(
-    `📊 Faena ${faenaId}: ${porcentajesJuveniles.length} registros de juveniles encontrados, Promedio: ${promedioJuveniles}%`,
-  );
-
   // 4. Actualizar TODAS las DescargaFaenaPesca de esta faena con el promedio calculado
   const descargasActualizadas = await prisma.descargaFaenaPesca.updateMany({
     where: {
@@ -237,10 +229,6 @@ async function actualizarPorcentajeJuvenilesFaena(faenaId) {
       actualizadoEn: new Date(),
     },
   });
-
-  console.log(
-    `✅ ${descargasActualizadas.count} descargas actualizadas con porcentaje juveniles: ${promedioJuveniles}%`,
-  );
 
   return {
     porcentajeJuveniles: promedioJuveniles,
@@ -263,21 +251,12 @@ async function actualizarPorcentajeJuvenilesTemporada(temporadaId) {
     },
   });
 
-  console.log(
-    `🔄 Actualizando porcentaje juveniles para ${faenas.length} faenas de la temporada ${temporadaId}`,
-  );
-
   // Actualizar cada faena
   const resultados = [];
   for (const faena of faenas) {
     const resultado = await actualizarPorcentajeJuvenilesFaena(faena.id);
     resultados.push(resultado);
   }
-
-  console.log(
-    `✅ Actualización masiva completada para temporada ${temporadaId}`,
-  );
-
   return resultados;
 }
 

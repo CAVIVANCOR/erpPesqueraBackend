@@ -12,7 +12,6 @@ import {
  */
 
 async function validarClavesForaneas(data) {
-  console.log("Entro aqui validarClavesForaneas")
   const validaciones = [
     prisma.entregaARendirPescaConsumo.findUnique({
       where: { id: data.entregaARendirPescaConsumoId },
@@ -32,7 +31,6 @@ async function validarClavesForaneas(data) {
       }),
     );
   }
-    console.log("data.moduloOrigenMovCajaId", data.moduloOrigenMovCajaId, data);
 
   // Agregar validación de ModuloSistema si se proporciona moduloOrigenMovCajaId
   if (data.moduloOrigenMovCajaId) {

@@ -29,7 +29,6 @@ export async function obtenerTipoCambioSunat(fecha) {
       return null;
     }
 
-    console.log(`🔍 Consultando tipo de cambio SUNAT para fecha: ${fechaISO}`);
 
     // Construir URL con parámetros
     const params = new URLSearchParams();
@@ -55,7 +54,6 @@ export async function obtenerTipoCambioSunat(fecha) {
     }
 
     const data = await response.json();
-    console.log(`📊 Respuesta API SUNAT:`, data);
     
     // La API retorna { buy_price, sell_price, base_currency, quote_currency, date }
     // Para COMPRAS usamos "sell_price" (precio de venta del dólar)
@@ -86,14 +84,12 @@ export async function validarTipoCambio(tipoCambio, fechaDocumento) {
     const tipoCambioSunat = await obtenerTipoCambioSunat(fecha);
     
     if (tipoCambioSunat) {
-      console.log(`✅ Tipo de cambio obtenido de SUNAT: ${tipoCambioSunat}`);
       return tipoCambioSunat;
     } else {
       console.warn(`⚠️ No se pudo obtener tipo de cambio de SUNAT para fecha: ${fecha}`);
       return null;
     }
   } else {
-    console.log(`✅ Tipo de cambio manual respetado: ${tipoCambio}`);
     return Number(tipoCambio);
   }
 }

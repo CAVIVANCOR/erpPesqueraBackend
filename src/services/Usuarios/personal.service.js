@@ -42,7 +42,8 @@ async function validarPersonal(data, excluirId = null) {
     { campo: 'cargoId', modelo: 'cargosPersonal' },
     { campo: 'ubigeoId', modelo: 'ubigeo' },
     { campo: 'areaFisicaId', modelo: 'areaFisicaSede' },
-    { campo: 'sedeEmpresaId', modelo: 'sedesEmpresa' } // sedeEmpresaId referencia a la tabla sede
+    { campo: 'sedeEmpresaId', modelo: 'sedesEmpresa' }, // sedeEmpresaId referencia a la tabla sede
+    { campo: 'enlaceEntidadComercialId', modelo: 'entidadComercial' }
   ];
   for (const ref of referencias) {
     if (data[ref.campo] !== undefined && data[ref.campo] !== null) {
@@ -75,7 +76,8 @@ const listar = async (filtros = {}) => {
       include: {
         usuario: true,
         cargo: true,
-        ubigeo: true
+        ubigeo: true,
+        enlaceEntidadComercial: true
       }
     });
 
@@ -118,7 +120,8 @@ const obtenerPorId = async (id) => {
         usuario: true,
         cargo: true,
         ubigeo: true,
-        tipoDocIdentidad: true
+        tipoDocIdentidad: true,
+        enlaceEntidadComercial: true
       }
     });
     if (!persona) throw new NotFoundError('Personal no encontrado');
@@ -135,8 +138,10 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarPersonal(data);
-    return await prisma.personal.create({ data });
+    const resultado = await prisma.personal.create({ data });
+    return resultado;
   } catch (err) {
+    console.error('❌ Backend - Error al crear personal:', err);
     if (err instanceof ConflictError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -151,8 +156,10 @@ const actualizar = async (id, data) => {
     const existente = await prisma.personal.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Personal no encontrado');
     await validarPersonal(data, id);
-    return await prisma.personal.update({ where: { id }, data });
+    const resultado = await prisma.personal.update({ where: { id }, data });
+    return resultado;
   } catch (err) {
+    console.error('❌ Backend - Error al actualizar personal:', err);
     if (err instanceof ConflictError || err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

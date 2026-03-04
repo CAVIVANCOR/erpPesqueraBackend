@@ -696,9 +696,7 @@ const finalizar = async (id, usuarioId = null) => {
       // Procesar cada faena que tenga descarga
       for (const faena of novedad.faenas) {
         if (faena.descarga) {
-          try {
-            console.log(`📦 Procesando descarga ID: ${faena.descarga.id} de faena ID: ${faena.id}`);
-            
+          try {            
             const resultadoDescarga = await finalizarDescargaConsumoService.finalizarDescargaConsumoConMovimientos(
               faena.descarga.id,
               id,
@@ -711,8 +709,6 @@ const finalizar = async (id, usuarioId = null) => {
               exito: true,
               resultado: resultadoDescarga
             });
-            
-            console.log(`✅ Descarga ${faena.descarga.id} procesada exitosamente`);
           } catch (errorDescarga) {
             console.error(`❌ Error procesando descarga ${faena.descarga.id}:`, errorDescarga.message);
             

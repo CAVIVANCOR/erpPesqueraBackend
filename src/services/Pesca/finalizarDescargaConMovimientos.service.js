@@ -27,7 +27,6 @@ const finalizarDescargaConMovimientos = async (descargaId, temporadaPescaId, usu
       const temporada = await tx.temporadaPesca.findUnique({
         where: { id: temporadaPescaId }
       });
-console.log('🔍 DEBUG - temporada.unidadNegocioId:', temporada.unidadNegocioId);
       if (!temporada) {
         throw new ValidationError('Temporada de pesca no encontrada');
       }
@@ -62,7 +61,6 @@ console.log('🔍 DEBUG - temporada.unidadNegocioId:', temporada.unidadNegocioId
       let esRegeneracion = false;
       
       if (descarga.movIngresoAlmacenId || descarga.movSalidaAlmacenId) {
-        console.log('⚠️ La descarga ya tiene movimientos. Eliminando documentos existentes para regenerar...');
         esRegeneracion = true;
         
         // PASO 1: Buscar y eliminar PreFactura vinculada al movimiento de salida
@@ -72,7 +70,6 @@ console.log('🔍 DEBUG - temporada.unidadNegocioId:', temporada.unidadNegocioId
           });
           
           if (preFacturaVinculada) {
-            console.log(`  → Eliminando PreFactura vinculada (ID: ${preFacturaVinculada.id}, Código: ${preFacturaVinculada.codigo})...`);
             
             // Eliminar detalles de PreFactura
             await tx.detallePreFactura.deleteMany({
@@ -84,7 +81,6 @@ console.log('🔍 DEBUG - temporada.unidadNegocioId:', temporada.unidadNegocioId
               where: { id: preFacturaVinculada.id }
             });
             
-            console.log('  ✅ PreFactura eliminada correctamente');
           }
         }
         
@@ -94,25 +90,20 @@ console.log('🔍 DEBUG - temporada.unidadNegocioId:', temporada.unidadNegocioId
         
         // PASO 3: Eliminar movimiento de ingreso si existe
         if (descarga.movIngresoAlmacenId) {
-          console.log(`  → Eliminando movimiento de INGRESO (ID: ${descarga.movIngresoAlmacenId})...`);
           await eliminarMovimientoAlmacenService.eliminarMovimientoAlmacenCompleto(
             descarga.movIngresoAlmacenId,
             tx
           );
-          console.log('  ✅ Movimiento de INGRESO eliminado correctamente');
         }
         
         // PASO 4: Eliminar movimiento de salida si existe
         if (descarga.movSalidaAlmacenId) {
-          console.log(`  → Eliminando movimiento de SALIDA (ID: ${descarga.movSalidaAlmacenId})...`);
           await eliminarMovimientoAlmacenService.eliminarMovimientoAlmacenCompleto(
             descarga.movSalidaAlmacenId,
             tx
           );
-          console.log('  ✅ Movimiento de SALIDA eliminado correctamente');
         }
         
-        console.log('✅ Documentos anteriores eliminados. Procediendo a regenerar...');
       }
 
       const parametroAprobador = await tx.parametroAprobador.findFirst({
@@ -406,14 +397,12 @@ console.log('🔍 DEBUG - temporada.unidadNegocioId:', temporada.unidadNegocioId
               tx
             );
 
-            console.log(`✅ PreFactura generada: ${preFacturaGenerada.preFactura.codigo}`);
             
             // Actualizar movimiento de salida con pedidoVentaId
             await tx.movimientoAlmacen.update({
               where: { id: movimientoSalida.movimiento.id },
               data: { pedidoVentaId: preFacturaGenerada.preFactura.id }
             });
-            console.log(`✅ Movimiento de salida actualizado con pedidoVentaId: ${preFacturaGenerada.preFactura.id}`);
           }
         }
       } catch (errorPreFactura) {
@@ -526,15 +515,8 @@ async function calcularCostoUnitario(tx, temporadaPescaId, descargas) {
       console.warn('⚠️ Cuota asignada es 0');
       return 0;
     }
-
     // 5. Calcular costo unitario
     const costoUnitario = totalEgresos / cuotaAsignada;
-
-    console.log(`📊 Cálculo de Costo Unitario (TemporadaPesca):`);
-    console.log(`   Total Egresos: S/ ${totalEgresos.toFixed(2)}`);
-    console.log(`   Cuota Asignada: ${cuotaAsignada} TM`);
-    console.log(`   Costo Unitario: S/ ${costoUnitario.toFixed(2)} por TM`);
-
     return costoUnitario;
   } catch (error) {
     console.error('❌ Error calculando costo unitario:', error);

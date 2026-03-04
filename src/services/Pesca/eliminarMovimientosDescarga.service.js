@@ -69,13 +69,11 @@ const eliminarMovimientosDescarga = async (descargaId, usuarioId) => {
             await tx.detallePreFactura.deleteMany({
               where: { preFacturaId: preFactura.id }
             });
-            console.log(`✅ Eliminados ${preFactura.detalles.length} detalle(s) de PreFactura ${preFactura.codigo}`);
 
             // Eliminar PreFactura
             await tx.preFactura.delete({
               where: { id: preFactura.id }
             });
-            console.log(`✅ PreFactura ${preFactura.codigo} eliminada`);
 
             preFacturaEliminada = {
               id: preFactura.id,

@@ -60,7 +60,7 @@ const listar = async () => {
         formaPago: true,
         incoterms: true,
         estado: true,
-        tipoProducto: true,
+        tipoProducto:true,
         destinoProducto: true,
         tipoEstadoProducto: true,
         formaTransaccion: true,
@@ -176,7 +176,7 @@ const obtenerPorCliente = async (clienteId) => {
         empresa: true,
         moneda: true,
         incoterms: true,
-        tipoProducto: true,
+        tipoProducto:true,
       },
       orderBy: { fechaDocumento: "desc" },
     });

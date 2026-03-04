@@ -151,8 +151,6 @@ const crear = async (data) => {
     if (!data.tipoDocumentoId) camposFaltantes.push("Tipo de Documento");
     if (!data.serieDocId) camposFaltantes.push("Serie de Documento");
     if (!data.tipoProductoId) camposFaltantes.push("Tipo Producto");
-    if (!data.tipoEstadoProductoId) camposFaltantes.push("Estado Producto");
-    if (!data.destinoProductoId) camposFaltantes.push("Destino Producto");
     if (!data.centroCostoId) camposFaltantes.push("Centro de Costo");
 
     if (camposFaltantes.length > 0) {
@@ -210,7 +208,7 @@ const crear = async (data) => {
         data: { correlativo: BigInt(nuevoCorrelativo) },
       });
 
-      // 6. Crear el requerimiento con los números generados
+            // 6. Crear el requerimiento con los números generados
       const nuevo = await tx.requerimientoCompra.create({
         data: {
           ...data,
@@ -219,9 +217,12 @@ const crear = async (data) => {
           numeroDocumento,
           estadoId: data.estadoId || BigInt(34), // Estado por defecto: 34 (Pendiente)
           centroCostoId: data.centroCostoId || BigInt(14), // Centro de costo por defecto: 14
+          tipoEstadoProductoId: data.tipoEstadoProductoId || BigInt(1), // ✅ DEFAULT: 1 (S/E Sin Estado)
+          destinoProductoId: data.destinoProductoId || BigInt(1), // ✅ DEFAULT: 1 (Mercado Local)
+          supervisorCampoId: data.supervisorCampoId || data.creadoPor || null, // ✅ DEFAULT: Usuario que registra
           fechaDocumento: data.fechaDocumento || new Date(),
           creadoPor: data.creadoPor || null,
-          tipoCambio: tipoCambioFinal, // ✅ CAMBIAR: era data.tipoCambio
+          tipoCambio: tipoCambioFinal,
 
           // Asignar porcentaje IGV desde la empresa si no viene en data
           porcentajeIGV:
