@@ -2388,6 +2388,8 @@ descargasFaenaConsumo DescargaFaenaConsumo[]
   detCuotasPescaComisionista DetCuotaPesca[] @relation("EntidadComisionistaAlquilerDetCuotaPesca")
   temporadasPescaAlquiladas TemporadaPesca[] @relation("EntidadEmpresarialAlquiladaTemporadaPesca")
 temporadasPescaComisionista TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
+personalEnlazado Personal[] @relation("PersonalEnlaceEntidad")
+
 
 }
 
@@ -3501,6 +3503,7 @@ model Personal {
   paraPescaConsumo      Boolean                 @default(false)
   paraTemporadaPesca    Boolean                 @default(false)
   usuario       Usuario?
+  enlaceEntidadComercialId BigInt?
   
   documentaciones DocumentacionPersonal[]
   cargo       CargosPersonal?    @relation(fields: [cargoId], references: [id])
@@ -3605,6 +3608,8 @@ tiposPrestamoCreados      TipoPrestamo[]      @relation("TipoPrestamoCreador")
 tiposPrestamoActualizados TipoPrestamo[]      @relation("TipoPrestamoActualizador")
   sublineasCreditoCreadas      SublineaCredito[]   @relation("SublineaCreditoCreador")
   sublineasCreditoActualizadas SublineaCredito[]   @relation("SublineaCreditoActualizador")
+  enlaceEntidadComercial EntidadComercial? @relation("PersonalEnlaceEntidad", fields: [enlaceEntidadComercialId], references: [id])
+
 }
 
 model Producto {
