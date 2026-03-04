@@ -79,7 +79,16 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const mov = await prisma.detMovsEntregaRendir.findUnique({ where: { id } });
+    const mov = await prisma.detMovsEntregaRendir.findUnique({
+      where: { id },
+      include: {
+        tipoMovimiento: true,
+        entidadComercial: true,
+        moneda: true,
+        producto: true,
+        tipoDocumento: true,
+      },
+    });
     if (!mov) throw new NotFoundError("DetMovsEntregaRendir no encontrado");
     return mov;
   } catch (err) {

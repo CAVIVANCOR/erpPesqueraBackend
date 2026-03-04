@@ -182,6 +182,8 @@ const obtenerPorId = async (id) => {
         bahiaComercial: true,
         estadoTemporada: true,
         unidadNegocio: true,  // ⭐ CRÍTICO: Incluir unidadNegocio
+        entidadEmpresarialAlquilada: true,
+        entidadComercialComisionistaAlq: true,
       },
     });
     if (!temp) throw new NotFoundError("TemporadaPesca no encontrada");

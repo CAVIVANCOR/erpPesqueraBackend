@@ -76,14 +76,14 @@ async function validarDetCuotaPesca(data) {
   if (data.precioPorTonComisionAlquiler !== undefined && data.precioPorTonComisionAlquiler !== null) {
     const precio = Number(data.precioPorTonComisionAlquiler);
     if (precio < 0) {
-      throw new ValidationError('El precio de comisión por alquiler no puede ser negativo');
+      throw new ValidationError('El precio por tonelada comisión alquiler no puede ser negativo');
     }
   }
 
   // Validar entidad comisionista alquiler
   if (data.entidadComercialComisionistaAlquiler !== undefined && data.entidadComercialComisionistaAlquiler !== null) {
-    const entidadComisionista = await prisma.entidadComercial.findUnique({ where: { id: BigInt(data.entidadComercialComisionistaAlquiler) } });
-    if (!entidadComisionista) throw new ValidationError('Entidad comisionista no existente para el campo entidadComercialComisionistaAlquiler.');
+    const entidad = await prisma.entidadComercial.findUnique({ where: { id: BigInt(data.entidadComercialComisionistaAlquiler) } });
+    if (!entidad) throw new ValidationError('Entidad comisionista no existente para el campo entidadComercialComisionistaAlquiler.');
   }
 
 }
