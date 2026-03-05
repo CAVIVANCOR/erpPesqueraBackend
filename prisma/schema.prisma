@@ -2409,7 +2409,25 @@ descargasFaenaConsumo DescargaFaenaConsumo[]
 temporadasPescaComisionista TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
 personalEnlazado Personal[] @relation("PersonalEnlaceEntidad")
 comisionesFidelizacion  ComisionFidelizacion[]
+detallesComisionFidelizacion DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
 
+
+}
+
+model DetComisionFidelizacionEntidad {
+  id                              BigInt   @id @default(autoincrement())
+  entidadComercialFidelizacionId  BigInt
+  personalId                      BigInt
+  precioPorTonelada               Decimal  @db.Decimal(7,2)
+  cesado                          Boolean  @default(false)
+  
+  // Relaciones
+  entidadComercial  EntidadComercial @relation("DetalleComisionFidelizacionEntidad", fields: [entidadComercialFidelizacionId], references: [id])
+  personal          Personal         @relation("PersonalComisionFidelizacion", fields: [personalId], references: [id])
+  
+  // Índices
+  @@index([entidadComercialFidelizacionId])
+  @@index([personalId])
 }
 
 model LineaCreditoEntidad {
@@ -3632,7 +3650,7 @@ tiposPrestamoActualizados TipoPrestamo[]      @relation("TipoPrestamoActualizado
   sublineasCreditoActualizadas SublineaCredito[]   @relation("SublineaCreditoActualizador")
   enlaceEntidadComercial EntidadComercial? @relation("PersonalEnlaceEntidad", fields: [enlaceEntidadComercialId], references: [id])
 comisionesFidelizacion  ComisionFidelizacion[]
-
+detallesComisionFidelizacion DetComisionFidelizacionEntidad[] @relation("PersonalComisionFidelizacion")
 }
 
 model Producto {
