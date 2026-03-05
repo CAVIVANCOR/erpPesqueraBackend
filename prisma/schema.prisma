@@ -2920,6 +2920,7 @@ model FaenaPesca {
   toneladasCapturadasFaena         Decimal?
   fechaHoraFondeo                  DateTime?
   puertoFondeoId                   BigInt?
+  pangueroId                       BigInt?
  
   // Relaciones principales
   temporada                        TemporadaPesca     @relation("FaenaTemporadas", fields: [temporadaId], references: [id])
@@ -2930,6 +2931,7 @@ model FaenaPesca {
   bahia                            Personal?          @relation("FaenaPescaBahia", fields: [bahiaId], references: [id])
   motorista                        Personal?          @relation("FaenaPescaMotorista", fields: [motoristaId], references: [id])
   patron                           Personal?          @relation("FaenaPescaPatron", fields: [patronId], references: [id])
+  panguero                         Personal?          @relation("FaenaPescaPanguero", fields: [pangueroId], references: [id])
   
   // Relaciones con Puertos
   puertoDescarga                   PuertoPesca?       @relation("FaenaPescaPuertoDescarga", fields: [puertoDescargaId], references: [id])
@@ -3548,6 +3550,7 @@ novedadesPescaConsumoComoBahia  NovedadPescaConsumo[]  @relation("NovedadPescaCo
 faenasPescaComoBahia              FaenaPesca[]         @relation("FaenaPescaBahia")
 faenasPescaComoMotorista          FaenaPesca[]         @relation("FaenaPescaMotorista")
 faenasPescaComoPatron             FaenaPesca[]         @relation("FaenaPescaPatron")
+faenasPescaComoPanguero           FaenaPesca[]         @relation("FaenaPescaPanguero")
 faenasPescaConsumoComoBahia       FaenaPescaConsumo[]  @relation("FaenaPescaConsumoBahia")
 faenasPescaConsumoComoMotorista   FaenaPescaConsumo[]  @relation("FaenaPescaConsumoMotorista")
 faenasPescaConsumoComoPatron      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPatron")
