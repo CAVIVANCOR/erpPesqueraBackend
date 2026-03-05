@@ -838,7 +838,10 @@ const calcularLiquidaciones = async (id) => {
     // 2. Obtener toneladas reales desde TemporadaPesca
     const toneladasReales = Number(temporada.toneladasCapturadasTemporada || 0);
 
-    // 3. Obtener precio de cuota PROPIA (cuotaPropia = TRUE)
+    // 3. Obtener precio por tonelada desde la temporada (igual que en Reporte PMM)
+    const precioPorTonTemporada = Number(temporada.precioPorTonDolares || 0);
+
+    // 3.1. Obtener precio de cuota PROPIA (cuotaPropia = TRUE) - solo para cálculos estimados
     const cuotaPropia = await prisma.detCuotaPesca.findFirst({
       where: {
         empresaId: temporada.empresaId,
@@ -922,7 +925,8 @@ const calcularLiquidaciones = async (id) => {
     }
 
     // 7. CÁLCULOS REALES (basados en toneladas capturadas)
-    const valorTotalReal = toneladasReales * precioPorTonPropia;
+    // Usar precioPorTonTemporada (igual que en Reporte PMM)
+    const valorTotalReal = toneladasReales * precioPorTonTemporada;
     const baseLiquidacionReal = valorTotalReal * porcentajeBaseLiqPesca;
 
     const liqComisionPatronReal =
