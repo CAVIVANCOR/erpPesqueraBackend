@@ -18,6 +18,7 @@ async function validarClavesForaneas(data) {
     bahia,
     motorista,
     patron,
+    panguero, // ⭐ AGREGAR ESTA LÍNEA
     puertoSalida,
     puertoDescarga,
     puertoFondeo,
@@ -32,6 +33,9 @@ async function validarClavesForaneas(data) {
       : Promise.resolve(true),
     data.patronId
       ? prisma.personal.findUnique({ where: { id: data.patronId } })
+      : Promise.resolve(true),
+    data.pangueroId // ⭐ AGREGAR ESTAS 3 LÍNEAS
+      ? prisma.personal.findUnique({ where: { id: data.pangueroId } })
       : Promise.resolve(true),
     data.puertoSalidaId
       ? prisma.puertoPesca.findUnique({ where: { id: data.puertoSalidaId } })
@@ -56,6 +60,9 @@ async function validarClavesForaneas(data) {
     throw new ValidationError("El motoristaId no existe.");
   if (data.patronId && !patron)
     throw new ValidationError("El patronId no existe.");
+  if (data.pangueroId && !panguero)
+    // ⭐ AGREGAR ESTAS 2 LÍNEAS
+    throw new ValidationError("El pangueroId no existe.");
   if (data.puertoSalidaId && !puertoSalida)
     throw new ValidationError("El puertoSalidaId no existe.");
   if (data.puertoDescargaId && !puertoDescarga)
@@ -153,6 +160,7 @@ const actualizar = async (id, data) => {
       "bahiaId",
       "motoristaId",
       "patronId",
+      "pangueroId", // ⭐ AGREGAR ESTA LÍNEA
       "puertoSalidaId",
       "puertoRetornoId",
       "puertoDescargaId",
@@ -183,6 +191,7 @@ const actualizar = async (id, data) => {
       "bahiaId",
       "motoristaId",
       "patronId",
+      "pangueroId", // ⭐ AGREGAR ESTA LÍNEA
       "puertoSalidaId",
       "puertoDescargaId",
       "puertoFondeoId",
