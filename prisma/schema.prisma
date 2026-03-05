@@ -1449,7 +1449,7 @@ model DescargaFaenaPesca {
   latitudFondeo                Decimal?
   longitudFondeo               Decimal?
   puertoFondeoId               BigInt?
-
+  precioPorTonComisionFidelizacion Decimal? @default(0.00) @db.Decimal(7,2)
 
   // Relaciones
   faenaPesca         FaenaPesca         @relation(fields: [faenaPescaId], references: [id])
@@ -1463,7 +1463,6 @@ model DescargaFaenaPesca {
   movIngresoAlmacen  MovimientoAlmacen? @relation("DescargaMovimientoIngreso", fields: [movIngresoAlmacenId], references: [id])
   movSalidaAlmacen   MovimientoAlmacen? @relation("DescargaMovimientoSalida", fields: [movSalidaAlmacenId], references: [id])  // ⭐ NUEVA RELACIÓN
 
-
   @@index([movIngresoAlmacenId])
   @@index([movSalidaAlmacenId])          // ⭐ NUEVO ÍNDICE
   @@index([puertoDescargaId])
@@ -1475,6 +1474,24 @@ model DescargaFaenaPesca {
   @@index([temporadaPescaId])
   @@index([especieId])
   @@index([faenaPescaId])
+}
+
+model ComisionFidelizacion {
+  id                                BigInt   @id @default(autoincrement())
+  temporadaPescaId                  BigInt
+  entidadComercialId                BigInt
+  personalId                        BigInt
+  precioPorTonComisionFidelizacion  Decimal  @db.Decimal(7,2)
+  toneladasCapturadas               Decimal  @db.Decimal(10,3)
+  montoPagarFidelizacionDolares     Decimal  @db.Decimal(12,2)
+  
+  temporadaPesca      TemporadaPesca @relation(fields: [temporadaPescaId], references: [id])
+  entidadComercial    EntidadComercial @relation(fields: [entidadComercialId], references: [id])
+  personal            Personal @relation(fields: [personalId], references: [id])
+  
+  @@index([temporadaPescaId])
+  @@index([entidadComercialId])
+  @@index([personalId])
 }
 
 
@@ -2329,6 +2346,8 @@ model EntidadComercial {
   condicionHabidoSUNAT Boolean               @default(true)
   estadoActivoSUNAT    Boolean               @default(true)
   esAgenteRetencion    Boolean               @default(false)
+  precioPorTonComisionFidelizacion Decimal? @default(0.00) @db.Decimal(7,2)
+
 
   tipoDocumento        TiposDocIdentidad   @relation(fields: [tipoDocumentoId], references: [id])
   tipoEntidad          TipoEntidad         @relation(fields: [tipoEntidadId], references: [id])
@@ -2389,7 +2408,7 @@ descargasFaenaConsumo DescargaFaenaConsumo[]
   temporadasPescaAlquiladas TemporadaPesca[] @relation("EntidadEmpresarialAlquiladaTemporadaPesca")
 temporadasPescaComisionista TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
 personalEnlazado Personal[] @relation("PersonalEnlaceEntidad")
-
+comisionesFidelizacion  ComisionFidelizacion[]
 
 }
 
@@ -3612,6 +3631,7 @@ tiposPrestamoActualizados TipoPrestamo[]      @relation("TipoPrestamoActualizado
   sublineasCreditoCreadas      SublineaCredito[]   @relation("SublineaCreditoCreador")
   sublineasCreditoActualizadas SublineaCredito[]   @relation("SublineaCreditoActualizador")
   enlaceEntidadComercial EntidadComercial? @relation("PersonalEnlaceEntidad", fields: [enlaceEntidadComercialId], references: [id])
+comisionesFidelizacion  ComisionFidelizacion[]
 
 }
 
@@ -3982,6 +4002,7 @@ model TemporadaPesca {
   unidadNegocio                UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
   entidadEmpresarialAlquilada  EntidadComercial? @relation("EntidadEmpresarialAlquiladaTemporadaPesca", fields: [entidadEmpresarialAlquiladaId], references:[id])
   entidadComercialComisionistaAlq  EntidadComercial? @relation("EntidadComercialComisionistaAlquilerTemporadaPesca", fields: [entidadComercialComisionistaAlquiler], references:[id])
+  comisionesFidelizacion  ComisionFidelizacion[]
 
 
   // Índices para performance
