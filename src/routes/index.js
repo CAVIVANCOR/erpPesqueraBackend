@@ -226,6 +226,7 @@ import sublineaCreditoRoutes from './Tesoreria/sublineaCredito.routes.js';
 import tarifaCostoExportacionRutaRoutes from './Ventas/tarifaCostoExportacionRuta.routes.js';
 import medioPagoRoutes from '../routes/Maestros/medioPago.routes.js';
 import unidadNegocioRoutes from './Usuarios/unidadNegocio.routes.js';
+import detComisionFidelizacionEntidadRoutes from './Maestros/detComisionFidelizacionEntidad.routes.js';
 
 const router = express.Router();
 
@@ -299,6 +300,8 @@ router.use('/direcciones-entidad', direccionEntidadRoutes);
 router.use('/precios-entidad', precioEntidadRoutes);
 // Rutas para VehiculoEntidad
 router.use('/vehiculos-entidad', vehiculoEntidadRoutes);
+// Rutas para DetComisionFidelizacionEntidad
+router.use('/det-comision-fidelizacion-entidad', detComisionFidelizacionEntidadRoutes);
 // Rutas para TipoVehiculo
 router.use('/tipos-vehiculo', tipoVehiculoRoutes);
 // Rutas para LineaCreditoEntidad
