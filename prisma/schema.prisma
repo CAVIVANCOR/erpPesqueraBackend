@@ -4002,6 +4002,8 @@ model TemporadaPesca {
   precioPorTonComisionAlquilerDolares Decimal? @default(0.00) @db.Decimal(10,2)
   entidadEmpresarialAlquiladaId BigInt?
   entidadComercialComisionistaAlquiler BigInt?
+  precioPorTonDolaresAlternativo Decimal? @default(0.00) @db.Decimal(10,2)
+
 
   
   zona                        ZonaPesca @default(NORTE)
