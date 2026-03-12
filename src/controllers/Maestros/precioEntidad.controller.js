@@ -73,3 +73,33 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+
+/**
+ * Obtiene el precio vigente para un producto en una fecha específica
+ * Busca primero precio especial del cliente, luego precio global de la empresa
+ */
+export async function obtenerPrecioVigente(req, res, next) {
+  try {
+    const { empresaId, empresaEntidadComercialId, especieId, clienteId, fechaDescarga } = req.query;
+
+    // Validar parámetros requeridos
+    if (!empresaId || !empresaEntidadComercialId || !especieId || !fechaDescarga) {
+      return res.status(400).json({
+        message: 'Faltan parámetros requeridos: empresaId, empresaEntidadComercialId, especieId, fechaDescarga'
+      });
+    }
+
+    const resultado = await precioEntidadService.obtenerPrecioVigente(
+      Number(empresaId),
+      Number(empresaEntidadComercialId),
+      Number(especieId),
+      clienteId ? Number(clienteId) : null,
+      new Date(fechaDescarga)
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+};

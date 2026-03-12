@@ -243,6 +243,69 @@ const obtenerPrecioEspecialActivo = async (entidadComercialId, productoId) => {
   }
 };
 
+/**
+ * Obtiene el precio vigente para un producto en una fecha específica
+ * Busca primero precio especial del cliente, luego precio global de la empresa
+ */
+export async function obtenerPrecioVigente(empresaId, empresaEntidadComercialId, especieId, clienteId, fechaDescarga) {
+  // 1. Buscar producto de la especie
+  const producto = await prisma.producto.findFirst({
+    where: {
+      empresaId: empresaId,
+      cesado: false,
+      especieId: especieId
+    }
+  });
+
+  if (!producto) {
+    return null;
+  }
+
+  // 2. Si hay clienteId, buscar precio especial
+  if (clienteId) {
+    const precioEspecial = await prisma.precioEntidad.findFirst({
+      where: {
+        entidadComercialId: clienteId,
+        productoId: producto.id,
+        activo: true,
+        vigenteDesde: { lte: fechaDescarga },
+        OR: [
+          { vigenteHasta: { gte: fechaDescarga } },
+          { vigenteHasta: null }
+        ]
+      },
+      include: {
+        producto: true,
+        moneda: true
+      }
+    });
+
+    if (precioEspecial) {
+      return precioEspecial;
+    }
+  }
+
+  // 3. Buscar precio global de la empresa
+  const precioGlobal = await prisma.precioEntidad.findFirst({
+    where: {
+      entidadComercialId: empresaEntidadComercialId,
+      productoId: producto.id,
+      activo: true,
+      vigenteDesde: { lte: fechaDescarga },
+      OR: [
+        { vigenteHasta: { gte: fechaDescarga } },
+        { vigenteHasta: null }
+      ]
+    },
+    include: {
+      producto: true,
+      moneda: true
+    }
+  });
+
+  return precioGlobal;
+}
+
 export default {
   listar,
   obtenerPorId,
@@ -250,5 +313,6 @@ export default {
   obtenerPrecioEspecialActivo,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  obtenerPrecioVigente
 };

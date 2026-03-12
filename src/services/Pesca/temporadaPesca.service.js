@@ -188,7 +188,7 @@ const obtenerPorId = async (id) => {
         empresa: true,
         bahiaComercial: true,
         estadoTemporada: true,
-        unidadNegocio: true, // ⭐ CRÍTICO: Incluir unidadNegocio
+        unidadNegocio: true,
         entidadEmpresarialAlquilada: true,
         entidadComercialComisionistaAlq: true,
       },
@@ -196,7 +196,6 @@ const obtenerPorId = async (id) => {
     if (!temp) throw new NotFoundError("TemporadaPesca no encontrada");
 
     // ⚠️ RETORNAR EXACTAMENTE LO QUE ESTÁ EN LA BASE DE DATOS
-    // NO recalcular - el valor ya está actualizado por el servicio de recálculo
     return temp;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -270,23 +269,38 @@ const actualizar = async (id, data) => {
       const empresaId = data.empresaId || existente.empresaId;
       const limiteMaximo =
         data.limiteMaximoCapturaTn || existente.limiteMaximoCapturaTn;
-      const zona = data.zona || existente.zona; // ⬅️ NUEVO: Obtener zona
+      const zona = data.zona || existente.zona;
 
       if (limiteMaximo && zona) {
-        // ⬅️ NUEVO: Validar zona
         const cuotas = await calcularCuotasPorEmpresa(
           empresaId,
           limiteMaximo,
           zona,
-        ); // ⬅️ NUEVO: Pasar zona
+        );
         data.cuotaPropiaTon = cuotas.cuotaPropiaTon;
         data.cuotaAlquiladaTon = cuotas.cuotaAlquiladaTon;
       }
     }
 
+    // ⭐ DIAGNÓSTICO: Verificar data antes de actualizar
+    console.log('💾 DATA ANTES DE PRISMA.UPDATE:', {
+      id,
+      precioPorTonDolares: data.precioPorTonDolares,
+      precioPorTonDolaresAlternativo: data.precioPorTonDolaresAlternativo,
+      precioPorTonAlquilerDolares: data.precioPorTonAlquilerDolares,
+    });
+
     const temporadaActualizada = await prisma.temporadaPesca.update({
       where: { id },
       data,
+    });
+
+    // ⭐ DIAGNÓSTICO: Verificar resultado después de actualizar
+    console.log('✅ TEMPORADA ACTUALIZADA:', {
+      id: temporadaActualizada.id,
+      precioPorTonDolares: temporadaActualizada.precioPorTonDolares,
+      precioPorTonDolaresAlternativo: temporadaActualizada.precioPorTonDolaresAlternativo,
+      precioPorTonAlquilerDolares: temporadaActualizada.precioPorTonAlquilerDolares,
     });
 
     // ⭐ RECALCULAR TONELADAS CAPTURADAS AUTOMÁTICAMENTE DESPUÉS DE ACTUALIZAR
@@ -297,7 +311,6 @@ const actualizar = async (id, data) => {
         `⚠️ Error al recalcular toneladas para temporada ${id}:`,
         recalcError,
       );
-      // No lanzar error, solo registrar - la actualización de temporada ya se completó
     }
 
     // ⭐ RECALCULAR PORCENTAJE JUVENILES PARA TODAS LAS FAENAS DE LA TEMPORADA
@@ -310,7 +323,6 @@ const actualizar = async (id, data) => {
         `⚠️ Error al recalcular porcentaje juveniles para temporada ${id}:`,
         juvenilesError,
       );
-      // No lanzar error, solo registrar - la actualización de temporada ya se completó
     }
 
     return temporadaActualizada;
