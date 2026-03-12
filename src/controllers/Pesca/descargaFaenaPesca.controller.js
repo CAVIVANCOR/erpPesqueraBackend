@@ -162,3 +162,27 @@ export async function regenerarMovimientosDescarga(req, res, next) {
     next(err);
   }
 }
+
+
+/**
+ * Obtener todas las descargas de una temporada específica
+ * Incluye información del cliente y precio de comisión fidelización
+ */
+export async function obtenerPorTemporada(req, res, next) {
+  try {
+    const temporadaId = Number(req.params.temporadaId);
+    
+    // Validar que el parámetro existe y es un número válido
+    if (!temporadaId || isNaN(temporadaId)) {
+      return res.status(400).json({ 
+        error: 'temporadaId es requerido y debe ser un número válido' 
+      });
+    }
+    
+    const descargas = await descargaFaenaPescaService.obtenerPorTemporada(temporadaId);
+    res.json(toJSONBigInt(descargas));
+  } catch (err) {
+    console.error('Error en obtenerPorTemporada controller:', err);
+    next(err);
+  }
+}

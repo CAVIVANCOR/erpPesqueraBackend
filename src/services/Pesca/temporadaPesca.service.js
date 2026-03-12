@@ -5,7 +5,7 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
-import recalcularToneladasService from "./recalcularToneladas.service.js";  // ⭐ AGREGAR ESTE IMPORT
+import recalcularToneladasService from "./recalcularToneladas.service.js"; // ⭐ AGREGAR ESTE IMPORT
 
 /**
  * Servicio CRUD para TemporadaPesca
@@ -17,14 +17,21 @@ import recalcularToneladasService from "./recalcularToneladas.service.js";  // �
  * Calcula las cuotas propia y alquilada basándose en los detalles de cuota de pesca.
  * @param {BigInt} empresaId - ID de la empresa
  * @param {Decimal} limiteMaximoCapturaTn - Límite máximo de captura en toneladas
+ * @param {String} zona - Zona de pesca (NORTE o SUR)
  * @returns {Promise<Object>} { cuotaPropiaTon, cuotaAlquiladaTon }
  */
-async function calcularCuotasPorEmpresa(empresaId, limiteMaximoCapturaTn) {
+async function calcularCuotasPorEmpresa(
+  empresaId,
+  limiteMaximoCapturaTn,
+  zona,
+) {
   // Obtener detalles de cuota activos de la empresa
   const detalles = await prisma.detCuotaPesca.findMany({
     where: {
       empresaId,
       activo: true,
+      zona: zona, // ⬅️ NUEVO: Filtrar por zona
+      esAlquiler: false, // ⬅️ NUEVO: Solo cuotas para PESCA
     },
   });
 
@@ -181,7 +188,7 @@ const obtenerPorId = async (id) => {
         empresa: true,
         bahiaComercial: true,
         estadoTemporada: true,
-        unidadNegocio: true,  // ⭐ CRÍTICO: Incluir unidadNegocio
+        unidadNegocio: true, // ⭐ CRÍTICO: Incluir unidadNegocio
         entidadEmpresarialAlquilada: true,
         entidadComercialComisionistaAlq: true,
       },
@@ -216,10 +223,11 @@ const crear = async (data) => {
     await validarSolapamiento(data);
 
     // Calcular cuotas automáticamente si se proporciona limiteMaximoCapturaTn
-    if (data.limiteMaximoCapturaTn) {
+    if (data.limiteMaximoCapturaTn && data.zona) {
       const cuotas = await calcularCuotasPorEmpresa(
         data.empresaId,
         data.limiteMaximoCapturaTn,
+        data.zona, // ⬅️ NUEVO: Pasar zona
       );
       data.cuotaPropiaTon = cuotas.cuotaPropiaTon;
       data.cuotaAlquiladaTon = cuotas.cuotaAlquiladaTon;
@@ -239,13 +247,13 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.temporadaPesca.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError("TemporadaPesca no encontrada");
-    
+
     // Validar claves foráneas si cambian
     const claves = ["empresaId", "BahiaId"];
     if (claves.some((k) => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    
+
     // Validar solapamiento si cambian nombre, fechas, empresa o estadoTemporadaId
     if (
       data.nombre ||
@@ -262,32 +270,49 @@ const actualizar = async (id, data) => {
       const empresaId = data.empresaId || existente.empresaId;
       const limiteMaximo =
         data.limiteMaximoCapturaTn || existente.limiteMaximoCapturaTn;
+      const zona = data.zona || existente.zona; // ⬅️ NUEVO: Obtener zona
 
-      if (limiteMaximo) {
-        const cuotas = await calcularCuotasPorEmpresa(empresaId, limiteMaximo);
+      if (limiteMaximo && zona) {
+        // ⬅️ NUEVO: Validar zona
+        const cuotas = await calcularCuotasPorEmpresa(
+          empresaId,
+          limiteMaximo,
+          zona,
+        ); // ⬅️ NUEVO: Pasar zona
         data.cuotaPropiaTon = cuotas.cuotaPropiaTon;
         data.cuotaAlquiladaTon = cuotas.cuotaAlquiladaTon;
       }
     }
 
-       const temporadaActualizada = await prisma.temporadaPesca.update({ where: { id }, data });
-    
+    const temporadaActualizada = await prisma.temporadaPesca.update({
+      where: { id },
+      data,
+    });
+
     // ⭐ RECALCULAR TONELADAS CAPTURADAS AUTOMÁTICAMENTE DESPUÉS DE ACTUALIZAR
     try {
       await recalcularToneladasService.recalcularToneladasTemporada(BigInt(id));
     } catch (recalcError) {
-      console.error(`⚠️ Error al recalcular toneladas para temporada ${id}:`, recalcError);
+      console.error(
+        `⚠️ Error al recalcular toneladas para temporada ${id}:`,
+        recalcError,
+      );
       // No lanzar error, solo registrar - la actualización de temporada ya se completó
     }
-    
+
     // ⭐ RECALCULAR PORCENTAJE JUVENILES PARA TODAS LAS FAENAS DE LA TEMPORADA
     try {
-      await recalcularToneladasService.actualizarPorcentajeJuvenilesTemporada(BigInt(id));
+      await recalcularToneladasService.actualizarPorcentajeJuvenilesTemporada(
+        BigInt(id),
+      );
     } catch (juvenilesError) {
-      console.error(`⚠️ Error al recalcular porcentaje juveniles para temporada ${id}:`, juvenilesError);
+      console.error(
+        `⚠️ Error al recalcular porcentaje juveniles para temporada ${id}:`,
+        juvenilesError,
+      );
       // No lanzar error, solo registrar - la actualización de temporada ya se completó
     }
-    
+
     return temporadaActualizada;
   } catch (err) {
     if (
@@ -819,7 +844,6 @@ const calcularLiquidaciones = async (id) => {
         },
       },
     });
-
     if (!temporada) throw new NotFoundError("TemporadaPesca no encontrada");
 
     // 1. Contar tripulantes de la última faena
@@ -847,6 +871,8 @@ const calcularLiquidaciones = async (id) => {
         empresaId: temporada.empresaId,
         activo: true,
         cuotaPropia: true,
+        esAlquiler: false,
+        zona: temporada.zona, // ⬅️ AGREGAR ESTA LÍNEA
       },
     });
 
@@ -858,6 +884,8 @@ const calcularLiquidaciones = async (id) => {
         empresaId: temporada.empresaId,
         activo: true,
         cuotaPropia: false,
+        esAlquiler: false,
+        zona: temporada.zona, // ⬅️ AGREGAR: Filtrar por zona de la temporada
       },
     });
 
@@ -883,7 +911,7 @@ const calcularLiquidaciones = async (id) => {
 
     // 6. CÁLCULOS ESTIMADOS (basados en cuotas asignadas)
     const totalToneladasEstimadas = cuotaPropiaTon + cuotaAlquiladaTon;
-    const valorTotalEstimado = totalToneladasEstimadas * precioPorTonPropia;
+    const valorTotalEstimado = totalToneladasEstimadas * precioPorTonTemporada; // ⬅️ CAMBIO: usar precioPorTonTemporada
     const baseLiquidacionEstimada = valorTotalEstimado * porcentajeBaseLiqPesca;
 
     const liqComisionPatronEstimado =
@@ -898,7 +926,10 @@ const calcularLiquidaciones = async (id) => {
       liqComisionPatronEstimado +
       liqComisionMotoristaEstimado +
       liqComisionPangueroEstimado;
-    const liqComisionAlquilerCuota = cuotaAlquiladaTon * precioPorTonAlquilada;
+      // Usar precioPorTonAlquilerDolares de TemporadaPesca en lugar de DetCuotaPesca
+    const precioPorTonAlquiler = Number(temporada.precioPorTonAlquilerDolares || 0);
+    const liqComisionAlquilerCuota = cuotaAlquiladaTon * precioPorTonAlquiler;
+
 
     // 6.1. CALCULAR INGRESOS POR ALQUILER DE CUOTAS DE LA OTRA ZONA
     // Buscar cuotas propias de la zona diferente que están marcadas para alquilar
@@ -907,7 +938,7 @@ const calcularLiquidaciones = async (id) => {
         empresaId: temporada.empresaId,
         activo: true,
         cuotaPropia: true,
-        zona: temporada.zona === 'NORTE' ? 'SUR' : 'NORTE', // Zona diferente
+        zona: temporada.zona === "NORTE" ? "SUR" : "NORTE", // Zona diferente
         esAlquiler: true,
       },
     });
@@ -915,7 +946,7 @@ const calcularLiquidaciones = async (id) => {
     // Calcular ingresos por cada cuota y sumar
     let ingresosPorAlquilerCuotaSur = 0;
     const limiteMaximoCaptura = Number(temporada.limiteMaximoCapturaTn || 0);
-    
+
     for (const cuota of cuotasParaAlquilar) {
       const porcentaje = Number(cuota.porcentajeCuota || 0);
       const precio = Number(cuota.precioPorTonDolares || 0);

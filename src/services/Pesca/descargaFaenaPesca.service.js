@@ -259,18 +259,68 @@ const actualizar = async (id, data) => {
 const eliminar = async (id) => {
   try {
     const existente = await prisma.descargaFaenaPesca.findUnique({
-      where: { id },
-      include: { detalles: true }
+      where: { id }
     });
     if (!existente) throw new NotFoundError('DescargaFaenaPesca no encontrada');
-    if (existente.detalles && existente.detalles.length > 0) {
-      throw new ConflictError('No se puede eliminar porque tiene detalles asociados.');
-    }
     await prisma.descargaFaenaPesca.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Obtener todas las descargas de una temporada específica
+ * Incluye información del cliente y precio de comisión fidelización
+ */
+const obtenerPorTemporada = async (temporadaId) => {
+  try {
+    const descargas = await prisma.descargaFaenaPesca.findMany({
+      where: {
+        faenaPesca: {
+          temporadaId: BigInt(temporadaId)
+        }
+      },
+      include: {
+        cliente: {
+          select: {
+            id: true,
+            razonSocial: true,
+            precioPorTonComisionFidelizacion: true
+          }
+        },
+        faenaPesca: {
+          select: {
+            id: true,
+            descripcion: true,
+            temporadaId: true
+          }
+        },
+        puertoDescarga: {
+          select: {
+            id: true,
+            nombre: true
+          }
+        },
+        especie: {
+          select: {
+            id: true,
+            nombre: true
+          }
+        }
+      },
+      orderBy: {
+        fechaHoraInicioDescarga: 'desc'
+      }
+    });
+
+    return descargas;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
     throw err;
   }
 };
@@ -282,5 +332,6 @@ export default {
   crear,
   actualizar,
   eliminar,
-  sincronizarFaenaConUltimaDescarga
+  sincronizarFaenaConUltimaDescarga,
+  obtenerPorTemporada
 };

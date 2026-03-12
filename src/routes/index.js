@@ -198,6 +198,7 @@ import recalcularToneladasRoutes from '../routes/Pesca/recalcularToneladas.route
 import testRecalculoRoutes from '../routes/Pesca/testRecalculo.routes.js';
 import detCuotaPescaRoutes from '../routes/Pesca/detCuotaPesca.routes.js';
 import detGastosPlanificadosRoutes from '../routes/Pesca/detGastosPlanificados.routes.js';
+import comisionFidelizacionRoutes from '../routes/Pesca/comisionFidelizacion.routes.js';
 import empresaReporteRoutes from '../routes/Maestros/empresa.reporte.routes.js';
 import productoRoutes from '../routes/Maestros/producto.routes.js';
 import centrosAlmacenRoutes from './Almacen/centrosAlmacen.routes.js';
@@ -602,6 +603,8 @@ router.use('/recalcular-toneladas', recalcularToneladasRoutes);
 router.use('/test-recalculo', testRecalculoRoutes);
 // Rutas para DetCuotaPesca
 router.use('/pesca/detalles-cuota-pesca', detCuotaPescaRoutes);
+// Rutas para ComisionFidelizacion
+router.use('/pesca/comisiones-fidelizacion', comisionFidelizacionRoutes);
 // Rutas para DetGastosPlanificados
 router.use('/gastos-planificados', detGastosPlanificadosRoutes);
 router.use('/movimientos-caja', movimientoCajaRoutes);
