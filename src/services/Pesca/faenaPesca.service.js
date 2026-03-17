@@ -77,7 +77,18 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.faenaPesca.findMany();
+    return await prisma.faenaPesca.findMany({
+      include: {
+        patron: true,
+        motorista: true,
+        panguero: true,
+        embarcacion: {
+          include: {
+            activo: true
+          }
+        }
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);

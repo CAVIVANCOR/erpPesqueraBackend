@@ -282,25 +282,9 @@ const actualizar = async (id, data) => {
       }
     }
 
-    // ⭐ DIAGNÓSTICO: Verificar data antes de actualizar
-    console.log('💾 DATA ANTES DE PRISMA.UPDATE:', {
-      id,
-      precioPorTonDolares: data.precioPorTonDolares,
-      precioPorTonDolaresAlternativo: data.precioPorTonDolaresAlternativo,
-      precioPorTonAlquilerDolares: data.precioPorTonAlquilerDolares,
-    });
-
     const temporadaActualizada = await prisma.temporadaPesca.update({
       where: { id },
       data,
-    });
-
-    // ⭐ DIAGNÓSTICO: Verificar resultado después de actualizar
-    console.log('✅ TEMPORADA ACTUALIZADA:', {
-      id: temporadaActualizada.id,
-      precioPorTonDolares: temporadaActualizada.precioPorTonDolares,
-      precioPorTonDolaresAlternativo: temporadaActualizada.precioPorTonDolaresAlternativo,
-      precioPorTonAlquilerDolares: temporadaActualizada.precioPorTonAlquilerDolares,
     });
 
     // ⭐ RECALCULAR TONELADAS CAPTURADAS AUTOMÁTICAMENTE DESPUÉS DE ACTUALIZAR
@@ -938,34 +922,23 @@ const calcularLiquidaciones = async (id) => {
       liqComisionPatronEstimado +
       liqComisionMotoristaEstimado +
       liqComisionPangueroEstimado;
-      // Usar precioPorTonAlquilerDolares de TemporadaPesca en lugar de DetCuotaPesca
-    const precioPorTonAlquiler = Number(temporada.precioPorTonAlquilerDolares || 0);
+    // Usar precioPorTonAlquilerDolares de TemporadaPesca en lugar de DetCuotaPesca
+    const precioPorTonAlquiler = Number(
+      temporada.precioPorTonAlquilerDolares || 0,
+    );
     const liqComisionAlquilerCuota = cuotaAlquiladaTon * precioPorTonAlquiler;
 
-
-    // 6.1. CALCULAR INGRESOS POR ALQUILER DE CUOTAS DE LA OTRA ZONA
-    // Buscar cuotas propias de la zona diferente que están marcadas para alquilar
-    const cuotasParaAlquilar = await prisma.detCuotaPesca.findMany({
-      where: {
-        empresaId: temporada.empresaId,
-        activo: true,
-        cuotaPropia: true,
-        zona: temporada.zona === "NORTE" ? "SUR" : "NORTE", // Zona diferente
-        esAlquiler: true,
-      },
-    });
-
-    // Calcular ingresos por cada cuota y sumar
+       // 6.1. CALCULAR INGRESOS POR ALQUILER DE CUOTAS
+    // SOLO calcular si es temporada de SOLO ALQUILER
     let ingresosPorAlquilerCuotaSur = 0;
-    const limiteMaximoCaptura = Number(temporada.limiteMaximoCapturaTn || 0);
 
-    for (const cuota of cuotasParaAlquilar) {
-      const porcentaje = Number(cuota.porcentajeCuota || 0);
-      const precio = Number(cuota.precioPorTonDolares || 0);
-      const toneladas = limiteMaximoCaptura * (porcentaje / 100);
-      const ingresos = toneladas * precio;
-      ingresosPorAlquilerCuotaSur += ingresos;
+    if (temporada.esTemporadaSoloAlquiler) {
+      // Temporada de SOLO ALQUILER: usar datos de TemporadaPesca
+      const cuotaPropia = Number(temporada.cuotaPropiaTon || 0);
+      const precioAlquiler = Number(temporada.precioPorTonAlquilerDolares || 0);
+      ingresosPorAlquilerCuotaSur = cuotaPropia * precioAlquiler;
     }
+    // Si NO es temporada de solo alquiler, ingresosPorAlquilerCuotaSur = 0
 
     // 7. CÁLCULOS REALES (basados en toneladas capturadas)
     // Usar precioPorTonTemporada (igual que en Reporte PMM)
@@ -985,25 +958,25 @@ const calcularLiquidaciones = async (id) => {
       liqComisionMotoristaReal +
       liqComisionPangueroReal;
 
-    // 8. Actualizar la temporada con todos los valores calculados
-    const temporadaActualizada = await prisma.temporadaPesca.update({
-      where: { id: Number(id) },
-      data: {
-        liqTripulantesPescaEstimado: totalTripulantes,
-        liqTripulantesPescaReal: totalTripulantes,
-        liqComisionPatronEstimado,
-        liqComisionMotoristaEstimado,
-        liqComisionPangueroEstimado,
-        liqTotalPescaEstimada,
-        liqComisionAlquilerCuota,
-        ingresosPorAlquilerCuotaSur,
-        liqComisionPatronReal,
-        liqComisionMotoristaReal,
-        liqComisionPangueroReal,
-        liqTotalPescaReal,
-        fechaActualizacion: new Date(),
-      },
-    });
+   // 8. Actualizar la temporada con todos los valores calculados
+const temporadaActualizada = await prisma.temporadaPesca.update({
+  where: { id: Number(id) },
+  data: {
+    liqTripulantesPescaEstimado: totalTripulantes,
+    liqTripulantesPescaReal: baseLiquidacionReal,  // ✅ CORRECTO - usa baseLiquidacionReal (65,758.21)
+    liqComisionPatronEstimado,
+    liqComisionMotoristaEstimado,
+    liqComisionPangueroEstimado,
+    liqTotalPescaEstimada,
+    liqComisionAlquilerCuota,
+    ingresosPorAlquilerCuotaSur,
+    liqComisionPatronReal,
+    liqComisionMotoristaReal,
+    liqComisionPangueroReal,
+    liqTotalPescaReal,
+    fechaActualizacion: new Date(),
+  },
+});
 
     // 9. Obtener código de moneda desde EMPRESA
     const monedaCalculos = await prisma.moneda.findUnique({

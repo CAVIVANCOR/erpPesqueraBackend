@@ -286,6 +286,7 @@ export async function obtenerPrecioVigente(empresaId, empresaEntidadComercialId,
   }
 
   // 3. Buscar precio global de la empresa
+
   const precioGlobal = await prisma.precioEntidad.findFirst({
     where: {
       entidadComercialId: empresaEntidadComercialId,

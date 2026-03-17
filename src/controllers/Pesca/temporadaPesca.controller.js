@@ -69,15 +69,6 @@ export async function crear(req, res, next) {
 export async function actualizar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    
-    // ⭐ DIAGNÓSTICO: Verificar si precioPorTonDolaresAlternativo llega en el payload
-    console.log('📦 PAYLOAD RECIBIDO EN CONTROLADOR:', {
-      id,
-      precioPorTonDolares: req.body.precioPorTonDolares,
-      precioPorTonDolaresAlternativo: req.body.precioPorTonDolaresAlternativo,
-      precioPorTonAlquilerDolares: req.body.precioPorTonAlquilerDolares,
-    });
-    
     const actualizado = await temporadaPescaService.actualizar(id, req.body);
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
