@@ -102,6 +102,21 @@ const listar = async () => {
 
     const entidadesConAuditoria = await Promise.all(
       entidades.map(async (entidad) => {
+        // Búsqueda manual de empresa
+        const empresaRaw = entidad.empresaId
+          ? await prisma.empresa.findUnique({
+              where: { id: entidad.empresaId },
+              select: { id: true, razonSocial: true, nombreComercial: true }
+            })
+          : null;
+
+        // Convertir BigInt a string manualmente para asegurar serialización
+        const empresa = empresaRaw ? {
+          id: empresaRaw.id.toString(),
+          razonSocial: empresaRaw.razonSocial,
+          nombreComercial: empresaRaw.nombreComercial
+        } : null;
+
         const personalCreador = entidad.creadoPor
           ? await prisma.personal.findUnique({
               where: { id: entidad.creadoPor },
@@ -116,18 +131,11 @@ const listar = async () => {
             })
           : null;
 
-        const empresa = entidad.empresaId
-          ? await prisma.empresa.findUnique({
-              where: { id: entidad.empresaId },
-              select: { id: true, razonSocial: true, nombreComercial: true }
-            })
-          : null;
-
         return {
           ...entidad,
+          empresa,
           personalCreador,
-          personalActualizador,
-          empresa
+          personalActualizador
         };
       })
     );

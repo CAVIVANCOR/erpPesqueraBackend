@@ -32,7 +32,7 @@ const listar = async (requerimientoCompraId) => {
       where.requerimientoCompraId = BigInt(requerimientoCompraId);
     }
     
-    return await prisma.detalleReqCompra.findMany({ 
+    const detalles = await prisma.detalleReqCompra.findMany({ 
       where,
       include: { 
         requerimientoCompra: true,
@@ -51,6 +51,35 @@ const listar = async (requerimientoCompraId) => {
         id: 'asc'
       }
     });
+
+    // Agregar empresa a cada proveedor manualmente
+    const detallesConEmpresa = await Promise.all(
+      detalles.map(async (detalle) => {
+        if (detalle.proveedor && detalle.proveedor.empresaId) {
+          const empresaRaw = await prisma.empresa.findUnique({
+            where: { id: detalle.proveedor.empresaId },
+            select: { id: true, razonSocial: true, nombreComercial: true }
+          });
+
+          const empresa = empresaRaw ? {
+            id: empresaRaw.id.toString(),
+            razonSocial: empresaRaw.razonSocial,
+            nombreComercial: empresaRaw.nombreComercial
+          } : null;
+
+          return {
+            ...detalle,
+            proveedor: {
+              ...detalle.proveedor,
+              empresa
+            }
+          };
+        }
+        return detalle;
+      })
+    );
+
+    return detallesConEmpresa;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

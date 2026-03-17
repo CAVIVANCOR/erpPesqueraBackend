@@ -153,6 +153,11 @@ const listar = async (filtros = {}) => {
     if (filtros.clienteId) {
       where.clienteId = Number(filtros.clienteId);
     }
+    
+    // Filtrar por cesado (por defecto mostrar solo activos)
+    if (filtros.cesado !== undefined) {
+      where.cesado = filtros.cesado;
+    }
 
     const productos = await prisma.producto.findMany({
       where,

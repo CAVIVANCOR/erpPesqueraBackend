@@ -62,13 +62,17 @@ const listar = async () => {
         tipoDocumento: true,
         serieDoc: true,
         proveedor: true,
-        tipoProducto: true,
+        tipoProducto: {
+          include: {
+            subfamilia: true,
+          },
+        },
         tipoEstadoProducto: true,
         destinoProducto: true,
         formaPago: true,
         modoDespachoRecepcion: true,
         moneda: true,
-        unidadNegocio: true, // ✅ AGREGAR ESTA LÍNEA
+        unidadNegocio: true,
         detalles: {
           include: {
             producto: true,
@@ -98,13 +102,17 @@ const obtenerPorId = async (id) => {
         tipoDocumento: true,
         serieDoc: true,
         proveedor: true,
-        tipoProducto: true,
+        tipoProducto: {
+          include: {
+            subfamilia: true,
+          },
+        },
         tipoEstadoProducto: true,
         destinoProducto: true,
         formaPago: true,
         modoDespachoRecepcion: true,
         moneda: true,
-        unidadNegocio: true, // ✅ AGREGAR ESTA LÍNEA
+        unidadNegocio: true,
         detalles: {
           include: {
             producto: {
@@ -234,7 +242,11 @@ const crear = async (data) => {
         },
         include: {
           empresa: true,
-          tipoProducto: true,
+          tipoProducto: {
+            include: {
+              subfamilia: true,
+            },
+          },
           tipoEstadoProducto: true,
           destinoProducto: true,
           proveedor: true,
@@ -242,7 +254,7 @@ const crear = async (data) => {
           tipoDocumento: true,
           serieDoc: true,
           moneda: true,
-          unidadNegocio: true, // ✅ AGREGAR ESTA LÍNEA
+          unidadNegocio: true,
         },
       });
 
@@ -313,8 +325,13 @@ const actualizar = async (id, data) => {
         tipoDocumento: true,
         serieDoc: true,
         proveedor: true,
+        tipoProducto: {
+          include: {
+            subfamilia: true,
+          },
+        },
         moneda: true,
-        unidadNegocio: true, // ✅ AGREGAR ESTA LÍNEA
+        unidadNegocio: true,
         detalles: {
           include: {
             producto: true,
@@ -387,23 +404,6 @@ const aprobar = async (id) => {
 
       if (!requerimiento)
         throw new NotFoundError("RequerimientoCompra no encontrado");
-
-      // Buscar aprobador configurado
-      const aprobador = await tx.parametroAprobador.findFirst({
-        where: {
-          moduloSistemaId: 4, // Compras
-          empresaId: requerimiento.empresaId,
-          cesado: false,
-          vigenteDesde: { lte: new Date() },
-          OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: new Date() } }],
-        },
-      });
-
-      if (!aprobador) {
-        throw new ValidationError(
-          "No hay aprobador configurado para esta empresa en el módulo de Compras",
-        );
-      }
 
       // ===== FLUJO COMPRA DIRECTA =====
       if (!requerimiento.esConCotizacion) {
@@ -479,7 +479,7 @@ const aprobar = async (id) => {
         where: { id },
         data: {
           estadoId: BigInt(35), // APROBADO
-          aprobadoPorId: aprobador.personalRespId,
+          aprobadoPorId: requerimiento.solicitanteId,
           fechaAprobacion: new Date(),
           actualizadoEn: new Date(),
         },
@@ -501,8 +501,7 @@ const aprobar = async (id) => {
         update: {},
         create: {
           requerimientoCompraId: id,
-          respEntregaRendirId:
-            requerimiento.solicitanteId || aprobador.personalRespId,
+          respEntregaRendirId: requerimiento.solicitanteId,
           centroCostoId: requerimiento.centroCostoId || BigInt(1),
           entregaLiquidada: false,
         },
