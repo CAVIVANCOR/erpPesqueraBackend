@@ -3307,7 +3307,7 @@ model MovimientoAlmacen {
 
 model MovimientoCaja {
   id                                      BigInt                        @id @default(autoincrement())
-  empresaOrigenId                         BigInt
+  empresaOrigenId                         BigInt?
   empresaDestinoId                        BigInt?
   tipoMovimientoId                        BigInt
   entidadComercialId                      BigInt?
@@ -3319,7 +3319,7 @@ model MovimientoCaja {
   usuarioId                               BigInt?
   estadoId                                BigInt
   cuentaCorrienteDestinoId                BigInt?
-  cuentaCorrienteOrigenId                 BigInt
+  cuentaCorrienteOrigenId                 BigInt?
   fechaCreacion                           DateTime?                      @default(now())
   fechaActualizacion                      DateTime?                      @default(now())
   centroCostoId                           BigInt?
@@ -3362,12 +3362,12 @@ model MovimientoCaja {
   // ========================================
   // RELACIONES EXISTENTES
   // ========================================
-  cuentaCorrienteOrigen     CuentaCorriente           @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
+  cuentaCorrienteOrigen     CuentaCorriente?           @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
   cuentaCorrienteDestino    CuentaCorriente?          @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
   tipoReferencia            TipoReferenciaMovimientoCaja? @relation(fields: [tipoReferenciaId], references: [id])
   entidadComercial          EntidadComercial?         @relation(fields: [entidadComercialId], references: [id])
   estadoMovimientoCaja      EstadoMultiFuncion        @relation(fields: [estadoId], references: [id])
-  empresaOrigen             Empresa                   @relation("EmpresaOrigenMovCaja", fields: [empresaOrigenId], references: [id])
+  empresaOrigen             Empresa?                   @relation("EmpresaOrigenMovCaja", fields: [empresaOrigenId], references: [id])
   empresaDestino            Empresa?                  @relation("EmpresaDestinoMovCaja", fields: [empresaDestinoId], references: [id])
   moneda                    Moneda                    @relation(fields: [monedaId], references: [id])
   tipoMovimiento            TipoMovEntregaRendir      @relation(fields: [tipoMovimientoId], references: [id])
