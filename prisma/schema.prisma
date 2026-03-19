@@ -4185,6 +4185,7 @@ model TipoMovEntregaRendir {
   nombre                       String                         @db.VarChar(50)
   descripcion                  String?
   esIngreso                    Boolean
+  esTransferencia              Boolean   @default(false)  // 🆕 NUEVO CAMPO
   activo                       Boolean                        @default(true)
 
   detMovsEntregaRendir DetMovsEntregaRendir[]
@@ -4194,7 +4195,7 @@ model TipoMovEntregaRendir {
   movimientosCaja  MovimientoCaja[]
   detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[]
   movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
-detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[]
+  detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[]
   configuracionesCuentaContable  ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableTipoMov")
 
 }
