@@ -606,6 +606,20 @@ const listarPorMovimiento = async (movimientoCajaId, submoduloId = null) => {
       whereClause.submoduloOrigenId = Number(submoduloId);
     }
 
+    // Definir relaciones a incluir
+    const incluirRelaciones = {
+      empresa: true,
+      moneda: true,
+      personalAprobador: true,
+      personalAnulador: true,
+      detalles: {
+        include: {
+          planCuenta: true
+        },
+        orderBy: { numeroLinea: 'asc' }
+      }
+    };
+
     const asientos = await prisma.asientoContable.findMany({
       where: whereClause,
       include: incluirRelaciones,
