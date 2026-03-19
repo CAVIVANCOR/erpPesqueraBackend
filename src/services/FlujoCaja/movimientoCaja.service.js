@@ -132,16 +132,13 @@ const incluirRelaciones = {
 async function copiarPdfAMovimientoCaja(rutaOrigen, movimientoCajaId) {
   try {
     if (!rutaOrigen || !movimientoCajaId) return null;
-    // Construir ruta absoluta del archivo origen
     const rutaAbsolutaOrigen = path.join(process.cwd(), rutaOrigen);
     
-    // Verificar que el archivo origen existe
     if (!fs.existsSync(rutaAbsolutaOrigen)) {
       console.warn(`[MOVIMIENTO CAJA] Archivo origen no existe: ${rutaAbsolutaOrigen}`);
-      return rutaOrigen; // Retornar ruta original como fallback
+      return rutaOrigen;
     }
     
-    // Crear carpeta destino (Sistema PDF V2)
     const carpetaDestino = path.join(
       process.cwd(),
       'uploads',
@@ -149,29 +146,90 @@ async function copiarPdfAMovimientoCaja(rutaOrigen, movimientoCajaId) {
       'movimiento-caja-comprobante'
     );
     
-    // Crear directorios si no existen
     if (!fs.existsSync(carpetaDestino)) {
       fs.mkdirSync(carpetaDestino, { recursive: true });
     }
-    // Generar nombre del archivo según Sistema PDF V2
+    
     const extension = path.extname(rutaOrigen);
     const nombreArchivo = `MOVIMIENTO-CAJA-COMPROBANTE-${movimientoCajaId}${extension}`;
     const rutaAbsolutaDestino = path.join(carpetaDestino, nombreArchivo);
-    // Copiar el archivo
     fs.copyFileSync(rutaAbsolutaOrigen, rutaAbsolutaDestino);
-    // Construir ruta relativa para la BD (Sistema PDF V2)
     const rutaRelativa = `/uploads/pdf-system/movimiento-caja-comprobante/${nombreArchivo}`;    
     return rutaRelativa;
   } catch (error) {
     console.error('[MOVIMIENTO CAJA] Error al copiar archivo:', error);
-    return rutaOrigen; // Retornar ruta original como fallback
+    return rutaOrigen;
+  }
+}
+
+/**
+ * Actualiza los saldos de las cuentas corrientes involucradas en un movimiento de caja
+ * @param {Object} movimiento - Movimiento de caja creado
+ * @returns {Promise<void>}
+ */
+async function actualizarSaldosCuentasCorrientes(movimiento) {
+  try {
+    const { id, cuentaCorrienteOrigenId, cuentaCorrienteDestinoId, empresaOrigenId, empresaDestinoId, monto, centroCostoId } = movimiento;
+    
+    // PROCESAR CUENTA ORIGEN (EGRESO)
+    if (cuentaCorrienteOrigenId && empresaOrigenId) {
+      const ultimoSaldoOrigen = await prisma.saldoCuentaCorriente.findFirst({
+        where: { cuentaCorrienteId: cuentaCorrienteOrigenId },
+        orderBy: { fecha: 'desc' }
+      });
+      
+      const saldoAnteriorOrigen = ultimoSaldoOrigen ? Number(ultimoSaldoOrigen.saldoActual) : 0;
+      const montoDecimal = Number(monto);
+      
+      await prisma.saldoCuentaCorriente.create({
+        data: {
+          cuentaCorrienteId: cuentaCorrienteOrigenId,
+          empresaId: empresaOrigenId,
+          fecha: new Date(),
+          saldoAnterior: saldoAnteriorOrigen,
+          ingresos: 0,
+          egresos: montoDecimal,
+          saldoActual: saldoAnteriorOrigen - montoDecimal,
+          movimientoCajaId: id,
+          centroCostoId: centroCostoId || null,
+          conciliado: false
+        }
+      });
+    }
+    
+    // PROCESAR CUENTA DESTINO (INGRESO)
+    if (cuentaCorrienteDestinoId && empresaDestinoId) {
+      const ultimoSaldoDestino = await prisma.saldoCuentaCorriente.findFirst({
+        where: { cuentaCorrienteId: cuentaCorrienteDestinoId },
+        orderBy: { fecha: 'desc' }
+      });
+      
+      const saldoAnteriorDestino = ultimoSaldoDestino ? Number(ultimoSaldoDestino.saldoActual) : 0;
+      const montoDecimal = Number(monto);
+      
+      await prisma.saldoCuentaCorriente.create({
+        data: {
+          cuentaCorrienteId: cuentaCorrienteDestinoId,
+          empresaId: empresaDestinoId,
+          fecha: new Date(),
+          saldoAnterior: saldoAnteriorDestino,
+          ingresos: montoDecimal,
+          egresos: 0,
+          saldoActual: saldoAnteriorDestino + montoDecimal,
+          movimientoCajaId: id,
+          centroCostoId: centroCostoId || null,
+          conciliado: false
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error al actualizar saldos de cuentas corrientes:', err);
+    throw new DatabaseError('Error al actualizar saldos de cuentas corrientes', err.message);
   }
 }
 
 /**
  * Valida la existencia de todas las referencias necesarias antes de crear o actualizar un MovimientoCaja.
- * Lanza ValidationError si alguna referencia no existe.
- * @param {Object} data - Datos del movimiento a validar
  */
 async function validarReferenciasMovimientoCaja(data) {
   const {
@@ -189,46 +247,45 @@ async function validarReferenciasMovimientoCaja(data) {
     entidadComercialId
   } = data;
 
-  // Valida existencia de cuenta corriente origen (OBLIGATORIO)
-  if (!cuentaCorrienteOrigenId) {
-    throw new ValidationError('Cuenta corriente origen es obligatoria');
+  if (cuentaCorrienteOrigenId) {
+    const cuentaOrigen = await prisma.cuentaCorriente.findUnique({ where: { id: cuentaCorrienteOrigenId } });
+    if (!cuentaOrigen) throw new ValidationError('Cuenta corriente origen no existente');
   }
-  const cuentaOrigen = await prisma.cuentaCorriente.findUnique({ where: { id: cuentaCorrienteOrigenId } });
-  if (!cuentaOrigen) throw new ValidationError('Cuenta corriente origen no existente');
   
-  // Valida existencia de cuenta corriente destino (OPCIONAL)
   if (cuentaCorrienteDestinoId) {
     const cuentaDestino = await prisma.cuentaCorriente.findUnique({ where: { id: cuentaCorrienteDestinoId } });
     if (!cuentaDestino) throw new ValidationError('Cuenta corriente destino no existente');
   }
-
-  // Valida existencia de empresa origen (OBLIGATORIO)
-  if (!empresaOrigenId) {
-    throw new ValidationError('Empresa origen es obligatoria');
-  }
-  const empresaOrigen = await prisma.empresa.findUnique({ where: { id: empresaOrigenId } });
-  if (!empresaOrigen) throw new ValidationError('Empresa origen no existente');
   
-  // Valida existencia de empresa destino (OPCIONAL - solo para transferencias entre empresas)
+  if (!cuentaCorrienteOrigenId && !cuentaCorrienteDestinoId) {
+    throw new ValidationError('Debe especificar al menos una cuenta corriente (origen o destino)');
+  }
+
+  if (empresaOrigenId) {
+    const empresaOrigen = await prisma.empresa.findUnique({ where: { id: empresaOrigenId } });
+    if (!empresaOrigen) throw new ValidationError('Empresa origen no existente');
+  }
+  
   if (empresaDestinoId) {
     const empresaDestino = await prisma.empresa.findUnique({ where: { id: empresaDestinoId } });
     if (!empresaDestino) throw new ValidationError('Empresa destino no existente');
   }
+  
+  if (!empresaOrigenId && !empresaDestinoId) {
+    throw new ValidationError('Debe especificar al menos una empresa (origen o destino)');
+  }
 
-  // Valida existencia de tipo de movimiento (OBLIGATORIO)
   if (!tipoMovimientoId) {
     throw new ValidationError('Tipo de movimiento es obligatorio');
   }
   const tipoMov = await prisma.tipoMovEntregaRendir.findUnique({ where: { id: tipoMovimientoId } });
   if (!tipoMov) throw new ValidationError('Tipo de movimiento no existente');
 
-  // Valida existencia de entidad comercial (OPCIONAL - solo cuando hay proveedor/cliente)
   if (entidadComercialId) {
     const entidadComercial = await prisma.entidadComercial.findUnique({ where: { id: entidadComercialId } });
     if (!entidadComercial) throw new ValidationError('Entidad comercial no existente');
   }
 
-  // Valida existencia de cuenta de entidad comercial (OPCIONAL - solo para pagos a proveedores)
   if (data.cuentaDestinoEntidadComercialId) {
     const ctaCteEntidad = await prisma.ctaCteEntidad.findUnique({ 
       where: { id: data.cuentaDestinoEntidadComercialId },
@@ -236,63 +293,47 @@ async function validarReferenciasMovimientoCaja(data) {
     });
     if (!ctaCteEntidad) throw new ValidationError('Cuenta de entidad comercial no existente');
     
-    // Validar que la cuenta pertenezca a la entidad comercial especificada
     if (entidadComercialId && ctaCteEntidad.entidadComercialId !== entidadComercialId) {
       throw new ValidationError('La cuenta seleccionada no pertenece a la entidad comercial especificada');
     }
   }
 
-  // Valida existencia de moneda (OBLIGATORIO)
   if (!monedaId) {
     throw new ValidationError('Moneda es obligatoria');
   }
   const moneda = await prisma.moneda.findUnique({ where: { id: monedaId } });
   if (!moneda) throw new ValidationError('Moneda no existente');
 
-  // Valida existencia de usuario si se provee
   if (usuarioId) {
     const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId } });
     if (!usuario) throw new ValidationError('Usuario no existente');
   }
 
-  // Valida existencia de tipo de referencia si se provee
   if (tipoReferenciaId) {
     const tipoRef = await prisma.tipoReferenciaMovimientoCaja.findUnique({ where: { id: tipoReferenciaId } });
     if (!tipoRef) throw new ValidationError('Tipo de referencia no existente');
   }
 
-  // Valida existencia de centro de costo si se provee
   if (centroCostoId) {
     const centroCosto = await prisma.centroCosto.findUnique({ where: { id: centroCostoId } });
     if (!centroCosto) throw new ValidationError('Centro de costo no existente');
   }
 
-  // Valida existencia de módulo origen si se provee
   if (moduloOrigenMotivoOperacionId) {
     const moduloOrigen = await prisma.moduloSistema.findUnique({ where: { id: moduloOrigenMotivoOperacionId } });
     if (!moduloOrigen) throw new ValidationError('Módulo origen no existente');
   }
 
-  // Valida existencia de usuario motivo operación si se provee
   if (usuarioMotivoOperacionId) {
     const usuarioMotivo = await prisma.personal.findUnique({ where: { id: usuarioMotivoOperacionId } });
     if (!usuarioMotivo) throw new ValidationError('Usuario motivo operación no existente');
   }
 }
 
-/**
- * Lista todos los movimientos de caja.
- * @returns {Promise<Array<Object>>} - Lista de movimientos de caja
- */
 const listar = async () => {
   return prisma.movimientoCaja.findMany({ include: incluirRelaciones });
 };
 
-/**
- * Obtiene un movimiento de caja por ID.
- * @param {BigInt|number} id - ID del movimiento de caja
- * @returns {Promise<Object>} - Movimiento de caja
- */
 const obtenerPorId = async (id) => {
   try {
     const movimiento = await prisma.movimientoCaja.findUnique({ where: { id }, include: incluirRelaciones });
@@ -304,23 +345,20 @@ const obtenerPorId = async (id) => {
   }
 };
 
-/**
- * Crea un nuevo movimiento de caja.
- * Si proviene de DetMovsEntregaRendir o DetMovsEntRendirPescaConsumo,
- * copia automáticamente el urlComprobanteMovimiento al urlDocumentoMovCaja.
- * @param {Object} data - Datos del movimiento de caja
- * @returns {Promise<Object>} - Movimiento de caja creado
- */
 const crear = async (data) => {
   try {
     await validarReferenciasMovimientoCaja(data);
     
-    // Si viene de un módulo origen, copiar físicamente el comprobante del detalle
+    if (!data.estadoId) {
+      data.estadoId = BigInt(20);
+    }
+    
     const moduloOrigen = data.moduloOrigenMotivoOperacionId ? Number(data.moduloOrigenMotivoOperacionId) : null;
     const origenId = data.origenMotivoOperacionId;
     
+    let movimientoCreado;
+    
     if (moduloOrigen === 2 && origenId) {
-      // PESCA INDUSTRIAL - Buscar en DetMovsEntregaRendir      
       const detMov = await prisma.detMovsEntregaRendir.findUnique({
         where: { id: BigInt(origenId) },
         select: { 
@@ -329,43 +367,36 @@ const crear = async (data) => {
         }
       });      
       if (detMov) {
-        // Copiar el productoId si existe
         if (detMov.productoId) {
           data.productoId = detMov.productoId;
         }
         
-        // Copiar físicamente el archivo PDF
         if (detMov.urlComprobanteMovimiento) {          
-          // Primero crear el MovimientoCaja para obtener el ID
-          const movimientoCreado = await prisma.movimientoCaja.create({ data });
-          // Ahora copiar el PDF con el ID del movimiento
+          movimientoCreado = await prisma.movimientoCaja.create({ data });
           const nuevaRuta = await copiarPdfAMovimientoCaja(
             detMov.urlComprobanteMovimiento, 
             movimientoCreado.id
           );
           if (nuevaRuta && nuevaRuta !== detMov.urlComprobanteMovimiento) {
-            // Actualizar el MovimientoCaja con la nueva ruta
             await prisma.movimientoCaja.update({
               where: { id: movimientoCreado.id },
               data: { urlDocumentoMovCaja: nuevaRuta }
             });
           }
           
+          await actualizarSaldosCuentasCorrientes(movimientoCreado);
           return movimientoCreado;
         }
       }
     } else if (moduloOrigen === 3 && origenId) {
-      // PESCA CONSUMO - Buscar en DetMovsEntRendirPescaConsumo
       const detMovConsumo = await prisma.detMovsEntRendirPescaConsumo.findUnique({
         where: { id: BigInt(origenId) },
         select: { urlComprobanteMovimiento: true }
       });
       
       if (detMovConsumo && detMovConsumo.urlComprobanteMovimiento) {
-        // Primero crear el MovimientoCaja
-        const movimientoCreado = await prisma.movimientoCaja.create({ data });
+        movimientoCreado = await prisma.movimientoCaja.create({ data });
         
-        // Copiar físicamente el archivo PDF
         const nuevaRuta = await copiarPdfAMovimientoCaja(
           detMovConsumo.urlComprobanteMovimiento,
           movimientoCreado.id
@@ -378,16 +409,16 @@ const crear = async (data) => {
           });
         }
         
+        await actualizarSaldosCuentasCorrientes(movimientoCreado);
         return movimientoCreado;
       }
     }
     
-    // Si NO viene de módulo origen, crear normalmente
-    return await prisma.movimientoCaja.create({ data });
+    movimientoCreado = await prisma.movimientoCaja.create({ data });
+    await actualizarSaldosCuentasCorrientes(movimientoCreado);
+    return movimientoCreado;
   } catch (err) {
-    // Manejar errores de validación de Prisma
     if (err.name === 'PrismaClientValidationError') {
-      // Extraer el campo faltante del mensaje de error
       const match = err.message.match(/Argument `(\w+)` is missing/);
       if (match) {
         const campoFaltante = match[1];
@@ -410,30 +441,19 @@ const crear = async (data) => {
   }
 };
 
-/**
- * Actualiza un movimiento de caja existente, validando primero la existencia del ID.
- * Si solo se actualizan URLs de PDFs, no valida referencias.
- * @param {BigInt|number} id - ID del movimiento de caja a actualizar
- * @param {Object} data - Datos a actualizar
- * @returns {Promise<Object>} - Movimiento de caja actualizado
- */
 const actualizar = async (id, data) => {
   try {
-    // Primero valida existencia del movimiento de caja
     const existente = await prisma.movimientoCaja.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Movimiento de Caja No Encontrado');
 
-    // Detectar si solo se están actualizando URLs de PDFs
     const soloActualizacionPDF = 
       Object.keys(data).length <= 2 && 
       (data.urlComprobanteOperacionMovCaja !== undefined || data.urlDocumentoMovCaja !== undefined);
 
-    // Solo valida referencias si NO es una actualización exclusiva de PDFs
     if (!soloActualizacionPDF) {
       await validarReferenciasMovimientoCaja(data);
     }
 
-    // Realiza la actualización
     const actualizado = await prisma.movimientoCaja.update({ where: { id }, data });
     return actualizado;
   } catch (err) {
@@ -443,11 +463,6 @@ const actualizar = async (id, data) => {
   }
 };
 
-/**
- * Elimina un movimiento de caja por ID.
- * @param {BigInt|number} id - ID del movimiento de caja
- * @returns {Promise<boolean>} - True si se eliminó correctamente
- */
 const eliminar = async (id) => {
   try {
     await prisma.movimientoCaja.delete({ where: { id } });
@@ -460,39 +475,28 @@ const eliminar = async (id) => {
   }
 };
 
-/**
- * Valida un movimiento de caja y actualiza el origen correspondiente.
- * Implementa la lógica completa de validación según el módulo de origen.
- * @param {BigInt|number} id - ID del movimiento de caja a validar
- * @returns {Promise<Object>} - Movimiento de caja validado
- */
 const validarMovimiento = async (id) => {
   try {
-    // 1. Obtener el movimiento de caja
     const movimiento = await prisma.movimientoCaja.findUnique({ where: { id } });
     if (!movimiento) throw new NotFoundError('Movimiento de caja no encontrado');
 
-    // 2. Verificar que el estado actual sea PENDIENTE (id=20)
     if (Number(movimiento.estadoId) !== 20) {
       throw new ValidationError('Solo se pueden validar movimientos en estado PENDIENTE');
     }
 
-    // 3. Actualizar MovimientoCaja a estado VALIDADO (id=21)
     const fechaActual = new Date();
     const movimientoActualizado = await prisma.movimientoCaja.update({
       where: { id },
       data: {
-        estadoId: BigInt(21), // VALIDADO
+        estadoId: BigInt(21),
         fechaActualizacion: fechaActual
       }
     });
 
-    // 4. Buscar y actualizar el origen según moduloOrigenMotivoOperacionId
     const moduloOrigen = Number(movimiento.moduloOrigenMotivoOperacionId);
     const origenId = movimiento.origenMotivoOperacionId;
 
     if (moduloOrigen === 2) {
-      // PESCA INDUSTRIAL - Buscar en DetMovsEntregaRendir
       const detMov = await prisma.detMovsEntregaRendir.findUnique({
         where: { id: origenId }
       });
@@ -501,7 +505,6 @@ const validarMovimiento = async (id) => {
         throw new ValidationError('La operación de Movimiento de Caja No encuentra el Origen de la Operación en DetMovsEntregaRendir');
       }
 
-      // Actualizar DetMovsEntregaRendir
       await prisma.detMovsEntregaRendir.update({
         where: { id: origenId },
         data: {
@@ -520,7 +523,6 @@ const validarMovimiento = async (id) => {
       });
 
     } else if (moduloOrigen === 3) {
-      // PESCA CONSUMO - Buscar en DetMovsEntRendirPescaConsumo
       const detMovConsumo = await prisma.detMovsEntRendirPescaConsumo.findUnique({
         where: { id: origenId }
       });
@@ -529,7 +531,6 @@ const validarMovimiento = async (id) => {
         throw new ValidationError('La operación de Movimiento de Caja No encuentra el Origen de la Operación en DetMovsEntRendirPescaConsumo');
       }
 
-      // Actualizar DetMovsEntRendirPescaConsumo
       await prisma.detMovsEntRendirPescaConsumo.update({
         where: { id: origenId },
         data: {
@@ -544,7 +545,6 @@ const validarMovimiento = async (id) => {
         }
       });
     } else if (moduloOrigen === 4) {
-      // COMPRAS - Buscar en DetMovsEntregaRendirPCompras
       const detMovCompras = await prisma.detMovsEntregaRendirPCompras.findUnique({
         where: { id: origenId }
       });
@@ -553,7 +553,6 @@ const validarMovimiento = async (id) => {
         throw new ValidationError('La operación de Movimiento de Caja No encuentra el Origen de la Operación en DetMovsEntregaRendirPCompras');
       }
 
-      // Actualizar DetMovsEntregaRendirPCompras
       await prisma.detMovsEntregaRendirPCompras.update({
         where: { id: origenId },
         data: {
@@ -568,7 +567,6 @@ const validarMovimiento = async (id) => {
         }
       });
     } else if (moduloOrigen === 5) {
-      // VENTAS - Buscar en DetMovsEntregaRendirPVentas
       const detMovVentas = await prisma.detMovsEntregaRendirPVentas.findUnique({
         where: { id: origenId }
       });
@@ -577,7 +575,6 @@ const validarMovimiento = async (id) => {
         throw new ValidationError('La operación de Movimiento de Caja No encuentra el Origen de la Operación en DetMovsEntregaRendirPVentas');
       }
 
-      // Actualizar DetMovsEntregaRendirPVentas
       await prisma.detMovsEntregaRendirPVentas.update({
         where: { id: origenId },
         data: {
@@ -604,12 +601,6 @@ const validarMovimiento = async (id) => {
   }
 };
 
-/**
- * Aprueba un movimiento de caja
- * @param {BigInt|number} id - ID del movimiento
- * @param {BigInt|number} aprobadoPorId - ID del personal que aprueba
- * @returns {Promise<Object>} - Movimiento aprobado
- */
 const aprobar = async (id, aprobadoPorId) => {
   try {
     const movimiento = await prisma.movimientoCaja.findUnique({ where: { id } });
@@ -641,13 +632,6 @@ const aprobar = async (id, aprobadoPorId) => {
   }
 };
 
-/**
- * Rechaza un movimiento de caja
- * @param {BigInt|number} id - ID del movimiento
- * @param {BigInt|number} rechazadoPorId - ID del personal que rechaza
- * @param {string} motivoRechazo - Motivo del rechazo
- * @returns {Promise<Object>} - Movimiento rechazado
- */
 const rechazar = async (id, rechazadoPorId, motivoRechazo) => {
   try {
     const movimiento = await prisma.movimientoCaja.findUnique({ where: { id } });
@@ -680,13 +664,6 @@ const rechazar = async (id, rechazadoPorId, motivoRechazo) => {
   }
 };
 
-/**
- * Revierte un movimiento de caja creando un movimiento inverso
- * @param {BigInt|number} id - ID del movimiento a revertir
- * @param {string} motivoReversion - Motivo de la reversión
- * @param {BigInt|number} usuarioId - ID del usuario que revierte
- * @returns {Promise<Object>} - Movimiento de reversión creado
- */
 const revertir = async (id, motivoReversion, usuarioId) => {
   try {
     const movimientoOriginal = await prisma.movimientoCaja.findUnique({
@@ -737,6 +714,7 @@ const revertir = async (id, motivoReversion, usuarioId) => {
       include: incluirRelaciones,
     });
 
+    await actualizarSaldosCuentasCorrientes(movimientoReversion);
     return movimientoReversion;
   } catch (err) {
     if (err.code === 'P2025') throw new NotFoundError('Movimiento de caja no encontrado');
