@@ -51,5 +51,25 @@ export async function listarPorCuentaPagar(req, res, next) {
   }
 }
 
+/**
+ * Lista los pagos (CxC y CxP) generados por un movimiento de caja
+ */
+export async function listarPorMovimiento(req, res, next) {
+  try {
+    const movimientoCajaId = Number(req.params.movimientoCajaId);
+    
+    if (!movimientoCajaId || isNaN(movimientoCajaId)) {
+      return res.status(400).json({
+        error: 'El parámetro movimientoCajaId es requerido y debe ser un número válido'
+      });
+    }
+
+    const pagos = await pagoService.listarPorMovimiento(movimientoCajaId);
+    res.json(toJSONBigInt(pagos));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // NOTA: No hay funciones crear, actualizar o eliminar
 // Los pagos se gestionan desde los tabs de CuentaPorCobrar y CuentaPorPagar

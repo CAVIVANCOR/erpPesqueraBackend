@@ -280,10 +280,86 @@ const obtenerPorId = async (id, tipoPago) => {
   }
 };
 
+/**
+ * Lista los pagos (CxC y CxP) generados por un movimiento de caja específico
+ * @param {number} movimientoCajaId - ID del movimiento de caja
+ * @returns {Promise<Array>} - Lista de pagos generados por el movimiento
+ */
+const listarPorMovimiento = async (movimientoCajaId) => {
+  try {
+    // Obtener pagos de cuentas por cobrar del movimiento
+    const pagosCobrar = await prisma.pagoCuentaPorCobrar.findMany({
+      where: {
+        movimientoCajaId: Number(movimientoCajaId)
+      },
+      include: {
+        cuentaPorCobrar: {
+          include: { 
+            cliente: true,
+            empresa: true,
+            moneda: true
+          }
+        },
+        medioPago: true,
+        moneda: true,
+        banco: true,
+        cuentaBancaria: true
+      },
+      orderBy: { fechaPago: 'desc' }
+    });
+
+    // Obtener pagos de cuentas por pagar del movimiento
+    const pagosPagar = await prisma.pagoCuentaPorPagar.findMany({
+      where: {
+        movimientoCajaId: Number(movimientoCajaId)
+      },
+      include: {
+        cuentaPorPagar: {
+          include: { 
+            proveedor: true,
+            empresa: true,
+            moneda: true
+          }
+        },
+        medioPago: true,
+        moneda: true,
+        banco: true,
+        cuentaBancaria: true
+      },
+      orderBy: { fechaPago: 'desc' }
+    });
+
+    // Combinar ambos arrays y agregar un campo tipo
+    const pagosCobrarConTipo = pagosCobrar.map(p => ({ 
+      ...p, 
+      tipoPago: 'COBRAR',
+      entidad: p.cuentaPorCobrar?.cliente?.razonSocial || 'N/A',
+      empresaNombre: p.cuentaPorCobrar?.empresa?.razonSocial || 'N/A'
+    }));
+    
+    const pagosPagarConTipo = pagosPagar.map(p => ({ 
+      ...p, 
+      tipoPago: 'PAGAR',
+      entidad: p.cuentaPorPagar?.proveedor?.razonSocial || 'N/A',
+      empresaNombre: p.cuentaPorPagar?.empresa?.razonSocial || 'N/A'
+    }));
+
+    return [...pagosCobrarConTipo, ...pagosPagarConTipo].sort((a, b) => 
+      new Date(b.fechaPago) - new Date(a.fechaPago)
+    );
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al listar pagos por movimiento', err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   listarPorEmpresa,
   listarPorCuentaCobrar,
-  listarPorCuentaPagar
+  listarPorCuentaPagar,
+  listarPorMovimiento
 };

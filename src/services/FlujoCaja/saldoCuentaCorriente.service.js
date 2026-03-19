@@ -321,6 +321,32 @@ const eliminar = async (id) => {
   }
 };
 
+
+/**
+ * Lista los saldos generados por un movimiento de caja específico
+ * @param {number} movimientoCajaId - ID del movimiento de caja
+ * @returns {Promise<Array>} - Lista de saldos generados por el movimiento
+ */
+const listarPorMovimiento = async (movimientoCajaId) => {
+  try {
+    const saldos = await prisma.saldoCuentaCorriente.findMany({
+      where: {
+        movimientoCajaId: Number(movimientoCajaId)
+      },
+      include: incluirRelaciones,
+      orderBy: {
+        fecha: 'desc'
+      }
+    });
+
+    return saldos;
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos al listar saldos por movimiento", err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -329,4 +355,5 @@ export default {
   crear,
   actualizar,
   eliminar,
+  listarPorMovimiento
 };

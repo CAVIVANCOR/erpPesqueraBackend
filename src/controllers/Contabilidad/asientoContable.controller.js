@@ -95,3 +95,24 @@ export async function anularAsiento(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Lista los asientos contables generados por un movimiento de caja
+ */
+export async function listarPorMovimiento(req, res, next) {
+  try {
+    const movimientoCajaId = Number(req.params.movimientoCajaId);
+    const submoduloId = req.query.submoduloId ? Number(req.query.submoduloId) : null;
+    
+    if (!movimientoCajaId || isNaN(movimientoCajaId)) {
+      return res.status(400).json({
+        error: 'El parámetro movimientoCajaId es requerido y debe ser un número válido'
+      });
+    }
+
+    const asientos = await asientoContableService.listarPorMovimiento(movimientoCajaId, submoduloId);
+    res.json(toJSONBigInt(asientos));
+  } catch (err) {
+    next(err);
+  }
+}

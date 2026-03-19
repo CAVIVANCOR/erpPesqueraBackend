@@ -61,6 +61,14 @@ router.get(
   asientoContableController.listarPorPeriodo
 );
 
+// Ruta para obtener asientos por movimiento de caja
+router.get(
+  '/por-movimiento/:movimientoCajaId', 
+  autenticarJWT, 
+  checkPermission('asientoContable', 'ver'),
+  asientoContableController.listarPorMovimiento
+);
+
 // Rutas de gestión de asientos
 router.post(
   '/:id/aprobar', 

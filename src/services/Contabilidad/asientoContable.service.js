@@ -588,6 +588,41 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
   }
 };
 
+/**
+ * Lista los asientos contables generados por un movimiento de caja específico
+ * @param {number} movimientoCajaId - ID del movimiento de caja
+ * @param {number} submoduloId - ID del submódulo (opcional)
+ * @returns {Promise<Array>} - Lista de asientos generados por el movimiento
+ */
+const listarPorMovimiento = async (movimientoCajaId, submoduloId = null) => {
+  try {
+    const whereClause = {
+      procesoOrigenId: Number(movimientoCajaId),
+      origenAsiento: 'AUTOMATICO'
+    };
+
+    // Si se proporciona submoduloId, agregarlo al filtro
+    if (submoduloId) {
+      whereClause.submoduloOrigenId = Number(submoduloId);
+    }
+
+    const asientos = await prisma.asientoContable.findMany({
+      where: whereClause,
+      include: incluirRelaciones,
+      orderBy: {
+        fechaAsiento: 'desc'
+      }
+    });
+
+    return asientos;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al listar asientos por movimiento', err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -597,5 +632,6 @@ export default {
   listarPorEmpresa,
   listarPorPeriodo,
   aprobarAsiento,
-  anularAsiento
+  anularAsiento,
+  listarPorMovimiento
 };

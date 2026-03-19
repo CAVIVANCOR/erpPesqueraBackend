@@ -113,6 +113,27 @@ const eliminar = async (req, res, next) => {
   }
 };
 
+
+/**
+ * Lista los saldos generados por un movimiento de caja
+ */
+const listarPorMovimiento = async (req, res, next) => {
+  try {
+    const movimientoCajaId = Number(req.params.movimientoCajaId);
+    
+    if (!movimientoCajaId || isNaN(movimientoCajaId)) {
+      return res.status(400).json({
+        error: 'El parámetro movimientoCajaId es requerido y debe ser un número válido'
+      });
+    }
+
+    const saldos = await saldoCuentaCorrienteService.listarPorMovimiento(movimientoCajaId);
+    res.json(toJSONBigInt(saldos));
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -120,5 +141,6 @@ export default {
   calcularSaldoActual,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  listarPorMovimiento
 };
