@@ -509,13 +509,83 @@ const eliminar = async (id) => {
   }
 };
 
-const validarMovimiento = async (id) => {
+const validarMovimiento = async (id, usuarioId) => {
   try {
     const movimiento = await prisma.movimientoCaja.findUnique({ where: { id } });
     if (!movimiento) throw new NotFoundError('Movimiento de caja no encontrado');
 
     if (Number(movimiento.estadoId) !== 20) {
       throw new ValidationError('Solo se pueden validar movimientos en estado PENDIENTE');
+    }
+
+    // ========================================
+    // ✅ VERIFICAR SI YA EXISTEN SALDOS GENERADOS
+    // ========================================
+    const saldosExistentes = await prisma.saldoCuentaCorriente.findMany({
+      where: { movimientoCajaId: id }
+    });
+
+    if (saldosExistentes.length > 0) {
+      // ========================================
+      // ✅ VERIFICAR PERMISO puedeReactivarDocs
+      // ========================================
+      if (!usuarioId) {
+        throw new ValidationError('Usuario no autenticado para re-validar movimientos con saldos generados');
+      }
+
+      // Buscar el submódulo de movimientoCaja
+      const submodulo = await prisma.submoduloSistema.findFirst({
+        where: { 
+          ruta: 'movimientoCaja',
+          activo: true 
+        },
+        select: { id: true, nombre: true }
+      });
+
+      if (!submodulo) {
+        throw new ValidationError('Submódulo de Movimiento de Caja no encontrado');
+      }
+
+      // Verificar si el usuario es superusuario
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: usuarioId },
+        select: { esSuperUsuario: true }
+      });
+
+      let tienePermiso = false;
+
+      if (usuario?.esSuperUsuario) {
+        tienePermiso = true;
+      } else {
+        // Buscar acceso del usuario al submódulo
+        const acceso = await prisma.accesosUsuario.findFirst({
+          where: {
+            usuarioId,
+            submoduloId: submodulo.id,
+            activo: true
+          },
+          select: {
+            puedeReactivarDocs: true
+          }
+        });
+
+        if (!acceso) {
+          throw new ValidationError(`No tiene acceso al módulo '${submodulo.nombre}'`);
+        }
+
+        tienePermiso = acceso.puedeReactivarDocs;
+      }
+
+      if (!tienePermiso) {
+        throw new ValidationError('No tiene permiso para re-validar movimientos con saldos generados. Se requiere el permiso "Reactivar Documentos".');
+      }
+
+      // ========================================
+      // ✅ ELIMINAR SALDOS EXISTENTES
+      // ========================================
+      await prisma.saldoCuentaCorriente.deleteMany({
+        where: { movimientoCajaId: id }
+      });
     }
 
     const fechaActual = new Date();
@@ -628,6 +698,9 @@ const validarMovimiento = async (id) => {
       throw new ValidationError(`Módulo origen no soportado: ${moduloOrigen}`);
     }
 
+    // ========================================
+    // ✅ GENERAR NUEVOS SALDOS
+    // ========================================
     const saldosGenerados = await actualizarSaldosCuentasCorrientes(movimientoActualizado);
 
     return {

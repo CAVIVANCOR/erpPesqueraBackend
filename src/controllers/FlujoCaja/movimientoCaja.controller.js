@@ -166,7 +166,8 @@ const eliminar = async (req, res, next) => {
 const validarMovimiento = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const movimientoValidado = await movimientoCajaService.validarMovimiento(id);
+    const usuarioId = req.user.id; // ✅ Extraer usuarioId del token JWT
+    const movimientoValidado = await movimientoCajaService.validarMovimiento(id, usuarioId);
     res.json(toJSONBigInt(movimientoValidado));
   } catch (err) {
     next(err);
