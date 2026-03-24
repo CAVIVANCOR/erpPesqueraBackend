@@ -3651,6 +3651,8 @@ tiposPrestamoActualizados TipoPrestamo[]      @relation("TipoPrestamoActualizado
   enlaceEntidadComercial EntidadComercial? @relation("PersonalEnlaceEntidad", fields: [enlaceEntidadComercialId], references: [id])
 comisionesFidelizacion  ComisionFidelizacion[]
 detallesComisionFidelizacion DetComisionFidelizacionEntidad[] @relation("PersonalComisionFidelizacion")
+categoriasTipoMovCreadas       CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovCreador")
+categoriasTipoMovActualizadas  CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovActualizador")
 }
 
 model Producto {
@@ -4187,6 +4189,7 @@ model TipoMovEntregaRendir {
   esIngreso                    Boolean
   esTransferencia              Boolean   @default(false)  // 🆕 NUEVO CAMPO
   activo                       Boolean                        @default(true)
+  categoriaId                  BigInt?
 
   detMovsEntregaRendir DetMovsEntregaRendir[]
   movimientosConsumo DetMovsEntRendirPescaConsumo[]
@@ -4197,8 +4200,27 @@ model TipoMovEntregaRendir {
   movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
   detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[]
   configuracionesCuentaContable  ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableTipoMov")
+  categoria             CategoriaTipoMovEntregaRendir? @relation(fields: [categoriaId], references: [id])
 
 }
+
+model CategoriaTipoMovEntregaRendir {
+  id                BigInt   @id @default(autoincrement())
+  nombre            String?  @db.VarChar(255)
+  cesado            Boolean  @default(false)
+  
+  // Auditoría
+  creadoEn          DateTime  @default(now())
+  actualizadoEn     DateTime? @updatedAt
+  creadoPor         BigInt?
+  actualizadoPor    BigInt?
+  
+  // RELACIONES
+  tiposMovimiento   TipoMovEntregaRendir[]
+  creador           Personal? @relation("CategoriaTipoMovCreador", fields: [creadoPor], references: [id])
+  actualizador      Personal? @relation("CategoriaTipoMovActualizador", fields: [actualizadoPor], references: [id])
+}
+
 
 model TipoMovimientoAcceso {
   id                       BigInt                     @id @default(autoincrement())
