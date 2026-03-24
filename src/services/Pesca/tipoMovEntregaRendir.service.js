@@ -34,7 +34,11 @@ async function tieneDependencias(id) {
 
 const listar = async () => {
   try {
-    return await prisma.tipoMovEntregaRendir.findMany();
+    return await prisma.tipoMovEntregaRendir.findMany({
+      include: {
+        categoria: true
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -43,7 +47,12 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const tipo = await prisma.tipoMovEntregaRendir.findUnique({ where: { id } });
+    const tipo = await prisma.tipoMovEntregaRendir.findUnique({ 
+      where: { id },
+      include: {
+        categoria: true
+      }
+    });
     if (!tipo) throw new NotFoundError('TipoMovEntregaRendir no encontrado');
     return tipo;
   } catch (err) {

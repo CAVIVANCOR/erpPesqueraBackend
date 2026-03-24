@@ -240,6 +240,7 @@ import tarifaCostoExportacionRutaRoutes from './Ventas/tarifaCostoExportacionRut
 import medioPagoRoutes from '../routes/Maestros/medioPago.routes.js';
 import unidadNegocioRoutes from './Usuarios/unidadNegocio.routes.js';
 import detComisionFidelizacionEntidadRoutes from './Maestros/detComisionFidelizacionEntidad.routes.js';
+import categoriaTipoMovEntregaRendirRoutes from './Pesca/categoriaTipoMovEntregaRendir.routes.js';
 
 const router = express.Router();
 
@@ -495,7 +496,7 @@ router.use('/entregas-rendir-contrato-servicios', entregaARendirContratoServicio
 // Rutas para DetMovsEntregaRendirContratoServicios
 router.use('/det-movs-entrega-rendir-contrato-servicios', detMovsEntregaRendirContratoServiciosRoutes);
 router.use('/det-movs-entrega-rendir-contrato-pdf', detMovsEntregaRendirContratoPdfRoutes);
-
+router.use('/categorias-tipo-mov-entrega-rendir', categoriaTipoMovEntregaRendirRoutes);
 // Rutas para TipoProducto
 router.use('/tipos-producto', tipoProductoRoutes);
 // Rutas para TipoEstadoProducto
@@ -613,6 +614,7 @@ router.use('/det-movs-entrega-rendir', detMovsEntregaRendirRoutes);
 router.use('/tipos-mov-entrega-rendir', tipoMovEntregaRendirRoutes);
 router.use('/recalcular-toneladas', recalcularToneladasRoutes);
 router.use('/test-recalculo', testRecalculoRoutes);
+
 // Rutas para DetCuotaPesca
 router.use('/pesca/detalles-cuota-pesca', detCuotaPescaRoutes);
 // Rutas para ComisionFidelizacion
