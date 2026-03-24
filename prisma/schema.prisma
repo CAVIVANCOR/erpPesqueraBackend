@@ -4208,6 +4208,7 @@ model CategoriaTipoMovEntregaRendir {
   id                BigInt   @id @default(autoincrement())
   nombre            String?  @db.VarChar(255)
   cesado            Boolean  @default(false)
+  tipo              Boolean  @default(false)// 🆕 NUEVO CAMPO false=INGRESO y true=EGRESO
   
   // Auditoría
   creadoEn          DateTime  @default(now())
