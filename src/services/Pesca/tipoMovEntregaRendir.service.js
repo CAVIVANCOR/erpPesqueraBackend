@@ -3,15 +3,10 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Servicio CRUD para TipoMovEntregaRendir
- * Valida unicidad de nombre y previene borrado si tiene movimientos asociados.
+ * Previene borrado si tiene movimientos asociados.
  * Documentado en español.
  */
 
-async function validarUnicidadNombre(nombre, id = null) {
-  const where = id ? { nombre, NOT: { id } } : { nombre };
-  const existe = await prisma.tipoMovEntregaRendir.findFirst({ where });
-  if (existe) throw new ConflictError('Ya existe un tipo de movimiento con ese nombre.');
-}
 
 async function tieneDependencias(id) {
   const tipo = await prisma.tipoMovEntregaRendir.findUnique({
@@ -65,7 +60,6 @@ const crear = async (data) => {
   try {
     if (!data.nombre) throw new ValidationError('El campo nombre es obligatorio.');
     if (typeof data.esIngreso !== 'boolean') throw new ValidationError('El campo esIngreso es obligatorio y debe ser boolean.');
-    await validarUnicidadNombre(data.nombre);
     return await prisma.tipoMovEntregaRendir.create({ data });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
@@ -78,9 +72,6 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.tipoMovEntregaRendir.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('TipoMovEntregaRendir no encontrado');
-    if (data.nombre && data.nombre !== existente.nombre) {
-      await validarUnicidadNombre(data.nombre, id);
-    }
     return await prisma.tipoMovEntregaRendir.update({ where: { id }, data });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;

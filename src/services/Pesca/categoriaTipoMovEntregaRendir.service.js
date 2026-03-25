@@ -3,15 +3,10 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 /**
  * Servicio CRUD para CategoriaTipoMovEntregaRendir
- * Valida unicidad de nombre y previene borrado si tiene tipos de movimiento asociados.
+ * Previene borrado si tiene tipos de movimiento asociados.
  * Documentado en español.
  */
 
-async function validarUnicidadNombre(nombre, id = null) {
-  const where = id ? { nombre, NOT: { id } } : { nombre };
-  const existe = await prisma.categoriaTipoMovEntregaRendir.findFirst({ where });
-  if (existe) throw new ConflictError('Ya existe una categoría con ese nombre.');
-}
 
 async function tieneDependencias(id) {
   const categoria = await prisma.categoriaTipoMovEntregaRendir.findUnique({
@@ -82,8 +77,7 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     if (!data.nombre) throw new ValidationError('El campo nombre es obligatorio.');
-    await validarUnicidadNombre(data.nombre);
-    return await prisma.categoriaTipoMovEntregaRendir.create({ 
+    return await prisma.categoriaTipoMovEntregaRendir.create({
       data,
       include: {
         creador: {
@@ -106,10 +100,7 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.categoriaTipoMovEntregaRendir.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('CategoriaTipoMovEntregaRendir no encontrada');
-    if (data.nombre && data.nombre !== existente.nombre) {
-      await validarUnicidadNombre(data.nombre, id);
-    }
-    return await prisma.categoriaTipoMovEntregaRendir.update({ 
+    return await prisma.categoriaTipoMovEntregaRendir.update({
       where: { id }, 
       data,
       include: {

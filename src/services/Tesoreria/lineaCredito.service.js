@@ -284,18 +284,27 @@ const listar = async () => {
         },
         sublineas: {
           include: {
+            tipoPrestamo: true,
             sobregiros: {
               where: {
                 activo: true,
               },
             },
+            prestamos: {
+              include: {
+                estado: true,
+                moneda: true,
+              },
+              orderBy: { fechaDesembolso: "desc" },
+            },
           },
+          orderBy: { tipoPrestamoId: "asc" },
         },
       },
       orderBy: { fechaAprobacion: "desc" },
     });
 
-    // ✅ CALCULAR montoUtilizado y montoDisponible CON CONVERSIÓN DE MONEDA
+       // ✅ CALCULAR montoUtilizado y montoDisponible CON CONVERSIÓN DE MONEDA
     const lineasConSaldos = await Promise.all(
       lineas.map(async (linea) => {
         const monedaLinea = linea.moneda; // Moneda de la línea de crédito
@@ -320,7 +329,6 @@ const listar = async () => {
 
             // Si la línea es USD y el préstamo es PEN: dividir por TC venta
             // Si la línea es PEN y el préstamo es USD: multiplicar por TC compra
-
             if (
               monedaLinea.codigoSunat === "USD" &&
               monedaPrestamo.codigoSunat === "PEN"
@@ -354,12 +362,25 @@ const listar = async () => {
           });
         }
 
+        // ✅ CALCULAR totalSobregiros PARA CADA SUBLÍNEA
+        const sublineasConTotales = linea.sublineas.map((sublinea) => {
+          const totalSobregiros = sublinea.sobregiros.reduce((sum, sobregiro) => {
+            return sum + parseFloat(sobregiro.montoAutorizado || 0);
+          }, 0);
+
+          return {
+            ...sublinea,
+            totalSobregiros,
+          };
+        });
+
         const montoDisponible = montoAprobado - montoUtilizado;
         return {
           ...linea,
           montoUtilizado,
           montoDisponible,
           totalSobregiros,
+          sublineas: sublineasConTotales, // ✅ Reemplazar sublíneas con totales calculados
         };
       }),
     );
