@@ -36,6 +36,9 @@ const listar = async (filtros = {}) => {
     
     return await prisma.unidadNegocio.findMany({
       where,
+      include: {
+        centroCosto: true
+      },
       orderBy: { orden: 'asc' }
     });
   } catch (err) {

@@ -24,7 +24,12 @@ async function validarSubfamilia(data) {
  */
 const listar = async () => {
   try {
-    return await prisma.subfamiliaProducto.findMany({ include: { productos: true } });
+    return await prisma.subfamiliaProducto.findMany({ 
+      include: { 
+        productos: true,
+        centroCosto: true
+      } 
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
