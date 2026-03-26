@@ -40,7 +40,9 @@ const listar = async () => {
       }
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError(`Error al listar categorías: ${err.message}`);
+    }
     throw err;
   }
 };
@@ -69,16 +71,29 @@ const obtenerPorId = async (id) => {
     if (!categoria) throw new NotFoundError('CategoriaTipoMovEntregaRendir no encontrada');
     return categoria;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError(`Error al obtener categoría: ${err.message}`);
+    }
     throw err;
   }
 };
 
-const crear = async (data) => {
+const crear = async (data, userId) => {
   try {
-    if (!data.nombre) throw new ValidationError('El campo nombre es obligatorio.');
+    if (!data.nombre || data.nombre.trim() === '') {
+      throw new ValidationError('El campo nombre es obligatorio.');
+    }
+
+    const datosLimpios = {
+      nombre: data.nombre.trim(),
+      cesado: data.cesado !== undefined ? Boolean(data.cesado) : false,
+      tipo: data.tipo !== undefined ? Boolean(data.tipo) : false,
+      creadoPor: userId ? BigInt(userId) : null,
+    };
+
     return await prisma.categoriaTipoMovEntregaRendir.create({
-      data,
+      data: datosLimpios,
       include: {
         creador: {
           select: {
@@ -91,18 +106,45 @@ const crear = async (data) => {
     });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith('P')) {
+      if (err.code === 'P2002') {
+        throw new ConflictError('Ya existe una categoría con ese nombre.');
+      }
+      throw new DatabaseError(`Error al crear categoría: ${err.message}`);
+    }
     throw err;
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, userId) => {
   try {
     const existente = await prisma.categoriaTipoMovEntregaRendir.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('CategoriaTipoMovEntregaRendir no encontrada');
+
+    const datosLimpios = {};
+    
+    if (data.nombre !== undefined) {
+      if (!data.nombre || data.nombre.trim() === '') {
+        throw new ValidationError('El campo nombre no puede estar vacío.');
+      }
+      datosLimpios.nombre = data.nombre.trim();
+    }
+    
+    if (data.cesado !== undefined) {
+      datosLimpios.cesado = Boolean(data.cesado);
+    }
+    
+    if (data.tipo !== undefined) {
+      datosLimpios.tipo = Boolean(data.tipo);
+    }
+    
+    if (userId) {
+      datosLimpios.actualizadoPor = BigInt(userId);
+    }
+
     return await prisma.categoriaTipoMovEntregaRendir.update({
       where: { id }, 
-      data,
+      data: datosLimpios,
       include: {
         actualizador: {
           select: {
@@ -115,7 +157,12 @@ const actualizar = async (id, data) => {
     });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith('P')) {
+      if (err.code === 'P2002') {
+        throw new ConflictError('Ya existe una categoría con ese nombre.');
+      }
+      throw new DatabaseError(`Error al actualizar categoría: ${err.message}`);
+    }
     throw err;
   }
 };
@@ -129,7 +176,9 @@ const eliminar = async (id) => {
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError(`Error al eliminar categoría: ${err.message}`);
+    }
     throw err;
   }
 };
