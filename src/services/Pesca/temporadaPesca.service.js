@@ -88,6 +88,28 @@ async function validarSolapamiento(data, id = null) {
 }
 
 /**
+ * Busca un centro de costo por su nombre y retorna su ID
+ * @param {string} nombreCentroCosto - Nombre del centro de costo a buscar
+ * @returns {Promise<BigInt>} ID del centro de costo encontrado
+ * @throws {ValidationError} Si no se encuentra el centro de costo
+ */
+async function obtenerIdCentroCostoPorNombre(nombreCentroCosto) {
+  const centroCosto = await prisma.centroCosto.findFirst({
+    where: {
+      Nombre: nombreCentroCosto,
+    },
+  });
+
+  if (!centroCosto) {
+    throw new ValidationError(
+      `No se encontró el centro de costo "${nombreCentroCosto}". Por favor, verifique la configuración.`,
+    );
+  }
+
+  return centroCosto.id;
+}
+
+/**
  * Lista temporadas de pesca con filtros opcionales
  * @param {Object} filtros - Filtros opcionales para la consulta
  * @param {number} [filtros.empresaId] - ID de la empresa
@@ -436,6 +458,10 @@ const iniciar = async (id) => {
       },
     });
 
+    // Obtener ID del centro de costo "PESCA INDUSTRIAL"
+    const centroCostoId =
+      await obtenerIdCentroCostoPorNombre("PESCA INDUSTRIAL");
+
     const resultado = await prisma.$transaction(async (tx) => {
       // 1. Actualizar el estado de la temporada a "EN PROCESO" y cargar datos de liquidación
       const temporadaActualizada = await tx.temporadaPesca.update({
@@ -461,7 +487,7 @@ const iniciar = async (id) => {
         data: {
           temporadaPescaId: Number(temporada.id),
           respEntregaRendirId: Number(temporada.BahiaId),
-          centroCostoId: Number(temporada.empresaId),
+          centroCostoId: Number(centroCostoId),
           fechaCreacion: new Date(),
           fechaActualizacion: new Date(),
           entregaLiquidada: false,
@@ -928,7 +954,7 @@ const calcularLiquidaciones = async (id) => {
     );
     const liqComisionAlquilerCuota = cuotaAlquiladaTon * precioPorTonAlquiler;
 
-       // 6.1. CALCULAR INGRESOS POR ALQUILER DE CUOTAS
+    // 6.1. CALCULAR INGRESOS POR ALQUILER DE CUOTAS
     // SOLO calcular si es temporada de SOLO ALQUILER
     let ingresosPorAlquilerCuotaSur = 0;
 
@@ -958,25 +984,25 @@ const calcularLiquidaciones = async (id) => {
       liqComisionMotoristaReal +
       liqComisionPangueroReal;
 
-   // 8. Actualizar la temporada con todos los valores calculados
-const temporadaActualizada = await prisma.temporadaPesca.update({
-  where: { id: Number(id) },
-  data: {
-    liqTripulantesPescaEstimado: totalTripulantes,
-    liqTripulantesPescaReal: baseLiquidacionReal,  // ✅ CORRECTO - usa baseLiquidacionReal (65,758.21)
-    liqComisionPatronEstimado,
-    liqComisionMotoristaEstimado,
-    liqComisionPangueroEstimado,
-    liqTotalPescaEstimada,
-    liqComisionAlquilerCuota,
-    ingresosPorAlquilerCuotaSur,
-    liqComisionPatronReal,
-    liqComisionMotoristaReal,
-    liqComisionPangueroReal,
-    liqTotalPescaReal,
-    fechaActualizacion: new Date(),
-  },
-});
+    // 8. Actualizar la temporada con todos los valores calculados
+    const temporadaActualizada = await prisma.temporadaPesca.update({
+      where: { id: Number(id) },
+      data: {
+        liqTripulantesPescaEstimado: totalTripulantes,
+        liqTripulantesPescaReal: baseLiquidacionReal, // ✅ CORRECTO - usa baseLiquidacionReal (65,758.21)
+        liqComisionPatronEstimado,
+        liqComisionMotoristaEstimado,
+        liqComisionPangueroEstimado,
+        liqTotalPescaEstimada,
+        liqComisionAlquilerCuota,
+        ingresosPorAlquilerCuotaSur,
+        liqComisionPatronReal,
+        liqComisionMotoristaReal,
+        liqComisionPangueroReal,
+        liqTotalPescaReal,
+        fechaActualizacion: new Date(),
+      },
+    });
 
     // 9. Obtener código de moneda desde EMPRESA
     const monedaCalculos = await prisma.moneda.findUnique({
