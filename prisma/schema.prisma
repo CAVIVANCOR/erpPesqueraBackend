@@ -339,13 +339,13 @@ model CentroCosto {
   entregasARendirConsumo        EntregaARendirPescaConsumo[]
 
   entregasRendirMovAlmacen EntregaARendirMovAlmacen[]
-    entregasRendirContratoServicio    EntregaARendirContratoServicios[] @relation("EntregaRendirContratoServicio")
+  entregasRendirContratoServicio    EntregaARendirContratoServicios[] @relation("EntregaRendirContratoServicio")
   detallesMovContratoServicio       DetMovsEntregaRendirContratoServicios[] @relation("DetMovContratoServicio")
   detMovsInventario DetMovsEntregaRendirMovAlmacen[] @relation("DetMovInventario")
-entregasRendirOTMantenimiento  EntregaARendirOTMantenimiento[] @relation("EntregaRendirOTMantenimiento")
-detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("DetMovOTMantenimiento")
+  entregasRendirOTMantenimiento  EntregaARendirOTMantenimiento[] @relation("EntregaRendirOTMantenimiento")
+  detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("DetMovOTMantenimiento")
   movimientosCaja        MovimientoCaja[]  @relation("MovimientoCajaCentroCosto")
-    saldosCuentaCorriente  SaldoCuentaCorriente[]  @relation("SaldoCuentaCorrienteCentroCosto")
+  saldosCuentaCorriente  SaldoCuentaCorriente[]  @relation("SaldoCuentaCorrienteCentroCosto")
   asientosContables         AsientoContableInterfaz[]
 
 // ========================================
@@ -354,7 +354,8 @@ detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("
   detallesAsientos                DetalleAsientoContable[]
   lineasPresupuesto               LineaPresupuesto[]
   ejecucionesPresupuestales       EjecucionPresupuestal[]
-
+  subfamiliasProducto      SubfamiliaProducto[] @relation("SubfamiliaCentroCosto")  // 🆕 NUEVO
+  unidadesNegocio          UnidadNegocio[]  // 🆕 NUEVO
 }
 
 model Color {
@@ -3933,9 +3934,13 @@ model SubfamiliaProducto {
   id        BigInt     @id @default(autoincrement())
   nombre    String     @db.VarChar(120)
   llevaKardex   Boolean    @default(false)  // ← NUEVO CAMPO
+  centroCostoId     BigInt?    // 🆕 Centro de costo asociado
+
 
   productos  Producto[]
   tiposProducto TipoProducto[]
+  centroCosto       CentroCosto? @relation("SubfamiliaCentroCosto", fields: [centroCostoId], references: [id])
+
 
 }
 
@@ -7621,6 +7626,8 @@ model UnidadNegocio {
   orden             Int       @default(0)
   fechaCreacion     DateTime  @default(now())
   fechaModificacion DateTime  @updatedAt
+  centroCostoId     BigInt?   // 🆕 NUEVO: Centro de costo asociado a esta unidad de negocio
+
   
    // 🆕 AGREGAR ESTAS 8 RELACIONES INVERSAS:
   cotizacionesVentas       CotizacionVentas[]
@@ -7631,8 +7638,11 @@ model UnidadNegocio {
   novedadesPescaConsumo    NovedadPescaConsumo[]
   temporadasPesca          TemporadaPesca[]
   contratosServicio        ContratoServicio[]
-  
+  centroCosto       CentroCosto? @relation(fields: [centroCostoId], references: [id])
+
   @@index([activo])
+  @@index([centroCostoId]) // 🆕 Índice para el nuevo campo
+
 }
 
 
