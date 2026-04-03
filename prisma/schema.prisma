@@ -1267,7 +1267,7 @@ prestamos             PrestamoBancario[]
   // ========================================
   // ÍNDICES
   // ========================================
-  @@unique([numeroCuenta, bancoId, empresaId], name: "unique_cuenta_banco_empresa")
+@@unique([numeroCuenta, bancoId, empresaId, descripcion], name: "unique_cuenta_banco_empresa_descripcion")
   
   // 🆕 ÍNDICES NUEVOS
   @@index([empresaId])
