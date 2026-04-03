@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { puedeEditarRegistroCerrado } from '../../utils/checkSuperUsuario.js';
 
 /**
  * Servicio CRUD para EntregaARendir
@@ -97,10 +98,47 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId = null) => {
   try {
-    const existente = await prisma.entregaARendir.findUnique({ where: { id } });
+    const existente = await prisma.entregaARendir.findUnique({ 
+      where: { id },
+      include: {
+        temporadaPesca: {
+          include: {
+            estadoTemporada: true
+          }
+        }
+      }
+    });
     if (!existente) throw new NotFoundError('EntregaARendir no encontrada');
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    const estadosCerrados = await prisma.estadoMultiFuncion.findMany({
+      where: {
+        tipoProvieneDeId: 4, // Temporada Pesca
+        descripcion: { in: ["FINALIZADA", "CANCELADA"] },
+        cesado: false
+      },
+      select: { id: true }
+    });
+    
+    const idsEstadosCerrados = estadosCerrados.map(e => e.id);
+    
+    const puedeEditar = await puedeEditarRegistroCerrado(
+      usuarioId,
+      existente.temporadaPesca.estadoTemporadaId,
+      idsEstadosCerrados
+    );
+    
+    if (!puedeEditar) {
+      throw new ValidationError(
+        `No se puede editar la entrega a rendir porque la temporada está en estado "${existente.temporadaPesca?.estadoTemporada?.descripcion}". ` +
+        `Solo los superusuarios pueden editar entregas de temporadas finalizadas o canceladas.`
+      );
+    }
+
     // Validar claves foráneas si cambian
     const claves = ['temporadaPescaId','respEntregaRendirId','centroCostoId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {

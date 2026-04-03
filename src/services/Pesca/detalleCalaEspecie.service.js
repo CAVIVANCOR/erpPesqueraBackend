@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { puedeEditarDetalleFaena } from '../../utils/checkSuperUsuario.js';
 
 /**
  * Servicio CRUD para DetalleCalaEspecie
@@ -170,10 +171,40 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId = null) => {
   try {
-    const existente = await prisma.detalleCalaEspecie.findUnique({ where: { id } });
+    const existente = await prisma.detalleCalaEspecie.findUnique({ 
+      where: { id },
+      include: {
+        cala: {
+          include: {
+            faenaPesca: {
+              include: {
+                temporada: {
+                  include: {
+                    estadoTemporada: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
     if (!existente) throw new NotFoundError('DetalleCalaEspecie no encontrado');
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    const puedeEditar = await puedeEditarDetalleFaena(usuarioId, existente.cala.faenaPescaId);
+    
+    if (!puedeEditar) {
+      throw new ValidationError(
+        `No se puede editar el detalle de cala porque la temporada está en estado "${existente.cala?.faenaPesca?.temporada?.estadoTemporada?.descripcion}". ` +
+        `Solo los superusuarios pueden editar detalles de temporadas finalizadas o canceladas.`
+      );
+    }
+
     // Validar claves foráneas si cambian
     const claves = ['calaId','especieId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {

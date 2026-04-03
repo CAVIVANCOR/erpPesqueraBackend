@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import { puedeEditarDetalleFaena } from '../../utils/checkSuperUsuario.js';
 
 /**
  * Servicio CRUD para TripulanteFaena
@@ -54,10 +55,36 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId = null) => {
   try {
-    const existente = await prisma.tripulanteFaena.findUnique({ where: { id } });
+    const existente = await prisma.tripulanteFaena.findUnique({ 
+      where: { id },
+      include: {
+        faenaPesca: {
+          include: {
+            temporada: {
+              include: {
+                estadoTemporada: true
+              }
+            }
+          }
+        }
+      }
+    });
     if (!existente) throw new NotFoundError('TripulanteFaena no encontrado');
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    const puedeEditar = await puedeEditarDetalleFaena(usuarioId, existente.faenaPescaId);
+    
+    if (!puedeEditar) {
+      throw new ValidationError(
+        `No se puede editar el tripulante porque la temporada está en estado "${existente.faenaPesca?.temporada?.estadoTemporada?.descripcion}". ` +
+        `Solo los superusuarios pueden editar tripulantes de temporadas finalizadas o canceladas.`
+      );
+    }
+
     // Validar claves foráneas si cambian
     const claves = ['faenaPescaId','personalId','cargoId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {

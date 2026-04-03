@@ -10,12 +10,12 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
 async function validarClavesForaneas(data) {
   const [entrega, responsable, tipoMov, centroCosto] = await Promise.all([
     prisma.entregaARendirPVentas.findUnique({ where: { id: data.entregaARendirPVentasId } }),
-    prisma.usuario ? prisma.usuario.findUnique({ where: { id: data.responsableId } }) : Promise.resolve(true),
+    prisma.personal ? prisma.personal.findUnique({ where: { id: data.responsableId } }) : Promise.resolve(true),
     prisma.tipoMovEntregaRendir.findUnique({ where: { id: data.tipoMovimientoId } }),
     prisma.centroCosto ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }) : Promise.resolve(true)
   ]);
   if (!entrega) throw new ValidationError('El entregaARendirPVentasId no existe.');
-  if (prisma.usuario && !responsable) throw new ValidationError('El responsableId no existe.');
+  if (prisma.personal && !responsable) throw new ValidationError('El responsableId no existe.');
   if (!tipoMov) throw new ValidationError('El tipoMovimientoId no existe.');
   if (prisma.centroCosto && !centroCosto) throw new ValidationError('El centroCostoId no existe.');
 }
@@ -24,12 +24,23 @@ const listar = async () => {
   try {
     return await prisma.detMovsEntregaRendirPVentas.findMany({
       include: {
-        entregaARendirPVentas: true,
+        entregaARendirPVentas: {
+          include: {
+            cotizacionVentas: {
+              include: {
+                cliente: true,
+                empresa: true
+              }
+            }
+          }
+        },
         tipoMovimiento: true,
+        responsable: true,
         producto: true,
         moneda: true,
         entidadComercial: true,
-        tipoDocumento: true
+        tipoDocumento: true,
+        centroCosto: true
       },
       orderBy: { fechaMovimiento: 'desc' }
     });
@@ -44,12 +55,23 @@ const obtenerPorId = async (id) => {
     const det = await prisma.detMovsEntregaRendirPVentas.findUnique({ 
       where: { id },
       include: {
-        entregaARendirPVentas: true,
+        entregaARendirPVentas: {
+          include: {
+            cotizacionVentas: {
+              include: {
+                cliente: true,
+                empresa: true
+              }
+            }
+          }
+        },
         tipoMovimiento: true,
+        responsable: true,
         producto: true,
         moneda: true,
         entidadComercial: true,
-        tipoDocumento: true
+        tipoDocumento: true,
+        centroCosto: true
       }
     });
     if (!det) throw new NotFoundError('DetMovsEntregaRendirPVentas no encontrado');
@@ -66,10 +88,12 @@ const obtenerPorEntrega = async (entregaARendirPVentasId) => {
       where: { entregaARendirPVentasId },
       include: {
         tipoMovimiento: true,
+        responsable: true,
         producto: true,
         moneda: true,
         entidadComercial: true,
-        tipoDocumento: true
+        tipoDocumento: true,
+        centroCosto: true
       },
       orderBy: { fechaMovimiento: 'desc' }
     });
@@ -82,13 +106,20 @@ const obtenerPorEntrega = async (entregaARendirPVentasId) => {
 const crear = async (data) => {
   try {
     if (!data.entregaARendirPVentasId || !data.responsableId || !data.fechaMovimiento || !data.tipoMovimientoId || !data.centroCostoId || data.monto === undefined || !data.monedaId) {
-      throw new ValidationError('Todos los campos obligatorios deben estar presentes.');
+      throw new ValidationError('Todos los campos obligatorios deben estar presentes: entregaARendirPVentasId, responsableId, fechaMovimiento, tipoMovimientoId, centroCostoId, monto, monedaId.');
     }
     await validarClavesForaneas(data);
     
-    // Asegurar campos de auditoría
+    // Asegurar campos de auditoría y opcionales
     const datosConAuditoria = {
       ...data,
+      validadoTesoreria: data.validadoTesoreria || false,
+      operacionSinFactura: data.operacionSinFactura || false,
+      fechaValidacionTesoreria: data.fechaValidacionTesoreria || null,
+      operacionMovCajaId: data.operacionMovCajaId || null,
+      fechaOperacionMovCaja: data.fechaOperacionMovCaja || null,
+      urlComprobanteOperacionMovCaja: data.urlComprobanteOperacionMovCaja || null,
+      moduloOrigenMovCajaId: data.moduloOrigenMovCajaId || null,
       fechaCreacion: data.fechaCreacion || new Date(),
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
@@ -96,12 +127,23 @@ const crear = async (data) => {
     return await prisma.detMovsEntregaRendirPVentas.create({ 
       data: datosConAuditoria,
       include: {
-        entregaARendirPVentas: true,
+        entregaARendirPVentas: {
+          include: {
+            cotizacionVentas: {
+              include: {
+                cliente: true,
+                empresa: true
+              }
+            }
+          }
+        },
         tipoMovimiento: true,
+        responsable: true,
         producto: true,
         moneda: true,
         entidadComercial: true,
-        tipoDocumento: true
+        tipoDocumento: true,
+        centroCosto: true
       }
     });
   } catch (err) {
@@ -125,7 +167,6 @@ const actualizar = async (id, data) => {
     const datosConAuditoria = {
       ...data,
       fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
-      creadoPor: data.creadoPor || existente.creadoPor || null,
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
     
@@ -133,12 +174,23 @@ const actualizar = async (id, data) => {
       where: { id }, 
       data: datosConAuditoria,
       include: {
-        entregaARendirPVentas: true,
+        entregaARendirPVentas: {
+          include: {
+            cotizacionVentas: {
+              include: {
+                cliente: true,
+                empresa: true
+              }
+            }
+          }
+        },
         tipoMovimiento: true,
+        responsable: true,
         producto: true,
         moneda: true,
         entidadComercial: true,
-        tipoDocumento: true
+        tipoDocumento: true,
+        centroCosto: true
       }
     });
   } catch (err) {

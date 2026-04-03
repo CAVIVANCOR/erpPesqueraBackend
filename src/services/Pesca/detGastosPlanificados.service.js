@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import { puedeEditarRegistroCerrado } from '../../utils/checkSuperUsuario.js';
 
 /**
  * Servicio CRUD para DetGastosPlanificados
@@ -204,10 +205,57 @@ const crear = async (data) => {
 /**
  * Actualiza un registro de gasto planificado existente.
  */
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId = null) => {
   try {
-    const existente = await prisma.detGastosPlanificados.findUnique({ where: { id } });
+    const existente = await prisma.detGastosPlanificados.findUnique({ 
+      where: { id },
+      include: {
+        detMovEntregaRendirTemporadaPesca: {
+          include: {
+            entregaARendir: {
+              include: {
+                temporadaPesca: {
+                  include: {
+                    estadoTemporada: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
     if (!existente) throw new NotFoundError('Gasto planificado no encontrado');
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    if (existente.detMovEntregaRendirTemporadaPesca) {
+      const estadosCerrados = await prisma.estadoMultiFuncion.findMany({
+        where: {
+          tipoProvieneDeId: 4, // Temporada Pesca
+          descripcion: { in: ["FINALIZADA", "CANCELADA"] },
+          cesado: false
+        },
+        select: { id: true }
+      });
+      
+      const idsEstadosCerrados = estadosCerrados.map(e => e.id);
+      
+      const puedeEditar = await puedeEditarRegistroCerrado(
+        usuarioId,
+        existente.detMovEntregaRendirTemporadaPesca.entregaARendir.temporadaPesca.estadoTemporadaId,
+        idsEstadosCerrados
+      );
+      
+      if (!puedeEditar) {
+        throw new ValidationError(
+          `No se puede editar el gasto porque la temporada está en estado "${existente.detMovEntregaRendirTemporadaPesca?.entregaARendir?.temporadaPesca?.estadoTemporada?.descripcion}". ` +
+          `Solo los superusuarios pueden editar gastos de temporadas finalizadas o canceladas.`
+        );
+      }
+    }
+
     await validarDetGastosPlanificados(data);
     return await prisma.detGastosPlanificados.update({ where: { id }, data });
   } catch (err) {

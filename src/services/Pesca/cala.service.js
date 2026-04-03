@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { puedeEditarDetalleFaena } from '../../utils/checkSuperUsuario.js';
 
 /**
  * Servicio CRUD para Cala con cálculo dinámico de toneladas capturadas
@@ -175,10 +176,35 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId = null) => {
   try {
-    const existente = await prisma.cala.findUnique({ where: { id } });
+    const existente = await prisma.cala.findUnique({ 
+      where: { id },
+      include: {
+        faenaPesca: {
+          include: {
+            temporada: {
+              include: {
+                estadoTemporada: true
+              }
+            }
+          }
+        }
+      }
+    });
     if (!existente) throw new NotFoundError('Cala no encontrada');
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    const puedeEditar = await puedeEditarDetalleFaena(usuarioId, existente.faenaPescaId);
+    
+    if (!puedeEditar) {
+      throw new ValidationError(
+        `No se puede editar la cala porque la temporada está en estado "${existente.faenaPesca?.temporada?.estadoTemporada?.descripcion}". ` +
+        `Solo los superusuarios pueden editar calas de temporadas finalizadas o canceladas.`
+      );
+    }
 
     // Remover toneladasCapturadas del input ya que se calcula dinámicamente
     const { toneladasCapturadas, ...calaData } = data;
@@ -215,7 +241,7 @@ const actualizar = async (id, data) => {
       toneladasCapturadas: toneladasCalculadas
     };
   } catch (err) {
-    if (err instanceof NotFoundError) throw err;
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

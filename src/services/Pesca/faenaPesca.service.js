@@ -6,6 +6,7 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import recalcularToneladasService from "./recalcularToneladas.service.js"; // ⭐ AGREGAR ESTE IMPORT
+import { puedeEditarRegistroCerrado } from "../../utils/checkSuperUsuario.js";
 
 /**
  * Servicio CRUD para FaenaPesca con cálculo dinámico de toneladas capturadas
@@ -152,15 +153,49 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId = null) => {
   try {
     const existente = await prisma.faenaPesca.findUnique({
       where: { id },
       include: {
-        temporada: true,
+        temporada: {
+          include: {
+            estadoTemporada: true
+          }
+        },
+        estadoFaena: true
       },
     });
     if (!existente) throw new NotFoundError("FaenaPesca no encontrada");
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    // Verificar si la temporada está cerrada
+    const estadosCerradosTemporada = await prisma.estadoMultiFuncion.findMany({
+      where: {
+        tipoProvieneDeId: 4, // Temporada Pesca
+        descripcion: { in: ["FINALIZADA", "CANCELADA"] },
+        cesado: false
+      },
+      select: { id: true }
+    });
+    
+    const idsEstadosCerradosTemporada = estadosCerradosTemporada.map(e => e.id);
+    
+    // Verificar si puede editar (superusuario O temporada no cerrada)
+    const puedeEditar = await puedeEditarRegistroCerrado(
+      usuarioId,
+      existente.temporada.estadoTemporadaId,
+      idsEstadosCerradosTemporada
+    );
+    
+    if (!puedeEditar) {
+      throw new ValidationError(
+        `No se puede editar la faena porque la temporada está en estado "${existente.temporada.estadoTemporada?.descripcion}". ` +
+        `Solo los superusuarios pueden editar faenas de temporadas finalizadas o canceladas.`
+      );
+    }
 
     // Filtrar solo los campos que se pueden actualizar directamente
     const camposPermitidos = [

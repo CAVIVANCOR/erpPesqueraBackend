@@ -219,6 +219,7 @@ const crear = async (data) => {
         actualizadoPor: data.actualizadoPor,
         urlMovAlmacenPdf: data.urlMovAlmacenPdf,
         urlMovAlmacenConCostosPdf: data.urlMovAlmacenConCostosPdf,
+        unidadNegocioId: data.unidadNegocioId,
       };
       
       // 5. Crear el movimiento de almacén (patrón estándar - solo cabecera)

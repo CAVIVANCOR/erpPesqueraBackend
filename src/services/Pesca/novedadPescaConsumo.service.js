@@ -312,6 +312,15 @@ const iniciar = async (id) => {
     // Obtener la novedad de pesca consumo
     const novedad = await prisma.novedadPescaConsumo.findUnique({
       where: { id },
+      include: {
+        unidadNegocio: {
+          select: {
+            id: true,
+            nombre: true,
+            centroCostoId: true,
+          },
+        },
+      },
     });
 
     if (!novedad) {
@@ -457,12 +466,23 @@ const iniciar = async (id) => {
       tripulantesCreados = tripulantesData.length;
     }
 
+    // Obtener centroCostoId desde la relación NovedadPescaConsumo → UnidadNegocio
+    const centroCostoId = novedad.unidadNegocio?.centroCostoId;
+
+    // Validación: Es OBLIGATORIO que la novedad tenga unidadNegocio con centroCostoId
+    if (!centroCostoId) {
+      throw new ValidationError(
+        `La novedad ${novedad.id} debe tener una Unidad de Negocio con Centro de Costo configurado. ` +
+          `Por favor, asigne una Unidad de Negocio a la novedad antes de iniciarla.`,
+      );
+    }
+
     // Crear EntregaARendirPescaConsumo (siguiendo patrón de TemporadaPesca)
     const entregaCreada = await prisma.entregaARendirPescaConsumo.create({
       data: {
         novedadPescaConsumoId: Number(id),
         respEntregaRendirId: Number(novedad.BahiaId),
-        centroCostoId: 11, // pesca de consumo
+        centroCostoId: Number(centroCostoId),
         fechaCreacion: new Date(),
         fechaActualizacion: new Date(),
         entregaLiquidada: false,
@@ -660,12 +680,12 @@ const finalizar = async (id, usuarioId = null) => {
       include: {
         faenas: {
           include: {
-            descarga: true
-          }
-        }
-      }
+            descarga: true,
+          },
+        },
+      },
     });
-    
+
     if (!novedad) throw new NotFoundError("NovedadPescaConsumo no encontrada");
 
     // Buscar el estado "FINALIZADA" para Novedad Pesca Consumo
@@ -687,37 +707,41 @@ const finalizar = async (id, usuarioId = null) => {
     // NUEVO: Generar movimientos y PreFactura para cada descarga
     // ============================================
     const resultadosDescargas = [];
-    
+
     if (novedad.faenas && novedad.faenas.length > 0 && usuarioId) {
       // Importar servicio de finalización de descargas
-      const { default: finalizarDescargaConsumoService } = 
-        await import('./finalizarDescargaConsumoConMovimientos.service.js');
-      
+      const { default: finalizarDescargaConsumoService } =
+        await import("./finalizarDescargaConsumoConMovimientos.service.js");
+
       // Procesar cada faena que tenga descarga
       for (const faena of novedad.faenas) {
         if (faena.descarga) {
-          try {            
-            const resultadoDescarga = await finalizarDescargaConsumoService.finalizarDescargaConsumoConMovimientos(
-              faena.descarga.id,
-              id,
-              usuarioId
-            );
-            
+          try {
+            const resultadoDescarga =
+              await finalizarDescargaConsumoService.finalizarDescargaConsumoConMovimientos(
+                faena.descarga.id,
+                id,
+                usuarioId,
+              );
+
             resultadosDescargas.push({
               descargaId: faena.descarga.id,
               faenaId: faena.id,
               exito: true,
-              resultado: resultadoDescarga
+              resultado: resultadoDescarga,
             });
           } catch (errorDescarga) {
-            console.error(`❌ Error procesando descarga ${faena.descarga.id}:`, errorDescarga.message);
-            
+            console.error(
+              `❌ Error procesando descarga ${faena.descarga.id}:`,
+              errorDescarga.message,
+            );
+
             // Registrar error pero continuar con otras descargas
             resultadosDescargas.push({
               descargaId: faena.descarga.id,
               faenaId: faena.id,
               exito: false,
-              error: errorDescarga.message
+              error: errorDescarga.message,
             });
           }
         }
@@ -737,8 +761,8 @@ const finalizar = async (id, usuarioId = null) => {
     const resultado = {
       novedad: novedadActualizada,
       descargasProcesadas: resultadosDescargas.length,
-      descargasExitosas: resultadosDescargas.filter(d => d.exito).length,
-      descargasConError: resultadosDescargas.filter(d => !d.exito).length,
+      descargasExitosas: resultadosDescargas.filter((d) => d.exito).length,
+      descargasConError: resultadosDescargas.filter((d) => !d.exito).length,
     };
 
     // Incluir detalles si se procesaron descargas

@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { puedeEditarRegistroCerrado } from '../../utils/checkSuperUsuario.js';
 
 /**
  * Servicio para gestión de Comisiones de Fidelización
@@ -17,11 +18,41 @@ const generarComisionesPorTemporada = async (temporadaPescaId, usuarioId) => {
   try {
     // 1. Validar que la temporada existe
     const temporada = await prisma.temporadaPesca.findUnique({
-      where: { id: temporadaPescaId }
+      where: { id: temporadaPescaId },
+      include: {
+        estadoTemporada: true
+      }
     });
     
     if (!temporada) {
       throw new NotFoundError('Temporada de pesca no encontrada');
+    }
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    const estadosCerrados = await prisma.estadoMultiFuncion.findMany({
+      where: {
+        tipoProvieneDeId: 4, // Temporada Pesca
+        descripcion: { in: ["FINALIZADA", "CANCELADA"] },
+        cesado: false
+      },
+      select: { id: true }
+    });
+    
+    const idsEstadosCerrados = estadosCerrados.map(e => e.id);
+    
+    const puedeEditar = await puedeEditarRegistroCerrado(
+      usuarioId,
+      temporada.estadoTemporadaId,
+      idsEstadosCerrados
+    );
+    
+    if (!puedeEditar) {
+      throw new ValidationError(
+        `No se pueden generar comisiones porque la temporada está en estado "${temporada.estadoTemporada?.descripcion}". ` +
+        `Solo los superusuarios pueden generar comisiones de temporadas finalizadas o canceladas.`
+      );
     }
 
     // 2. Eliminar comisiones previas de esta temporada

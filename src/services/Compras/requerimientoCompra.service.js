@@ -4,7 +4,7 @@ import {
   DatabaseError,
   ValidationError,
 } from "../../utils/errors.js";
-import { validarTipoCambio } from "../../utils/tipoCambio.util.js"
+import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
 
 /**
  * Servicio CRUD para RequerimientoCompra
@@ -172,9 +172,8 @@ const crear = async (data) => {
     // ✅ Validar y obtener tipo de cambio si es necesario
     const tipoCambioFinal = await validarTipoCambio(
       data.tipoCambio,
-      data.fechaDocumento || new Date()
+      data.fechaDocumento || new Date(),
     );
-
 
     // Usar transacción para generar número y actualizar correlativo atómicamente
     return await prisma.$transaction(async (tx) => {
@@ -216,7 +215,7 @@ const crear = async (data) => {
         data: { correlativo: BigInt(nuevoCorrelativo) },
       });
 
-            // 6. Crear el requerimiento con los números generados
+      // 6. Crear el requerimiento con los números generados
       const nuevo = await tx.requerimientoCompra.create({
         data: {
           ...data,
@@ -224,7 +223,7 @@ const crear = async (data) => {
           numCorreDoc: numCorre,
           numeroDocumento,
           estadoId: data.estadoId || BigInt(34), // Estado por defecto: 34 (Pendiente)
-          centroCostoId: data.centroCostoId || BigInt(14), // Centro de costo por defecto: 14
+          centroCostoId: data.centroCostoId,
           tipoEstadoProductoId: data.tipoEstadoProductoId || BigInt(1), // ✅ DEFAULT: 1 (S/E Sin Estado)
           destinoProductoId: data.destinoProductoId || BigInt(1), // ✅ DEFAULT: 1 (Mercado Local)
           supervisorCampoId: data.supervisorCampoId || data.creadoPor || null, // ✅ DEFAULT: Usuario que registra
@@ -302,17 +301,16 @@ const actualizar = async (id, data) => {
         );
       }
 
-           await validarForaneas(data);
+      await validarForaneas(data);
 
       // ✅ Validar y obtener tipo de cambio si es necesario
       if (data.hasOwnProperty("tipoCambio")) {
         data.tipoCambio = await validarTipoCambio(
           data.tipoCambio,
-          data.fechaDocumento || existe.fechaDocumento
+          data.fechaDocumento || existe.fechaDocumento,
         );
       }
     }
-
 
     const actualizado = await prisma.requerimientoCompra.update({
       where: { id },
@@ -495,22 +493,7 @@ const aprobar = async (id) => {
         },
       });
 
-      // Crear EntregaARendir automáticamente (solo si no existe)
-      const entregaRendir = await tx.entregaARendirPCompras.upsert({
-        where: { requerimientoCompraId: id },
-        update: {},
-        create: {
-          requerimientoCompraId: id,
-          respEntregaRendirId: requerimiento.solicitanteId,
-          centroCostoId: requerimiento.centroCostoId || BigInt(1),
-          entregaLiquidada: false,
-        },
-      });
-
-      return {
-        ...aprobado,
-        entregaARendir: entregaRendir,
-      };
+      return aprobado;
     });
   } catch (err) {
     console.error("Error en aprobar requerimiento:", err);

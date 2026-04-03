@@ -6,6 +6,7 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import recalcularToneladasService from "./recalcularToneladas.service.js"; // ⭐ AGREGAR ESTE IMPORT
+import { puedeEditarRegistroCerrado } from "../../utils/checkSuperUsuario.js";
 
 /**
  * Servicio CRUD para TemporadaPesca
@@ -264,10 +265,44 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId = null) => {
   try {
-    const existente = await prisma.temporadaPesca.findUnique({ where: { id } });
+    const existente = await prisma.temporadaPesca.findUnique({ 
+      where: { id },
+      include: {
+        estadoTemporada: true
+      }
+    });
     if (!existente) throw new NotFoundError("TemporadaPesca no encontrada");
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    // Estados cerrados: FINALIZADA, CANCELADA
+    const estadosCerrados = await prisma.estadoMultiFuncion.findMany({
+      where: {
+        tipoProvieneDeId: 4, // Temporada Pesca
+        descripcion: { in: ["FINALIZADA", "CANCELADA"] },
+        cesado: false
+      },
+      select: { id: true }
+    });
+    
+    const idsEstadosCerrados = estadosCerrados.map(e => e.id);
+    
+    // Verificar si puede editar (superusuario O estado no cerrado)
+    const puedeEditar = await puedeEditarRegistroCerrado(
+      usuarioId,
+      existente.estadoTemporadaId,
+      idsEstadosCerrados
+    );
+    
+    if (!puedeEditar) {
+      throw new ValidationError(
+        `No se puede editar la temporada porque está en estado "${existente.estadoTemporada?.descripcion}". ` +
+        `Solo los superusuarios pueden editar temporadas finalizadas o canceladas.`
+      );
+    }
 
     // Validar claves foráneas si cambian
     const claves = ["empresaId", "BahiaId"];
@@ -372,7 +407,18 @@ const eliminar = async (id) => {
 
 const iniciar = async (id) => {
   try {
-    const temporada = await prisma.temporadaPesca.findUnique({ where: { id } });
+    const temporada = await prisma.temporadaPesca.findUnique({
+      where: { id },
+      include: {
+        unidadNegocio: {
+          select: {
+            id: true,
+            nombre: true,
+            centroCostoId: true,
+          },
+        },
+      },
+    });
     if (!temporada) throw new NotFoundError("TemporadaPesca no encontrada");
 
     // Buscar el estado "EN PROCESO" para temporadas de pesca
@@ -458,9 +504,16 @@ const iniciar = async (id) => {
       },
     });
 
-    // Obtener ID del centro de costo "PESCA INDUSTRIAL"
-    const centroCostoId =
-      await obtenerIdCentroCostoPorNombre("PESCA INDUSTRIAL");
+    // Obtener centroCostoId desde la relación TemporadaPesca → UnidadNegocio
+    const centroCostoId = temporada.unidadNegocio?.centroCostoId;
+
+    // Validación: Es OBLIGATORIO que la temporada tenga unidadNegocio con centroCostoId
+    if (!centroCostoId) {
+      throw new ValidationError(
+        `La temporada ${temporada.id} debe tener una Unidad de Negocio con Centro de Costo configurado. ` +
+          `Por favor, asigne una Unidad de Negocio a la temporada antes de iniciarla.`,
+      );
+    }
 
     const resultado = await prisma.$transaction(async (tx) => {
       // 1. Actualizar el estado de la temporada a "EN PROCESO" y cargar datos de liquidación

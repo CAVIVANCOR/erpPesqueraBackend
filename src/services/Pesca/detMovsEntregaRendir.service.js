@@ -4,6 +4,7 @@ import {
   DatabaseError,
   ValidationError,
 } from "../../utils/errors.js";
+import { puedeEditarRegistroCerrado } from "../../utils/checkSuperUsuario.js";
 
 /**
  * Servicio CRUD para DetMovsEntregaRendir
@@ -142,13 +143,51 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId = null) => {
   try {
     const existente = await prisma.detMovsEntregaRendir.findUnique({
       where: { id },
+      include: {
+        entregaARendir: {
+          include: {
+            temporadaPesca: {
+              include: {
+                estadoTemporada: true
+              }
+            }
+          }
+        }
+      }
     });
     if (!existente)
       throw new NotFoundError("DetMovsEntregaRendir no encontrado");
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    const estadosCerrados = await prisma.estadoMultiFuncion.findMany({
+      where: {
+        tipoProvieneDeId: 4, // Temporada Pesca
+        descripcion: { in: ["FINALIZADA", "CANCELADA"] },
+        cesado: false
+      },
+      select: { id: true }
+    });
+    
+    const idsEstadosCerrados = estadosCerrados.map(e => e.id);
+    
+    const puedeEditar = await puedeEditarRegistroCerrado(
+      usuarioId,
+      existente.entregaARendir.temporadaPesca.estadoTemporadaId,
+      idsEstadosCerrados
+    );
+    
+    if (!puedeEditar) {
+      throw new ValidationError(
+        `No se puede editar el movimiento porque la temporada está en estado "${existente.entregaARendir?.temporadaPesca?.estadoTemporada?.descripcion}". ` +
+        `Solo los superusuarios pueden editar movimientos de temporadas finalizadas o canceladas.`
+      );
+    }
 
     // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
     if (data.tipoMovimientoId === 1 || data.tipoMovimientoId === 2) {

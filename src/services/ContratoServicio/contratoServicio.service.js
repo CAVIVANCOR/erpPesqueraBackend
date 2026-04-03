@@ -1,6 +1,11 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
-import { validarTipoCambio } from '../../utils/tipoCambio.util.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
+import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
 
 /**
  * Servicio CRUD para ContratoServicio
@@ -16,26 +21,26 @@ import { validarTipoCambio } from '../../utils/tipoCambio.util.js';
  */
 async function generarCodigoContrato(empresaId) {
   const año = new Date().getFullYear();
-  
+
   // Buscar el último contrato del año
   const ultimoContrato = await prisma.contratoServicio.findFirst({
     where: {
       empresaId,
       numeroCompleto: {
-        startsWith: `CONT-${año}-`
-      }
+        startsWith: `CONT-${año}-`,
+      },
     },
-    orderBy: { id: 'desc' }
+    orderBy: { id: "desc" },
   });
 
   let correlativo = 1;
   if (ultimoContrato) {
     // Extraer el correlativo del código: CONT-2024-000001
-    const partes = ultimoContrato.numeroCompleto.split('-');
+    const partes = ultimoContrato.numeroCompleto.split("-");
     correlativo = parseInt(partes[2]) + 1;
   }
 
-  return `CONT-${año}-${String(correlativo).padStart(6, '0')}`;
+  return `CONT-${año}-${String(correlativo).padStart(6, "0")}`;
 }
 
 /**
@@ -59,14 +64,15 @@ const listar = async () => {
         estadoContrato: true,
         detallesServicios: {
           include: {
-            productoServicio: true
-          }
-        }
+            productoServicio: true,
+          },
+        },
       },
-      orderBy: { fechaCelebracion: 'desc' }
+      orderBy: { fechaCelebracion: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -96,25 +102,26 @@ const obtenerPorId = async (id) => {
             productoServicio: {
               include: {
                 familia: true,
-                unidadMedida: true
-              }
-            }
+                unidadMedida: true,
+              },
+            },
           },
-          orderBy: { id: 'asc' }
+          orderBy: { id: "asc" },
         },
         prefacturas: {
           include: {
             cliente: true,
-            moneda: true
+            moneda: true,
           },
-          orderBy: { fechaDocumento: 'desc' }
-        }
-      }
+          orderBy: { fechaDocumento: "desc" },
+        },
+      },
     });
-    if (!contrato) throw new NotFoundError('Contrato no encontrado');
+    if (!contrato) throw new NotFoundError("Contrato no encontrado");
     return contrato;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -131,12 +138,13 @@ const obtenerPorCliente = async (clienteId) => {
         sede: true,
         almacen: true,
         moneda: true,
-        estadoContrato: true
+        estadoContrato: true,
       },
-      orderBy: { fechaCelebracion: 'desc' }
+      orderBy: { fechaCelebracion: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -153,12 +161,13 @@ const obtenerPorEmpresa = async (empresaId) => {
         sede: true,
         almacen: true,
         moneda: true,
-        estadoContrato: true
+        estadoContrato: true,
       },
-      orderBy: { fechaCelebracion: 'desc' }
+      orderBy: { fechaCelebracion: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -174,22 +183,43 @@ const crear = async (data) => {
     const activoId = data.activoId ? BigInt(data.activoId) : undefined;
     const almacenId = data.almacenId ? BigInt(data.almacenId) : undefined;
     const clienteId = data.clienteId ? BigInt(data.clienteId) : undefined;
-    const contactoClienteId = data.contactoClienteId ? BigInt(data.contactoClienteId) : undefined;
-    const responsableId = data.responsableId ? BigInt(data.responsableId) : undefined;
+    const contactoClienteId = data.contactoClienteId
+      ? BigInt(data.contactoClienteId)
+      : undefined;
+    const responsableId = data.responsableId
+      ? BigInt(data.responsableId)
+      : undefined;
     const aprobadorId = data.aprobadorId ? BigInt(data.aprobadorId) : undefined;
-    const tipoDocumentoId = data.tipoDocumentoId ? BigInt(data.tipoDocumentoId) : undefined;
+    const tipoDocumentoId = data.tipoDocumentoId
+      ? BigInt(data.tipoDocumentoId)
+      : undefined;
     const serieDocId = data.serieDocId ? BigInt(data.serieDocId) : undefined;
     const monedaId = data.monedaId ? BigInt(data.monedaId) : undefined;
-    const estadoContratoId = data.estadoContratoId ? BigInt(data.estadoContratoId) : undefined;
+    const estadoContratoId = data.estadoContratoId
+      ? BigInt(data.estadoContratoId)
+      : undefined;
     const creadoPor = data.creadoPor ? BigInt(data.creadoPor) : undefined;
-    const actualizadoPor = data.actualizadoPor ? BigInt(data.actualizadoPor) : undefined;
+    const actualizadoPor = data.actualizadoPor
+      ? BigInt(data.actualizadoPor)
+      : undefined;
+    const unidadNegocioId = data.unidadNegocioId
+      ? BigInt(data.unidadNegocioId)
+      : undefined;
 
     // Validar campos obligatorios
-    if (!empresaId || !sedeId || !almacenId || !clienteId || 
-        !responsableId || !tipoDocumentoId || !serieDocId || 
-        !monedaId || !estadoContratoId) {
+    if (
+      !empresaId ||
+      !sedeId ||
+      !almacenId ||
+      !clienteId ||
+      !responsableId ||
+      !tipoDocumentoId ||
+      !serieDocId ||
+      !monedaId ||
+      !estadoContratoId
+    ) {
       throw new ValidationError(
-        'Faltan campos obligatorios: empresaId, sedeId, almacenId, clienteId, responsableId, tipoDocumentoId, serieDocId, monedaId, estadoContratoId'
+        "Faltan campos obligatorios: empresaId, sedeId, almacenId, clienteId, responsableId, tipoDocumentoId, serieDocId, monedaId, estadoContratoId",
       );
     }
 
@@ -203,43 +233,55 @@ const crear = async (data) => {
     return await prisma.$transaction(async (tx) => {
       // 1. Validar existencia de empresa
       const empresa = await tx.empresa.findUnique({ where: { id: empresaId } });
-      if (!empresa) throw new ValidationError('Empresa no existente.');
+      if (!empresa) throw new ValidationError("Empresa no existente.");
 
       // 2. Validar existencia de cliente
-      const cliente = await tx.entidadComercial.findUnique({ where: { id: clienteId } });
-      if (!cliente) throw new ValidationError('Cliente no existente.');
+      const cliente = await tx.entidadComercial.findUnique({
+        where: { id: clienteId },
+      });
+      if (!cliente) throw new ValidationError("Cliente no existente.");
 
       // 3. Validar existencia de responsable
-      const responsable = await tx.personal.findUnique({ where: { id: responsableId } });
-      if (!responsable) throw new ValidationError('Responsable no existente.');
+      const responsable = await tx.personal.findUnique({
+        where: { id: responsableId },
+      });
+      if (!responsable) throw new ValidationError("Responsable no existente.");
 
       // 4. Validar aprobador si se proporciona
       if (aprobadorId) {
-        const aprobador = await tx.personal.findUnique({ where: { id: aprobadorId } });
-        if (!aprobador) throw new ValidationError('Aprobador no existente.');
+        const aprobador = await tx.personal.findUnique({
+          where: { id: aprobadorId },
+        });
+        if (!aprobador) throw new ValidationError("Aprobador no existente.");
       }
 
       // 5. Obtener la serie seleccionada
       const serie = await tx.serieDoc.findUnique({
-        where: { id: serieDocId }
+        where: { id: serieDocId },
       });
-      
+
       if (!serie) {
-        throw new ValidationError('Serie de documento no encontrada.');
+        throw new ValidationError("Serie de documento no encontrada.");
       }
-      
+
       // 6. Calcular nuevo correlativo
       const nuevoCorrelativo = Number(serie.correlativo) + 1;
-      
+
       // 7. Generar números con formato
-      const numSerie = String(serie.serie).padStart(serie.numCerosIzqSerie, '0');
-      const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, '0');
+      const numSerie = String(serie.serie).padStart(
+        serie.numCerosIzqSerie,
+        "0",
+      );
+      const numCorre = String(nuevoCorrelativo).padStart(
+        serie.numCerosIzqCorre,
+        "0",
+      );
       const numeroCompleto = `${numSerie}-${numCorre}`;
-      
+
       // 8. Actualizar el correlativo en SerieDoc
       await tx.serieDoc.update({
         where: { id: serieDocId },
-        data: { correlativo: BigInt(nuevoCorrelativo) }
+        data: { correlativo: BigInt(nuevoCorrelativo) },
       });
 
       // 9. Calcular fechaFinContrato si no viene (1 año después de fechaInicioContrato)
@@ -269,7 +311,8 @@ const crear = async (data) => {
         fechaInicioContrato: data.fechaInicioContrato,
         fechaFinContrato,
         fechaInicioCobro: data.fechaInicioCobro,
-        periodicidadCobro: data.periodicidadCobro !== undefined ? data.periodicidadCobro : 1,
+        periodicidadCobro:
+          data.periodicidadCobro !== undefined ? data.periodicidadCobro : 1,
         textoEsenciaContrato: data.textoEsenciaContrato,
         urlContratoPdf: data.urlContratoPdf,
         incluyeLuz: data.incluyeLuz !== undefined ? data.incluyeLuz : false,
@@ -282,6 +325,7 @@ const crear = async (data) => {
         creadoEn: data.creadoEn || new Date(),
         actualizadoPor,
         actualizadoEn: data.actualizadoEn || new Date(),
+        unidadNegocioId,
       };
 
       // 11. Crear el contrato con los números generados (patrón estándar)
@@ -299,15 +343,17 @@ const crear = async (data) => {
           tipoDocumento: true,
           serieDoc: true,
           moneda: true,
-          estadoContrato: true
-        }
+          estadoContrato: true,
+        },
       });
 
       return contratoCreado;
     });
   } catch (err) {
-    if (err instanceof ValidationError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof ValidationError || err instanceof ConflictError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -317,32 +363,42 @@ const crear = async (data) => {
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.contratoServicio.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Contrato no encontrado');
+    const existente = await prisma.contratoServicio.findUnique({
+      where: { id },
+    });
+    if (!existente) throw new NotFoundError("Contrato no encontrado");
 
     // Validar referencias si cambian
     if (data.empresaId && data.empresaId !== existente.empresaId) {
-      const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
-      if (!empresa) throw new ValidationError('Empresa no existente.');
+      const empresa = await prisma.empresa.findUnique({
+        where: { id: data.empresaId },
+      });
+      if (!empresa) throw new ValidationError("Empresa no existente.");
     }
 
     if (data.clienteId && data.clienteId !== existente.clienteId) {
-      const cliente = await prisma.entidadComercial.findUnique({ where: { id: data.clienteId } });
-      if (!cliente) throw new ValidationError('Cliente no existente.');
+      const cliente = await prisma.entidadComercial.findUnique({
+        where: { id: data.clienteId },
+      });
+      if (!cliente) throw new ValidationError("Cliente no existente.");
     }
 
     if (data.responsableId && data.responsableId !== existente.responsableId) {
-      const responsable = await prisma.personal.findUnique({ where: { id: data.responsableId } });
-      if (!responsable) throw new ValidationError('Responsable no existente.');
+      const responsable = await prisma.personal.findUnique({
+        where: { id: data.responsableId },
+      });
+      if (!responsable) throw new ValidationError("Responsable no existente.");
     }
 
     if (data.aprobadorId && data.aprobadorId !== existente.aprobadorId) {
-      const aprobador = await prisma.personal.findUnique({ where: { id: data.aprobadorId } });
-      if (!aprobador) throw new ValidationError('Aprobador no existente.');
+      const aprobador = await prisma.personal.findUnique({
+        where: { id: data.aprobadorId },
+      });
+      if (!aprobador) throw new ValidationError("Aprobador no existente.");
     }
 
     // ✅ Validar y obtener tipo de cambio si es necesario
-    if (data.hasOwnProperty('tipoCambio')) {
+    if (data.hasOwnProperty("tipoCambio")) {
       data.tipoCambio = await validarTipoCambio(
         data.tipoCambio,
         data.fechaCelebracion || existente.fechaCelebracion,
@@ -385,12 +441,14 @@ const actualizar = async (id, data) => {
         tipoDocumento: true,
         serieDoc: true,
         moneda: true,
-        estadoContrato: true
-      }
+        estadoContrato: true,
+      },
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -404,24 +462,29 @@ const eliminar = async (id) => {
       where: { id },
       include: {
         detallesServicios: true,
-        prefacturas: true
-      }
+        prefacturas: true,
+      },
     });
-    if (!existente) throw new NotFoundError('Contrato no encontrado');
+    if (!existente) throw new NotFoundError("Contrato no encontrado");
 
     // Validar que no tenga dependencias
     if (existente.detallesServicios && existente.detallesServicios.length > 0) {
-      throw new ConflictError('No se puede eliminar porque tiene servicios asociados.');
+      throw new ConflictError(
+        "No se puede eliminar porque tiene servicios asociados.",
+      );
     }
     if (existente.prefacturas && existente.prefacturas.length > 0) {
-      throw new ConflictError('No se puede eliminar porque tiene prefacturas asociadas.');
+      throw new ConflictError(
+        "No se puede eliminar porque tiene prefacturas asociadas.",
+      );
     }
 
     await prisma.contratoServicio.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -435,22 +498,23 @@ const eliminar = async (id) => {
 const obtenerSeriesDoc = async (empresaId, tipoDocumentoId) => {
   try {
     const where = {
-      activo: true // Solo series activas
+      activo: true, // Solo series activas
     };
-    
+
     if (empresaId) where.empresaId = BigInt(empresaId);
     if (tipoDocumentoId) where.tipoDocumentoId = BigInt(tipoDocumentoId);
-    
+
     const series = await prisma.serieDoc.findMany({
       where,
       orderBy: {
-        serie: 'asc'
-      }
+        serie: "asc",
+      },
     });
-    
+
     return series;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -463,12 +527,14 @@ const obtenerContratosVigentes = async (clienteId) => {
     const estadoVigente = await prisma.estadoMultiFuncion.findFirst({
       where: {
         tipoProvieneDe: 10, // CONTRATO_SERVICIO
-        nombre: 'VIGENTE'
-      }
+        nombre: "VIGENTE",
+      },
     });
 
     if (!estadoVigente) {
-      throw new ValidationError('No se encontró el estado VIGENTE para contratos');
+      throw new ValidationError(
+        "No se encontró el estado VIGENTE para contratos",
+      );
     }
 
     return await prisma.contratoServicio.findMany({
@@ -476,12 +542,12 @@ const obtenerContratosVigentes = async (clienteId) => {
         clienteId,
         estadoContratoId: estadoVigente.id,
         fechaInicioContrato: {
-          lte: new Date()
+          lte: new Date(),
         },
         OR: [
           { fechaFinContrato: null },
-          { fechaFinContrato: { gte: new Date() } }
-        ]
+          { fechaFinContrato: { gte: new Date() } },
+        ],
       },
       include: {
         empresa: true,
@@ -490,14 +556,15 @@ const obtenerContratosVigentes = async (clienteId) => {
         moneda: true,
         detallesServicios: {
           include: {
-            productoServicio: true
-          }
-        }
+            productoServicio: true,
+          },
+        },
       },
-      orderBy: { fechaCelebracion: 'desc' }
+      orderBy: { fechaCelebracion: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -511,5 +578,5 @@ export default {
   actualizar,
   eliminar,
   obtenerSeriesDoc,
-  obtenerContratosVigentes
+  obtenerContratosVigentes,
 };

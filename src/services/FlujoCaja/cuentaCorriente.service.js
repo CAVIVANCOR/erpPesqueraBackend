@@ -16,6 +16,13 @@ const incluirRelaciones = {
   empresa: true,
   movimientosOrigen: true,
   movimientosDestino: true,
+  cuentaContable: {
+    select: {
+      id: true,
+      codigoCuenta: true,
+      nombreCuenta: true,
+    }
+  },
   personalCreador: {
     select: {
       id: true,
@@ -62,19 +69,20 @@ async function validarReferencias({
 }
 
 /**
- * Valida que no exista una cuenta corriente duplicada con el mismo número, banco y empresa.
+ * Valida que no exista una cuenta corriente duplicada con el mismo número, banco, empresa y descripción.
  * Lanza ConflictError si ya existe un registro igual.
  * @param {Object} param0 - Objeto con los campos a validar
  * @param {number|null} excluirId - Si se actualiza, excluir el propio ID de la búsqueda
  */
 async function validarDuplicado(
-  { numeroCuenta, bancoId, empresaId },
+  { numeroCuenta, bancoId, empresaId, descripcion },
   excluirId = null
 ) {
   const where = {
     numeroCuenta,
     bancoId,
     empresaId,
+    descripcion: descripcion || null,
   };
   try {
     if (excluirId) {
@@ -83,14 +91,14 @@ async function validarDuplicado(
       });
       if (existe) {
         throw new ConflictError(
-          "Ya existe una cuenta corriente con ese número, banco y empresa"
+          "Ya existe una cuenta corriente con ese número, banco, empresa y descripción"
         );
       }
     } else {
       const existe = await prisma.cuentaCorriente.findFirst({ where });
       if (existe) {
         throw new ConflictError(
-          "Ya existe una cuenta corriente con ese número, banco y empresa"
+          "Ya existe una cuenta corriente con ese número, banco, empresa y descripción"
         );
       }
     }

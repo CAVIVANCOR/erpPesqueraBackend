@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { puedeEditarDetalleFaena } from '../../utils/checkSuperUsuario.js';
 
 /**
  * Servicio CRUD para DescargaFaenaPesca
@@ -207,10 +208,35 @@ const crear = async (data) => {
   }
 };
 
-const actualizar = async (id, data) => {
+const actualizar = async (id, data, usuarioId = null) => {
   try {
-    const existente = await prisma.descargaFaenaPesca.findUnique({ where: { id } });
+    const existente = await prisma.descargaFaenaPesca.findUnique({ 
+      where: { id },
+      include: {
+        faenaPesca: {
+          include: {
+            temporada: {
+              include: {
+                estadoTemporada: true
+              }
+            }
+          }
+        }
+      }
+    });
     if (!existente) throw new NotFoundError('DescargaFaenaPesca no encontrada');
+
+    // ========================================
+    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
+    // ========================================
+    const puedeEditar = await puedeEditarDetalleFaena(usuarioId, existente.faenaPescaId);
+    
+    if (!puedeEditar) {
+      throw new ValidationError(
+        `No se puede editar la descarga porque la temporada está en estado "${existente.faenaPesca?.temporada?.estadoTemporada?.descripcion}". ` +
+        `Solo los superusuarios pueden editar descargas de temporadas finalizadas o canceladas.`
+      );
+    }
     
     // Validar claves foráneas si cambian (incluyendo campos opcionales)
     const claves = [
