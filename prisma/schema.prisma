@@ -1306,6 +1306,7 @@ model SaldoCuentaCorriente {
   diferencia            Decimal?        @db.Decimal(18, 2)
   conciliado            Boolean?        @default(false)
   fechaConciliacion     DateTime?
+  asientoContableId     BigInt?         // 🆕 NUEVO: Asiento contable generado
   
   // ========================================
   // CENTRO DE COSTO
@@ -1324,6 +1325,7 @@ model SaldoCuentaCorriente {
   empresa               Empresa         @relation("SaldoCuentaCorrienteEmpresa", fields: [empresaId], references: [id])
   movimientoCaja        MovimientoCaja? @relation(fields: [movimientoCajaId], references: [id])
   centroCosto           CentroCosto?    @relation("SaldoCuentaCorrienteCentroCosto", fields: [centroCostoId], references: [id])
+  asientoContable       AsientoContable? @relation(fields: [asientoContableId], references: [id])  // 🆕 NUEVO
   
   // ========================================
   // ÍNDICES
@@ -5131,6 +5133,8 @@ movimientosInversion  MovimientoInversion[]
 prestamos             PrestamoBancario[]    @relation("AsientoPrestamo")
   cuentasPorCobrar      CuentaPorCobrar[]       // Relación inversa
   cuentasPorPagar       CuentaPorPagar[]        // Relación inversa
+  saldosCuentaCorriente SaldoCuentaCorriente[]  // 🆕 Relación inversa
+
   // ========================================
   // ÍNDICES - CRÍTICO: índice en tipoLibro para filtrado rápido
   // ========================================
