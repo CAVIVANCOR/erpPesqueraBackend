@@ -78,29 +78,30 @@ async function validarDuplicado(
   { numeroCuenta, bancoId, empresaId, descripcion },
   excluirId = null
 ) {
-  const where = {
-    numeroCuenta,
-    bancoId,
-    empresaId,
-    descripcion: descripcion || null,
-  };
+  // Normalizar descripción: trim y convertir a mayúsculas
+  const descripcionNormalizada = descripcion ? descripcion.trim().toUpperCase() : null;
+  
   try {
-    if (excluirId) {
-      const existe = await prisma.cuentaCorriente.findFirst({
-        where: { ...where, id: { not: excluirId } },
-      });
-      if (existe) {
-        throw new ConflictError(
-          "Ya existe una cuenta corriente con ese número, banco, empresa y descripción"
-        );
-      }
-    } else {
-      const existe = await prisma.cuentaCorriente.findFirst({ where });
-      if (existe) {
-        throw new ConflictError(
-          "Ya existe una cuenta corriente con ese número, banco, empresa y descripción"
-        );
-      }
+    // Buscar todas las cuentas con el mismo número, banco y empresa
+    const cuentasExistentes = await prisma.cuentaCorriente.findMany({
+      where: {
+        numeroCuenta,
+        bancoId,
+        empresaId,
+        ...(excluirId && { id: { not: excluirId } }),
+      },
+    });
+    
+    // Verificar si alguna tiene la misma descripción normalizada
+    const duplicado = cuentasExistentes.find(cuenta => {
+      const descripcionExistente = cuenta.descripcion ? cuenta.descripcion.trim().toUpperCase() : null;
+      return descripcionExistente === descripcionNormalizada;
+    });
+    
+    if (duplicado) {
+      throw new ConflictError(
+        "Ya existe una cuenta corriente con ese número, banco, empresa y descripción"
+      );
     }
   } catch (error) {
     console.error("Error en consulta de duplicados:", error);
@@ -186,9 +187,10 @@ const crear = async (data) => {
   } catch (err) {
     // Manejar error de restricción única específicamente
     if (err.code === "P2002") {
-      if (err.meta?.target?.includes("unique_cuenta_banco_empresa")) {
+      if (err.meta?.target?.includes("unique_cuenta_banco_empresa_descripcion") || 
+          err.meta?.target?.includes("unique_cuenta_banco_empresa")) {
         throw new ConflictError(
-          "Ya existe una cuenta corriente con ese número, banco y empresa"
+          "Ya existe una cuenta corriente con ese número, banco, empresa y descripción"
         );
       } else {
         throw new ConflictError(
