@@ -5932,6 +5932,9 @@ model PagoCuentaPorPagar {
   bancoId               BigInt?
   cuentaBancariaId      BigInt?
   
+  // ⭐ NUEVO: Vinculación con Préstamo Bancario
+  prestamoBancarioId    BigInt?     // FK a PrestamoBancario (cuando medio = PRÉSTAMO BANCARIO)
+  
   // Vinculación con caja
   movimientoCajaId      BigInt?
   
@@ -5950,9 +5953,13 @@ model PagoCuentaPorPagar {
   movimientoCaja        MovimientoCaja?     @relation(fields: [movimientoCajaId], references: [id])
   registrador           Personal?           @relation(fields: [registradoPor], references: [id])
   
+  // ⭐ NUEVA RELACIÓN
+  prestamoBancario      PrestamoBancario?   @relation(fields: [prestamoBancarioId], references: [id])
+  
   @@index([cuentaPorPagarId])
   @@index([fechaPago])
   @@index([movimientoCajaId])
+  @@index([prestamoBancarioId])  // ⭐ NUEVO ÍNDICE
 }
 
 
@@ -7014,6 +7021,8 @@ model PrestamoBancario {
   cuotas                CuotaPrestamo[]
   desembolsos           DesembolsoPrestamo[]
   garantias             GarantiaPrestamo[]
+  pagosCuentaPorPagar   PagoCuentaPorPagar[]  // ⭐ AGREGADO: Relación inversa con pagos
+
 
   // ========================================
   // ÍNDICES
