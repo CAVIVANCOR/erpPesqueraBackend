@@ -114,14 +114,22 @@ const eliminar = async (id) => {
   }
 };
 
-const obtenerPorTemporada = async (temporadaId) => {
+const obtenerPorTemporada = async (temporadaId, faenaPescaId = null) => {
   try {
+    // ⭐ MODIFICADO: Construir filtro dinámico
+    const where = {
+      faenaPesca: {
+        temporadaId: temporadaId
+      }
+    };
+    
+    // ⭐ AGREGADO: Filtrar por faena si se proporciona
+    if (faenaPescaId) {
+      where.faenaPescaId = faenaPescaId;
+    }
+    
     const resultado = await prisma.detAccionesPreviasFaena.findMany({
-      where: {
-        faenaPesca: {
-          temporadaId: temporadaId
-        }
-      },
+      where,
       include: {
         accionPrevia: true,
         faenaPesca: {

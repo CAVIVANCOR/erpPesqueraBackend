@@ -87,10 +87,31 @@ const eliminar = async (id) => {
   }
 };
 
+// ⭐ AGREGADO: Función para obtener por faenaPescaConsumoId
+const obtenerPorFaenaConsumo = async (faenaPescaConsumoId) => {
+  try {
+    const resultado = await prisma.detAccionesPreviasFaenaConsumo.findMany({
+      where: {
+        faenaPescaConsumoId: faenaPescaConsumoId
+      },
+      include: {
+        accionPrevia: true,
+        faenaPescaConsumo: true
+      }
+    });
+    return resultado;
+  } catch (err) {
+    console.error("❌ [DEBUG] Error en obtenerPorFaenaConsumo:", err);
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  obtenerPorFaenaConsumo  // ⭐ AGREGADO
 };

@@ -134,6 +134,58 @@ const listarPorMovimiento = async (req, res, next) => {
   }
 };
 
+/**
+ * Genera un borrador de asiento contable para un saldo (sin guardarlo)
+ */
+const generarBorradorAsiento = async (req, res, next) => {
+  try {
+    const saldoId = Number(req.params.id);
+    
+    if (!saldoId || isNaN(saldoId)) {
+      return res.status(400).json({
+        error: 'El ID del saldo es requerido y debe ser un número válido'
+      });
+    }
+
+    const borrador = await saldoCuentaCorrienteService.generarBorradorAsiento(saldoId);
+    res.json(toJSONBigInt(borrador));
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Guarda el asiento contable editado por el usuario y lo vincula al saldo
+ */
+const guardarAsientoContable = async (req, res, next) => {
+  try {
+    const saldoId = Number(req.params.id);
+    
+    if (!saldoId || isNaN(saldoId)) {
+      return res.status(400).json({
+        error: 'El ID del saldo es requerido y debe ser un número válido'
+      });
+    }
+
+    const { asientoData, creadoPor } = req.body;
+    
+    if (!asientoData) {
+      return res.status(400).json({
+        error: 'Los datos del asiento son requeridos'
+      });
+    }
+
+    const asiento = await saldoCuentaCorrienteService.guardarAsientoContable(
+      saldoId,
+      asientoData,
+      creadoPor
+    );
+    res.status(201).json(toJSONBigInt(asiento));
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -142,5 +194,7 @@ export default {
   crear,
   actualizar,
   eliminar,
-  listarPorMovimiento
+  listarPorMovimiento,
+  generarBorradorAsiento,
+  guardarAsientoContable
 };

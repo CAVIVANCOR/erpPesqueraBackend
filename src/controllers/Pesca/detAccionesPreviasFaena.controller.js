@@ -57,7 +57,10 @@ export async function eliminar(req, res, next) {
 export async function obtenerPorTemporada(req, res, next) {
   try {
     const temporadaId = Number(req.params.temporadaId);
-    const detalles = await detAccionesPreviasFaenaService.obtenerPorTemporada(temporadaId);
+    // ⭐ AGREGADO: Leer faenaPescaId de query params (opcional)
+    const faenaPescaId = req.query.faenaPescaId ? Number(req.query.faenaPescaId) : null;
+    
+    const detalles = await detAccionesPreviasFaenaService.obtenerPorTemporada(temporadaId, faenaPescaId);
     res.json(toJSONBigInt(detalles));
   } catch (err) {
     next(err);

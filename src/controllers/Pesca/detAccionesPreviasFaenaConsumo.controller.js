@@ -7,7 +7,14 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  */
 export async function listar(req, res, next) {
   try {
-    const detalles = await detAccionesPreviasFaenaConsumoService.listar();
+    // ⭐ AGREGADO: Leer faenaPescaConsumoId de query params (opcional)
+    const faenaPescaConsumoId = req.query.faenaPescaConsumoId ? Number(req.query.faenaPescaConsumoId) : null;
+    
+    // ⭐ MODIFICADO: Si viene faenaPescaConsumoId, usar función específica
+    const detalles = faenaPescaConsumoId 
+      ? await detAccionesPreviasFaenaConsumoService.obtenerPorFaenaConsumo(faenaPescaConsumoId)
+      : await detAccionesPreviasFaenaConsumoService.listar();
+    
     res.json(toJSONBigInt(detalles));
   } catch (err) {
     next(err);

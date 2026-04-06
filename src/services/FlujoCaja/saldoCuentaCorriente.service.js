@@ -6,6 +6,8 @@ import {
   DatabaseError,
   ValidationError,
 } from "../../utils/errors.js";
+// Importa servicios necesarios para generación de asientos contables
+import periodoContableService from "../Contabilidad/periodoContable.service.js";
 
 // Define las relaciones que se incluirán al consultar saldos
 const incluirRelaciones = {
@@ -14,11 +16,22 @@ const incluirRelaciones = {
       banco: true,
       moneda: true,
       empresa: true,
+      cuentaContable: true,
     }
   },
   empresa: true,
   movimientoCaja: true,
   centroCosto: true,
+  asientoContable: {
+    include: {
+      detalles: {
+        include: {
+          planCuenta: true
+        },
+        orderBy: { numeroLinea: 'asc' }
+      }
+    }
+  }
 };
 
 /**
@@ -35,6 +48,10 @@ async function validarReferencias({
   // Valida existencia de la cuenta corriente
   const cuenta = await prisma.cuentaCorriente.findUnique({
     where: { id: cuentaCorrienteId },
+    include: {
+      cuentaContable: true,
+      banco: true,
+    }
   });
   if (!cuenta) throw new ValidationError("Cuenta corriente no existente");
 
@@ -59,6 +76,449 @@ async function validarReferencias({
       where: { id: centroCostoId },
     });
     if (!centroCosto) throw new ValidationError("Centro de costo no existente");
+  }
+
+  return cuenta;
+}
+
+/**
+ * Genera un BORRADOR de asiento contable (sin guardarlo en BD).
+ * El usuario podrá revisar y modificar las cuentas antes de guardarlo.
+ * @param {BigInt} saldoId - ID del saldo
+ * @returns {Promise<Object>} - Borrador del asiento contable
+ */
+const generarBorradorAsiento = async (saldoId) => {
+  try {
+    const saldo = await prisma.saldoCuentaCorriente.findUnique({
+      where: { id: saldoId },
+      include: {
+        cuentaCorriente: {
+          include: {
+            cuentaContable: true,
+            banco: true,
+            moneda: true
+          }
+        },
+        empresa: true
+      }
+    });
+
+    if (!saldo) {
+      throw new NotFoundError('Saldo no encontrado');
+    }
+
+    const cuentaCorriente = saldo.cuentaCorriente;
+
+    if (!cuentaCorriente.cuentaContableId || !cuentaCorriente.cuentaContable) {
+      throw new ValidationError('La cuenta corriente no tiene una cuenta contable vinculada');
+    }
+
+    // Obtener período contable activo o el más reciente
+    let periodoContable = null;
+    try {
+      periodoContable = await periodoContableService.obtenerPeriodoActivo(saldo.empresaId);
+    } catch (error) {
+      // Si no hay período activo, buscar el período más reciente (estado ABIERTO = 50)
+      const periodos = await prisma.periodoContable.findMany({
+        where: { 
+          empresaId: saldo.empresaId,
+          estadoId: 50n // Estado ABIERTO
+        },
+        orderBy: { fechaInicio: 'desc' },
+        take: 1
+      });
+      
+      if (periodos.length > 0) {
+        periodoContable = periodos[0];
+      } else {
+        // Si no hay períodos abiertos, buscar cualquier período de la empresa
+        const cualquierPeriodo = await prisma.periodoContable.findFirst({
+          where: { empresaId: saldo.empresaId },
+          orderBy: { fechaInicio: 'desc' }
+        });
+        
+        if (!cualquierPeriodo) {
+          throw new ValidationError(
+            'No hay períodos contables configurados para esta empresa. ' +
+            'Por favor, cree un período contable antes de generar asientos.'
+          );
+        }
+        periodoContable = cualquierPeriodo;
+      }
+    }
+
+    // Buscar cuenta de Resultados Acumulados
+    const cuentaContrapartida = await prisma.planCuentasContable.findFirst({
+      where: {
+        codigoCuenta: { startsWith: '591' },
+        activo: true
+      }
+    });
+
+    if (!cuentaContrapartida) {
+      throw new ValidationError('No se encontró la cuenta de Resultados Acumulados (591)');
+    }
+
+    const montoSaldo = Number(saldo.saldoActual);
+    const esSaldoPositivo = montoSaldo > 0;
+
+    // Generar estructura del borrador (SIN guardarlo)
+    const borrador = {
+      empresaId: saldo.empresaId,
+      periodoContableId: periodoContable.id,
+      fechaAsiento: saldo.fecha || new Date(),
+      glosa: `Saldo inicial de cuenta corriente ${cuentaCorriente.numeroCuenta} - ${cuentaCorriente.descripcion || cuentaCorriente.banco?.nombre || ''}`,
+      tipoLibro: 'FISCAL',
+      origenAsiento: 'AUTOMATICO',
+      monedaId: cuentaCorriente.monedaId,
+      detalles: []
+    };
+
+    // Generar detalles según si es positivo o negativo
+    if (esSaldoPositivo) {
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: cuentaCorriente.cuentaContableId,
+          codigoCuenta: cuentaCorriente.cuentaContable.codigoCuenta,
+          nombreCuenta: cuentaCorriente.cuentaContable.nombreCuenta,
+          glosa: `Saldo inicial ${cuentaCorriente.numeroCuenta}`,
+          debe: montoSaldo,
+          haber: 0,
+          centroCostoId: saldo.centroCostoId || null
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaContrapartida.id,
+          codigoCuenta: cuentaContrapartida.codigoCuenta,
+          nombreCuenta: cuentaContrapartida.nombreCuenta,
+          glosa: `Saldo inicial ${cuentaCorriente.numeroCuenta}`,
+          debe: 0,
+          haber: montoSaldo,
+          centroCostoId: saldo.centroCostoId || null
+        }
+      ];
+    } else {
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: cuentaContrapartida.id,
+          codigoCuenta: cuentaContrapartida.codigoCuenta,
+          nombreCuenta: cuentaContrapartida.nombreCuenta,
+          glosa: `Sobregiro inicial ${cuentaCorriente.numeroCuenta}`,
+          debe: Math.abs(montoSaldo),
+          haber: 0,
+          centroCostoId: saldo.centroCostoId || null
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaCorriente.cuentaContableId,
+          codigoCuenta: cuentaCorriente.cuentaContable.codigoCuenta,
+          nombreCuenta: cuentaCorriente.cuentaContable.nombreCuenta,
+          glosa: `Sobregiro inicial ${cuentaCorriente.numeroCuenta}`,
+          debe: 0,
+          haber: Math.abs(montoSaldo),
+          centroCostoId: saldo.centroCostoId || null
+        }
+      ];
+    }
+
+    return borrador;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Guarda el asiento contable editado por el usuario y lo vincula al saldo.
+ * @param {BigInt} saldoId - ID del saldo
+ * @param {Object} asientoData - Datos del asiento editado por el usuario
+ * @param {BigInt} creadoPor - ID del usuario que crea el asiento
+ * @returns {Promise<Object>} - Asiento contable creado
+ */
+const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
+  try {
+    // Validar que el saldo existe y no tiene asiento ya generado
+    const saldo = await prisma.saldoCuentaCorriente.findUnique({
+      where: { id: saldoId }
+    });
+
+    if (!saldo) {
+      throw new NotFoundError('Saldo no encontrado');
+    }
+
+    if (saldo.asientoContableId) {
+      throw new ValidationError('Este saldo ya tiene un asiento contable generado');
+    }
+
+    // Validar partida doble
+    const totalDebe = asientoData.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+    const totalHaber = asientoData.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
+    const diferencia = Math.abs(totalDebe - totalHaber);
+
+    if (diferencia > 0.01) {
+      throw new ValidationError(
+        `El asiento no está balanceado. Debe: ${totalDebe.toFixed(2)}, Haber: ${totalHaber.toFixed(2)}, Diferencia: ${diferencia.toFixed(2)}`
+      );
+    }
+
+    // Obtener moneda
+    const moneda = await prisma.moneda.findUnique({
+      where: { id: asientoData.monedaId }
+    });
+    if (!moneda) {
+      throw new ValidationError('Moneda no encontrada');
+    }
+
+    // Usar transacción para crear asiento y actualizar saldo
+    return await prisma.$transaction(async (tx) => {
+      // Obtener correlativo
+      const ultimoAsiento = await tx.asientoContable.findFirst({
+        where: {
+          empresaId: asientoData.empresaId,
+          periodoContableId: asientoData.periodoContableId
+        },
+        orderBy: { correlativo: 'desc' }
+      });
+      const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
+      const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, '0')}`;
+
+      // Crear asiento
+      const asiento = await tx.asientoContable.create({
+        data: {
+          empresaId: asientoData.empresaId,
+          periodoContableId: asientoData.periodoContableId,
+          numeroAsiento,
+          correlativo,
+          fechaAsiento: new Date(asientoData.fechaAsiento),
+          glosa: asientoData.glosa,
+          tipoLibro: asientoData.tipoLibro || 'FISCAL',
+          origenAsiento: asientoData.origenAsiento || 'AUTOMATICO',
+          submoduloOrigenId: null,
+          procesoOrigenId: saldoId,
+          estadoId: BigInt(76), // PENDIENTE
+          totalDebe,
+          totalHaber,
+          diferencia: 0,
+          estaCuadrado: true,
+          monedaId: asientoData.monedaId,
+          tipoCambio: asientoData.tipoCambio || null,
+          creadoPor
+        }
+      });
+
+      // Crear detalles
+      await Promise.all(
+        asientoData.detalles.map((detalle) =>
+          tx.detalleAsientoContable.create({
+            data: {
+              asientoContableId: asiento.id,
+              numeroLinea: detalle.numeroLinea,
+              planCuentaId: detalle.planCuentaId,
+              codigoCuenta: detalle.codigoCuenta,
+              nombreCuenta: detalle.nombreCuenta,
+              glosa: detalle.glosa,
+              debe: detalle.debe || 0,
+              haber: detalle.haber || 0,
+              monedaId: asientoData.monedaId,
+              tipoCambio: asientoData.tipoCambio || null,
+              centroCostoId: detalle.centroCostoId || null,
+              creadoPor
+            }
+          })
+        )
+      );
+
+      // Vincular asiento al saldo
+      await tx.saldoCuentaCorriente.update({
+        where: { id: saldoId },
+        data: { asientoContableId: asiento.id }
+      });
+
+      // Retornar asiento completo
+      return await tx.asientoContable.findUnique({
+        where: { id: asiento.id },
+        include: {
+          empresa: true,
+          periodoContable: true,
+          estado: true,
+          moneda: true,
+          detalles: {
+            include: {
+              planCuenta: true
+            },
+            orderBy: { numeroLinea: 'asc' }
+          }
+        }
+      });
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Genera un asiento contable para el registro de saldo inicial de cuenta corriente.
+ * @param {Object} saldo - Datos del saldo creado
+ * @param {Object} cuentaCorriente - Datos de la cuenta corriente
+ * @param {Object} tx - Transacción de Prisma
+ * @param {BigInt} creadoPor - ID del usuario que crea el asiento
+ * @returns {Promise<Object>} - Asiento contable creado
+ */
+async function generarAsientoSaldoInicial(saldo, cuentaCorriente, tx, creadoPor) {
+  try {
+    if (!cuentaCorriente.cuentaContableId || !cuentaCorriente.cuentaContable) {
+      console.warn(`Cuenta corriente ${cuentaCorriente.id} no tiene cuenta contable vinculada. No se generará asiento.`);
+      return null;
+    }
+
+    const periodoActivo = await periodoContableService.obtenerPeriodoActivo(saldo.empresaId);
+    if (!periodoActivo) {
+      console.warn(`No hay período contable activo para empresa ${saldo.empresaId}. No se generará asiento.`);
+      return null;
+    }
+
+    const moneda = await tx.moneda.findFirst({
+      where: { codigo: 'PEN' }
+    });
+    if (!moneda) {
+      throw new ValidationError('No se encontró la moneda PEN en el sistema.');
+    }
+
+    const estadoPendiente = await tx.estadoMultiFuncion.findUnique({
+      where: { id: BigInt(76) }
+    });
+    if (!estadoPendiente) {
+      throw new ValidationError('Estado PENDIENTE (76) no encontrado.');
+    }
+
+    const cuentaContrapartida = await tx.planCuentasContable.findFirst({
+      where: {
+        empresaId: saldo.empresaId,
+        codigoCuenta: { startsWith: '591' }
+      }
+    });
+
+    if (!cuentaContrapartida) {
+      console.warn('No se encontró cuenta de Resultados Acumulados (591). No se generará asiento.');
+      return null;
+    }
+
+    const ultimoAsiento = await tx.asientoContable.findFirst({
+      where: {
+        empresaId: saldo.empresaId,
+        periodoContableId: periodoActivo.id
+      },
+      orderBy: { correlativo: 'desc' }
+    });
+    const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
+    const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, '0')}`;
+
+    const montoSaldo = Number(saldo.saldoActual);
+    const esSaldoPositivo = montoSaldo > 0;
+
+    const totalDebe = esSaldoPositivo ? montoSaldo : Math.abs(montoSaldo);
+    const totalHaber = esSaldoPositivo ? montoSaldo : Math.abs(montoSaldo);
+
+    const asiento = await tx.asientoContable.create({
+      data: {
+        empresaId: saldo.empresaId,
+        periodoContableId: periodoActivo.id,
+        numeroAsiento,
+        correlativo,
+        fechaAsiento: saldo.fecha || new Date(),
+        glosa: `Saldo inicial de cuenta corriente ${cuentaCorriente.numeroCuenta} - ${cuentaCorriente.descripcion || cuentaCorriente.banco?.nombre || ''}`,
+        tipoLibro: 'FISCAL',
+        origenAsiento: 'AUTOMATICO',
+        submoduloOrigenId: null,
+        procesoOrigenId: saldo.id,
+        estadoId: BigInt(76),
+        totalDebe,
+        totalHaber,
+        diferencia: 0,
+        estaCuadrado: true,
+        monedaId: moneda.id,
+        tipoCambio: null,
+        creadoPor
+      }
+    });
+
+    const detalles = [];
+
+    if (esSaldoPositivo) {
+      detalles.push({
+        asientoContableId: asiento.id,
+        numeroLinea: 1,
+        planCuentaId: cuentaCorriente.cuentaContableId,
+        codigoCuenta: cuentaCorriente.cuentaContable.codigoCuenta,
+        nombreCuenta: cuentaCorriente.cuentaContable.nombreCuenta,
+        glosa: `Saldo inicial ${cuentaCorriente.numeroCuenta}`,
+        debe: montoSaldo,
+        haber: 0,
+        monedaId: moneda.id,
+        centroCostoId: saldo.centroCostoId || null,
+        creadoPor
+      });
+
+      detalles.push({
+        asientoContableId: asiento.id,
+        numeroLinea: 2,
+        planCuentaId: cuentaContrapartida.id,
+        codigoCuenta: cuentaContrapartida.codigoCuenta,
+        nombreCuenta: cuentaContrapartida.nombreCuenta,
+        glosa: `Saldo inicial ${cuentaCorriente.numeroCuenta}`,
+        debe: 0,
+        haber: montoSaldo,
+        monedaId: moneda.id,
+        centroCostoId: saldo.centroCostoId || null,
+        creadoPor
+      });
+    } else {
+      detalles.push({
+        asientoContableId: asiento.id,
+        numeroLinea: 1,
+        planCuentaId: cuentaContrapartida.id,
+        codigoCuenta: cuentaContrapartida.codigoCuenta,
+        nombreCuenta: cuentaContrapartida.nombreCuenta,
+        glosa: `Sobregiro inicial ${cuentaCorriente.numeroCuenta}`,
+        debe: Math.abs(montoSaldo),
+        haber: 0,
+        monedaId: moneda.id,
+        centroCostoId: saldo.centroCostoId || null,
+        creadoPor
+      });
+
+      detalles.push({
+        asientoContableId: asiento.id,
+        numeroLinea: 2,
+        planCuentaId: cuentaCorriente.cuentaContableId,
+        codigoCuenta: cuentaCorriente.cuentaContable.codigoCuenta,
+        nombreCuenta: cuentaCorriente.cuentaContable.nombreCuenta,
+        glosa: `Sobregiro inicial ${cuentaCorriente.numeroCuenta}`,
+        debe: 0,
+        haber: Math.abs(montoSaldo),
+        monedaId: moneda.id,
+        centroCostoId: saldo.centroCostoId || null,
+        creadoPor
+      });
+    }
+
+    await Promise.all(
+      detalles.map(detalle => tx.detalleAsientoContable.create({ data: detalle }))
+    );
+
+    return asiento;
+  } catch (err) {
+    console.error('Error al generar asiento contable para saldo inicial:', err);
+    return null;
   }
 }
 
@@ -179,9 +639,9 @@ const calcularSaldoActual = async (cuentaCorrienteId) => {
 };
 
 /**
- * Crea un nuevo registro de saldo.
+ * Crea un nuevo registro de saldo y genera automáticamente el asiento contable.
  * @param {Object} data - Datos del saldo
- * @returns {Promise<Object>} - Saldo creado
+ * @returns {Promise<Object>} - Saldo creado con asiento contable
  */
 const crear = async (data) => {
   try {
@@ -223,10 +683,13 @@ const crear = async (data) => {
       creadoEn: new Date(),
     };
 
-    const resultado = await prisma.saldoCuentaCorriente.create({
+    // Crear el saldo SIN asiento contable (se generará después deliberadamente)
+    const saldoCreado = await prisma.saldoCuentaCorriente.create({
       data: datosConAuditoria,
+      include: incluirRelaciones
     });
-    return resultado;
+
+    return saldoCreado;
   } catch (err) {
     // Solo convertir errores de Prisma que NO sean de validación de negocio
     if (
@@ -355,5 +818,7 @@ export default {
   crear,
   actualizar,
   eliminar,
-  listarPorMovimiento
+  listarPorMovimiento,
+  generarBorradorAsiento,
+  guardarAsientoContable
 };
