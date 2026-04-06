@@ -40,7 +40,13 @@ const listar = async () => {
         medioPago: true,
         moneda: true,
         banco: true,
-        cuentaBancaria: true
+        cuentaBancaria: true,
+        prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+          include: {
+            banco: true,
+            tipoPrestamo: true
+          }
+        }
       },
       orderBy: { fechaPago: 'desc' }
     });
@@ -114,7 +120,13 @@ const listarPorEmpresa = async (empresaId) => {
         medioPago: true,
         moneda: true,
         banco: true,
-        cuentaBancaria: true
+        cuentaBancaria: true,
+        prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+          include: {
+            banco: true,
+            tipoPrestamo: true
+          }
+        }
       },
       orderBy: { fechaPago: 'desc' }
     });
@@ -190,7 +202,13 @@ const listarPorCuentaPagar = async (cuentaPorPagarId) => {
         medioPago: true,
         moneda: true,
         banco: true,
-        cuentaBancaria: true
+        cuentaBancaria: true,
+        prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+          include: {
+            banco: true,
+            tipoPrestamo: true
+          }
+        }
       },
       orderBy: { fechaPago: 'desc' }
     });
@@ -257,7 +275,13 @@ const obtenerPorId = async (id, tipoPago) => {
           medioPago: true,
           moneda: true,
           banco: true,
-          cuentaBancaria: true
+          cuentaBancaria: true,
+          prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+            include: {
+              banco: true,
+              tipoPrestamo: true
+            }
+          }
         }
       });
       
@@ -324,7 +348,13 @@ const listarPorMovimiento = async (movimientoCajaId) => {
         medioPago: true,
         moneda: true,
         banco: true,
-        cuentaBancaria: true
+        cuentaBancaria: true,
+        prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+          include: {
+            banco: true,
+            tipoPrestamo: true
+          }
+        }
       },
       orderBy: { fechaPago: 'desc' }
     });
