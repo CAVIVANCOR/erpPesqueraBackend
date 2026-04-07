@@ -152,7 +152,7 @@ model AsientoContableInterfaz {
   // REFERENCIAS ADICIONALES
   // ========================================
   referenciaExtId       String?
-  tipoReferenciaId      BigInt?
+  medioPagoId           BigInt?
   
   // ========================================
   // WORKFLOW
@@ -170,9 +170,9 @@ model AsientoContableInterfaz {
   moneda                Moneda                        @relation(fields: [monedaId], references: [id])
   centroCosto           CentroCosto?                  @relation(fields: [centroCostoId], references: [id])
   submoduloSistema      SubmoduloSistema?             @relation(fields: [submoduloId], references: [id])
-  tipoReferencia        TipoReferenciaMovimientoCaja? @relation(fields: [tipoReferenciaId], references: [id])
   personalEnviador      Personal?                     @relation("AsientoContableEnviadoPorId", fields: [enviadoPorId], references: [id])
-  
+  medioPago             MedioPago? @relation(fields: [medioPagoId], references: [id])
+
   // ========================================
   // ÍNDICES
   // ========================================
@@ -3318,7 +3318,7 @@ model MovimientoCaja {
   monedaId                                BigInt
   descripcion                             String?
   referenciaExtId                         String?
-  tipoReferenciaId                        BigInt?
+  medioPagoId                             BigInt?
   usuarioId                               BigInt?
   estadoId                                BigInt
   cuentaCorrienteDestinoId                BigInt?
@@ -3367,7 +3367,6 @@ model MovimientoCaja {
   // ========================================
   cuentaCorrienteOrigen     CuentaCorriente?           @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
   cuentaCorrienteDestino    CuentaCorriente?          @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
-  tipoReferencia            TipoReferenciaMovimientoCaja? @relation(fields: [tipoReferenciaId], references: [id])
   entidadComercial          EntidadComercial?         @relation(fields: [entidadComercialId], references: [id])
   estadoMovimientoCaja      EstadoMultiFuncion        @relation(fields: [estadoId], references: [id])
   empresaOrigen             Empresa?                   @relation("EmpresaOrigenMovCaja", fields: [empresaOrigenId], references: [id])
@@ -3376,6 +3375,7 @@ model MovimientoCaja {
   tipoMovimiento            TipoMovEntregaRendir      @relation(fields: [tipoMovimientoId], references: [id])
   ctaCteEntidad             CtaCteEntidad?            @relation(fields: [cuentaDestinoEntidadComercialId], references: [id])
   producto                  Producto?                 @relation(fields: [productoId], references: [id])
+  medioPago                 MedioPago?  @relation(fields: [medioPagoId], references: [id])
 
   // ========================================
   // 🆕 RELACIONES NUEVAS
@@ -4339,18 +4339,6 @@ model TipoProvieneDe {
   updatedAt          DateTime
 
   estados     EstadoMultiFuncion[]
-
-}
-
-model TipoReferenciaMovimientoCaja {
-  id             BigInt           @id @default(autoincrement())
-  codigo         String           @unique @db.VarChar(30)
-  descripcion    String?
-  activo         Boolean          @default(true)
-
-  movimientos MovimientoCaja[]
-  configuracionesCuentaContable  ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableTipoRef")
-  asientosContables         AsientoContableInterfaz[]
 
 }
 
@@ -5975,10 +5963,15 @@ model MedioPago {
   requiereNumOperacion  Boolean     @default(false)
   activo                Boolean     @default(true)
   
+  // Relaciones existentes
   pagosCobrar           PagoCuentaPorCobrar[]
   pagosPagar            PagoCuentaPorPagar[]
-    pagosLetra            PagoLetraCambio[]
-
+  pagosLetra            PagoLetraCambio[]
+  
+  // ✅ NUEVAS RELACIONES
+  movimientos           MovimientoCaja[]
+  configuracionesCuentaContable  ConfiguracionCuentaContable[]
+  asientosContables     AsientoContableInterfaz[]
   
   @@index([activo])
 }
@@ -6833,11 +6826,12 @@ model ConfiguracionCuentaContable {
   id                      BigInt    @id @default(autoincrement())
   empresaId               BigInt
   tipoMovimientoId        BigInt
-  tipoReferenciaId        BigInt?
   
   // ✅ CORRECTO: Foreign Keys
   cuentaContableDebeId    BigInt
   cuentaContableHaberId   BigInt
+  medioPagoId             BigInt?
+
   
   descripcionPlantilla    String?   @db.VarChar(200)
   activo                  Boolean?  @default(true)
@@ -6852,10 +6846,10 @@ model ConfiguracionCuentaContable {
   // ========================================
   empresa                 Empresa                      @relation("ConfiguracionCuentaContableEmpresa", fields: [empresaId], references: [id])
   tipoMovimiento          TipoMovEntregaRendir         @relation("ConfiguracionCuentaContableTipoMov", fields: [tipoMovimientoId], references: [id])
-  tipoReferencia          TipoReferenciaMovimientoCaja? @relation("ConfiguracionCuentaContableTipoRef", fields: [tipoReferenciaId], references: [id])
   personalCreador         Personal?                    @relation("ConfiguracionCuentaContableCreadorId", fields: [creadoPorId], references: [id])
   personalActualizador    Personal?                    @relation("ConfiguracionCuentaContableActualizadorId", fields: [actualizadoPorId], references: [id])
-  
+  medioPago               MedioPago?  @relation(fields: [medioPagoId], references: [id])
+
   // ⭐ NUEVAS RELACIONES A PLAN DE CUENTAS
   cuentaDebe              PlanCuentasContable          @relation("CuentaDebe", fields: [cuentaContableDebeId], references: [id])
   cuentaHaber             PlanCuentasContable          @relation("CuentaHaber", fields: [cuentaContableHaberId], references: [id])
@@ -6864,10 +6858,10 @@ model ConfiguracionCuentaContable {
   // ÍNDICES
   // ========================================
   @@index([empresaId])
-  @@index([tipoMovimientoId, tipoReferenciaId])
+  @@index([tipoMovimientoId, medioPagoId])
   @@index([cuentaContableDebeId])
   @@index([cuentaContableHaberId])
-  @@unique([empresaId, tipoMovimientoId, tipoReferenciaId], name: "unique_config_cuenta")
+  @@unique([empresaId, tipoMovimientoId, medioPagoId], name: "unique_config_cuenta")
 }
 
 // ============================================
