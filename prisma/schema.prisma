@@ -1644,26 +1644,27 @@ model DetMovsEntregaRendir {
   creadoEn             DateTime             @default(now())
   actualizadoEn        DateTime
   centroCostoId        BigInt
-  urlComprobanteMovimiento String?
-  validadoTesoreria    Boolean @default(false)
-  fechaValidacionTesoreria DateTime?
-  operacionSinFactura  Boolean @default(false)
-  fechaOperacionMovCaja DateTime?
-  operacionMovCajaId BigInt?
-  moduloOrigenMovCajaId BigInt?
-  entidadComercialId BigInt?
-  monedaId BigInt?
-  urlComprobanteOperacionMovCaja String?
-
-  tipoDocumentoId        BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
-  numeroSerieComprobante        String?                              // Número Serie del comprobante
-  numeroCorrelativoComprobante String?                               // Número Correlativo del comprobante
+  urlComprobanteMovimiento        String?
+  validadoTesoreria               Boolean @default(false)
+  fechaValidacionTesoreria        DateTime?
+  operacionSinFactura             Boolean @default(false)
+  fechaOperacionMovCaja           DateTime?
+  operacionMovCajaId              BigInt?
+  moduloOrigenMovCajaId           BigInt?
+  entidadComercialId              BigInt?
+  monedaId                        BigInt?
+  urlComprobanteOperacionMovCaja  String?
+  tipoDocumentoId                 BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
+  numeroSerieComprobante          String?                              // Número Serie del comprobante
+  numeroCorrelativoComprobante    String?                               // Número Correlativo del comprobante
   formaParteCalculoLiquidacionTripulantes Boolean? @default(false)
-  formaParteCalculoEntregaARendir Boolean? @default(false)
-
-  detalleGastosPlanificados    String?     @db.Text
-  asignacionOrigenId           BigInt?
-  formaParteCalculoLiqAlquilerCuota Boolean? @default(false)
+  formaParteCalculoEntregaARendir         Boolean? @default(false)
+  detalleGastosPlanificados               String?     @db.Text
+  asignacionOrigenId                      BigInt?
+  formaParteCalculoLiqAlquilerCuota       Boolean? @default(false)
+  entregaARendirLiquidada                 Boolean? @default(false)
+  fechaLiquidacionEntregaARendir          DateTime?
+  urlLiquidacionEntregaARendir            String?
 
   entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
