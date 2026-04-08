@@ -1,6 +1,10 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
-import { puedeEditarRegistroCerrado } from '../../utils/checkSuperUsuario.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+} from "../../utils/errors.js";
+import { puedeEditarRegistroCerrado } from "../../utils/checkSuperUsuario.js";
 
 /**
  * Servicio CRUD para DetGastosPlanificados
@@ -15,85 +19,117 @@ import { puedeEditarRegistroCerrado } from '../../utils/checkSuperUsuario.js';
 async function validarDetGastosPlanificados(data) {
   // Validar que solo UNO de los campos FK tenga valor
   const fkFields = [
-    'detMovEntregaRendirTemporadaPescaId',
-    'detMovEntRendirPescaConsumoId',
-    'detMovEntregaRendirPComprasId',
-    'detMovEntregaRendirPVentasId',
-    'detMovEntregaRendirMovAlmacenId',
-    'detMovEntregaRendirContratoId',
-    'detMovEntregaRendirOTId'
+    "detMovEntregaRendirTemporadaPescaId",
+    "detMovEntRendirPescaConsumoId",
+    "detMovEntregaRendirPComprasId",
+    "detMovEntregaRendirPVentasId",
+    "detMovEntregaRendirMovAlmacenId",
+    "detMovEntregaRendirContratoId",
+    "detMovEntregaRendirOTId",
   ];
 
-  const fkValuesPresent = fkFields.filter(field => data[field] !== undefined && data[field] !== null);
-  
+  const fkValuesPresent = fkFields.filter(
+    (field) => data[field] !== undefined && data[field] !== null,
+  );
+
   if (fkValuesPresent.length === 0) {
-    throw new ValidationError('Debe especificar al menos un tipo de entrega a rendir.');
+    throw new ValidationError(
+      "Debe especificar al menos un tipo de entrega a rendir.",
+    );
   }
-  
+
   if (fkValuesPresent.length > 1) {
-    throw new ValidationError('Solo puede especificar un tipo de entrega a rendir.');
+    throw new ValidationError(
+      "Solo puede especificar un tipo de entrega a rendir.",
+    );
   }
 
   // Validar existencia de Producto (gasto)
   if (data.productoId) {
-    const producto = await prisma.producto.findUnique({ where: { id: data.productoId } });
-    if (!producto) throw new ValidationError('Producto (gasto) no existente.');
+    const producto = await prisma.producto.findUnique({
+      where: { id: data.productoId },
+    });
+    if (!producto) throw new ValidationError("Producto (gasto) no existente.");
   }
 
   // Validar existencia de Moneda
   if (data.monedaId) {
-    const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
-    if (!moneda) throw new ValidationError('Moneda no existente.');
+    const moneda = await prisma.moneda.findUnique({
+      where: { id: data.monedaId },
+    });
+    if (!moneda) throw new ValidationError("Moneda no existente.");
   }
 
   // Validar existencia de la entrega a rendir correspondiente
   if (data.detMovEntregaRendirTemporadaPescaId) {
-    const existe = await prisma.detMovsEntregaRendir.findUnique({ 
-      where: { id: data.detMovEntregaRendirTemporadaPescaId } 
+    const existe = await prisma.detMovsEntregaRendir.findUnique({
+      where: { id: data.detMovEntregaRendirTemporadaPescaId },
     });
-    if (!existe) throw new ValidationError('Detalle de movimiento de entrega a rendir (Temporada Pesca) no existente.');
+    if (!existe)
+      throw new ValidationError(
+        "Detalle de movimiento de entrega a rendir (Temporada Pesca) no existente.",
+      );
   }
 
   if (data.detMovEntRendirPescaConsumoId) {
-    const existe = await prisma.detMovsEntRendirPescaConsumo.findUnique({ 
-      where: { id: data.detMovEntRendirPescaConsumoId } 
+    const existe = await prisma.detMovsEntRendirPescaConsumo.findUnique({
+      where: { id: data.detMovEntRendirPescaConsumoId },
     });
-    if (!existe) throw new ValidationError('Detalle de movimiento de entrega a rendir (Pesca Consumo) no existente.');
+    if (!existe)
+      throw new ValidationError(
+        "Detalle de movimiento de entrega a rendir (Pesca Consumo) no existente.",
+      );
   }
 
   if (data.detMovEntregaRendirPComprasId) {
-    const existe = await prisma.detMovsEntregaRendirPCompras.findUnique({ 
-      where: { id: data.detMovEntregaRendirPComprasId } 
+    const existe = await prisma.detMovsEntregaRendirPCompras.findUnique({
+      where: { id: data.detMovEntregaRendirPComprasId },
     });
-    if (!existe) throw new ValidationError('Detalle de movimiento de entrega a rendir (Compras) no existente.');
+    if (!existe)
+      throw new ValidationError(
+        "Detalle de movimiento de entrega a rendir (Compras) no existente.",
+      );
   }
 
   if (data.detMovEntregaRendirPVentasId) {
-    const existe = await prisma.detMovsEntregaRendirPVentas.findUnique({ 
-      where: { id: data.detMovEntregaRendirPVentasId } 
+    const existe = await prisma.detMovsEntregaRendirPVentas.findUnique({
+      where: { id: data.detMovEntregaRendirPVentasId },
     });
-    if (!existe) throw new ValidationError('Detalle de movimiento de entrega a rendir (Ventas) no existente.');
+    if (!existe)
+      throw new ValidationError(
+        "Detalle de movimiento de entrega a rendir (Ventas) no existente.",
+      );
   }
 
   if (data.detMovEntregaRendirMovAlmacenId) {
-    const existe = await prisma.detMovsEntregaRendirMovAlmacen.findUnique({ 
-      where: { id: data.detMovEntregaRendirMovAlmacenId } 
+    const existe = await prisma.detMovsEntregaRendirMovAlmacen.findUnique({
+      where: { id: data.detMovEntregaRendirMovAlmacenId },
     });
-    if (!existe) throw new ValidationError('Detalle de movimiento de entrega a rendir (Movimiento Almacén) no existente.');
+    if (!existe)
+      throw new ValidationError(
+        "Detalle de movimiento de entrega a rendir (Movimiento Almacén) no existente.",
+      );
   }
 
   if (data.detMovEntregaRendirContratoId) {
-    const existe = await prisma.detMovsEntregaRendirContratoServicios.findUnique({ 
-      where: { id: data.detMovEntregaRendirContratoId } 
-    });
-    if (!existe) throw new ValidationError('Detalle de movimiento de entrega a rendir (Contrato Servicios) no existente.');
+    const existe =
+      await prisma.detMovsEntregaRendirContratoServicios.findUnique({
+        where: { id: data.detMovEntregaRendirContratoId },
+      });
+    if (!existe)
+      throw new ValidationError(
+        "Detalle de movimiento de entrega a rendir (Contrato Servicios) no existente.",
+      );
   }
 
   if (data.detMovEntregaRendirOTId) {
-    const existe = await prisma.detMovsEntregaRendirOTMantenimiento.findUnique({ 
-      where: { id: data.detMovEntregaRendirOTId } 
+    const existe = await prisma.detMovsEntregaRendirOTMantenimiento.findUnique({
+      where: { id: data.detMovEntregaRendirOTId },
     });
-    if (!existe) throw new ValidationError('Detalle de movimiento de entrega a rendir (OT Mantenimiento) no existente.');
+    if (!existe)
+      throw new ValidationError(
+        "Detalle de movimiento de entrega a rendir (OT Mantenimiento) no existente.",
+      );
   }
 }
 
@@ -104,55 +140,62 @@ async function validarDetGastosPlanificados(data) {
 const listar = async (filtros = {}) => {
   try {
     const where = {};
-    
+
     // Filtrar por tipo de entrega a rendir
     if (filtros.detMovEntregaRendirTemporadaPescaId) {
-      where.detMovEntregaRendirTemporadaPescaId = filtros.detMovEntregaRendirTemporadaPescaId;
+      where.detMovEntregaRendirTemporadaPescaId =
+        filtros.detMovEntregaRendirTemporadaPescaId;
     }
     if (filtros.detMovEntRendirPescaConsumoId) {
-      where.detMovEntRendirPescaConsumoId = filtros.detMovEntRendirPescaConsumoId;
+      where.detMovEntRendirPescaConsumoId =
+        filtros.detMovEntRendirPescaConsumoId;
     }
     if (filtros.detMovEntregaRendirPComprasId) {
-      where.detMovEntregaRendirPComprasId = filtros.detMovEntregaRendirPComprasId;
+      where.detMovEntregaRendirPComprasId =
+        filtros.detMovEntregaRendirPComprasId;
     }
     if (filtros.detMovEntregaRendirPVentasId) {
       where.detMovEntregaRendirPVentasId = filtros.detMovEntregaRendirPVentasId;
     }
     if (filtros.detMovEntregaRendirMovAlmacenId) {
-      where.detMovEntregaRendirMovAlmacenId = filtros.detMovEntregaRendirMovAlmacenId;
+      where.detMovEntregaRendirMovAlmacenId =
+        filtros.detMovEntregaRendirMovAlmacenId;
     }
     if (filtros.detMovEntregaRendirContratoId) {
-      where.detMovEntregaRendirContratoId = filtros.detMovEntregaRendirContratoId;
+      where.detMovEntregaRendirContratoId =
+        filtros.detMovEntregaRendirContratoId;
     }
     if (filtros.detMovEntregaRendirOTId) {
       where.detMovEntregaRendirOTId = filtros.detMovEntregaRendirOTId;
     }
-    
+
     const gastos = await prisma.detGastosPlanificados.findMany({
       where,
       include: {
         producto: {
           select: {
             id: true,
-            descripcionArmada: true
-          }
+            descripcionArmada: true,
+          },
         },
         moneda: {
           select: {
             id: true,
-            nombre: true,
-            simbolo: true
-          }
-        }
+            nombreLargo: true,
+            simbolo: true,
+            codigoSunat:true,
+          },
+        },
       },
       orderBy: {
-        creadoEn: 'desc'
-      }
+        creadoEn: "desc",
+      },
     });
 
     return gastos;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -168,22 +211,23 @@ const obtenerPorId = async (id) => {
         producto: {
           select: {
             id: true,
-            descripcionArmada: true
-          }
+            descripcionArmada: true,
+          },
         },
         moneda: {
           select: {
             id: true,
             nombre: true,
-            simbolo: true
-          }
-        }
-      }
+            simbolo: true,
+          },
+        },
+      },
     });
-    if (!gasto) throw new NotFoundError('Gasto planificado no encontrado');
+    if (!gasto) throw new NotFoundError("Gasto planificado no encontrado");
     return gasto;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -197,7 +241,8 @@ const crear = async (data) => {
     return await prisma.detGastosPlanificados.create({ data });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -207,7 +252,7 @@ const crear = async (data) => {
  */
 const actualizar = async (id, data, usuarioId = null) => {
   try {
-    const existente = await prisma.detGastosPlanificados.findUnique({ 
+    const existente = await prisma.detGastosPlanificados.findUnique({
       where: { id },
       include: {
         detMovEntregaRendirTemporadaPesca: {
@@ -216,16 +261,16 @@ const actualizar = async (id, data, usuarioId = null) => {
               include: {
                 temporadaPesca: {
                   include: {
-                    estadoTemporada: true
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+                    estadoTemporada: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
-    if (!existente) throw new NotFoundError('Gasto planificado no encontrado');
+    if (!existente) throw new NotFoundError("Gasto planificado no encontrado");
 
     // ========================================
     // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
@@ -235,23 +280,24 @@ const actualizar = async (id, data, usuarioId = null) => {
         where: {
           tipoProvieneDeId: 4, // Temporada Pesca
           descripcion: { in: ["FINALIZADA", "CANCELADA"] },
-          cesado: false
+          cesado: false,
         },
-        select: { id: true }
+        select: { id: true },
       });
-      
-      const idsEstadosCerrados = estadosCerrados.map(e => e.id);
-      
+
+      const idsEstadosCerrados = estadosCerrados.map((e) => e.id);
+
       const puedeEditar = await puedeEditarRegistroCerrado(
         usuarioId,
-        existente.detMovEntregaRendirTemporadaPesca.entregaARendir.temporadaPesca.estadoTemporadaId,
-        idsEstadosCerrados
+        existente.detMovEntregaRendirTemporadaPesca.entregaARendir
+          .temporadaPesca.estadoTemporadaId,
+        idsEstadosCerrados,
       );
-      
+
       if (!puedeEditar) {
         throw new ValidationError(
           `No se puede editar el gasto porque la temporada está en estado "${existente.detMovEntregaRendirTemporadaPesca?.entregaARendir?.temporadaPesca?.estadoTemporada?.descripcion}". ` +
-          `Solo los superusuarios pueden editar gastos de temporadas finalizadas o canceladas.`
+            `Solo los superusuarios pueden editar gastos de temporadas finalizadas o canceladas.`,
         );
       }
     }
@@ -259,8 +305,10 @@ const actualizar = async (id, data, usuarioId = null) => {
     await validarDetGastosPlanificados(data);
     return await prisma.detGastosPlanificados.update({ where: { id }, data });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -270,13 +318,16 @@ const actualizar = async (id, data, usuarioId = null) => {
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.detGastosPlanificados.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Gasto planificado no encontrado');
+    const existente = await prisma.detGastosPlanificados.findUnique({
+      where: { id },
+    });
+    if (!existente) throw new NotFoundError("Gasto planificado no encontrado");
     await prisma.detGastosPlanificados.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -286,5 +337,5 @@ export default {
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
 };

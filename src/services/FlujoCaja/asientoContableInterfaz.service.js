@@ -2,7 +2,7 @@
 import prisma from '../../config/prismaClient.js';
 // Importa los errores personalizados para manejo consistente de errores
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
-
+ 
 // Define las relaciones que se incluirán al consultar asientos contables interfaz
 const incluirRelaciones = {
   movimientoCaja: true,
@@ -14,13 +14,13 @@ const incluirRelaciones = {
     }
   }
 };
-
+ 
 /**
  * Valida que existan las referencias foráneas requeridas antes de crear o actualizar un asiento contable interfaz.
  * Lanza ValidationError si alguna referencia no existe.
  * @param {Object} param0 - Objeto con los IDs a validar
  */
-async function validarReferencias({ movimientoCajaId, monedaId, empresaId, tipoReferenciaId }) {
+async function validarReferencias({ movimientoCajaId, monedaId, empresaId, medioPagoId }) {
   // Valida existencia de MovimientoCaja
   const mov = await prisma.movimientoCaja.findUnique({ where: { id: movimientoCajaId } });
   if (!mov) throw new ValidationError('Movimiento de caja no existente');
@@ -30,13 +30,13 @@ async function validarReferencias({ movimientoCajaId, monedaId, empresaId, tipoR
   // Valida existencia de Empresa
   const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
   if (!empresa) throw new ValidationError('Empresa no existente');
-  // Valida existencia de TipoReferenciaMovimientoCaja (si se proporciona)
-  if (tipoReferenciaId) {
-    const tipo = await prisma.tipoReferenciaMovimientoCaja.findUnique({ where: { id: tipoReferenciaId } });
-    if (!tipo) throw new ValidationError('Tipo de referencia de movimiento de caja no existente');
+  // Valida existencia de MedioPago (si se proporciona)
+  if (medioPagoId) {
+    const medioPago = await prisma.medioPago.findUnique({ where: { id: medioPagoId } });
+    if (!medioPago) throw new ValidationError('Medio de pago no existente');
   }
 }
-
+ 
 /**
  * Obtiene todos los asientos contables interfaz, incluyendo relaciones principales.
  * @returns {Promise<Array>} - Lista de asientos contables interfaz
@@ -49,7 +49,7 @@ const listar = async () => {
     throw err;
   }
 };
-
+ 
 const obtenerPorId = async (id) => {
   try {
     const asiento = await prisma.asientoContableInterfaz.findUnique({ where: { id }, include: incluirRelaciones });
@@ -60,7 +60,7 @@ const obtenerPorId = async (id) => {
     throw err;
   }
 };
-
+ 
 const crear = async (data) => {
   try {
     await validarReferencias(data);

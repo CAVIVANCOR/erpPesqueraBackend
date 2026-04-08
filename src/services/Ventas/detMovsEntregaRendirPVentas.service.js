@@ -35,12 +35,10 @@ const listar = async () => {
           }
         },
         tipoMovimiento: true,
-        responsable: true,
         producto: true,
         moneda: true,
         entidadComercial: true,
         tipoDocumento: true,
-        centroCosto: true
       },
       orderBy: { fechaMovimiento: 'desc' }
     });

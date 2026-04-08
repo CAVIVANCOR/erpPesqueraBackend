@@ -12,7 +12,7 @@ import {
 const incluirRelaciones = {
   empresa: true,
   tipoMovimiento: true,
-  tipoReferencia: true,
+  medioPago: true,
   personalCreador: {
     select: {
       id: true,
@@ -37,7 +37,7 @@ const incluirRelaciones = {
 async function validarReferencias({
   empresaId,
   tipoMovimientoId,
-  tipoReferenciaId,
+  medioPagoId,
 }) {
   // Valida existencia de la empresa
   const empresa = await prisma.empresa.findUnique({
@@ -51,13 +51,13 @@ async function validarReferencias({
   });
   if (!tipoMov) throw new ValidationError("Tipo de movimiento no existente");
 
-  // Valida existencia del tipo de referencia si se proporciona
-  if (tipoReferenciaId) {
-    const tipoRef = await prisma.tipoReferenciaMovimientoCaja.findUnique({
-      where: { id: tipoReferenciaId },
+  // Valida existencia del medio de pago si se proporciona
+  if (medioPagoId) {
+    const medioPago = await prisma.medioPago.findUnique({
+      where: { id: medioPagoId },
     });
-    if (!tipoRef)
-      throw new ValidationError("Tipo de referencia no existente");
+    if (!medioPago)
+      throw new ValidationError("Medio de pago no existente");
   }
 }
 
@@ -68,13 +68,13 @@ async function validarReferencias({
  * @param {number|null} excluirId - Si se actualiza, excluir el propio ID de la búsqueda
  */
 async function validarDuplicado(
-  { empresaId, tipoMovimientoId, tipoReferenciaId },
+  { empresaId, tipoMovimientoId, medioPagoId },
   excluirId = null
 ) {
   const where = {
     empresaId,
     tipoMovimientoId,
-    tipoReferenciaId: tipoReferenciaId || null,
+    medioPagoId: medioPagoId || null,
   };
 
   try {
@@ -84,7 +84,7 @@ async function validarDuplicado(
       });
       if (existe) {
         throw new ConflictError(
-          "Ya existe una configuración con esa combinación de empresa, tipo de movimiento y tipo de referencia"
+          "Ya existe una configuración con esa combinación de empresa, tipo de movimiento y medio de pago"
         );
       }
     } else {
@@ -93,7 +93,7 @@ async function validarDuplicado(
       });
       if (existe) {
         throw new ConflictError(
-          "Ya existe una configuración con esa combinación de empresa, tipo de movimiento y tipo de referencia"
+          "Ya existe una configuración con esa combinación de empresa, tipo de movimiento y medio de pago"
         );
       }
     }
@@ -145,16 +145,16 @@ const obtenerPorId = async (id) => {
  * Obtiene la configuración para una combinación específica.
  * @param {BigInt|number} empresaId - ID de la empresa
  * @param {BigInt|number} tipoMovimientoId - ID del tipo de movimiento
- * @param {BigInt|number|null} tipoReferenciaId - ID del tipo de referencia (opcional)
+ * @param {BigInt|number|null} medioPagoId - ID del medio de pago (opcional)
  * @returns {Promise<Object|null>} - Configuración encontrada o null
  */
-const obtenerConfiguracion = async (empresaId, tipoMovimientoId, tipoReferenciaId = null) => {
+const obtenerConfiguracion = async (empresaId, tipoMovimientoId, medioPagoId = null) => {
   try {
     const config = await prisma.configuracionCuentaContable.findFirst({
       where: {
         empresaId,
         tipoMovimientoId,
-        tipoReferenciaId: tipoReferenciaId || null,
+        medioPagoId: medioPagoId || null,
         activo: true,
       },
       include: incluirRelaciones,

@@ -64,7 +64,11 @@ const listar = async () => {
   try {
     return await prisma.detMovsEntregaRendir.findMany({
       include: {
-        tipoMovimiento: true,
+        tipoMovimiento: {
+          include: {
+            categoria: true,
+          },
+        },
         entidadComercial: true,
         moneda: true,
         producto: true,
@@ -83,7 +87,11 @@ const obtenerPorId = async (id) => {
     const mov = await prisma.detMovsEntregaRendir.findUnique({
       where: { id },
       include: {
-        tipoMovimiento: true,
+        tipoMovimiento: {
+          include: {
+            categoria: true,
+          },
+        },
         entidadComercial: true,
         moneda: true,
         producto: true,
@@ -122,11 +130,13 @@ const crear = async (data) => {
     }
 
     // Validación: Si NO es asignación Y formaParteCalculoEntregaARendir=true → asignacionOrigenId es obligatorio
+    // NOTA: asignacionOrigenId puede ser 0 (nueva asignación) o un ID > 0 (gasto de asignación existente)
     if (
       data.tipoMovimientoId !== 1 &&
       data.tipoMovimientoId !== 2 &&
       data.formaParteCalculoEntregaARendir === true &&
-      (!data.asignacionOrigenId || data.asignacionOrigenId === null)
+      (data.asignacionOrigenId === null ||
+        data.asignacionOrigenId === undefined)
     ) {
       throw new ValidationError(
         "Debe especificar una asignación origen cuando el movimiento forma parte del cálculo de entrega a rendir.",
@@ -134,6 +144,12 @@ const crear = async (data) => {
     }
 
     await validarClavesForaneas(data);
+
+    // Convertir asignacionOrigenId=0 a null para Prisma (0 es solo indicador lógico, no FK)
+    if (data.asignacionOrigenId === 0) {
+      data.asignacionOrigenId = null;
+    }
+
     return await prisma.detMovsEntregaRendir.create({ data });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
@@ -152,12 +168,12 @@ const actualizar = async (id, data, usuarioId = null) => {
           include: {
             temporadaPesca: {
               include: {
-                estadoTemporada: true
-              }
-            }
-          }
-        }
-      }
+                estadoTemporada: true,
+              },
+            },
+          },
+        },
+      },
     });
     if (!existente)
       throw new NotFoundError("DetMovsEntregaRendir no encontrado");
@@ -169,23 +185,23 @@ const actualizar = async (id, data, usuarioId = null) => {
       where: {
         tipoProvieneDeId: 4, // Temporada Pesca
         descripcion: { in: ["FINALIZADA", "CANCELADA"] },
-        cesado: false
+        cesado: false,
       },
-      select: { id: true }
+      select: { id: true },
     });
-    
-    const idsEstadosCerrados = estadosCerrados.map(e => e.id);
-    
+
+    const idsEstadosCerrados = estadosCerrados.map((e) => e.id);
+
     const puedeEditar = await puedeEditarRegistroCerrado(
       usuarioId,
       existente.entregaARendir.temporadaPesca.estadoTemporadaId,
-      idsEstadosCerrados
+      idsEstadosCerrados,
     );
-    
+
     if (!puedeEditar) {
       throw new ValidationError(
         `No se puede editar el movimiento porque la temporada está en estado "${existente.entregaARendir?.temporadaPesca?.estadoTemporada?.descripcion}". ` +
-        `Solo los superusuarios pueden editar movimientos de temporadas finalizadas o canceladas.`
+          `Solo los superusuarios pueden editar movimientos de temporadas finalizadas o canceladas.`,
       );
     }
 
@@ -209,7 +225,7 @@ const actualizar = async (id, data, usuarioId = null) => {
       tipoMovFinal !== 1 &&
       tipoMovFinal !== 2 &&
       formaParteCalculo === true &&
-      (!asignacionOrigen || asignacionOrigen === null)
+      (asignacionOrigen === null || asignacionOrigen === undefined)
     ) {
       throw new ValidationError(
         "Debe especificar una asignación origen cuando el movimiento forma parte del cálculo de entrega a rendir.",
@@ -262,6 +278,11 @@ const actualizar = async (id, data, usuarioId = null) => {
       detalleGastosPlanificados: data.detalleGastosPlanificados,
       asignacionOrigenId: data.asignacionOrigenId,
     };
+
+    // Convertir asignacionOrigenId=0 a null para Prisma (0 es solo indicador lógico, no FK)
+    if (datosActualizacion.asignacionOrigenId === 0) {
+      datosActualizacion.asignacionOrigenId = null;
+    }
 
     return await prisma.detMovsEntregaRendir.update({
       where: { id },
