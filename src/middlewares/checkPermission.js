@@ -17,10 +17,25 @@ import { ForbiddenError } from '../utils/errors.js';
 export const checkPermission = (ruta, accion) => {
   return async (req, res, next) => {
     try {
-      const usuarioId = req.user?.id; // ✅ CORREGIDO: Cambiado de req.usuario a req.user
+      const usuarioId = req.user?.id;
       
       if (!usuarioId) {
         throw new ForbiddenError('Usuario no autenticado');
+      }
+
+      // ⭐ NUEVO: Permitir lectura (GET) sin validar permisos de módulo
+      if (accion === 'ver') {
+        const usuario = await prisma.usuario.findUnique({
+          where: { id: usuarioId },
+          select: { esSuperUsuario: true }
+        });
+
+        req.acceso = { 
+          esSuperUsuario: usuario?.esSuperUsuario || false,
+          lecturaPublica: true,
+          puedeVer: true 
+        };
+        return next();
       }
 
       // Superusuarios tienen acceso total a todo
