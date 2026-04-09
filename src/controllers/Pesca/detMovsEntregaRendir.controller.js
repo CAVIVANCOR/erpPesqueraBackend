@@ -69,6 +69,16 @@ export async function obtenerConGastosAsociados(req, res, next) {
   }
 }
 
+export async function obtenerTodasAsignacionesNoLiquidadas(req, res, next) {
+  try {
+    const asignaciones =
+      await detMovsEntregaRendirService.obtenerTodasAsignacionesNoLiquidadas();
+    res.json(toJSONBigInt(asignaciones));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   listar,
   obtenerPorId,
@@ -76,4 +86,5 @@ export default {
   actualizar,
   eliminar,
   obtenerConGastosAsociados,
+  obtenerTodasAsignacionesNoLiquidadas
 };

@@ -816,9 +816,6 @@ const validarMovimiento = async (id, usuarioId) => {
         },
       });
     } else if (moduloOrigen === null || moduloOrigen === 0) {
-      console.log(
-        `[VALIDAR MOVIMIENTO] Movimiento manual ID ${id} validado sin módulo origen`,
-      );
     } else {
       throw new ValidationError(`Módulo origen no soportado: ${moduloOrigen}`);
     }

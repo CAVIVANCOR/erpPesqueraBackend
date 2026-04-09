@@ -280,6 +280,8 @@ const actualizar = async (id, data, usuarioId = null) => {
       entregaARendirLiquidada: data.entregaARendirLiquidada, // ← AGREGAR
       fechaLiquidacionEntregaARendir: data.fechaLiquidacionEntregaARendir, // ← AGREGAR
       urlLiquidacionEntregaARendir: data.urlLiquidacionEntregaARendir, // ← AGREGAR
+      enlaceAOtroDetalleGastoId: data.enlaceAOtroDetalleGastoId,
+      embarcacionId: data.embarcacionId,
     };
 
     // Convertir asignacionOrigenId=0 a null para Prisma (0 es solo indicador lógico, no FK)
@@ -390,6 +392,236 @@ const obtenerConGastosAsociados = async (id) => {
   }
 };
 
+const obtenerTodasAsignacionesNoLiquidadas = async () => {
+  try {
+    // Obtener ENTREGAS A RENDIR de todos los módulos que NO estén liquidadas
+    const [
+      pescaIndustrial,
+      pescaConsumo,
+      ventas,
+      compras,
+      movAlmacen,
+      contratos,
+      otMantenimiento,
+    ] = await Promise.all([
+            // 1. Pesca Industrial
+      prisma.entregaARendir.findMany({
+        where: {
+          entregaLiquidada: false,
+        },
+        select: {
+          id: true,
+          temporadaPesca: {
+            select: {
+              nombre: true,
+              empresa: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      // 2. Pesca Consumo
+      prisma.entregaARendirPescaConsumo.findMany({
+        where: {
+          entregaLiquidada: false,
+        },
+        select: {
+          id: true,
+          novedadPescaConsumo: {
+            select: {
+              nombre: true,
+              empresa: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      // 3. Ventas
+      prisma.entregaARendirPVentas.findMany({
+        where: {
+          entregaLiquidada: false,
+        },
+        select: {
+          id: true,
+          cotizacionVentas: {
+            select: {
+              numeroDocumento: true,
+              fechaDocumento: true,
+              cliente: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+              empresa: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      // 4. Compras
+      prisma.entregaARendirPCompras.findMany({
+        where: {
+          entregaLiquidada: false,
+        },
+        select: {
+          id: true,
+          requerimientoCompra: {
+            select: {
+              numeroDocumento: true,
+              fechaDocumento: true,
+              proveedor: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+              empresa: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      // 5. Movimiento Almacén
+      prisma.entregaARendirMovAlmacen.findMany({
+        where: {
+          entregaLiquidada: false,
+        },
+        select: {
+          id: true,
+          movimientoAlmacen: {
+            select: {
+              numeroDocumento: true,
+              fechaDocumento: true,
+              entidadComercial: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+              empresa: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      // 6. Contratos
+      prisma.entregaARendirContratoServicios.findMany({
+        where: {
+          entregaLiquidada: false,
+        },
+        select: {
+          id: true,
+          contratoServicio: {
+            select: {
+              numeroCompleto: true,
+              fechaCelebracion: true,
+              cliente: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+              empresa: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      // 7. OT Mantenimiento
+      prisma.entregaARendirOTMantenimiento.findMany({
+        where: {
+          entregaLiquidada: false,
+        },
+        select: {
+          id: true,
+          otMantenimiento: {
+            select: {
+              numeroCompleto: true,
+              fechaDocumento: true,
+              descripcionProblema: true,
+              empresa: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+    // Formatear y unificar resultados
+    const formatearFecha = (fecha) => {
+      if (!fecha) return '';
+      return new Date(fecha).toLocaleDateString('es-PE');
+    };
+
+        const asignacionesFormateadas = [
+      ...pescaIndustrial.map((a) => ({
+        id: Number(a.id),
+        modulo: 'PESCA_INDUSTRIAL',
+        label: `${a.temporadaPesca?.empresa?.razonSocial || 'Sin empresa'} - Temporada Pesca - ${a.temporadaPesca?.nombre || 'Sin nombre'}`,
+      })),
+      ...pescaConsumo.map((a) => ({
+        id: Number(a.id),
+        modulo: 'PESCA_CONSUMO',
+        label: `${a.novedadPescaConsumo?.empresa?.razonSocial || 'Sin empresa'} - Novedad Pesca Consumo - ${a.novedadPescaConsumo?.nombre || 'Sin nombre'}`,
+      })),
+      ...ventas.map((a) => ({
+        id: Number(a.id),
+        modulo: 'VENTAS',
+        label: `${a.cotizacionVentas?.empresa?.razonSocial || 'Sin empresa'} - Cotización Ventas - ${a.cotizacionVentas?.numeroDocumento || 'S/N'} | ${formatearFecha(a.cotizacionVentas?.fechaDocumento)} | ${a.cotizacionVentas?.cliente?.razonSocial || 'Sin cliente'}`,
+      })),
+      ...compras.map((a) => ({
+        id: Number(a.id),
+        modulo: 'COMPRAS',
+        label: `${a.requerimientoCompra?.empresa?.razonSocial || 'Sin empresa'} - Requerimiento Compra - ${a.requerimientoCompra?.numeroDocumento || 'S/N'} | ${formatearFecha(a.requerimientoCompra?.fechaDocumento)} | ${a.requerimientoCompra?.proveedor?.razonSocial || 'Sin proveedor'}`,
+      })),
+      ...movAlmacen.map((a) => ({
+        id: Number(a.id),
+        modulo: 'MOV_ALMACEN',
+        label: `${a.movimientoAlmacen?.empresa?.razonSocial || 'Sin empresa'} - Movimiento Almacén - ${a.movimientoAlmacen?.numeroDocumento || 'S/N'} | ${formatearFecha(a.movimientoAlmacen?.fechaDocumento)} | ${a.movimientoAlmacen?.entidadComercial?.razonSocial || 'Sin entidad'}`,
+      })),
+      ...contratos.map((a) => ({
+        id: Number(a.id),
+        modulo: 'CONTRATOS',
+        label: `${a.contratoServicio?.empresa?.razonSocial || 'Sin empresa'} - Contrato Servicio - ${a.contratoServicio?.numeroCompleto || 'S/N'} | ${formatearFecha(a.contratoServicio?.fechaCelebracion)} | ${a.contratoServicio?.cliente?.razonSocial || 'Sin cliente'}`,
+      })),
+      ...otMantenimiento.map((a) => ({
+        id: Number(a.id),
+        modulo: 'OT_MANTENIMIENTO',
+        label: `${a.otMantenimiento?.empresa?.razonSocial || 'Sin empresa'} - OT Mantenimiento - ${a.otMantenimiento?.numeroCompleto || 'S/N'} | ${formatearFecha(a.otMantenimiento?.fechaDocumento)} | ${a.otMantenimiento?.descripcionProblema || 'Sin descripción'}`,
+      })),
+    ];
+
+    // Ordenar alfabéticamente por módulo y luego por label
+    return asignacionesFormateadas.sort((a, b) => {
+      if (a.modulo !== b.modulo) {
+        return a.modulo.localeCompare(b.modulo);
+      }
+      return a.label.localeCompare(b.label);
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P'))
+      throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -397,4 +629,5 @@ export default {
   actualizar,
   eliminar,
   obtenerConGastosAsociados,
+  obtenerTodasAsignacionesNoLiquidadas
 };
