@@ -1,5 +1,5 @@
-import detMovsEntregaRendirService from '../../services/Pesca/detMovsEntregaRendir.service.js';
-import toJSONBigInt from '../../utils/toJSONBigInt.js';
+import detMovsEntregaRendirService from "../../services/Pesca/detMovsEntregaRendir.service.js";
+import toJSONBigInt from "../../utils/toJSONBigInt.js";
 
 /**
  * Controlador para DetMovsEntregaRendir
@@ -37,7 +37,11 @@ export async function actualizar(req, res, next) {
   try {
     const id = Number(req.params.id);
     const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
-    const actualizado = await detMovsEntregaRendirService.actualizar(id, req.body, usuarioId);
+    const actualizado = await detMovsEntregaRendirService.actualizar(
+      id,
+      req.body,
+      usuarioId
+    );
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
     next(err);
@@ -53,3 +57,23 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+export async function obtenerConGastosAsociados(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const movimiento =
+      await detMovsEntregaRendirService.obtenerConGastosAsociados(id);
+    res.json(toJSONBigInt(movimiento));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export default {
+  listar,
+  obtenerPorId,
+  crear,
+  actualizar,
+  eliminar,
+  obtenerConGastosAsociados,
+};

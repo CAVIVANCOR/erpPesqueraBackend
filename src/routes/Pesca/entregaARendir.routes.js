@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para EntregaARendir
 router.get('/', entregaARendirController.listar);
+router.post("/:id/liquidar", entregaARendirController.liquidarEntregaARendir);  // ← AGREGAR AQUÍ
 router.get('/:id', entregaARendirController.obtenerPorId);
 router.post('/', entregaARendirController.crear);
 router.put('/:id', entregaARendirController.actualizar);

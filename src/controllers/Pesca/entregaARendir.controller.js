@@ -53,3 +53,27 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+export async function liquidarEntregaARendir(req, res, next) {
+  try {
+    const id = BigInt(req.params.id);
+    const { urlLiquidacionPdf } = req.body;
+    const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
+
+    if (!urlLiquidacionPdf) {
+      return res.status(400).json({
+        message: "El campo urlLiquidacionPdf es obligatorio",
+      });
+    }
+
+    const resultado = await entregaARendirService.liquidarEntregaARendir(
+      id,
+      urlLiquidacionPdf,
+      usuarioId
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

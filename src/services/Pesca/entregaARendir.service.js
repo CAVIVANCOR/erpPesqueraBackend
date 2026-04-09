@@ -194,10 +194,76 @@ const eliminar = async (id) => {
   }
 };
 
+const liquidarEntregaARendir = async (id, urlLiquidacionPdf, usuarioId) => {
+  try {
+    const entregaARendir = await prisma.entregaARendir.findUnique({
+      where: { id },
+      include: {
+        movimientos: {
+          where: {
+            formaParteCalculoEntregaARendir: true,
+          },
+        },
+      },
+    });
+
+    if (!entregaARendir) {
+      throw new NotFoundError("EntregaARendir no encontrada");
+    }
+
+    if (entregaARendir.entregaLiquidada) {
+      throw new ValidationError("Esta Entrega a Rendir ya está liquidada");
+    }
+
+    const fechaLiquidacion = new Date();
+
+    await prisma.$transaction(async (tx) => {
+      await tx.entregaARendir.update({
+        where: { id },
+        data: {
+          entregaLiquidada: true,
+          fechaLiquidacion: fechaLiquidacion,
+          urlLiquidacionPdf: urlLiquidacionPdf,
+          respLiquidacionId: usuarioId,
+          fechaActualizacion: fechaLiquidacion,
+        },
+      });
+
+      await tx.detMovsEntregaRendir.updateMany({
+        where: {
+          entregaARendirId: id,
+          formaParteCalculoEntregaARendir: true,
+        },
+        data: {
+          entregaARendirLiquidada: true,
+          fechaLiquidacionEntregaARendir: fechaLiquidacion,
+          urlLiquidacionEntregaARendir: urlLiquidacionPdf,
+          actualizadoEn: fechaLiquidacion,
+        },
+      });
+    });
+
+    const movimientosActualizados = entregaARendir.movimientos.length;
+
+    return {
+      success: true,
+      movimientosActualizados,
+      fechaLiquidacion,
+    };
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  liquidarEntregaARendir
 };

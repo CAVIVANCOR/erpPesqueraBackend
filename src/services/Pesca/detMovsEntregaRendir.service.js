@@ -277,6 +277,9 @@ const actualizar = async (id, data, usuarioId = null) => {
       formaParteCalculoLiqAlquilerCuota: data.formaParteCalculoLiqAlquilerCuota,
       detalleGastosPlanificados: data.detalleGastosPlanificados,
       asignacionOrigenId: data.asignacionOrigenId,
+      entregaARendirLiquidada: data.entregaARendirLiquidada, // ← AGREGAR
+      fechaLiquidacionEntregaARendir: data.fechaLiquidacionEntregaARendir, // ← AGREGAR
+      urlLiquidacionEntregaARendir: data.urlLiquidacionEntregaARendir, // ← AGREGAR
     };
 
     // Convertir asignacionOrigenId=0 a null para Prisma (0 es solo indicador lógico, no FK)
@@ -314,10 +317,84 @@ const eliminar = async (id) => {
   }
 };
 
+const obtenerConGastosAsociados = async (id) => {
+  try {
+    const mov = await prisma.detMovsEntregaRendir.findUnique({
+      where: { id },
+      include: {
+        tipoMovimiento: {
+          include: {
+            categoria: true,
+          },
+        },
+        entidadComercial: true,
+        moneda: true,
+        producto: true,
+        tipoDocumento: true,
+        entregaARendir: {
+          include: {
+            temporadaPesca: {
+              include: {
+                empresa: true,
+              },
+            },
+          },
+        },
+        gastosAsociados: {
+          include: {
+            tipoMovimiento: {
+              include: {
+                categoria: true,
+              },
+            },
+            moneda: true,
+            producto: true,
+          },
+        },
+      },
+    });
+
+    if (!mov) throw new NotFoundError("DetMovsEntregaRendir no encontrado");
+
+    // Obtener responsable manualmente
+    const responsable = await prisma.personal.findUnique({
+      where: { id: mov.responsableId },
+      select: {
+        id: true,
+        nombres: true,
+        apellidos: true,
+        numeroDocumento: true,
+      },
+    });
+
+    // Obtener centro de costo manualmente
+    const centroCosto = await prisma.centroCosto.findUnique({
+      where: { id: mov.centroCostoId },
+      select: {
+        id: true,
+        Nombre: true,
+        Codigo: true,
+      },
+    });
+
+    // Agregar datos al objeto
+    mov.responsable = responsable;
+    mov.centroCosto = centroCosto;
+
+    return mov;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
+  obtenerConGastosAsociados,
 };

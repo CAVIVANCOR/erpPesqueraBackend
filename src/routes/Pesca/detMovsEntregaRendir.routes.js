@@ -98,6 +98,7 @@ const upload = multer({
 
 // Rutas CRUD para DetMovsEntregaRendir
 router.get('/', detMovsEntregaRendirController.listar);
+router.get('/:id/con-gastos', detMovsEntregaRendirController.obtenerConGastosAsociados);
 router.get('/:id', detMovsEntregaRendirController.obtenerPorId);
 router.post('/', detMovsEntregaRendirController.crear);
 router.put('/:id', detMovsEntregaRendirController.actualizar);
