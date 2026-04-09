@@ -622,6 +622,66 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
   }
 };
 
+const obtenerValoresIniciales = async (moduloOrigen, entregaARendirId) => {
+  try {
+    const resultado = {
+      enlaceAOtroDetalleGastoId: Number(entregaARendirId),
+      embarcacionId: null,
+    };
+
+    // Solo para PESCA_INDUSTRIAL y PESCA_CONSUMO se calcula embarcacionId
+    if (moduloOrigen === 'PESCA_INDUSTRIAL') {
+      // Obtener la EntregaARendir para sacar el temporadaPescaId
+      const entrega = await prisma.entregaARendir.findUnique({
+        where: { id: BigInt(entregaARendirId) },
+        select: { temporadaPescaId: true },
+      });
+
+      if (!entrega) {
+        throw new NotFoundError('EntregaARendir no encontrada');
+      }
+
+      // Buscar la faena más reciente de esa temporada
+      const faenaMasReciente = await prisma.faenaPesca.findFirst({
+        where: { temporadaId: entrega.temporadaPescaId },
+        orderBy: { fechaSalida: 'desc' },
+        select: { embarcacionId: true },
+      });
+
+      if (faenaMasReciente && faenaMasReciente.embarcacionId) {
+        resultado.embarcacionId = Number(faenaMasReciente.embarcacionId);
+      }
+    } else if (moduloOrigen === 'PESCA_CONSUMO') {
+      // Obtener la EntregaARendirPescaConsumo para sacar el novedadPescaConsumoId
+      const entrega = await prisma.entregaARendirPescaConsumo.findUnique({
+        where: { id: BigInt(entregaARendirId) },
+        select: { novedadPescaConsumoId: true },
+      });
+
+      if (!entrega) {
+        throw new NotFoundError('EntregaARendirPescaConsumo no encontrada');
+      }
+
+      // Buscar la faena más reciente de esa novedad
+      const faenaMasReciente = await prisma.faenaPescaConsumo.findFirst({
+        where: { novedadPescaConsumoId: entrega.novedadPescaConsumoId },
+        orderBy: { fechaSalida: 'desc' },
+        select: { embarcacionId: true },
+      });
+
+      if (faenaMasReciente && faenaMasReciente.embarcacionId) {
+        resultado.embarcacionId = Number(faenaMasReciente.embarcacionId);
+      }
+    }
+
+    return resultado;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P'))
+      throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -629,5 +689,6 @@ export default {
   actualizar,
   eliminar,
   obtenerConGastosAsociados,
-  obtenerTodasAsignacionesNoLiquidadas
+  obtenerTodasAsignacionesNoLiquidadas,
+  obtenerValoresIniciales
 };

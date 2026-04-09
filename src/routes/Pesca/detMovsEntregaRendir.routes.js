@@ -100,6 +100,7 @@ const upload = multer({
 router.get('/', detMovsEntregaRendirController.listar);
 router.get('/:id/con-gastos', detMovsEntregaRendirController.obtenerConGastosAsociados);
 router.get('/asignaciones/no-liquidadas', detMovsEntregaRendirController.obtenerTodasAsignacionesNoLiquidadas);
+router.get('/valores-iniciales', detMovsEntregaRendirController.obtenerValoresIniciales);  // ⭐ AGREGAR ESTA LÍNEA
 router.get('/:id', detMovsEntregaRendirController.obtenerPorId);
 router.post('/', detMovsEntregaRendirController.crear);
 router.put('/:id', detMovsEntregaRendirController.actualizar);

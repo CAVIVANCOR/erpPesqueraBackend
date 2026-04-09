@@ -79,6 +79,26 @@ export async function obtenerTodasAsignacionesNoLiquidadas(req, res, next) {
   }
 }
 
+export async function obtenerValoresIniciales(req, res, next) {
+  try {
+    const { moduloOrigen, entregaARendirId } = req.query;
+    
+    if (!moduloOrigen || !entregaARendirId) {
+      return res.status(400).json({
+        error: 'Se requieren moduloOrigen y entregaARendirId',
+      });
+    }
+
+    const valores = await detMovsEntregaRendirService.obtenerValoresIniciales(
+      moduloOrigen,
+      Number(entregaARendirId)
+    );
+    res.json(toJSONBigInt(valores));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   listar,
   obtenerPorId,
@@ -86,5 +106,6 @@ export default {
   actualizar,
   eliminar,
   obtenerConGastosAsociados,
-  obtenerTodasAsignacionesNoLiquidadas
+  obtenerTodasAsignacionesNoLiquidadas,
+  obtenerValoresIniciales
 };
