@@ -987,7 +987,10 @@ model DetMovsEntregaRendirPVentas {
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
   formaParteCalculoEntregaARendir Boolean? @default(false)
-
+ entregaARendirLiquidada                 Boolean? @default(false)
+  fechaLiquidacionEntregaARendir          DateTime?
+  urlLiquidacionEntregaARendir            String?
+  enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
 
   entregaARendirPVentas       EntregaARendirPVentas @relation(fields: [entregaARendirPVentasId], references: [id], onDelete: Cascade)
   tipoMovimiento              TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1613,9 +1616,13 @@ model DetMovsEntRendirPescaConsumo {
   numeroCorrelativoComprobante String?                               // Número Correlativo del comprobante
   formaParteCalculoLiquidacionTripulantes Boolean? @default(false)
   formaParteCalculoEntregaARendir Boolean? @default(false)
-
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
+  entregaARendirLiquidada                 Boolean? @default(false)
+  fechaLiquidacionEntregaARendir          DateTime?
+  urlLiquidacionEntregaARendir            String?
+  enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
+  embarcacionId                           BigInt?   // Enlace a la Embarcacion para la cual se esta haciendo el gasto
 
   entregaARendirPescaConsumo EntregaARendirPescaConsumo @relation(fields: [entregaARendirPescaConsumoId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1628,6 +1635,8 @@ model DetMovsEntRendirPescaConsumo {
 
   asignacionOrigen             DetMovsEntRendirPescaConsumo? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntRendirPescaConsumo[] @relation("GastosDeAsignacion")
+  embarcacion                  Embarcacion?  @relation(fields: [embarcacionId], references: [id])
+
 
   @@index([asignacionOrigenId])
 }
@@ -1762,6 +1771,10 @@ model DetMovsEntregaRendirPCompras {
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
   formaParteCalculoEntregaARendir Boolean? @default(false)
+   entregaARendirLiquidada                 Boolean? @default(false)
+  fechaLiquidacionEntregaARendir          DateTime?
+  urlLiquidacionEntregaARendir            String?
+  enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
 
   
   entregaARendirPCompras   EntregaARendirPCompras @relation(fields: [entregaARendirPComprasId], references: [id], onDelete: Cascade)
@@ -2171,6 +2184,8 @@ model Embarcacion {
   calas                Cala[]
   calasFaenaConsumo    CalaFaenaConsumo[] @relation("CalaFaenaConsumo_Embarcacion")
   detMovsEntregaRendir DetMovsEntregaRendir[]
+  detMovsEntRendirPescaConsumo  DetMovsEntRendirPescaConsumo[]
+
 }
 
 model Empresa {
@@ -2693,7 +2708,10 @@ model DetMovsEntregaRendirMovAlmacen {
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
   formaParteCalculoEntregaARendir Boolean? @default(false)
-
+ entregaARendirLiquidada                 Boolean? @default(false)
+  fechaLiquidacionEntregaARendir          DateTime?
+  urlLiquidacionEntregaARendir            String?
+  enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   
   entregaARendirMovAlmacen   EntregaARendirMovAlmacen @relation(fields: [entregaARendirMovAlmacenId], references: [id], onDelete: Cascade)
   tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2774,7 +2792,10 @@ model DetMovsEntregaRendirContratoServicios {
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
   formaParteCalculoEntregaARendir Boolean? @default(false)
-
+ entregaARendirLiquidada                 Boolean? @default(false)
+  fechaLiquidacionEntregaARendir          DateTime?
+  urlLiquidacionEntregaARendir            String?
+  enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   
   entregaARendirContratoServicio       EntregaARendirContratoServicios @relation(fields: [entregaARendirContratoServicioId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2853,7 +2874,10 @@ model DetMovsEntregaRendirOTMantenimiento {
   detalleGastosPlanificados    String?     @db.Text
   asignacionOrigenId           BigInt?
   formaParteCalculoEntregaARendir Boolean? @default(false)
-
+ entregaARendirLiquidada                 Boolean? @default(false)
+  fechaLiquidacionEntregaARendir          DateTime?
+  urlLiquidacionEntregaARendir            String?
+  enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   
   entregaARendirOTMantenimiento       EntregaARendirOTMantenimiento @relation(fields: [entregaARendirOTMantenimientoId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
