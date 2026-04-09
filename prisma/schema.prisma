@@ -1665,17 +1665,20 @@ model DetMovsEntregaRendir {
   entregaARendirLiquidada                 Boolean? @default(false)
   fechaLiquidacionEntregaARendir          DateTime?
   urlLiquidacionEntregaARendir            String?
+  enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
+  embarcacionId                           BigInt?   // Enlace a la Embarcacion para la cual se esta haciendo el gasto
 
-  entregaARendir        EntregaARendir @relation(fields: [entregaARendirId], references: [id])
-  tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
-  entidadComercial EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
-  moneda Moneda? @relation(fields: [monedaId], references: [id])
-  tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
-  producto Producto? @relation(fields: [productoId], references: [id])
+  entregaARendir               EntregaARendir @relation(fields: [entregaARendirId], references: [id])
+  tipoMovimiento               TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+  entidadComercial             EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
+  moneda                       Moneda? @relation(fields: [monedaId], references: [id])
+  tipoDocumento                TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
+  producto                     Producto? @relation(fields: [productoId], references: [id])
+  embarcacion                  Embarcacion?  @relation(fields: [embarcacionId], references: [id])
 
   asignacionOrigen             DetMovsEntregaRendir? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendir[] @relation("GastosDeAsignacion")
-  gastosPlanificados DetGastosPlanificados[]
+  gastosPlanificados           DetGastosPlanificados[]
 
   @@index([asignacionOrigenId])
 }
@@ -2166,7 +2169,8 @@ model Embarcacion {
   faenasConsumo FaenaPescaConsumo[] @relation("EmbarcacionFaenasConsumo")
   activo            Activo          @relation(fields: [activoId], references: [id])
   calas                Cala[]
-calasFaenaConsumo    CalaFaenaConsumo[] @relation("CalaFaenaConsumo_Embarcacion")
+  calasFaenaConsumo    CalaFaenaConsumo[] @relation("CalaFaenaConsumo_Embarcacion")
+  detMovsEntregaRendir DetMovsEntregaRendir[]
 }
 
 model Empresa {
