@@ -984,13 +984,15 @@ model DetMovsEntregaRendirPVentas {
   creadoPor                   BigInt?
   actualizadoPor              BigInt?
 
-  detalleGastosPlanificados    String?     @db.Text
-  asignacionOrigenId           BigInt?
-  formaParteCalculoEntregaARendir Boolean? @default(false)
- entregaARendirLiquidada                 Boolean? @default(false)
+  detalleGastosPlanificados               String?     @db.Text
+  asignacionOrigenId                      BigInt?
+  formaParteCalculoEntregaARendir         Boolean? @default(false)
+  entregaARendirLiquidada                 Boolean? @default(false)
   fechaLiquidacionEntregaARendir          DateTime?
   urlLiquidacionEntregaARendir            String?
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
+  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
+  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
 
   entregaARendirPVentas       EntregaARendirPVentas @relation(fields: [entregaARendirPVentasId], references: [id], onDelete: Cascade)
   tipoMovimiento              TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1631,7 +1633,9 @@ model DetMovsEntRendirPescaConsumo {
   tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto Producto? @relation(fields: [productoId], references: [id])
   gastosPlanificados DetGastosPlanificados[]
-
+  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
+  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+  
 
   asignacionOrigen             DetMovsEntRendirPescaConsumo? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntRendirPescaConsumo[] @relation("GastosDeAsignacion")
@@ -1676,6 +1680,8 @@ model DetMovsEntregaRendir {
   urlLiquidacionEntregaARendir            String?
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   embarcacionId                           BigInt?   // Enlace a la Embarcacion para la cual se esta haciendo el gasto
+  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
+  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
 
   entregaARendir               EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento               TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1775,7 +1781,8 @@ model DetMovsEntregaRendirPCompras {
   fechaLiquidacionEntregaARendir          DateTime?
   urlLiquidacionEntregaARendir            String?
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
-
+  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
+  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
   
   entregaARendirPCompras   EntregaARendirPCompras @relation(fields: [entregaARendirPComprasId], references: [id], onDelete: Cascade)
   tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2705,14 +2712,16 @@ model DetMovsEntregaRendirMovAlmacen {
   creadoEn                 DateTime    @default(now())
   actualizadoEn            DateTime    @updatedAt
 
-  detalleGastosPlanificados    String?     @db.Text
-  asignacionOrigenId           BigInt?
-  formaParteCalculoEntregaARendir Boolean? @default(false)
- entregaARendirLiquidada                 Boolean? @default(false)
+  detalleGastosPlanificados               String?     @db.Text
+  asignacionOrigenId                      BigInt?
+  formaParteCalculoEntregaARendir         Boolean? @default(false)
+  entregaARendirLiquidada                 Boolean? @default(false)
   fechaLiquidacionEntregaARendir          DateTime?
   urlLiquidacionEntregaARendir            String?
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
-  
+  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
+  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+
   entregaARendirMovAlmacen   EntregaARendirMovAlmacen @relation(fields: [entregaARendirMovAlmacenId], references: [id], onDelete: Cascade)
   tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   responsable              Personal @relation("ResponsableMovInventario", fields: [responsableId], references: [id])
@@ -2789,14 +2798,16 @@ model DetMovsEntregaRendirContratoServicios {
   creadoEn                             DateTime    @default(now())
   actualizadoEn                        DateTime    @updatedAt
 
-  detalleGastosPlanificados    String?     @db.Text
-  asignacionOrigenId           BigInt?
-  formaParteCalculoEntregaARendir Boolean? @default(false)
- entregaARendirLiquidada                 Boolean? @default(false)
+  detalleGastosPlanificados               String?     @db.Text
+  asignacionOrigenId                      BigInt?
+  formaParteCalculoEntregaARendir         Boolean? @default(false)
+ entregaARendirLiquidada                  Boolean? @default(false)
   fechaLiquidacionEntregaARendir          DateTime?
   urlLiquidacionEntregaARendir            String?
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
-  
+  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
+  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+
   entregaARendirContratoServicio       EntregaARendirContratoServicios @relation(fields: [entregaARendirContratoServicioId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   responsable                          Personal @relation("ResponsableMovContratoServicio", fields: [responsableId], references: [id])
@@ -2871,14 +2882,16 @@ model DetMovsEntregaRendirOTMantenimiento {
   creadoEn                             DateTime    @default(now())
   actualizadoEn                        DateTime    @updatedAt
 
-  detalleGastosPlanificados    String?     @db.Text
-  asignacionOrigenId           BigInt?
-  formaParteCalculoEntregaARendir Boolean? @default(false)
- entregaARendirLiquidada                 Boolean? @default(false)
+  detalleGastosPlanificados               String?     @db.Text
+  asignacionOrigenId                      BigInt?
+  formaParteCalculoEntregaARendir         Boolean? @default(false)
+  entregaARendirLiquidada                 Boolean? @default(false)
   fechaLiquidacionEntregaARendir          DateTime?
   urlLiquidacionEntregaARendir            String?
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
-  
+  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
+  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+
   entregaARendirOTMantenimiento       EntregaARendirOTMantenimiento @relation(fields: [entregaARendirOTMantenimientoId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
   responsable                          Personal @relation("ResponsableMovOTMantenimiento", fields: [responsableId], references: [id])
