@@ -107,6 +107,11 @@ router.post('/', detMovsEntregaRendirController.crear);
 router.put('/:id', detMovsEntregaRendirController.actualizar);
 router.delete('/:id', detMovsEntregaRendirController.eliminar);
 
+// ⭐ NUEVAS RUTAS PARA CONTROL DE SALDO
+router.post('/:id/liquidar', autenticarJWT, detMovsEntregaRendirController.liquidarAsignacion);
+router.get('/saldo-inicial', autenticarJWT, detMovsEntregaRendirController.obtenerSaldoInicial);
+router.get('/:id/saldo-final', autenticarJWT, detMovsEntregaRendirController.calcularSaldoFinal);
+
 /**
  * POST /api/det-movs-entrega-rendir/upload
  * Sube un PDF generado a partir de fotos de comprobantes de movimientos.

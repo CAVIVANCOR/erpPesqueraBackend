@@ -110,6 +110,51 @@ export async function obtenerLabelEnlacePorId(req, res, next) {
 }
 
 
+
+export async function liquidarAsignacion(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
+    const asignacionLiquidada = await detMovsEntregaRendirService.liquidarAsignacion(
+      id,
+      usuarioId
+    );
+    res.json(toJSONBigInt(asignacionLiquidada));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function obtenerSaldoInicial(req, res, next) {
+  try {
+    const { entregaARendirId, fechaMovimiento } = req.query;
+    
+    if (!entregaARendirId || !fechaMovimiento) {
+      return res.status(400).json({
+        error: 'Se requieren entregaARendirId y fechaMovimiento',
+      });
+    }
+
+    const saldoInicial = await detMovsEntregaRendirService.obtenerSaldoInicialAsignacion(
+      Number(entregaARendirId),
+      fechaMovimiento
+    );
+    res.json({ saldoInicial });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function calcularSaldoFinal(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const saldoFinal = await detMovsEntregaRendirService.calcularSaldoFinalAsignacion(id);
+    res.json({ saldoFinal });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   listar,
   obtenerPorId,
@@ -119,5 +164,8 @@ export default {
   obtenerConGastosAsociados,
   obtenerTodasAsignacionesNoLiquidadas,
   obtenerValoresIniciales,
-  obtenerLabelEnlacePorId
+  obtenerLabelEnlacePorId,
+  liquidarAsignacion,
+  obtenerSaldoInicial,
+  calcularSaldoFinal
 };

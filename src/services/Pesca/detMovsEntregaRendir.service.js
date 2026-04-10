@@ -145,6 +145,24 @@ const crear = async (data) => {
 
     await validarClavesForaneas(data);
 
+    // ⭐ NUEVO: Si es asignación principal, calcular saldo inicial automáticamente
+    if (
+      (data.tipoMovimientoId === 1 || data.tipoMovimientoId === 2) &&
+      data.formaParteCalculoEntregaARendir === true &&
+      (data.asignacionOrigenId === null || data.asignacionOrigenId === 0)
+    ) {
+      const saldoInicial = await obtenerSaldoInicialAsignacion(
+        data.entregaARendirId,
+        data.fechaMovimiento,
+      );
+      data.saldoInicialAsignacion = saldoInicial;
+      data.saldoFinalAsignacion = null; // Se calculará al liquidar
+    } else {
+      // Para gastos asociados y gastos directos, los saldos son null
+      data.saldoInicialAsignacion = null;
+      data.saldoFinalAsignacion = null;
+    }
+
     // Convertir asignacionOrigenId=0 a null para Prisma (0 es solo indicador lógico, no FK)
     if (data.asignacionOrigenId === 0) {
       data.asignacionOrigenId = null;
@@ -282,6 +300,8 @@ const actualizar = async (id, data, usuarioId = null) => {
       urlLiquidacionEntregaARendir: data.urlLiquidacionEntregaARendir, // ← AGREGAR
       enlaceAOtroDetalleGastoId: data.enlaceAOtroDetalleGastoId,
       embarcacionId: data.embarcacionId,
+      saldoInicialAsignacion: data.saldoInicialAsignacion,
+      saldoFinalAsignacion: data.saldoFinalAsignacion,
     };
 
     // Convertir asignacionOrigenId=0 a null para Prisma (0 es solo indicador lógico, no FK)
@@ -846,6 +866,162 @@ const obtenerValoresIniciales = async (moduloOrigen, entregaARendirId) => {
   }
 };
 
+/**
+ * Buscar la última asignación liquidada del mismo contexto
+ * para obtener el saldo inicial de una nueva asignación
+ */
+const obtenerSaldoInicialAsignacion = async (
+  entregaARendirId,
+  fechaMovimiento,
+) => {
+  try {
+    // Buscar la última asignación liquidada con los mismos criterios
+    const ultimaAsignacionLiquidada =
+      await prisma.detMovsEntregaRendir.findFirst({
+        where: {
+          entregaARendirId: BigInt(entregaARendirId),
+          asignacionOrigenId: null, // Es asignación principal
+          formaParteCalculoEntregaARendir: true, // Forma parte del cálculo
+          entregaARendirLiquidada: true, // Ya está liquidada
+          fechaMovimiento: {
+            lt: new Date(fechaMovimiento), // Anterior a la fecha actual
+          },
+        },
+        orderBy: [{ fechaMovimiento: "desc" }, { id: "desc" }],
+        select: {
+          id: true,
+          saldoFinalAsignacion: true,
+        },
+      });
+
+    // Si existe una asignación anterior liquidada, retornar su saldo final
+    if (
+      ultimaAsignacionLiquidada &&
+      ultimaAsignacionLiquidada.saldoFinalAsignacion !== null
+    ) {
+      return Number(ultimaAsignacionLiquidada.saldoFinalAsignacion);
+    }
+
+    // Si no hay asignación anterior, el saldo inicial es 0
+    return 0;
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Calcular el saldo final de una asignación al liquidarla
+ */
+const calcularSaldoFinalAsignacion = async (asignacionId) => {
+  try {
+    // Obtener la asignación con sus gastos asociados
+    const asignacion = await prisma.detMovsEntregaRendir.findUnique({
+      where: { id: BigInt(asignacionId) },
+      include: {
+        gastosAsociados: {
+          where: {
+            formaParteCalculoEntregaARendir: true, // Solo gastos que forman parte del cálculo
+          },
+          select: {
+            monto: true,
+          },
+        },
+      },
+    });
+
+    if (!asignacion) {
+      throw new NotFoundError("Asignación no encontrada");
+    }
+
+    // Validar que sea una asignación principal
+    if (asignacion.asignacionOrigenId !== null) {
+      throw new ValidationError(
+        "Solo se puede calcular saldo de asignaciones principales",
+      );
+    }
+
+    // Calcular total gastado
+    const totalGastado = asignacion.gastosAsociados.reduce((sum, gasto) => {
+      return sum + Number(gasto.monto);
+    }, 0);
+
+    // Calcular saldo final
+    const saldoInicial = Number(asignacion.saldoInicialAsignacion || 0);
+    const montoEntregado = Number(asignacion.monto);
+    const saldoFinal = saldoInicial + montoEntregado - totalGastado;
+
+    return saldoFinal;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Liquidar una asignación (marcarla como liquidada y calcular saldo final)
+ */
+const liquidarAsignacion = async (asignacionId, usuarioId = null) => {
+  try {
+    // Validar que la asignación existe y es principal
+    const asignacion = await prisma.detMovsEntregaRendir.findUnique({
+      where: { id: BigInt(asignacionId) },
+      select: {
+        id: true,
+        asignacionOrigenId: true,
+        formaParteCalculoEntregaARendir: true,
+        entregaARendirLiquidada: true,
+      },
+    });
+
+    if (!asignacion) {
+      throw new NotFoundError("Asignación no encontrada");
+    }
+
+    if (asignacion.asignacionOrigenId !== null) {
+      throw new ValidationError(
+        "Solo se pueden liquidar asignaciones principales",
+      );
+    }
+
+    if (!asignacion.formaParteCalculoEntregaARendir) {
+      throw new ValidationError(
+        "La asignación no forma parte del cálculo de entrega a rendir",
+      );
+    }
+
+    if (asignacion.entregaARendirLiquidada) {
+      throw new ValidationError("La asignación ya está liquidada");
+    }
+
+    // Calcular saldo final
+    const saldoFinal = await calcularSaldoFinalAsignacion(asignacionId);
+
+    // Actualizar la asignación
+    const asignacionActualizada = await prisma.detMovsEntregaRendir.update({
+      where: { id: BigInt(asignacionId) },
+      data: {
+        entregaARendirLiquidada: true,
+        fechaLiquidacionEntregaARendir: new Date(),
+        saldoFinalAsignacion: saldoFinal,
+        actualizadoEn: new Date(),
+      },
+    });
+
+    return asignacionActualizada;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -856,4 +1032,7 @@ export default {
   obtenerLabelEnlace,
   obtenerTodasAsignacionesNoLiquidadas,
   obtenerValoresIniciales,
+  obtenerSaldoInicialAsignacion,
+  calcularSaldoFinalAsignacion,
+  liquidarAsignacion,
 };
