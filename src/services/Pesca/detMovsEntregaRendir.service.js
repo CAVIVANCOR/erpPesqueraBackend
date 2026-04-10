@@ -356,13 +356,13 @@ const obtenerConGastosAsociados = async (id) => {
             },
             moneda: true,
             producto: true,
+            tipoDocumento: true,
             embarcacion: {
               include: {
-                activo: true, // ⭐ AGREGAR ESTO
+                activo: true,
               },
             },
             gastosPlanificados: {
-              // ⭐ AGREGAR
               include: {
                 producto: true,
                 moneda: true,
