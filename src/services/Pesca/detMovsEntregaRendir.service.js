@@ -333,7 +333,11 @@ const obtenerConGastosAsociados = async (id) => {
         moneda: true,
         producto: true,
         tipoDocumento: true,
-        embarcacion: true,  // ⭐ AGREGAR
+        embarcacion: {
+          include: {
+            activo: true, // ⭐ AGREGAR ESTO
+          },
+        },
         entregaARendir: {
           include: {
             temporadaPesca: {
@@ -352,8 +356,13 @@ const obtenerConGastosAsociados = async (id) => {
             },
             moneda: true,
             producto: true,
-            embarcacion: true,  // ⭐ AGREGAR
-            gastosPlanificados: {  // ⭐ AGREGAR
+            embarcacion: {
+              include: {
+                activo: true, // ⭐ AGREGAR ESTO
+              },
+            },
+            gastosPlanificados: {
+              // ⭐ AGREGAR
               include: {
                 producto: true,
                 moneda: true,
@@ -361,7 +370,8 @@ const obtenerConGastosAsociados = async (id) => {
             },
           },
         },
-        gastosPlanificados: {  // ⭐ AGREGAR
+        gastosPlanificados: {
+          // ⭐ AGREGAR
           include: {
             producto: true,
             moneda: true,
@@ -405,7 +415,6 @@ const obtenerConGastosAsociados = async (id) => {
     throw err;
   }
 };
-
 
 /**
  * Obtener el label formateado de un enlace a otro detalle de gasto
@@ -514,40 +523,38 @@ const obtenerLabelEnlace = async (enlaceId) => {
     ]);
 
     const formatearFecha = (fecha) => {
-      if (!fecha) return '';
-      return new Date(fecha).toLocaleDateString('es-PE');
+      if (!fecha) return "";
+      return new Date(fecha).toLocaleDateString("es-PE");
     };
 
     if (pescaIndustrial) {
-      return `${pescaIndustrial.temporadaPesca?.empresa?.razonSocial || 'Sin empresa'} - Temporada Pesca - ${pescaIndustrial.temporadaPesca?.nombre || 'Sin nombre'}`;
+      return `${pescaIndustrial.temporadaPesca?.empresa?.razonSocial || "Sin empresa"} - Temporada Pesca - ${pescaIndustrial.temporadaPesca?.nombre || "Sin nombre"}`;
     }
     if (pescaConsumo) {
-      return `${pescaConsumo.novedadPescaConsumo?.empresa?.razonSocial || 'Sin empresa'} - Novedad Pesca Consumo - ${pescaConsumo.novedadPescaConsumo?.nombre || 'Sin nombre'}`;
+      return `${pescaConsumo.novedadPescaConsumo?.empresa?.razonSocial || "Sin empresa"} - Novedad Pesca Consumo - ${pescaConsumo.novedadPescaConsumo?.nombre || "Sin nombre"}`;
     }
     if (ventas) {
-      return `${ventas.cotizacionVentas?.empresa?.razonSocial || 'Sin empresa'} - Cotización Ventas - ${ventas.cotizacionVentas?.numeroDocumento || 'S/N'} | ${formatearFecha(ventas.cotizacionVentas?.fechaDocumento)} | ${ventas.cotizacionVentas?.cliente?.razonSocial || 'Sin cliente'}`;
+      return `${ventas.cotizacionVentas?.empresa?.razonSocial || "Sin empresa"} - Cotización Ventas - ${ventas.cotizacionVentas?.numeroDocumento || "S/N"} | ${formatearFecha(ventas.cotizacionVentas?.fechaDocumento)} | ${ventas.cotizacionVentas?.cliente?.razonSocial || "Sin cliente"}`;
     }
     if (compras) {
-      return `${compras.requerimientoCompra?.empresa?.razonSocial || 'Sin empresa'} - Requerimiento Compra - ${compras.requerimientoCompra?.numeroDocumento || 'S/N'} | ${formatearFecha(compras.requerimientoCompra?.fechaDocumento)} | ${compras.requerimientoCompra?.proveedor?.razonSocial || 'Sin proveedor'}`;
+      return `${compras.requerimientoCompra?.empresa?.razonSocial || "Sin empresa"} - Requerimiento Compra - ${compras.requerimientoCompra?.numeroDocumento || "S/N"} | ${formatearFecha(compras.requerimientoCompra?.fechaDocumento)} | ${compras.requerimientoCompra?.proveedor?.razonSocial || "Sin proveedor"}`;
     }
     if (movAlmacen) {
-      return `${movAlmacen.movimientoAlmacen?.empresa?.razonSocial || 'Sin empresa'} - Movimiento Almacén - ${movAlmacen.movimientoAlmacen?.numeroDocumento || 'S/N'} | ${formatearFecha(movAlmacen.movimientoAlmacen?.fechaDocumento)} | ${movAlmacen.movimientoAlmacen?.entidadComercial?.razonSocial || 'Sin entidad'}`;
+      return `${movAlmacen.movimientoAlmacen?.empresa?.razonSocial || "Sin empresa"} - Movimiento Almacén - ${movAlmacen.movimientoAlmacen?.numeroDocumento || "S/N"} | ${formatearFecha(movAlmacen.movimientoAlmacen?.fechaDocumento)} | ${movAlmacen.movimientoAlmacen?.entidadComercial?.razonSocial || "Sin entidad"}`;
     }
     if (contratos) {
-      return `${contratos.contratoServicio?.empresa?.razonSocial || 'Sin empresa'} - Contrato Servicio - ${contratos.contratoServicio?.numeroCompleto || 'S/N'} | ${formatearFecha(contratos.contratoServicio?.fechaCelebracion)} | ${contratos.contratoServicio?.cliente?.razonSocial || 'Sin cliente'}`;
+      return `${contratos.contratoServicio?.empresa?.razonSocial || "Sin empresa"} - Contrato Servicio - ${contratos.contratoServicio?.numeroCompleto || "S/N"} | ${formatearFecha(contratos.contratoServicio?.fechaCelebracion)} | ${contratos.contratoServicio?.cliente?.razonSocial || "Sin cliente"}`;
     }
     if (otMantenimiento) {
-      return `${otMantenimiento.otMantenimiento?.empresa?.razonSocial || 'Sin empresa'} - OT Mantenimiento - ${otMantenimiento.otMantenimiento?.numeroCompleto || 'S/N'} | ${formatearFecha(otMantenimiento.otMantenimiento?.fechaDocumento)} | ${otMantenimiento.otMantenimiento?.descripcionProblema || 'Sin descripción'}`;
+      return `${otMantenimiento.otMantenimiento?.empresa?.razonSocial || "Sin empresa"} - OT Mantenimiento - ${otMantenimiento.otMantenimiento?.numeroCompleto || "S/N"} | ${formatearFecha(otMantenimiento.otMantenimiento?.fechaDocumento)} | ${otMantenimiento.otMantenimiento?.descripcionProblema || "Sin descripción"}`;
     }
 
     return null;
   } catch (err) {
-    console.error('Error al obtener label de enlace:', err);
+    console.error("Error al obtener label de enlace:", err);
     return null;
   }
 };
-
-
 
 const obtenerTodasAsignacionesNoLiquidadas = async () => {
   try {
@@ -561,7 +568,7 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
       contratos,
       otMantenimiento,
     ] = await Promise.all([
-            // 1. Pesca Industrial
+      // 1. Pesca Industrial
       prisma.entregaARendir.findMany({
         where: {
           entregaLiquidada: false,
@@ -723,45 +730,45 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
     ]);
     // Formatear y unificar resultados
     const formatearFecha = (fecha) => {
-      if (!fecha) return '';
-      return new Date(fecha).toLocaleDateString('es-PE');
+      if (!fecha) return "";
+      return new Date(fecha).toLocaleDateString("es-PE");
     };
 
-        const asignacionesFormateadas = [
+    const asignacionesFormateadas = [
       ...pescaIndustrial.map((a) => ({
         id: Number(a.id),
-        modulo: 'PESCA_INDUSTRIAL',
-        label: `${a.temporadaPesca?.empresa?.razonSocial || 'Sin empresa'} - Temporada Pesca - ${a.temporadaPesca?.nombre || 'Sin nombre'}`,
+        modulo: "PESCA_INDUSTRIAL",
+        label: `${a.temporadaPesca?.empresa?.razonSocial || "Sin empresa"} - Temporada Pesca - ${a.temporadaPesca?.nombre || "Sin nombre"}`,
       })),
       ...pescaConsumo.map((a) => ({
         id: Number(a.id),
-        modulo: 'PESCA_CONSUMO',
-        label: `${a.novedadPescaConsumo?.empresa?.razonSocial || 'Sin empresa'} - Novedad Pesca Consumo - ${a.novedadPescaConsumo?.nombre || 'Sin nombre'}`,
+        modulo: "PESCA_CONSUMO",
+        label: `${a.novedadPescaConsumo?.empresa?.razonSocial || "Sin empresa"} - Novedad Pesca Consumo - ${a.novedadPescaConsumo?.nombre || "Sin nombre"}`,
       })),
       ...ventas.map((a) => ({
         id: Number(a.id),
-        modulo: 'VENTAS',
-        label: `${a.cotizacionVentas?.empresa?.razonSocial || 'Sin empresa'} - Cotización Ventas - ${a.cotizacionVentas?.numeroDocumento || 'S/N'} | ${formatearFecha(a.cotizacionVentas?.fechaDocumento)} | ${a.cotizacionVentas?.cliente?.razonSocial || 'Sin cliente'}`,
+        modulo: "VENTAS",
+        label: `${a.cotizacionVentas?.empresa?.razonSocial || "Sin empresa"} - Cotización Ventas - ${a.cotizacionVentas?.numeroDocumento || "S/N"} | ${formatearFecha(a.cotizacionVentas?.fechaDocumento)} | ${a.cotizacionVentas?.cliente?.razonSocial || "Sin cliente"}`,
       })),
       ...compras.map((a) => ({
         id: Number(a.id),
-        modulo: 'COMPRAS',
-        label: `${a.requerimientoCompra?.empresa?.razonSocial || 'Sin empresa'} - Requerimiento Compra - ${a.requerimientoCompra?.numeroDocumento || 'S/N'} | ${formatearFecha(a.requerimientoCompra?.fechaDocumento)} | ${a.requerimientoCompra?.proveedor?.razonSocial || 'Sin proveedor'}`,
+        modulo: "COMPRAS",
+        label: `${a.requerimientoCompra?.empresa?.razonSocial || "Sin empresa"} - Requerimiento Compra - ${a.requerimientoCompra?.numeroDocumento || "S/N"} | ${formatearFecha(a.requerimientoCompra?.fechaDocumento)} | ${a.requerimientoCompra?.proveedor?.razonSocial || "Sin proveedor"}`,
       })),
       ...movAlmacen.map((a) => ({
         id: Number(a.id),
-        modulo: 'MOV_ALMACEN',
-        label: `${a.movimientoAlmacen?.empresa?.razonSocial || 'Sin empresa'} - Movimiento Almacén - ${a.movimientoAlmacen?.numeroDocumento || 'S/N'} | ${formatearFecha(a.movimientoAlmacen?.fechaDocumento)} | ${a.movimientoAlmacen?.entidadComercial?.razonSocial || 'Sin entidad'}`,
+        modulo: "MOV_ALMACEN",
+        label: `${a.movimientoAlmacen?.empresa?.razonSocial || "Sin empresa"} - Movimiento Almacén - ${a.movimientoAlmacen?.numeroDocumento || "S/N"} | ${formatearFecha(a.movimientoAlmacen?.fechaDocumento)} | ${a.movimientoAlmacen?.entidadComercial?.razonSocial || "Sin entidad"}`,
       })),
       ...contratos.map((a) => ({
         id: Number(a.id),
-        modulo: 'CONTRATOS',
-        label: `${a.contratoServicio?.empresa?.razonSocial || 'Sin empresa'} - Contrato Servicio - ${a.contratoServicio?.numeroCompleto || 'S/N'} | ${formatearFecha(a.contratoServicio?.fechaCelebracion)} | ${a.contratoServicio?.cliente?.razonSocial || 'Sin cliente'}`,
+        modulo: "CONTRATOS",
+        label: `${a.contratoServicio?.empresa?.razonSocial || "Sin empresa"} - Contrato Servicio - ${a.contratoServicio?.numeroCompleto || "S/N"} | ${formatearFecha(a.contratoServicio?.fechaCelebracion)} | ${a.contratoServicio?.cliente?.razonSocial || "Sin cliente"}`,
       })),
       ...otMantenimiento.map((a) => ({
         id: Number(a.id),
-        modulo: 'OT_MANTENIMIENTO',
-        label: `${a.otMantenimiento?.empresa?.razonSocial || 'Sin empresa'} - OT Mantenimiento - ${a.otMantenimiento?.numeroCompleto || 'S/N'} | ${formatearFecha(a.otMantenimiento?.fechaDocumento)} | ${a.otMantenimiento?.descripcionProblema || 'Sin descripción'}`,
+        modulo: "OT_MANTENIMIENTO",
+        label: `${a.otMantenimiento?.empresa?.razonSocial || "Sin empresa"} - OT Mantenimiento - ${a.otMantenimiento?.numeroCompleto || "S/N"} | ${formatearFecha(a.otMantenimiento?.fechaDocumento)} | ${a.otMantenimiento?.descripcionProblema || "Sin descripción"}`,
       })),
     ];
 
@@ -773,8 +780,8 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
       return a.label.localeCompare(b.label);
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P'))
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -787,7 +794,7 @@ const obtenerValoresIniciales = async (moduloOrigen, entregaARendirId) => {
     };
 
     // Solo para PESCA_INDUSTRIAL y PESCA_CONSUMO se calcula embarcacionId
-    if (moduloOrigen === 'PESCA_INDUSTRIAL') {
+    if (moduloOrigen === "PESCA_INDUSTRIAL") {
       // Obtener la EntregaARendir para sacar el temporadaPescaId
       const entrega = await prisma.entregaARendir.findUnique({
         where: { id: BigInt(entregaARendirId) },
@@ -795,20 +802,20 @@ const obtenerValoresIniciales = async (moduloOrigen, entregaARendirId) => {
       });
 
       if (!entrega) {
-        throw new NotFoundError('EntregaARendir no encontrada');
+        throw new NotFoundError("EntregaARendir no encontrada");
       }
 
       // Buscar la faena más reciente de esa temporada
       const faenaMasReciente = await prisma.faenaPesca.findFirst({
         where: { temporadaId: entrega.temporadaPescaId },
-        orderBy: { fechaSalida: 'desc' },
+        orderBy: { fechaSalida: "desc" },
         select: { embarcacionId: true },
       });
 
       if (faenaMasReciente && faenaMasReciente.embarcacionId) {
         resultado.embarcacionId = Number(faenaMasReciente.embarcacionId);
       }
-    } else if (moduloOrigen === 'PESCA_CONSUMO') {
+    } else if (moduloOrigen === "PESCA_CONSUMO") {
       // Obtener la EntregaARendirPescaConsumo para sacar el novedadPescaConsumoId
       const entrega = await prisma.entregaARendirPescaConsumo.findUnique({
         where: { id: BigInt(entregaARendirId) },
@@ -816,13 +823,13 @@ const obtenerValoresIniciales = async (moduloOrigen, entregaARendirId) => {
       });
 
       if (!entrega) {
-        throw new NotFoundError('EntregaARendirPescaConsumo no encontrada');
+        throw new NotFoundError("EntregaARendirPescaConsumo no encontrada");
       }
 
       // Buscar la faena más reciente de esa novedad
       const faenaMasReciente = await prisma.faenaPescaConsumo.findFirst({
         where: { novedadPescaConsumoId: entrega.novedadPescaConsumoId },
-        orderBy: { fechaSalida: 'desc' },
+        orderBy: { fechaSalida: "desc" },
         select: { embarcacionId: true },
       });
 
@@ -833,8 +840,8 @@ const obtenerValoresIniciales = async (moduloOrigen, entregaARendirId) => {
 
     return resultado;
   } catch (err) {
-    if (err.code && err.code.startsWith('P'))
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -848,5 +855,5 @@ export default {
   obtenerConGastosAsociados,
   obtenerLabelEnlace,
   obtenerTodasAsignacionesNoLiquidadas,
-  obtenerValoresIniciales
+  obtenerValoresIniciales,
 };
