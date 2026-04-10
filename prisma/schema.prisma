@@ -1682,6 +1682,7 @@ model DetMovsEntregaRendir {
   embarcacionId                           BigInt?   // Enlace a la Embarcacion para la cual se esta haciendo el gasto
   saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
   saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+  enlaceGastosPlanificadosId              BigInt?    //Para identificar de que Gasto Planificado Proviene el Gasto Real
 
   entregaARendir               EntregaARendir @relation(fields: [entregaARendirId], references: [id])
   tipoMovimiento               TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1690,12 +1691,14 @@ model DetMovsEntregaRendir {
   tipoDocumento                TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto                     Producto? @relation(fields: [productoId], references: [id])
   embarcacion                  Embarcacion?  @relation(fields: [embarcacionId], references: [id])
+  enlaceGastoPlanificado       DetGastosPlanificados? @relation("GastoRealDeGastoPlanificado", fields: [enlaceGastosPlanificadosId], references: [id])
 
   asignacionOrigen             DetMovsEntregaRendir? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendir[] @relation("GastosDeAsignacion")
   gastosPlanificados           DetGastosPlanificados[]
 
   @@index([asignacionOrigenId])
+  @@index([enlaceGastosPlanificadosId])
 }
 
 model DetGastosPlanificados {
@@ -1733,6 +1736,8 @@ model DetGastosPlanificados {
   producto          Producto @relation(fields: [productoId], references: [id])
   moneda            Moneda @relation(fields: [monedaId], references: [id])
   
+  gastosReales             DetMovsEntregaRendir[] @relation("GastoRealDeGastoPlanificado")
+
   // Índices para performance
   @@index([detMovEntregaRendirTemporadaPescaId])
   @@index([detMovEntRendirPescaConsumoId])
