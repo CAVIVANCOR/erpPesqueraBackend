@@ -993,6 +993,8 @@ model DetMovsEntregaRendirPVentas {
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
   saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+  enlaceGastosPlanificadosId              BigInt?    //Para identificar de que Gasto Planificado Proviene el Gasto Real
+
 
   entregaARendirPVentas       EntregaARendirPVentas @relation(fields: [entregaARendirPVentasId], references: [id], onDelete: Cascade)
   tipoMovimiento              TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1003,13 +1005,16 @@ model DetMovsEntregaRendirPVentas {
 
   asignacionOrigen             DetMovsEntregaRendirPVentas? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendirPVentas[] @relation("GastosDeAsignacion")
-  
+  enlaceGastoPlanificado       DetGastosPlanificados? @relation("GastoRealDeGastoPlanificadoPVentas", fields: [enlaceGastosPlanificadosId], references: [id])
+
   costosEstimadosVinculados   CostosExportacionCotizacion[]          // Relación inversa para vincular con estimados
   gastosPlanificados DetGastosPlanificados[]
 
   @@index([entregaARendirPVentasId])
   @@index([productoId])
   @@index([asignacionOrigenId])
+  @@index([enlaceGastosPlanificadosId])
+
 }
 
 
@@ -1625,6 +1630,10 @@ model DetMovsEntRendirPescaConsumo {
   urlLiquidacionEntregaARendir            String?
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   embarcacionId                           BigInt?   // Enlace a la Embarcacion para la cual se esta haciendo el gasto
+  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
+  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+  enlaceGastosPlanificadosId              BigInt?    //Para identificar de que Gasto Planificado Proviene el Gasto Real
+
 
   entregaARendirPescaConsumo EntregaARendirPescaConsumo @relation(fields: [entregaARendirPescaConsumoId], references: [id])
   tipoMovimiento        TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -1633,9 +1642,8 @@ model DetMovsEntRendirPescaConsumo {
   tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   producto Producto? @relation(fields: [productoId], references: [id])
   gastosPlanificados DetGastosPlanificados[]
-  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
-  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
-  
+  enlaceGastoPlanificado       DetGastosPlanificados? @relation("GastoRealDeGastoPlanificadoPescaConsumo", fields: [enlaceGastosPlanificadosId], references: [id])
+
 
   asignacionOrigen             DetMovsEntRendirPescaConsumo? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntRendirPescaConsumo[] @relation("GastosDeAsignacion")
@@ -1643,6 +1651,8 @@ model DetMovsEntRendirPescaConsumo {
 
 
   @@index([asignacionOrigenId])
+  @@index([enlaceGastosPlanificadosId])
+
 }
 
 model DetMovsEntregaRendir {
@@ -1737,7 +1747,13 @@ model DetGastosPlanificados {
   moneda            Moneda @relation(fields: [monedaId], references: [id])
   
   gastosReales             DetMovsEntregaRendir[] @relation("GastoRealDeGastoPlanificado")
-
+  gastosRealesPVentas         DetMovsEntregaRendirPVentas[] @relation("GastoRealDeGastoPlanificadoPVentas")  // ← AGREGAR AQUÍ
+  gastosRealesPescaConsumo     DetMovsEntRendirPescaConsumo[] @relation("GastoRealDeGastoPlanificadoPescaConsumo")
+  gastosRealesPCompras         DetMovsEntregaRendirPCompras[] @relation("GastoRealDeGastoPlanificadoPCompras")
+  gastosRealesMovAlmacen       DetMovsEntregaRendirMovAlmacen[] @relation("GastoRealDeGastoPlanificadoMovAlmacen")
+  gastosRealesContratoServicios DetMovsEntregaRendirContratoServicios[] @relation("GastoRealDeGastoPlanificadoContratoServicios")
+  gastosRealesOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("GastoRealDeGastoPlanificadoOTMantenimiento")
+  
   // Índices para performance
   @@index([detMovEntregaRendirTemporadaPescaId])
   @@index([detMovEntRendirPescaConsumoId])
@@ -1788,18 +1804,21 @@ model DetMovsEntregaRendirPCompras {
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
   saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
-  
-  entregaARendirPCompras   EntregaARendirPCompras @relation(fields: [entregaARendirPComprasId], references: [id], onDelete: Cascade)
-  tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
-  entidadComercial         EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
-  moneda Moneda? @relation(fields: [monedaId], references: [id])
-  tipoDocumento TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
-  producto Producto? @relation(fields: [productoId], references: [id])
+  enlaceGastosPlanificadosId              BigInt?    //Para identificar de que Gasto Planificado Proviene el Gasto Real
+
+  entregaARendirPCompras       EntregaARendirPCompras @relation(fields: [entregaARendirPComprasId], references: [id], onDelete: Cascade)
+  tipoMovimiento               TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+  entidadComercial             EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
+  moneda                       Moneda? @relation(fields: [monedaId], references: [id])
+  tipoDocumento                TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
+  producto                     Producto? @relation(fields: [productoId], references: [id])
   asignacionOrigen             DetMovsEntregaRendirPCompras? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendirPCompras[] @relation("GastosDeAsignacion")
-  gastosPlanificados DetGastosPlanificados[]
+  gastosPlanificados           DetGastosPlanificados[]
+  enlaceGastoPlanificado       DetGastosPlanificados? @relation("GastoRealDeGastoPlanificadoPCompras", fields: [enlaceGastosPlanificadosId], references: [id])
 
   @@index([asignacionOrigenId])
+  @@index([enlaceGastosPlanificadosId])
 }
 
 model DetPermisoGestionadoOT {
@@ -2726,6 +2745,7 @@ model DetMovsEntregaRendirMovAlmacen {
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
   saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+  enlaceGastosPlanificadosId              BigInt?    //Para identificar de que Gasto Planificado Proviene el Gasto Real
 
   entregaARendirMovAlmacen   EntregaARendirMovAlmacen @relation(fields: [entregaARendirMovAlmacenId], references: [id], onDelete: Cascade)
   tipoMovimiento           TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2739,12 +2759,13 @@ model DetMovsEntregaRendirMovAlmacen {
   asignacionOrigen             DetMovsEntregaRendirMovAlmacen? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendirMovAlmacen[] @relation("GastosDeAsignacion")
   gastosPlanificados DetGastosPlanificados[]
+  enlaceGastoPlanificado       DetGastosPlanificados? @relation("GastoRealDeGastoPlanificadoMovAlmacen", fields: [enlaceGastosPlanificadosId], references: [id])
 
   @@index([entregaARendirMovAlmacenId])
   @@index([tipoMovimientoId])
   @@index([responsableId])
   @@index([fechaMovimiento])
-
+  @@index([enlaceGastosPlanificadosId])
   @@index([asignacionOrigenId])
 }
 
@@ -2812,6 +2833,7 @@ model DetMovsEntregaRendirContratoServicios {
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
   saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+  enlaceGastosPlanificadosId              BigInt?    //Para identificar de que Gasto Planificado Proviene el Gasto Real
 
   entregaARendirContratoServicio       EntregaARendirContratoServicios @relation(fields: [entregaARendirContratoServicioId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2825,12 +2847,14 @@ model DetMovsEntregaRendirContratoServicios {
   asignacionOrigen             DetMovsEntregaRendirContratoServicios? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendirContratoServicios[] @relation("GastosDeAsignacion")
   gastosPlanificados DetGastosPlanificados[]
+  enlaceGastoPlanificado       DetGastosPlanificados? @relation("GastoRealDeGastoPlanificadoContratoServicios", fields: [enlaceGastosPlanificadosId], references: [id])
 
   @@index([entregaARendirContratoServicioId])
   @@index([tipoMovimientoId])
   @@index([responsableId])
   @@index([fechaMovimiento])
   @@index([asignacionOrigenId])
+  @@index([enlaceGastosPlanificadosId])
 }
 
 model EntregaARendirOTMantenimiento {
@@ -2896,6 +2920,7 @@ model DetMovsEntregaRendirOTMantenimiento {
   enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
   saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
   saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
+  enlaceGastosPlanificadosId              BigInt?    //Para identificar de que Gasto Planificado Proviene el Gasto Real
 
   entregaARendirOTMantenimiento       EntregaARendirOTMantenimiento @relation(fields: [entregaARendirOTMantenimientoId], references: [id], onDelete: Cascade)
   tipoMovimiento                       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
@@ -2909,12 +2934,13 @@ model DetMovsEntregaRendirOTMantenimiento {
   asignacionOrigen             DetMovsEntregaRendirOTMantenimiento? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados              DetMovsEntregaRendirOTMantenimiento[] @relation("GastosDeAsignacion")
   gastosPlanificados DetGastosPlanificados[]
+  enlaceGastoPlanificado       DetGastosPlanificados? @relation("GastoRealDeGastoPlanificadoOTMantenimiento", fields: [enlaceGastosPlanificadosId], references: [id])
 
   @@index([entregaARendirOTMantenimientoId])
   @@index([tipoMovimientoId])
   @@index([responsableId])
   @@index([fechaMovimiento])
-
+  @@index([enlaceGastosPlanificadosId])
   @@index([asignacionOrigenId])
 }
 
