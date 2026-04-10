@@ -99,8 +99,9 @@ const upload = multer({
 // Rutas CRUD para DetMovsEntregaRendir
 router.get('/', detMovsEntregaRendirController.listar);
 router.get('/:id/con-gastos', detMovsEntregaRendirController.obtenerConGastosAsociados);
+router.get('/:id/label-enlace', detMovsEntregaRendirController.obtenerLabelEnlacePorId);  // ⭐ AGREGAR ESTA LÍNEA
 router.get('/asignaciones/no-liquidadas', detMovsEntregaRendirController.obtenerTodasAsignacionesNoLiquidadas);
-router.get('/valores-iniciales', detMovsEntregaRendirController.obtenerValoresIniciales);  // ⭐ AGREGAR ESTA LÍNEA
+router.get('/valores-iniciales', detMovsEntregaRendirController.obtenerValoresIniciales);
 router.get('/:id', detMovsEntregaRendirController.obtenerPorId);
 router.post('/', detMovsEntregaRendirController.crear);
 router.put('/:id', detMovsEntregaRendirController.actualizar);

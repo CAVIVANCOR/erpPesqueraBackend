@@ -99,6 +99,17 @@ export async function obtenerValoresIniciales(req, res, next) {
   }
 }
 
+export async function obtenerLabelEnlacePorId(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const label = await detMovsEntregaRendirService.obtenerLabelEnlace(id);
+    res.json(label);
+  } catch (err) {
+    next(err);
+  }
+}
+
+
 export default {
   listar,
   obtenerPorId,
@@ -107,5 +118,6 @@ export default {
   eliminar,
   obtenerConGastosAsociados,
   obtenerTodasAsignacionesNoLiquidadas,
-  obtenerValoresIniciales
+  obtenerValoresIniciales,
+  obtenerLabelEnlacePorId
 };

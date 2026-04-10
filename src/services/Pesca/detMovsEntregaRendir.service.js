@@ -333,6 +333,7 @@ const obtenerConGastosAsociados = async (id) => {
         moneda: true,
         producto: true,
         tipoDocumento: true,
+        embarcacion: true,  // ⭐ AGREGAR
         entregaARendir: {
           include: {
             temporadaPesca: {
@@ -351,6 +352,19 @@ const obtenerConGastosAsociados = async (id) => {
             },
             moneda: true,
             producto: true,
+            embarcacion: true,  // ⭐ AGREGAR
+            gastosPlanificados: {  // ⭐ AGREGAR
+              include: {
+                producto: true,
+                moneda: true,
+              },
+            },
+          },
+        },
+        gastosPlanificados: {  // ⭐ AGREGAR
+          include: {
+            producto: true,
+            moneda: true,
           },
         },
       },
@@ -391,6 +405,149 @@ const obtenerConGastosAsociados = async (id) => {
     throw err;
   }
 };
+
+
+/**
+ * Obtener el label formateado de un enlace a otro detalle de gasto
+ */
+const obtenerLabelEnlace = async (enlaceId) => {
+  try {
+    if (!enlaceId) return null;
+
+    // Buscar en todas las tablas de entregas a rendir
+    const [
+      pescaIndustrial,
+      pescaConsumo,
+      ventas,
+      compras,
+      movAlmacen,
+      contratos,
+      otMantenimiento,
+    ] = await Promise.all([
+      prisma.entregaARendir.findUnique({
+        where: { id: BigInt(enlaceId) },
+        select: {
+          temporadaPesca: {
+            select: {
+              nombre: true,
+              empresa: { select: { razonSocial: true } },
+            },
+          },
+        },
+      }),
+      prisma.entregaARendirPescaConsumo.findUnique({
+        where: { id: BigInt(enlaceId) },
+        select: {
+          novedadPescaConsumo: {
+            select: {
+              nombre: true,
+              empresa: { select: { razonSocial: true } },
+            },
+          },
+        },
+      }),
+      prisma.entregaARendirPVentas.findUnique({
+        where: { id: BigInt(enlaceId) },
+        select: {
+          cotizacionVentas: {
+            select: {
+              numeroDocumento: true,
+              fechaDocumento: true,
+              cliente: { select: { razonSocial: true } },
+              empresa: { select: { razonSocial: true } },
+            },
+          },
+        },
+      }),
+      prisma.entregaARendirPCompras.findUnique({
+        where: { id: BigInt(enlaceId) },
+        select: {
+          requerimientoCompra: {
+            select: {
+              numeroDocumento: true,
+              fechaDocumento: true,
+              proveedor: { select: { razonSocial: true } },
+              empresa: { select: { razonSocial: true } },
+            },
+          },
+        },
+      }),
+      prisma.entregaARendirMovAlmacen.findUnique({
+        where: { id: BigInt(enlaceId) },
+        select: {
+          movimientoAlmacen: {
+            select: {
+              numeroDocumento: true,
+              fechaDocumento: true,
+              entidadComercial: { select: { razonSocial: true } },
+              empresa: { select: { razonSocial: true } },
+            },
+          },
+        },
+      }),
+      prisma.entregaARendirContratoServicios.findUnique({
+        where: { id: BigInt(enlaceId) },
+        select: {
+          contratoServicio: {
+            select: {
+              numeroCompleto: true,
+              fechaCelebracion: true,
+              cliente: { select: { razonSocial: true } },
+              empresa: { select: { razonSocial: true } },
+            },
+          },
+        },
+      }),
+      prisma.entregaARendirOTMantenimiento.findUnique({
+        where: { id: BigInt(enlaceId) },
+        select: {
+          otMantenimiento: {
+            select: {
+              numeroCompleto: true,
+              fechaDocumento: true,
+              descripcionProblema: true,
+              empresa: { select: { razonSocial: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const formatearFecha = (fecha) => {
+      if (!fecha) return '';
+      return new Date(fecha).toLocaleDateString('es-PE');
+    };
+
+    if (pescaIndustrial) {
+      return `${pescaIndustrial.temporadaPesca?.empresa?.razonSocial || 'Sin empresa'} - Temporada Pesca - ${pescaIndustrial.temporadaPesca?.nombre || 'Sin nombre'}`;
+    }
+    if (pescaConsumo) {
+      return `${pescaConsumo.novedadPescaConsumo?.empresa?.razonSocial || 'Sin empresa'} - Novedad Pesca Consumo - ${pescaConsumo.novedadPescaConsumo?.nombre || 'Sin nombre'}`;
+    }
+    if (ventas) {
+      return `${ventas.cotizacionVentas?.empresa?.razonSocial || 'Sin empresa'} - Cotización Ventas - ${ventas.cotizacionVentas?.numeroDocumento || 'S/N'} | ${formatearFecha(ventas.cotizacionVentas?.fechaDocumento)} | ${ventas.cotizacionVentas?.cliente?.razonSocial || 'Sin cliente'}`;
+    }
+    if (compras) {
+      return `${compras.requerimientoCompra?.empresa?.razonSocial || 'Sin empresa'} - Requerimiento Compra - ${compras.requerimientoCompra?.numeroDocumento || 'S/N'} | ${formatearFecha(compras.requerimientoCompra?.fechaDocumento)} | ${compras.requerimientoCompra?.proveedor?.razonSocial || 'Sin proveedor'}`;
+    }
+    if (movAlmacen) {
+      return `${movAlmacen.movimientoAlmacen?.empresa?.razonSocial || 'Sin empresa'} - Movimiento Almacén - ${movAlmacen.movimientoAlmacen?.numeroDocumento || 'S/N'} | ${formatearFecha(movAlmacen.movimientoAlmacen?.fechaDocumento)} | ${movAlmacen.movimientoAlmacen?.entidadComercial?.razonSocial || 'Sin entidad'}`;
+    }
+    if (contratos) {
+      return `${contratos.contratoServicio?.empresa?.razonSocial || 'Sin empresa'} - Contrato Servicio - ${contratos.contratoServicio?.numeroCompleto || 'S/N'} | ${formatearFecha(contratos.contratoServicio?.fechaCelebracion)} | ${contratos.contratoServicio?.cliente?.razonSocial || 'Sin cliente'}`;
+    }
+    if (otMantenimiento) {
+      return `${otMantenimiento.otMantenimiento?.empresa?.razonSocial || 'Sin empresa'} - OT Mantenimiento - ${otMantenimiento.otMantenimiento?.numeroCompleto || 'S/N'} | ${formatearFecha(otMantenimiento.otMantenimiento?.fechaDocumento)} | ${otMantenimiento.otMantenimiento?.descripcionProblema || 'Sin descripción'}`;
+    }
+
+    return null;
+  } catch (err) {
+    console.error('Error al obtener label de enlace:', err);
+    return null;
+  }
+};
+
+
 
 const obtenerTodasAsignacionesNoLiquidadas = async () => {
   try {
@@ -689,6 +846,7 @@ export default {
   actualizar,
   eliminar,
   obtenerConGastosAsociados,
+  obtenerLabelEnlace,
   obtenerTodasAsignacionesNoLiquidadas,
   obtenerValoresIniciales
 };
