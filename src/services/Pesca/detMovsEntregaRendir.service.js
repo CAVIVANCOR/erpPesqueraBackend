@@ -73,6 +73,12 @@ const listar = async () => {
         moneda: true,
         producto: true,
         tipoDocumento: true,
+        enlaceGastoPlanificado: {
+          include: {
+            producto: true,
+            moneda: true,
+          },
+        },
       },
     });
   } catch (err) {
@@ -302,6 +308,7 @@ const actualizar = async (id, data, usuarioId = null) => {
       embarcacionId: data.embarcacionId,
       saldoInicialAsignacion: data.saldoInicialAsignacion,
       saldoFinalAsignacion: data.saldoFinalAsignacion,
+      enlaceGastosPlanificadosId: data.enlaceGastosPlanificadosId, // ← AGREGAR AQUÍ
     };
 
     // Convertir asignacionOrigenId=0 a null para Prisma (0 es solo indicador lógico, no FK)
