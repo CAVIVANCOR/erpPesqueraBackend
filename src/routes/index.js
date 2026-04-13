@@ -172,6 +172,7 @@ import detalleDescargaFaenaRoutes from '../routes/Pesca/detalleDescargaFaena.rou
 import accionesPreviasFaenaRoutes from '../routes/Pesca/accionesPreviasFaena.routes.js';
 import detAccionesPreviasFaenaRoutes from '../routes/Pesca/detAccionesPreviasFaena.routes.js';
 import puertoPescaRoutes from '../routes/Pesca/puertoPesca.routes.js';
+import geolocalizacionRoutes from '../routes/Pesca/geolocalizacion.routes.js';
 import novedadPescaConsumoRoutes from '../routes/Pesca/novedadPescaConsumo.routes.js';
 import faenaPescaConsumoRoutes from '../routes/Pesca/faenaPescaConsumo.routes.js';
 import detAccionesPreviasFaenaConsumoRoutes from '../routes/Pesca/detAccionesPreviasFaenaConsumo.routes.js';
@@ -575,6 +576,8 @@ router.use('/pesca/acciones-previas-faena', accionesPreviasFaenaRoutes);
 router.use('/pesca/detalles-acciones-previas-faena', detAccionesPreviasFaenaRoutes);
 // Rutas para PuertoPesca
 router.use('/pesca/puertos-pesca', puertoPescaRoutes);
+// Rutas para Geolocalización
+router.use('/pesca/geolocalizacion', geolocalizacionRoutes);
 // Rutas para NovedadPescaConsumo
 router.use('/pesca/novedades-pesca-consumo', novedadPescaConsumoRoutes);
 // Rutas para FaenaPescaConsumo
