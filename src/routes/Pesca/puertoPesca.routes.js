@@ -6,6 +6,7 @@ const router = Router();
 // Rutas CRUD para PuertoPesca
 router.get('/', puertoPescaController.listar);
 router.get('/activos', puertoPescaController.listarActivos);
+router.get('/zonas-disponibles', puertoPescaController.obtenerZonasDisponibles);
 router.get('/:id', puertoPescaController.obtenerPorId);
 router.post('/', puertoPescaController.crear);
 router.put('/:id', puertoPescaController.actualizar);

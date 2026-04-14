@@ -63,3 +63,15 @@ export async function listarActivos(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Obtiene las zonas únicas disponibles
+ */
+export async function obtenerZonasDisponibles(req, res, next) {
+  try {
+    const zonas = await puertoPescaService.obtenerZonasDisponibles();
+    res.json(zonas);
+  } catch (err) {
+    next(err);
+  }
+}

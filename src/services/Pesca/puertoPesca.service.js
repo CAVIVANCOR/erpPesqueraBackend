@@ -88,10 +88,29 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Obtiene las zonas únicas disponibles en los puertos activos
+ * @returns {Promise<string[]>} Array de zonas únicas
+ */
+const obtenerZonasDisponibles = async () => {
+  try {
+    const zonas = await prisma.puertoPesca.findMany({
+      where: { activo: true },
+      select: { zona: true },
+      distinct: ['zona']
+    });
+    return zonas.map(z => z.zona);
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  obtenerZonasDisponibles
 };
