@@ -1,6 +1,12 @@
 import prisma from '../../config/prismaClient.js';
 import * as turf from '@turf/turf';
 import { ValidationError, DatabaseError } from '../../utils/errors.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Servicio de Geolocalización para análisis de coordenadas de pesca
@@ -8,6 +14,34 @@ import { ValidationError, DatabaseError } from '../../utils/errors.js';
  * 100% Open Source - Sin APIs de pago
  * Documentado en español
  */
+// ========== CACHÉ DE DATOS GEOGRÁFICOS ==========
+
+/**
+ * Caché en memoria para datos geográficos
+ * Se carga una sola vez al iniciar el servidor
+ */
+let centrosPobladosCache = null;
+
+/**
+ * Carga datos de centros poblados INEI en memoria
+ * @returns {Object} GeoJSON de centros poblados
+ */
+const cargarCentrosPoblados = () => {
+  if (centrosPobladosCache) {
+    return centrosPobladosCache;
+  }
+  
+  try {
+    const geojsonPath = path.join(__dirname, '..', '..', '..', 'temp', 'centros_poblados.geojson');
+    const geojsonData = fs.readFileSync(geojsonPath, 'utf-8');
+    centrosPobladosCache = JSON.parse(geojsonData);
+    console.log(`✅ Centros poblados INEI cargados en memoria: ${centrosPobladosCache.features.length} lugares`);
+    return centrosPobladosCache;
+  } catch (error) {
+    console.error('❌ Error cargando centros poblados:', error);
+    throw new DatabaseError('Error cargando datos geográficos', error.message);
+  }
+};
 
 // ========== FUNCIONES AUXILIARES ==========
 
@@ -128,6 +162,59 @@ const calcularDistanciaACosta = async (latitud, longitud) => {
  */
 const obtenerUbicacionGeografica = async (latitud, longitud) => {
   try {
+    // PASO 1: Buscar centro poblado más cercano en GeoJSON
+    const geojson = cargarCentrosPoblados();
+    const puntoConsulta = turf.point([longitud, latitud]);
+    
+    let centroPobladoMasCercano = null;
+    let distanciaMinima = Infinity;
+    
+    // Buscar en un radio de 50km
+    for (const feature of geojson.features) {
+      const puntoCentro = turf.point(feature.geometry.coordinates);
+      const distancia = turf.distance(puntoConsulta, puntoCentro, { units: 'kilometers' });
+      
+      if (distancia < 50 && distancia < distanciaMinima) {
+        distanciaMinima = distancia;
+        centroPobladoMasCercano = feature;
+      }
+    }
+    
+    // PASO 2: Si encontró centro poblado con UBIGEO, consultar tabla Ubigeo
+    if (centroPobladoMasCercano && centroPobladoMasCercano.properties.UBIGEO) {
+      try {
+        const ubigeoData = await prisma.ubigeo.findUnique({
+          where: { codigo: centroPobladoMasCercano.properties.UBIGEO },
+          include: {
+            departamento: true,
+            provincia: true,
+            pais: true
+          }
+        });
+        
+        if (ubigeoData) {
+          const props = centroPobladoMasCercano.properties;
+          const nombreLugar = sanitizarTexto(props.DESCRIPCIO || props.NOMBDIST || 'N/A');
+          
+          return {
+            direccionCompleta: `${nombreLugar}, ${ubigeoData.provincia.nombre}, ${ubigeoData.departamento.nombre}, ${ubigeoData.pais.nombre}`,
+            lugar: nombreLugar,
+            ciudad: nombreLugar,
+            distrito: sanitizarTexto(ubigeoData.nombreDistrito) || nombreLugar,
+            provincia: sanitizarTexto(ubigeoData.provincia.nombre),
+            departamento: sanitizarTexto(ubigeoData.departamento.nombre),
+            pais: sanitizarTexto(ubigeoData.pais.nombre),
+            cuerpoAgua: 'Océano Pacífico',
+            tipoLugar: 'poblado',
+            ubigeo: ubigeoData.codigo
+          };
+        }
+      } catch (error) {
+        console.warn('Error consultando tabla Ubigeo:', error);
+      }
+    }
+    
+    // PASO 3: Fallback a Nominatim si no encontró en BD
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitud}&lon=${longitud}&zoom=10&addressdetails=1`,
       {
@@ -141,6 +228,7 @@ const obtenerUbicacionGeografica = async (latitud, longitud) => {
       console.warn(`Nominatim API error: ${response.status}`);
       return {
         direccionCompleta: 'No disponible',
+        lugar: 'N/A',
         ciudad: 'N/A',
         distrito: 'N/A',
         provincia: 'N/A',
@@ -155,10 +243,11 @@ const obtenerUbicacionGeografica = async (latitud, longitud) => {
 
     return {
       direccionCompleta: sanitizarTexto(data.display_name) || 'N/A',
+      lugar: sanitizarTexto(data.address?.city || data.address?.town || data.address?.village) || 'N/A',
       ciudad: sanitizarTexto(data.address?.city || data.address?.town || data.address?.village) || 'N/A',
-      distrito: sanitizarTexto(data.address?.suburb || data.address?.neighbourhood) || 'N/A',
-      provincia: sanitizarTexto(data.address?.state || data.address?.province) || 'N/A',
-      departamento: sanitizarTexto(data.address?.region) || 'N/A',
+      distrito: sanitizarTexto(data.address?.city || data.address?.town || data.address?.village) || 'N/A',
+      provincia: sanitizarTexto(data.address?.county) || 'N/A',
+      departamento: sanitizarTexto(data.address?.state) || 'N/A',
       pais: sanitizarTexto(data.address?.country) || 'Perú',
       cuerpoAgua: sanitizarTexto(data.address?.water || data.address?.bay || data.address?.sea) || 'Océano Pacífico',
       tipoLugar: sanitizarTexto(data.type) || 'N/A'
@@ -167,6 +256,7 @@ const obtenerUbicacionGeografica = async (latitud, longitud) => {
     console.error('Error en geocodificación inversa:', error);
     return {
       direccionCompleta: 'No disponible',
+      lugar: 'N/A',
       ciudad: 'N/A',
       distrito: 'N/A',
       provincia: 'N/A',
@@ -393,6 +483,149 @@ const obtenerInformacionGeograficaCompleta = async (
   }
 };
 
+
+/**
+ * 7. Obtiene referencia costera para ubicaciones en alta mar
+ * Usa proyección perpendicular hacia la costa con datos oficiales INEI
+ * @param {number} latitud - Latitud del punto en el mar
+ * @param {number} longitud - Longitud del punto en el mar
+ * @returns {Promise<Object>} Información de referencia costera
+ */
+const obtenerReferenciaCosta = async (latitud, longitud) => {
+  try {
+       // Cargar GeoJSON de centros poblados INEI (desde caché)
+    const geojson = cargarCentrosPoblados();
+    
+    // PASO 1: Filtrar por latitud similar (±0.15° aprox. 16.5 km)
+    const toleranciaLat = 0.15;
+    const candidatos = geojson.features.filter(feature => {
+      const lat = feature.geometry.coordinates[1];
+      return lat >= (latitud - toleranciaLat) && lat <= (latitud + toleranciaLat);
+    });
+    
+    if (candidatos.length === 0) {
+      throw new ValidationError('No se encontraron lugares costeros cercanos');
+    }
+    
+    // PASO 2: Encontrar longitud más cercana (más al este, hacia tierra)
+    let lonMasCercana = Infinity;
+    
+    for (const candidato of candidatos) {
+      const lon = candidato.geometry.coordinates[0];
+      
+      // Solo considerar lugares al este (longitud mayor = más cerca de tierra)
+      if (lon > longitud) {
+        const diferencia = Math.abs(lon - longitud);
+        
+        if (diferencia < Math.abs(lonMasCercana - longitud)) {
+          lonMasCercana = lon;
+        }
+      }
+    }
+    
+    // Si no hay lugares al este, usar el más cercano en general
+    if (lonMasCercana === Infinity) {
+      for (const candidato of candidatos) {
+        const lon = candidato.geometry.coordinates[0];
+        const diferencia = Math.abs(lon - longitud);
+        
+        if (diferencia < Math.abs(lonMasCercana - longitud)) {
+          lonMasCercana = lon;
+        }
+      }
+    }
+    
+    // PASO 3: Crear punto proyectado en la costa
+    const puntoProyectado = turf.point([lonMasCercana, latitud]);
+    
+    // PASO 4: Buscar lugar más cercano al punto proyectado
+    let distanciaMinima = Infinity;
+    let lugarMasCercano = null;
+    
+    for (const candidato of candidatos) {
+      const puntoCandidato = turf.point(candidato.geometry.coordinates);
+      const distancia = turf.distance(puntoProyectado, puntoCandidato, { units: 'kilometers' });
+      
+      if (distancia < distanciaMinima) {
+        distanciaMinima = distancia;
+        lugarMasCercano = candidato;
+      }
+    }
+    
+    if (!lugarMasCercano) {
+      throw new ValidationError('No se pudo determinar ubicación costera de referencia');
+    }
+    
+    // PASO 5: Calcular distancia desde barco a punto proyectado
+    const puntoBarco = turf.point([Number(longitud), Number(latitud)]);
+    const distanciaKm = turf.distance(puntoBarco, puntoProyectado, { units: 'kilometers' });
+    const distanciaMN = turf.distance(puntoBarco, puntoProyectado, { units: 'nauticalmiles' });
+    
+    // PASO 6: Calcular bearing (rumbo hacia la costa)
+    const bearing = turf.bearing(puntoBarco, puntoProyectado);
+    const bearingNormalizado = bearing < 0 ? bearing + 360 : bearing;
+    
+    // Convertir bearing a dirección cardinal
+    let direccion = '';
+    if (bearingNormalizado >= 337.5 || bearingNormalizado < 22.5) {
+      direccion = 'Norte';
+    } else if (bearingNormalizado >= 22.5 && bearingNormalizado < 67.5) {
+      direccion = 'Noreste';
+    } else if (bearingNormalizado >= 67.5 && bearingNormalizado < 112.5) {
+      direccion = 'Este';
+    } else if (bearingNormalizado >= 112.5 && bearingNormalizado < 157.5) {
+      direccion = 'Sureste';
+    } else if (bearingNormalizado >= 157.5 && bearingNormalizado < 202.5) {
+      direccion = 'Sur';
+    } else if (bearingNormalizado >= 202.5 && bearingNormalizado < 247.5) {
+      direccion = 'Suroeste';
+    } else if (bearingNormalizado >= 247.5 && bearingNormalizado < 292.5) {
+      direccion = 'Oeste';
+    } else {
+      direccion = 'Noroeste';
+    }
+    
+    // Extraer datos del lugar encontrado
+    const props = lugarMasCercano.properties;
+    const nombre = sanitizarTexto(props.DESCRIPCIO || props.NOMBDIST || 'Costa peruana');
+    const departamento = sanitizarTexto(props.DEPARTAMEN || 'N/A');
+    const provincia = sanitizarTexto(props.PROVINCIA || 'N/A');
+    const distrito = sanitizarTexto(props.DISTRITO || 'N/A');
+    const ubigeo = props.UBIGEO || '';
+    
+    return {
+      esReferenciaCalculada: true,
+      distanciaACosta: {
+        km: parseFloat(distanciaKm.toFixed(2)),
+        millasNauticas: parseFloat(distanciaMN.toFixed(2))
+      },
+      puntoProyectado: {
+        latitud: parseFloat(latitud.toFixed(6)),
+        longitud: parseFloat(lonMasCercana.toFixed(6))
+      },
+      ubicacionCosta: {
+        lugar: nombre,
+        distrito: distrito,
+        provincia: provincia,
+        departamento: departamento,
+        ubigeo: ubigeo,
+        pais: 'Perú'
+      },
+      navegacion: {
+        bearing: parseFloat(bearingNormalizado.toFixed(1)),
+        direccion: direccion
+      },
+      descripcion: `A ${distanciaMN.toFixed(1)} millas náuticas mar adentro desde ${nombre}, ${provincia}, ${departamento}`,
+      mensaje: 'Ubicación calculada mediante proyección perpendicular a la costa (datos oficiales INEI)'
+    };
+    
+  } catch (err) {
+    console.error('Error en obtenerReferenciaCosta:', err);
+    if (err instanceof ValidationError) throw err;
+    throw new DatabaseError('Error calculando referencia costera', err.message);
+  }
+};
+
 export default {
   obtenerInformacionGeograficaCompleta,
   encontrarPuertoMasCercano,
@@ -400,5 +633,6 @@ export default {
   obtenerUbicacionGeografica,
   determinarZonaPesca,
   calcularDistanciaDesdeOrigen,
-  obtenerProfundidadMar
+  obtenerProfundidadMar,
+  obtenerReferenciaCosta
 };

@@ -31,3 +31,7 @@ Thumbs.db
 
 # Uploads (archivos subidos por usuarios)
 uploads/
+
+# Excluir carpetas completas
+temp/
+scripts/

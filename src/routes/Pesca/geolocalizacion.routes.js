@@ -8,5 +8,6 @@ const router = Router();
  * POST /api/pesca/geolocalizacion/analizar - Analiza coordenadas GPS
  */
 router.post('/analizar', geolocalizacionController.analizarCoordenadas);
+router.post('/referencia-costa', geolocalizacionController.obtenerReferenciaCosta);
 
 export default router;

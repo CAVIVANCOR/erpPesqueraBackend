@@ -49,3 +49,37 @@ export async function analizarCoordenadas(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Obtiene referencia costera para ubicación en alta mar
+ * @route POST /api/pesca/geolocalizacion/referencia-costa
+ * @param {Object} req.body.latitud - Latitud del punto en el mar (requerido)
+ * @param {Object} req.body.longitud - Longitud del punto en el mar (requerido)
+ */
+export async function obtenerReferenciaCosta(req, res, next) {
+  try {
+    const { latitud, longitud } = req.body;
+
+    if (latitud === undefined || latitud === null) {
+      return res.status(400).json({
+        error: 'El parámetro latitud es requerido'
+      });
+    }
+
+    if (longitud === undefined || longitud === null) {
+      return res.status(400).json({
+        error: 'El parámetro longitud es requerido'
+      });
+    }
+
+    const lat = Number(latitud);
+    const lng = Number(longitud);
+
+    const referencia = await geolocalizacionService.obtenerReferenciaCosta(lat, lng);
+
+    res.json(toJSONBigInt(referencia));
+  } catch (err) {
+    console.error('Error en obtenerReferenciaCosta controller:', err);
+    next(err);
+  }
+}
