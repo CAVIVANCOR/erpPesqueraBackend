@@ -1552,9 +1552,29 @@ model DetCalaPescaConsumo {
   especieId           BigInt
   toneladas           Decimal?
   porcentajeJuveniles Decimal?
+  pesoMuestra         Decimal? @db.Decimal(10,3)  // Peso de la muestra en kg (ej: 2.800)
+  totalEjemplares     Int?                         // Total de ejemplares medidos (calculado)
+  
+  // Estructura de tallas (cantidad de peces por talla en cm)
+  talla_9_50          Int?     @default(0)         // Cantidad de peces de 9.50 cm
+  talla_10_00         Int?     @default(0)         // Cantidad de peces de 10.00 cm
+  talla_10_50         Int?     @default(0)         // Cantidad de peces de 10.50 cm
+  talla_11_00         Int?     @default(0)         // Cantidad de peces de 11.00 cm
+  talla_11_50         Int?     @default(0)         // Cantidad de peces de 11.50 cm
+  talla_12_00         Int?     @default(0)         // Cantidad de peces de 12.00 cm
+  talla_12_50         Int?     @default(0)         // Cantidad de peces de 12.50 cm
+  talla_13_00         Int?     @default(0)         // Cantidad de peces de 13.00 cm
+  talla_13_50         Int?     @default(0)         // Cantidad de peces de 13.50 cm
+  talla_14_00         Int?     @default(0)         // Cantidad de peces de 14.00 cm
+  talla_14_50         Int?     @default(0)         // Cantidad de peces de 14.50 cm
+  talla_15_00         Int?     @default(0)         // Cantidad de peces de 15.00 cm
+  talla_15_50         Int?     @default(0)         // Cantidad de peces de 15.50 cm
+  talla_16_00         Int?     @default(0)         // Cantidad de peces de 16.00 cm
+  
+  urlDatosCala        String?                      // Ruta de la imagen del reporte de cala
   observaciones       String?
   createdAt           DateTime         @default(now())
-  updatedAt           DateTime
+  updatedAt           DateTime         @updatedAt
 
   calaFaenaConsumo    CalaFaenaConsumo @relation(fields: [calaFaenaConsumoId], references: [id])
   especie             Especie @relation(fields: [especieId], references: [id])
@@ -1840,9 +1860,29 @@ model DetalleCalaEspecie {
   especieId           BigInt
   toneladas           Decimal?
   porcentajeJuveniles Decimal?
+  pesoMuestra         Decimal? @db.Decimal(10,3)  // Peso de la muestra en kg (ej: 2.800)
+  totalEjemplares     Int?                         // Total de ejemplares medidos (calculado)
+  
+  // Estructura de tallas (cantidad de peces por talla en cm)
+  talla_9_50          Int?     @default(0)         // Cantidad de peces de 9.50 cm
+  talla_10_00         Int?     @default(0)         // Cantidad de peces de 10.00 cm
+  talla_10_50         Int?     @default(0)         // Cantidad de peces de 10.50 cm
+  talla_11_00         Int?     @default(0)         // Cantidad de peces de 11.00 cm
+  talla_11_50         Int?     @default(0)         // Cantidad de peces de 11.50 cm
+  talla_12_00         Int?     @default(0)         // Cantidad de peces de 12.00 cm
+  talla_12_50         Int?     @default(0)         // Cantidad de peces de 12.50 cm
+  talla_13_00         Int?     @default(0)         // Cantidad de peces de 13.00 cm
+  talla_13_50         Int?     @default(0)         // Cantidad de peces de 13.50 cm
+  talla_14_00         Int?     @default(0)         // Cantidad de peces de 14.00 cm
+  talla_14_50         Int?     @default(0)         // Cantidad de peces de 14.50 cm
+  talla_15_00         Int?     @default(0)         // Cantidad de peces de 15.00 cm
+  talla_15_50         Int?     @default(0)         // Cantidad de peces de 15.50 cm
+  talla_16_00         Int?     @default(0)         // Cantidad de peces de 16.00 cm
+  
+  urlDatosCala        String?                      // Ruta de la imagen del reporte de cala
   observaciones       String?
   createdAt           DateTime @default(now())
-  updatedAt           DateTime
+  updatedAt           DateTime @updatedAt
 
   cala                Cala   @relation(fields: [calaId], references: [id])
   especie             Especie @relation(fields: [especieId], references: [id])
