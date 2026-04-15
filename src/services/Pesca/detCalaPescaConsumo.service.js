@@ -1,6 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
-
+import { calcularPorcentajeJuveniles } from '../../utils/calcularPorcentajeJuveniles.js';
 /**
  * Servicio CRUD para DetCalaPescaConsumo
  * Valida existencia de claves foráneas y campos obligatorios.
@@ -45,7 +45,17 @@ const crear = async (data) => {
       }
     }
     await validarClavesForaneas(data);
-    return await prisma.detCalaPescaConsumo.create({ data });
+    
+    // Calcular porcentaje de juveniles y total de ejemplares automáticamente
+    const { porcentajeJuveniles, totalEjemplares } = calcularPorcentajeJuveniles(data);
+    
+    const dataConCalculos = {
+      ...data,
+      porcentajeJuveniles,
+      totalEjemplares
+    };
+    
+    return await prisma.detCalaPescaConsumo.create({ data: dataConCalculos });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -62,7 +72,17 @@ const actualizar = async (id, data) => {
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    return await prisma.detCalaPescaConsumo.update({ where: { id }, data });
+    
+    // Calcular porcentaje de juveniles y total de ejemplares automáticamente
+    const { porcentajeJuveniles, totalEjemplares } = calcularPorcentajeJuveniles(data);
+    
+    const dataConCalculos = {
+      ...data,
+      porcentajeJuveniles,
+      totalEjemplares
+    };
+    
+    return await prisma.detCalaPescaConsumo.update({ where: { id }, data: dataConCalculos });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

@@ -34,8 +34,14 @@ async function recalcularToneladasCala(calaId, faenaPescaId, TemporadaPescaId) {
     },
   });
 
-  await recalcularToneladasFaena(faenaPescaId);
-  await recalcularToneladasTemporada(TemporadaPescaId);
+  // ⭐ VALIDAR ANTES DE LLAMAR A FUNCIONES EN CASCADA
+  if (faenaPescaId) {
+    await recalcularToneladasFaena(faenaPescaId);
+  }
+  
+  if (TemporadaPescaId) {
+    await recalcularToneladasTemporada(TemporadaPescaId);
+  }
 
   return toneladasCalculadas;
 }
@@ -46,6 +52,12 @@ async function recalcularToneladasCala(calaId, faenaPescaId, TemporadaPescaId) {
  * @param {BigInt} faenaId - ID de la faena a recalcular
  */
 async function recalcularToneladasFaena(faenaId) {
+  // ⭐ VALIDAR QUE faenaId NO SEA UNDEFINED O NULL
+  if (!faenaId) {
+    console.warn('⚠️ recalcularToneladasFaena: faenaId es undefined o null');
+    return 0;
+  }
+
   // Obtener todas las calas de esta faena específica
   const calasFaena = await prisma.cala.findMany({
     where: {
@@ -75,6 +87,12 @@ async function recalcularToneladasFaena(faenaId) {
  * @param {BigInt} temporadaId - ID de la temporada a recalcular
  */
 async function recalcularToneladasTemporada(temporadaId) {
+  // ⭐ VALIDAR QUE temporadaId NO SEA UNDEFINED O NULL
+  if (!temporadaId) {
+    console.warn('⚠️ recalcularToneladasTemporada: temporadaId es undefined o null');
+    return 0;
+  }
+
   // Obtener todas las descargas de esta temporada a través de la relación con faenaPesca
   const descargasTemporada = await prisma.descargaFaenaPesca.findMany({
     where: {
@@ -110,7 +128,6 @@ async function recalcularToneladasTemporada(temporadaId) {
 
   return toneladasCalculadas;
 }
-
 /**
  * FUNCIÓN EN CASCADA: Recalcula desde una cala hacia arriba en la jerarquía
  * Útil cuando se modifica DetalleCalaEspecie

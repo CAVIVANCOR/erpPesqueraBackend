@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 import { puedeEditarDetalleFaena } from '../../utils/checkSuperUsuario.js';
+import { calcularPorcentajeJuveniles } from '../../utils/calcularPorcentajeJuveniles.js';
 
 /**
  * Servicio CRUD para DetalleCalaEspecie
@@ -155,9 +156,14 @@ const crear = async (data) => {
     await validarClavesForaneas(data);
     await validarUnicidad(data.calaId, data.especieId);
     
-    // Agregar updatedAt requerido por Prisma
+    // Calcular porcentaje de juveniles y total de ejemplares automáticamente
+    const { porcentajeJuveniles, totalEjemplares } = calcularPorcentajeJuveniles(data);
+    
+    // Agregar updatedAt y campos calculados
     const dataConUpdatedAt = {
       ...data,
+      porcentajeJuveniles,
+      totalEjemplares,
       updatedAt: new Date()
     };
     
@@ -215,7 +221,17 @@ const actualizar = async (id, data, usuarioId = null) => {
         id
       );
     }
-    const actualizado = await prisma.detalleCalaEspecie.update({ where: { id }, data });
+    
+    // Calcular porcentaje de juveniles y total de ejemplares automáticamente
+    const { porcentajeJuveniles, totalEjemplares } = calcularPorcentajeJuveniles(data);
+    
+    const dataConCalculos = {
+      ...data,
+      porcentajeJuveniles,
+      totalEjemplares
+    };
+    
+    const actualizado = await prisma.detalleCalaEspecie.update({ where: { id }, data: dataConCalculos });
     await actualizarToneladasCala(actualizado.calaId);
     return actualizado;
   } catch (err) {
