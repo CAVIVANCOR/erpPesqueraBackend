@@ -2250,6 +2250,8 @@ model Embarcacion {
   tipoEmbarcacionId                      BigInt
   estadoActivoId                         BigInt
   urlFotoEmbarcacion                     String?
+  millasNauticasPorGalon  Decimal?  @db.Decimal(10, 2)
+
 
   tipoEmbarcacion   TipoEmbarcacion @relation(fields: [tipoEmbarcacionId], references: [id])
   documentaciones DocumentacionEmbarcacion[]
