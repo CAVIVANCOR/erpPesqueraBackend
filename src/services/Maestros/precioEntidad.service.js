@@ -1,5 +1,9 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio CRUD para PrecioEntidad
@@ -15,18 +19,24 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
 async function validarPrecioEntidad(data) {
   // Validar existencia de EntidadComercial
   if (data.entidadComercialId) {
-    const existe = await prisma.entidadComercial.findUnique({ where: { id: data.entidadComercialId } });
-    if (!existe) throw new ValidationError('Entidad comercial no existente.');
+    const existe = await prisma.entidadComercial.findUnique({
+      where: { id: data.entidadComercialId },
+    });
+    if (!existe) throw new ValidationError("Entidad comercial no existente.");
   }
   // Validar existencia de Producto
   if (data.productoId) {
-    const existeProducto = await prisma.producto.findUnique({ where: { id: data.productoId } });
-    if (!existeProducto) throw new ValidationError('Producto no existente.');
+    const existeProducto = await prisma.producto.findUnique({
+      where: { id: data.productoId },
+    });
+    if (!existeProducto) throw new ValidationError("Producto no existente.");
   }
   // Validar existencia de Moneda
   if (data.monedaId) {
-    const existeMoneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
-    if (!existeMoneda) throw new ValidationError('Moneda no existente.');
+    const existeMoneda = await prisma.moneda.findUnique({
+      where: { id: data.monedaId },
+    });
+    if (!existeMoneda) throw new ValidationError("Moneda no existente.");
   }
 }
 
@@ -40,14 +50,15 @@ const listar = async () => {
         entidadComercial: true,
         producto: {
           include: {
-            unidadMedida: true
-          }
+            unidadMedida: true,
+          },
         },
-        moneda: true
-      }
+        moneda: true,
+      },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -63,16 +74,17 @@ const obtenerPorId = async (id) => {
         entidadComercial: true,
         producto: {
           include: {
-            unidadMedida: true
-          }
+            unidadMedida: true,
+          },
         },
-        moneda: true
-      }
+        moneda: true,
+      },
     });
-    if (!precio) throw new NotFoundError('Precio no encontrado');
+    if (!precio) throw new NotFoundError("Precio no encontrado");
     return precio;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -88,47 +100,48 @@ const obtenerPorEntidad = async (entidadComercialId) => {
         entidadComercial: true,
         producto: {
           include: {
-            unidadMedida: true
-          }
+            unidadMedida: true,
+          },
         },
         moneda: true,
       },
-      orderBy: { id: 'desc' }
+      orderBy: { id: "desc" },
     });
-    
+
     // Consultar manualmente los datos de personal para cada precio
     const resultadoConPersonal = await Promise.all(
       resultado.map(async (precio) => {
         let personalCreador = null;
         let personalActualizador = null;
-        
+
         // Consultar personal creador si existe
         if (precio.creadoPor) {
           personalCreador = await prisma.personal.findUnique({
             where: { id: precio.creadoPor },
-            select: { id: true, nombres: true, apellidos: true }
+            select: { id: true, nombres: true, apellidos: true },
           });
         }
-        
+
         // Consultar personal actualizador si existe
         if (precio.actualizadoPor) {
           personalActualizador = await prisma.personal.findUnique({
             where: { id: precio.actualizadoPor },
-            select: { id: true, nombres: true, apellidos: true }
+            select: { id: true, nombres: true, apellidos: true },
           });
         }
-        
+
         return {
           ...precio,
           personalCreador,
-          personalActualizador
+          personalActualizador,
         };
-      })
+      }),
     );
-    
+
     return resultadoConPersonal;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -139,18 +152,19 @@ const obtenerPorEntidad = async (entidadComercialId) => {
 const crear = async (data) => {
   try {
     await validarPrecioEntidad(data);
-    
+
     // Asegurar que las fechas de auditoría estén presentes
     const datosConAuditoria = {
       ...data,
       fechaCreacion: data.fechaCreacion || new Date(),
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
-    
+
     return await prisma.precioEntidad.create({ data: datosConAuditoria });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -161,23 +175,29 @@ const crear = async (data) => {
 const actualizar = async (id, data) => {
   try {
     const existente = await prisma.precioEntidad.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Precio no encontrado');
+    if (!existente) throw new NotFoundError("Precio no encontrado");
     await validarPrecioEntidad(data);
-    
+
     // Asegurar que todos los campos de auditoría estén presentes
     const datosConAuditoria = {
       ...data,
       // Si fechaCreacion o creadoPor son null/vacíos en el registro existente, asignarlos ahora
-      fechaCreacion: data.fechaCreacion || existente.fechaCreacion || new Date(),
+      fechaCreacion:
+        data.fechaCreacion || existente.fechaCreacion || new Date(),
       creadoPor: data.creadoPor || existente.creadoPor || null,
       // Siempre actualizar estos campos
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
-    
-    return await prisma.precioEntidad.update({ where: { id }, data: datosConAuditoria });
+
+    return await prisma.precioEntidad.update({
+      where: { id },
+      data: datosConAuditoria,
+    });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -188,12 +208,13 @@ const actualizar = async (id, data) => {
 const eliminar = async (id) => {
   try {
     const existente = await prisma.precioEntidad.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Precio no encontrado');
+    if (!existente) throw new NotFoundError("Precio no encontrado");
     await prisma.precioEntidad.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -208,37 +229,38 @@ const eliminar = async (id) => {
 const obtenerPrecioEspecialActivo = async (entidadComercialId, productoId) => {
   try {
     const fechaActual = new Date();
-    
+
     const precio = await prisma.precioEntidad.findFirst({
       where: {
         entidadComercialId: BigInt(entidadComercialId),
         productoId: BigInt(productoId),
         activo: true,
         vigenteDesde: {
-          lte: fechaActual  // Vigente desde <= fecha actual
+          lte: fechaActual, // Vigente desde <= fecha actual
         },
         OR: [
-          { vigenteHasta: null },  // Sin fecha de fin (vigencia indefinida)
-          { vigenteHasta: { gte: fechaActual } }  // Vigente hasta >= fecha actual
-        ]
+          { vigenteHasta: null }, // Sin fecha de fin (vigencia indefinida)
+          { vigenteHasta: { gte: fechaActual } }, // Vigente hasta >= fecha actual
+        ],
       },
       include: {
         entidadComercial: true,
         producto: {
           include: {
-            unidadMedida: true
-          }
+            unidadMedida: true,
+          },
         },
-        moneda: true
+        moneda: true,
       },
       orderBy: {
-        vigenteDesde: 'desc'  // El más reciente si hay varios
-      }
+        vigenteDesde: "desc", // El más reciente si hay varios
+      },
     });
-    
+
     return precio;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -247,14 +269,20 @@ const obtenerPrecioEspecialActivo = async (entidadComercialId, productoId) => {
  * Obtiene el precio vigente para un producto en una fecha específica
  * Busca primero precio especial del cliente, luego precio global de la empresa
  */
-export async function obtenerPrecioVigente(empresaId, empresaEntidadComercialId, especieId, clienteId, fechaDescarga) {
+export async function obtenerPrecioVigente(
+  empresaId,
+  empresaEntidadComercialId,
+  especieId,
+  clienteId,
+  fechaDescarga,
+) {
   // 1. Buscar producto de la especie
   const producto = await prisma.producto.findFirst({
     where: {
       empresaId: empresaId,
       cesado: false,
-      especieId: especieId
-    }
+      especieId: especieId,
+    },
   });
 
   if (!producto) {
@@ -269,15 +297,12 @@ export async function obtenerPrecioVigente(empresaId, empresaEntidadComercialId,
         productoId: producto.id,
         activo: true,
         vigenteDesde: { lte: fechaDescarga },
-        OR: [
-          { vigenteHasta: { gte: fechaDescarga } },
-          { vigenteHasta: null }
-        ]
+        OR: [{ vigenteHasta: { gte: fechaDescarga } }, { vigenteHasta: null }],
       },
       include: {
         producto: true,
-        moneda: true
-      }
+        moneda: true,
+      },
     });
 
     if (precioEspecial) {
@@ -293,18 +318,61 @@ export async function obtenerPrecioVigente(empresaId, empresaEntidadComercialId,
       productoId: producto.id,
       activo: true,
       vigenteDesde: { lte: fechaDescarga },
-      OR: [
-        { vigenteHasta: { gte: fechaDescarga } },
-        { vigenteHasta: null }
-      ]
+      OR: [{ vigenteHasta: { gte: fechaDescarga } }, { vigenteHasta: null }],
     },
     include: {
       producto: true,
-      moneda: true
-    }
+      moneda: true,
+    },
   });
 
   return precioGlobal;
+}
+
+/**
+ * Obtiene el precio de combustible vigente para una empresa y fecha
+ * @param {BigInt} entidadComercialId - ID de la entidad comercial
+ * @param {Date} fechaReferencia - Fecha de referencia para validar vigencia
+ * @returns {Promise<Object|null>} Precio encontrado o null
+ */
+export async function obtenerPrecioCombustibleVigente(
+  entidadComercialId,
+  fechaReferencia,
+) {
+
+  const precio = await prisma.precioEntidad.findFirst({
+    where: {
+      entidadComercialId: BigInt(entidadComercialId),
+      activo: true,
+      vigenteDesde: {
+        lte: new Date(fechaReferencia),
+      },
+      OR: [
+        { vigenteHasta: null },
+        { vigenteHasta: { gte: new Date(fechaReferencia) } },
+      ],
+      producto: {
+        descripcionArmada: {
+          contains: "PETROLEO",
+        },
+        subfamiliaId: BigInt(48),
+      },
+    },
+    include: {
+      moneda: {
+        select: {
+          id: true,
+          codigoSunat: true,
+          simbolo: true,
+        },
+      },
+    },
+    orderBy: {
+      vigenteDesde: "desc",
+    },
+  });
+
+  return precio;
 }
 
 export default {
@@ -315,5 +383,6 @@ export default {
   crear,
   actualizar,
   eliminar,
-  obtenerPrecioVigente
+  obtenerPrecioVigente,
+  obtenerPrecioCombustibleVigente,
 };

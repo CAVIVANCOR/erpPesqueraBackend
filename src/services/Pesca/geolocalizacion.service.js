@@ -35,7 +35,6 @@ const cargarCentrosPoblados = () => {
     const geojsonPath = path.join(__dirname, '..', '..', '..', 'temp', 'centros_poblados.geojson');
     const geojsonData = fs.readFileSync(geojsonPath, 'utf-8');
     centrosPobladosCache = JSON.parse(geojsonData);
-    console.log(`✅ Centros poblados INEI cargados en memoria: ${centrosPobladosCache.features.length} lugares`);
     return centrosPobladosCache;
   } catch (error) {
     console.error('❌ Error cargando centros poblados:', error);

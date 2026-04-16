@@ -45,7 +45,12 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const emb = await prisma.embarcacion.findUnique({ where: { id } });
+    const emb = await prisma.embarcacion.findUnique({ 
+      where: { id },
+      include: {
+        activo: true
+      }
+    });
     if (!emb) throw new NotFoundError('Embarcación no encontrada');
     return emb;
   } catch (err) {

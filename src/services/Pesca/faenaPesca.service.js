@@ -85,10 +85,10 @@ const listar = async () => {
         panguero: true,
         embarcacion: {
           include: {
-            activo: true
-          }
-        }
-      }
+            activo: true,
+          },
+        },
+      },
     });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -99,7 +99,16 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const faena = await prisma.faenaPesca.findUnique({ where: { id } });
+    const faena = await prisma.faenaPesca.findUnique({
+      where: { id },
+      include: {
+        embarcacion: true,
+        puertoSalida: true,
+        bahia: true,
+        motorista: true,
+        patron: true,
+      },
+    });
     if (!faena) throw new NotFoundError("FaenaPesca no encontrada");
     return faena;
   } catch (err) {
@@ -160,10 +169,10 @@ const actualizar = async (id, data, usuarioId = null) => {
       include: {
         temporada: {
           include: {
-            estadoTemporada: true
-          }
+            estadoTemporada: true,
+          },
         },
-        estadoFaena: true
+        estadoFaena: true,
       },
     });
     if (!existente) throw new NotFoundError("FaenaPesca no encontrada");
@@ -176,24 +185,26 @@ const actualizar = async (id, data, usuarioId = null) => {
       where: {
         tipoProvieneDeId: 4, // Temporada Pesca
         descripcion: { in: ["FINALIZADA", "CANCELADA"] },
-        cesado: false
+        cesado: false,
       },
-      select: { id: true }
+      select: { id: true },
     });
-    
-    const idsEstadosCerradosTemporada = estadosCerradosTemporada.map(e => e.id);
-    
+
+    const idsEstadosCerradosTemporada = estadosCerradosTemporada.map(
+      (e) => e.id,
+    );
+
     // Verificar si puede editar (superusuario O temporada no cerrada)
     const puedeEditar = await puedeEditarRegistroCerrado(
       usuarioId,
       existente.temporada.estadoTemporadaId,
-      idsEstadosCerradosTemporada
+      idsEstadosCerradosTemporada,
     );
-    
+
     if (!puedeEditar) {
       throw new ValidationError(
         `No se puede editar la faena porque la temporada está en estado "${existente.temporada.estadoTemporada?.descripcion}". ` +
-        `Solo los superusuarios pueden editar faenas de temporadas finalizadas o canceladas.`
+          `Solo los superusuarios pueden editar faenas de temporadas finalizadas o canceladas.`,
       );
     }
 

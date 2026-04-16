@@ -103,3 +103,45 @@ export async function obtenerPrecioVigente(req, res, next) {
     next(err);
   }
 };
+
+
+/**
+ * Obtiene precio de combustible vigente
+ * @route GET /api/precios-entidad/combustible
+ * @param {string} req.query.entidadComercialId - ID de la entidad comercial
+ * @param {string} req.query.fechaReferencia - Fecha de referencia ISO
+ */
+export async function obtenerPrecioCombustibleVigente(req, res, next) {
+  try {
+    const { entidadComercialId, fechaReferencia } = req.query;
+
+    // Validar parámetros requeridos
+    if (!entidadComercialId) {
+      return res.status(400).json({
+        error: 'El parámetro entidadComercialId es requerido'
+      });
+    }
+
+    if (!fechaReferencia) {
+      return res.status(400).json({
+        error: 'El parámetro fechaReferencia es requerido'
+      });
+    }
+
+    const precio = await precioEntidadService.obtenerPrecioCombustibleVigente(
+      entidadComercialId,
+      fechaReferencia
+    );
+
+    if (!precio) {
+      return res.status(404).json({
+        error: 'No se encontró precio de combustible vigente'
+      });
+    }
+
+    res.json(toJSONBigInt(precio));
+  } catch (err) {
+    console.error('Error en obtenerPrecioCombustibleVigente controller:', err);
+    next(err);
+  }
+}
