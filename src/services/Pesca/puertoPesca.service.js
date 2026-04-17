@@ -22,6 +22,70 @@ const listar = async () => {
   }
 };
 
+/**
+ * Lista puertos activos nacionales (por defecto para dropdowns)
+ * Filtra esPuertoOtroPais = false
+ */
+const listarActivos = async () => {
+  try {
+    return await prisma.puertoPesca.findMany({
+      where: {
+        activo: true,
+        esPuertoOtroPais: false
+      },
+      orderBy: [
+        { zona: 'asc' },
+        { nombre: 'asc' }
+      ]
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Lista TODOS los puertos activos (nacionales + internacionales)
+ */
+const listarTodosActivos = async () => {
+  try {
+    return await prisma.puertoPesca.findMany({
+      where: {
+        activo: true
+      },
+      orderBy: [
+        { zona: 'asc' },
+        { nombre: 'asc' }
+      ]
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
+ * Lista solo puertos internacionales activos
+ */
+const listarInternacionales = async () => {
+  try {
+    return await prisma.puertoPesca.findMany({
+      where: {
+        activo: true,
+        esPuertoOtroPais: true
+      },
+      orderBy: [
+        { zona: 'asc' },
+        { nombre: 'asc' }
+      ]
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+
 const obtenerPorId = async (id) => {
   try {
     const puerto = await prisma.puertoPesca.findUnique({ where: { id } });
@@ -108,6 +172,9 @@ const obtenerZonasDisponibles = async () => {
 
 export default {
   listar,
+  listarActivos,
+  listarTodosActivos,
+  listarInternacionales,
   obtenerPorId,
   crear,
   actualizar,

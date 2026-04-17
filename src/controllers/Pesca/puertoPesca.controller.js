@@ -53,12 +53,37 @@ export async function eliminar(req, res, next) {
   }
 }
 
+/**
+ * Lista puertos activos NACIONALES (por defecto para dropdowns de pesca)
+ */
 export async function listarActivos(req, res, next) {
   try {
-    const puertos = await puertoPescaService.listar();
-    // Filtrar solo puertos activos (asumiendo que activo = true o no tiene campo activo)
-    const puertosActivos = puertos.filter(puerto => puerto.activo !== false);
-    res.json(toJSONBigInt(puertosActivos));
+    const puertos = await puertoPescaService.listarActivos();
+    res.json(toJSONBigInt(puertos));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Lista TODOS los puertos activos (nacionales + internacionales)
+ */
+export async function listarTodosActivos(req, res, next) {
+  try {
+    const puertos = await puertoPescaService.listarTodosActivos();
+    res.json(toJSONBigInt(puertos));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Lista solo puertos internacionales activos
+ */
+export async function listarInternacionales(req, res, next) {
+  try {
+    const puertos = await puertoPescaService.listarInternacionales();
+    res.json(toJSONBigInt(puertos));
   } catch (err) {
     next(err);
   }

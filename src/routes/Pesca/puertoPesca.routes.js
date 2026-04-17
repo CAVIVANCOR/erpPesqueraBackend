@@ -4,9 +4,12 @@ import * as puertoPescaController from '../../controllers/Pesca/puertoPesca.cont
 const router = Router();
 
 // Rutas CRUD para PuertoPesca
-router.get('/', puertoPescaController.listar);
-router.get('/activos', puertoPescaController.listarActivos);
+// IMPORTANTE: Rutas específicas ANTES de rutas dinámicas
+router.get('/activos', puertoPescaController.listarActivos); // Solo nacionales activos (DEFAULT)
+router.get('/todos-activos', puertoPescaController.listarTodosActivos); // Todos los activos
+router.get('/internacionales', puertoPescaController.listarInternacionales); // Solo internacionales
 router.get('/zonas-disponibles', puertoPescaController.obtenerZonasDisponibles);
+router.get('/', puertoPescaController.listar); // Todos (admin)
 router.get('/:id', puertoPescaController.obtenerPorId);
 router.post('/', puertoPescaController.crear);
 router.put('/:id', puertoPescaController.actualizar);
