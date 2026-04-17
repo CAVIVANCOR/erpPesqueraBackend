@@ -2443,11 +2443,10 @@ model EntidadComercial {
   actualizadoEn        DateTime
   creadoPor            BigInt?
   actualizadoPor       BigInt?
-  condicionHabidoSUNAT Boolean               @default(true)
-  estadoActivoSUNAT    Boolean               @default(true)
-  esAgenteRetencion    Boolean               @default(false)
-  precioPorTonComisionFidelizacion Decimal? @default(0.00) @db.Decimal(7,2)
-
+  condicionHabidoSUNAT                       Boolean  @default(true)
+  estadoActivoSUNAT                          Boolean  @default(true)
+  esAgenteRetencion                          Boolean  @default(false)
+  precioPorTonComisionFidelizacion           Decimal? @default(0.00) @db.Decimal(7,2)
 
   tipoDocumento        TiposDocIdentidad   @relation(fields: [tipoDocumentoId], references: [id])
   tipoEntidad          TipoEntidad         @relation(fields: [tipoEntidadId], references: [id])
@@ -2483,11 +2482,11 @@ model EntidadComercial {
   insumosProveedorSugerido  DetInsumosTareaOT[] @relation("ProveedorSugeridoInsumoOT")
   contratosServicioCliente  ContratoServicio[]  @relation("ContratoServicioCliente")
   movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[] @relation("ProveedorMovContratoServicio")
-detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("ProveedorMovOTMantenimiento")
-descargasFaenaPesca   DescargaFaenaPesca[]
-descargasFaenaConsumo DescargaFaenaConsumo[]
+  detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("ProveedorMovOTMantenimiento")
+  descargasFaenaPesca   DescargaFaenaPesca[]
+  descargasFaenaConsumo DescargaFaenaConsumo[]
 
- // ========================================
+  // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
   comprobantesElectronicos        ComprobanteElectronico[]
@@ -2506,13 +2505,32 @@ descargasFaenaConsumo DescargaFaenaConsumo[]
   detCuotasPesca       DetCuotaPesca[]   @relation("EntidadEmpresarialDetCuotaPesca")
   detCuotasPescaComisionista DetCuotaPesca[] @relation("EntidadComisionistaAlquilerDetCuotaPesca")
   temporadasPescaAlquiladas TemporadaPesca[] @relation("EntidadEmpresarialAlquiladaTemporadaPesca")
-temporadasPescaComisionista TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
-personalEnlazado Personal[] @relation("PersonalEnlaceEntidad")
-comisionesFidelizacion  ComisionFidelizacion[]
-detallesComisionFidelizacion DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
-
+  temporadasPescaComisionista TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
+  personalEnlazado Personal[] @relation("PersonalEnlaceEntidad")
+  comisionesFidelizacion  ComisionFidelizacion[]
+  detallesComisionFidelizacion DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
+  plataformasRecepcionPesca  DetPlataformaRecepcionPesca[]
 
 }
+
+model DetPlataformaRecepcionPesca {
+  id                    BigInt            @id @default(autoincrement())
+  entidadComercialId    BigInt
+  puertoPescaId         BigInt
+  nombre                String            @db.VarChar(200)
+  latitud               Decimal?          @db.Decimal(10, 8)
+  longitud              Decimal?          @db.Decimal(11, 8)
+  activo                Boolean           @default(true)
+
+  // Relaciones
+  entidadComercial      EntidadComercial  @relation(fields: [entidadComercialId], references: [id])
+  puertoPesca           PuertoPesca       @relation(fields: [puertoPescaId], references: [id])
+
+  @@index([entidadComercialId])
+  @@index([puertoPescaId])
+  @@index([activo])
+}
+
 
 model DetComisionFidelizacionEntidad {
   id                              BigInt   @id @default(autoincrement())
@@ -3890,19 +3908,20 @@ model PuertoPesca {
   esPuertoOtroPais    Boolean @default(false)
 
   faenasPescaComoDescarga           FaenaPesca[]         @relation("FaenaPescaPuertoDescarga")
-faenasPescaComoSalida             FaenaPesca[]         @relation("FaenaPescaPuertoSalida")
-faenasPescaComoFondeo             FaenaPesca[]         @relation("FaenaPescaPuertoFondeo")
-faenasPescaConsumoComoDescarga    FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPuertoDescarga")
-faenasPescaConsumoComoSalida      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPuertoSalida")
-faenasPescaConsumoComoFondeo      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPuertoFondeo")
-descargasFaenaPescaDescarga   DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_PuertoDescarga")
-descargasFaenaPescaFondeo     DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_PuertoFondeo")
-descargasFaenaConsumoDescarga DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_PuertoDescarga")
-descargasFaenaConsumoFondeo   DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_PuertoFondeo")
+  faenasPescaComoSalida             FaenaPesca[]         @relation("FaenaPescaPuertoSalida")
+  faenasPescaComoFondeo             FaenaPesca[]         @relation("FaenaPescaPuertoFondeo")
+  faenasPescaConsumoComoDescarga    FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPuertoDescarga")
+  faenasPescaConsumoComoSalida      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPuertoSalida")
+  faenasPescaConsumoComoFondeo      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPuertoFondeo")
+  descargasFaenaPescaDescarga   DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_PuertoDescarga")
+  descargasFaenaPescaFondeo     DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_PuertoFondeo")
+  descargasFaenaConsumoDescarga DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_PuertoDescarga")
+  descargasFaenaConsumoFondeo   DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_PuertoFondeo")
 
   // Relaciones inversas para TarifaCostoExportacionRuta
   tarifasComoOrigen  TarifaCostoExportacionRuta[] @relation("PuertoOrigenTarifa")
   tarifasComoDestino TarifaCostoExportacionRuta[] @relation("PuertoDestinoTarifa")
+  plataformasRecepcion  DetPlataformaRecepcionPesca[]
 }
 
 model RefreshToken {
