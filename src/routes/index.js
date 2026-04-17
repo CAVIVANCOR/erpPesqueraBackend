@@ -241,7 +241,7 @@ import medioPagoRoutes from '../routes/Maestros/medioPago.routes.js';
 import unidadNegocioRoutes from './Usuarios/unidadNegocio.routes.js';
 import detComisionFidelizacionEntidadRoutes from './Maestros/detComisionFidelizacionEntidad.routes.js';
 import categoriaTipoMovEntregaRendirRoutes from './Pesca/categoriaTipoMovEntregaRendir.routes.js';
-
+import detPlataformaRecepcionPescaRoutes from './Pesca/detPlataformaRecepcionPesca.routes.js';
 const router = express.Router();
 
 // Rutas públicas de autenticación
@@ -300,6 +300,7 @@ router.use('/departamentos', departamentoRoutes);
 router.use('/provincias', provinciaRoutes);
 // Rutas para EntidadComercial
 router.use('/entidades-comerciales', entidadComercialRoutes);
+router.use('/pesca/det-plataforma-recepcion-pesca', detPlataformaRecepcionPescaRoutes);
 // Rutas para ContactoEntidad
 router.use('/contactos-entidad', contactoEntidadRoutes);
 // Rutas para TipoEntidad
