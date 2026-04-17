@@ -1401,6 +1401,8 @@ model DescargaFaenaConsumo {
   precioPorKgEspecie           Decimal? @default(0.00) @db.Decimal(7,2)
   precioTotal                  Decimal? @default(0.00) @db.Decimal(18,2)
   katanaTripulacionId          BigInt?
+  plataformaRecepcionPescaId   BigInt?
+
 
   // Relaciones
   faenaPescaConsumo  FaenaPescaConsumo  @relation(fields: [faenaPescaConsumoId], references: [id])
@@ -1414,6 +1416,8 @@ model DescargaFaenaConsumo {
   movIngresoAlmacen  MovimientoAlmacen? @relation("DescargaConsumoMovimientoIngreso", fields: [movIngresoAlmacenId], references: [id])
   movSalidaAlmacen   MovimientoAlmacen? @relation("DescargaConsumoMovimientoSalida", fields: [movSalidaAlmacenId], references: [id])  // ⭐ NUEVA RELACIÓN
   katanaTripulacion  KatanaTripulacion? @relation("DescargaFaenaConsumo_KatanaTripulacion", fields: [katanaTripulacionId], references: [id])
+  plataformaRecepcionPesca DetPlataformaRecepcionPesca? @relation("DescargaConsumo_PlataformaRecepcion", fields: [plataformaRecepcionPescaId], references: [id])
+
 
   @@index([movIngresoAlmacenId])
   @@index([movSalidaAlmacenId])          // ⭐ NUEVO ÍNDICE
@@ -1426,6 +1430,7 @@ model DescargaFaenaConsumo {
   @@index([especieId])
   @@index([faenaPescaConsumoId])
   @@index([katanaTripulacionId])
+  @@index([plataformaRecepcionPescaId])
 
 }
 
@@ -1467,6 +1472,8 @@ model DescargaFaenaPesca {
   longitudFondeo               Decimal?
   puertoFondeoId               BigInt?
   precioPorTonComisionFidelizacion Decimal? @default(0.00) @db.Decimal(7,2)
+  plataformaRecepcionPescaId   BigInt?
+
 
   // Relaciones
   faenaPesca         FaenaPesca         @relation(fields: [faenaPescaId], references: [id])
@@ -1479,6 +1486,8 @@ model DescargaFaenaPesca {
   especie            Especie?           @relation(fields: [especieId], references: [id])
   movIngresoAlmacen  MovimientoAlmacen? @relation("DescargaMovimientoIngreso", fields: [movIngresoAlmacenId], references: [id])
   movSalidaAlmacen   MovimientoAlmacen? @relation("DescargaMovimientoSalida", fields: [movSalidaAlmacenId], references: [id])  // ⭐ NUEVA RELACIÓN
+  plataformaRecepcionPesca DetPlataformaRecepcionPesca? @relation(fields: [plataformaRecepcionPescaId], references: [id])
+
 
   @@index([movIngresoAlmacenId])
   @@index([movSalidaAlmacenId])          // ⭐ NUEVO ÍNDICE
@@ -1491,6 +1500,8 @@ model DescargaFaenaPesca {
   @@index([temporadaPescaId])
   @@index([especieId])
   @@index([faenaPescaId])
+  @@index([plataformaRecepcionPescaId])
+
 }
 
 model ComisionFidelizacion {
@@ -2525,6 +2536,8 @@ model DetPlataformaRecepcionPesca {
   // Relaciones
   entidadComercial      EntidadComercial  @relation(fields: [entidadComercialId], references: [id])
   puertoPesca           PuertoPesca       @relation(fields: [puertoPescaId], references: [id])
+  descargasFaenaPesca   DescargaFaenaPesca[]
+  descargasFaenaConsumo DescargaFaenaConsumo[] @relation("DescargaConsumo_PlataformaRecepcion")
 
   @@index([entidadComercialId])
   @@index([puertoPescaId])
