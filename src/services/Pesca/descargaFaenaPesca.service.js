@@ -46,7 +46,13 @@ async function validarClavesForaneas(data) {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
   
-  const [faenaPesca, temporada, patron, motorista, bahia, puerto, puertoFondeo, cliente, movIngresoAlmacen, especie] = await Promise.all(validaciones);
+  if (data.plataformaRecepcionPescaId) {
+    validaciones.push(prisma.detPlataformaRecepcionPesca.findUnique({ where: { id: data.plataformaRecepcionPescaId } }));
+  } else {
+    validaciones.push(Promise.resolve(true)); // placeholder
+  }
+  
+  const [faenaPesca, temporada, patron, motorista, bahia, puerto, puertoFondeo, cliente, movIngresoAlmacen, especie, plataformaRecepcion] = await Promise.all(validaciones);
   
   // Validar campos obligatorios
   if (!faenaPesca) throw new ValidationError('El faenaPescaId no existe.');
@@ -59,8 +65,9 @@ async function validarClavesForaneas(data) {
   if (data.puertoDescargaId && !puerto) throw new ValidationError('El puertoDescargaId no existe.');
   if (data.puertoFondeoId && !puertoFondeo) throw new ValidationError('El puertoFondeoId no existe.');
   if (data.clienteId && !cliente) throw new ValidationError('El clienteId no existe.');
-  // movIngresoAlmacenId no se valida porque es gestionado automáticamente por el sistema
+   // movIngresoAlmacenId no se valida porque es gestionado automáticamente por el sistema
   if (data.especieId && !especie) throw new ValidationError('El especieId no existe.');
+  if (data.plataformaRecepcionPescaId && !plataformaRecepcion) throw new ValidationError('El plataformaRecepcionPescaId no existe.');
 }
 
 async function validarUnicidadFaenaPescaId(faenaPescaId, id = null) {
