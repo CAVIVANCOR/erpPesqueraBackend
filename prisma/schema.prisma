@@ -1371,11 +1371,11 @@ model DescargaFaenaConsumo {
   fechaHoraArriboPuerto        DateTime?
   fechaHoraLlegadaPuerto       DateTime?
   clienteId                    BigInt?
-  numPlataformaDescarga        String?                @db.VarChar(20)
+  numPlataformaDescarga        String?                @db.VarChar(60)
   turnoPlataformaDescarga      String?                @db.VarChar(20)
   fechaHoraInicioDescarga      DateTime?
   fechaHoraFinDescarga         DateTime?
-  numWinchaPesaje              String?                @db.VarChar(20)
+  numWinchaPesaje              String?                @db.VarChar(60)
   urlComprobanteWincha         String?
   patronId                     BigInt
   motoristaId                  BigInt
