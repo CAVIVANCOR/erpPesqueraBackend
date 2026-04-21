@@ -125,7 +125,8 @@ const listar = async () => {
         puertoFondeo: true,
         patron: true,
         motorista: true,
-        bahia: true
+        bahia: true,
+        plataformaRecepcionPesca: true
       }
     });
   } catch (err) {
@@ -133,7 +134,6 @@ const listar = async () => {
     throw err;
   }
 };
-
 const obtenerPorId = async (id) => {
   try {
     const descarga = await prisma.descargaFaenaConsumo.findUnique({ 
@@ -146,7 +146,8 @@ const obtenerPorId = async (id) => {
         puertoFondeo: true,
         patron: true,
         motorista: true,
-        bahia: true
+        bahia: true,
+        plataformaRecepcionPesca: true
       }
     });
     if (!descarga) throw new NotFoundError('DescargaFaenaConsumo no encontrada');
@@ -248,7 +249,8 @@ const obtenerPorFaena = async (faenaPescaConsumoId) => {
         puertoFondeo: true,
         patron: true,
         motorista: true,
-        bahia: true
+        bahia: true,
+        plataformaRecepcionPesca: true
       },
       orderBy: { id: 'desc' }
     });

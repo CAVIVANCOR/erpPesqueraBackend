@@ -120,7 +120,8 @@ const listar = async () => {
         puertoFondeo: true,
         patron: true,
         motorista: true,
-        bahia: true
+        bahia: true,
+        plataformaRecepcionPesca: true
       }
     });
   } catch (err) {
@@ -141,7 +142,8 @@ const obtenerPorId = async (id) => {
         puertoFondeo: true,
         patron: true,
         motorista: true,
-        bahia: true
+        bahia: true,
+        plataformaRecepcionPesca: true
       }
     });
     if (!descarga) throw new NotFoundError('DescargaFaenaPesca no encontrada');
@@ -151,7 +153,6 @@ const obtenerPorId = async (id) => {
     throw err;
   }
 };
-
 const obtenerPorFaena = async (faenaPescaId) => {
   try {
     
@@ -169,7 +170,8 @@ const obtenerPorFaena = async (faenaPescaId) => {
         puertoFondeo: true,
         patron: true,
         motorista: true,
-        bahia: true
+        bahia: true,
+        plataformaRecepcionPesca: true
       },
       orderBy: { id: 'desc' }
     });
