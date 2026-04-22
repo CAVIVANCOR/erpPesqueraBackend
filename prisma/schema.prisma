@@ -254,6 +254,11 @@ model Cala {
   temporadaPescaId    BigInt
   latitudFin          Decimal?
   longitudFin         Decimal?
+  lugarUbicacionGeografica  String?
+  combustibleConsumido      Decimal?  @default(0.00)
+  recorridoMillasNauticas   Decimal?  @default(0.00)
+
+
 
   // Relaciones
   faenaPesca       FaenaPesca         @relation(fields: [faenaPescaId], references: [id])
@@ -290,6 +295,9 @@ model CalaFaenaConsumo {
   novedadPescaConsumoId  BigInt
   latitudFin             Decimal?
   longitudFin            Decimal?
+  lugarUbicacionGeografica  String?
+  combustibleConsumido      Decimal?  @default(0.00)
+  recorridoMillasNauticas   Decimal?  @default(0.00)
 
   // Relaciones
   faenaPescaConsumo  FaenaPescaConsumo   @relation(fields: [faenaPescaConsumoId], references: [id])
@@ -1402,7 +1410,8 @@ model DescargaFaenaConsumo {
   precioTotal                  Decimal? @default(0.00) @db.Decimal(18,2)
   katanaTripulacionId          BigInt?
   plataformaRecepcionPescaId   BigInt?
-
+  combustibleConsumido         Decimal? @default(0.00)
+  recorridoMillasNauticas      Decimal? @default(0.00)
 
   // Relaciones
   faenaPescaConsumo  FaenaPescaConsumo  @relation(fields: [faenaPescaConsumoId], references: [id])
@@ -1473,7 +1482,8 @@ model DescargaFaenaPesca {
   puertoFondeoId               BigInt?
   precioPorTonComisionFidelizacion Decimal? @default(0.00) @db.Decimal(7,2)
   plataformaRecepcionPescaId   BigInt?
-
+  combustibleConsumido         Decimal? @default(0.00)
+  recorridoMillasNauticas      Decimal? @default(0.00)
 
   // Relaciones
   faenaPesca         FaenaPesca         @relation(fields: [faenaPescaId], references: [id])
@@ -3111,6 +3121,10 @@ model FaenaPesca {
   fechaHoraFondeo                  DateTime?
   puertoFondeoId                   BigInt?
   pangueroId                       BigInt?
+  combustibleAbastecidoGalones     Decimal? @default(0.00)
+  combustibleConsumido             Decimal? @default(0.00)
+  recorridoMillasNauticas          Decimal? @default(0.00)
+  PrecioGalonPetroleoSoles         Decimal? @default(0.00)
  
   // Relaciones principales
   temporada                        TemporadaPesca     @relation("FaenaTemporadas", fields: [temporadaId], references: [id])
@@ -3169,7 +3183,10 @@ model FaenaPescaConsumo {
   toneladasCapturadasFaena       Decimal?
   fechaHoraFondeo                DateTime?
   puertoFondeoId                 BigInt?
-
+  combustibleAbastecidoGalones     Decimal? @default(0.00)
+  combustibleConsumido             Decimal? @default(0.00)
+  recorridoMillasNauticas          Decimal? @default(0.00)
+  PrecioGalonPetroleoSoles         Decimal? @default(0.00)
 
   // Relaciones principales
   novedadPescaConsumo            NovedadPescaConsumo @relation(fields: [novedadPescaConsumoId], references: [id])
@@ -3579,12 +3596,18 @@ model NovedadPescaConsumo {
   urlResolucionPdf                String?
   cuotaAlquiladaTon               Decimal?
   cuotaPropiaTon                  Decimal?
-  limiteMaximoCapturaTn           Decimal?       @db.Decimal(12, 3)
-  numeroResolucion                String?
-  referenciaExtra                 String?
-  urlLiquidacionPersonalPesca  String?
+  limiteMaximoCapturaTn             Decimal?       @db.Decimal(12, 3)
+  numeroResolucion                  String?
+  referenciaExtra                   String?
+  urlLiquidacionPersonalPesca       String?
   urlConsolidadoFaenaCalasDescargas String?
-  urlConsolidadoFinal     String?
+  urlConsolidadoFinal               String?
+  combustibleTotalConsumido         Decimal?  @default(0.00)
+  recorridoTotalMillasNauticas      Decimal?  @default(0.00)
+  consumoTotalPetroleo              Decimal?  @default(0.00)
+  combustibleTotalConsumidoReal     Decimal?  @default(0.00)
+  recorridoTotalMillasNauticasReal  Decimal?  @default(0.00)
+  consumoTotalPetroleoReal          Decimal?  @default(0.00)
 
   porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
@@ -3608,6 +3631,7 @@ model NovedadPescaConsumo {
   faenas                          FaenaPescaConsumo[]
   entregasARendir                 EntregaARendirPescaConsumo[]
   unidadNegocio     UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+  diasSinFaena             DetalleDiaSinFaena[]  @relation("DiaSinFaenaNovedadConsumo")
 
  
   // Índices para performance
@@ -3725,51 +3749,51 @@ model Personal {
   tareasValidadas   DetTareasOT[] @relation("ValidadorTareaOT")
   insumosAprobados  DetInsumosTareaOT[] @relation("AprobadorComprasInsumoOT")
   otValidadas               OTMantenimiento[]       @relation("ValidadorOT")
-    contratosResponsable    ContratoServicio[]    @relation("ContratoServicioResponsable")
+  contratosResponsable    ContratoServicio[]    @relation("ContratoServicioResponsable")
   contratosAprobador      ContratoServicio[]    @relation("ContratoServicioAprobador")
     // Entregas a Rendir - Contratos de Servicios
   entregasRendirContratoServicioLiquidadas    EntregaARendirContratoServicios[] @relation("LiquidadorContratoServicio")
   entregasRendirContratoServicioResponsable   EntregaARendirContratoServicios[] @relation("ResponsableEntregaContratoServicio")
   movimientosContratoServicioResponsable      DetMovsEntregaRendirContratoServicios[] @relation("ResponsableMovContratoServicio")
   movimientosInventarioResponsable DetMovsEntregaRendirMovAlmacen[] @relation("ResponsableMovInventario")
-entregasRendirOTMantenimientoResp      EntregaARendirOTMantenimiento[] @relation("ResponsableEntregaOTMantenimiento")
-entregasRendirOTMantenimientoLiq       EntregaARendirOTMantenimiento[] @relation("LiquidadorOTMantenimiento")
-detMovsEntregaOTMantenimiento          DetMovsEntregaRendirOTMantenimiento[] @relation("ResponsableMovOTMantenimiento")
-temporadasPescaComoBahia  TemporadaPesca[]  @relation("TemporadaPescaBahia")
-novedadesPescaConsumoComoBahia  NovedadPescaConsumo[]  @relation("NovedadPescaConsumoBahia")
-faenasPescaComoBahia              FaenaPesca[]         @relation("FaenaPescaBahia")
-faenasPescaComoMotorista          FaenaPesca[]         @relation("FaenaPescaMotorista")
-faenasPescaComoPatron             FaenaPesca[]         @relation("FaenaPescaPatron")
-faenasPescaComoPanguero           FaenaPesca[]         @relation("FaenaPescaPanguero")
-faenasPescaConsumoComoBahia       FaenaPescaConsumo[]  @relation("FaenaPescaConsumoBahia")
-faenasPescaConsumoComoMotorista   FaenaPescaConsumo[]  @relation("FaenaPescaConsumoMotorista")
-faenasPescaConsumoComoPatron      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPatron")
-detallesCuotaPescaActualizados  DetCuotaPesca[]  @relation("DetCuotaPescaActualizador")
-descargasFaenaPescaPatron       DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Patron")
-descargasFaenaPescaMotorista    DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Motorista")
-descargasFaenaPescaBahia        DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Bahia")
-descargasFaenaConsumoPatron     DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Patron")
-descargasFaenaConsumoMotorista  DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Motorista")
-descargasFaenaConsumoBahia      DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Bahia")
-calasPatron                     Cala[]                 @relation("Cala_Patron")
-calasMotorista                  Cala[]                 @relation("Cala_Motorista")
-calasBahia                      Cala[]                 @relation("Cala_Bahia")
-calasFaenaConsumoPatron         CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Patron")
-calasFaenaConsumoMotorista      CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Motorista")
-calasFaenaConsumoBahia          CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Bahia")
+  entregasRendirOTMantenimientoResp      EntregaARendirOTMantenimiento[] @relation("ResponsableEntregaOTMantenimiento")
+  entregasRendirOTMantenimientoLiq       EntregaARendirOTMantenimiento[] @relation("LiquidadorOTMantenimiento")
+  detMovsEntregaOTMantenimiento          DetMovsEntregaRendirOTMantenimiento[] @relation("ResponsableMovOTMantenimiento")
+  temporadasPescaComoBahia  TemporadaPesca[]  @relation("TemporadaPescaBahia")
+  novedadesPescaConsumoComoBahia  NovedadPescaConsumo[]  @relation("NovedadPescaConsumoBahia")
+  faenasPescaComoBahia              FaenaPesca[]         @relation("FaenaPescaBahia")
+  faenasPescaComoMotorista          FaenaPesca[]         @relation("FaenaPescaMotorista")
+  faenasPescaComoPatron             FaenaPesca[]         @relation("FaenaPescaPatron")
+  faenasPescaComoPanguero           FaenaPesca[]         @relation("FaenaPescaPanguero")
+  faenasPescaConsumoComoBahia       FaenaPescaConsumo[]  @relation("FaenaPescaConsumoBahia")
+  faenasPescaConsumoComoMotorista   FaenaPescaConsumo[]  @relation("FaenaPescaConsumoMotorista")
+  faenasPescaConsumoComoPatron      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPatron")
+  detallesCuotaPescaActualizados  DetCuotaPesca[]  @relation("DetCuotaPescaActualizador")
+  descargasFaenaPescaPatron       DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Patron")
+  descargasFaenaPescaMotorista    DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Motorista")
+  descargasFaenaPescaBahia        DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Bahia")
+  descargasFaenaConsumoPatron     DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Patron")
+  descargasFaenaConsumoMotorista  DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Motorista")
+  descargasFaenaConsumoBahia      DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Bahia")
+  calasPatron                     Cala[]                 @relation("Cala_Patron")
+  calasMotorista                  Cala[]                 @relation("Cala_Motorista")
+  calasBahia                      Cala[]                 @relation("Cala_Bahia")
+  calasFaenaConsumoPatron         CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Patron")
+  calasFaenaConsumoMotorista      CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Motorista")
+  calasFaenaConsumoBahia          CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Bahia")
 
-videoconferenciasOrganizadas  Videoconferencia[]  @relation("OrganizadorReunion")
-participacionesReunion        ParticipanteReunion[]
+  videoconferenciasOrganizadas  Videoconferencia[]  @relation("OrganizadorReunion")
+  participacionesReunion        ParticipanteReunion[]
   cuentasCorrientesCreadas      CuentaCorriente[]  @relation("CuentaCorrienteCreadorId")
   cuentasCorrientesActualizadas CuentaCorriente[]  @relation("CuentaCorrienteActualizadorId")
-    movimientosAprobados   MovimientoCaja[]  @relation("MovimientoCajaAprobadorId")
+  movimientosAprobados   MovimientoCaja[]  @relation("MovimientoCajaAprobadorId")
   movimientosRechazados  MovimientoCaja[]  @relation("MovimientoCajaRechazadorId")
-    asientosContablesEnviados  AsientoContableInterfaz[]  @relation("AsientoContableEnviadoPorId")
+  asientosContablesEnviados  AsientoContableInterfaz[]  @relation("AsientoContableEnviadoPorId")
   configuracionesCuentaContableCreadas      ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableCreadorId")
   configuracionesCuentaContableActualizadas ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableActualizadorId")
 
 
- // ========================================
+  // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
   periodosContablesCerrados       PeriodoContable[]       @relation("PeriodoCerradoPor")
@@ -3789,23 +3813,25 @@ participacionesReunion        ParticipanteReunion[]
   preFacturasAutoriza             PreFactura[]            @relation("AutorizaVenta")
 
   // Nuevas relaciones con Tesorería Avanzada
-prestamosCreados      PrestamoBancario[]       @relation("PrestamoCreador")
-prestamosActualizados PrestamoBancario[]       @relation("PrestamoActualizador")
-desembolsosCreados    DesembolsoPrestamo[]
-lineasCreditoCreadas  LineaCredito[]           @relation("LineaCreditoCreador")
-lineasCreditoActualizadas LineaCredito[]       @relation("LineaCreditoActualizador")
-inversionesCreadas    InversionFinanciera[]    @relation("InversionCreador")
-inversionesActualizadas InversionFinanciera[]  @relation("InversionActualizador")
-movimientosInversionCreados MovimientoInversion[]
-tiposPrestamoCreados      TipoPrestamo[]      @relation("TipoPrestamoCreador")
-tiposPrestamoActualizados TipoPrestamo[]      @relation("TipoPrestamoActualizador")
+  prestamosCreados      PrestamoBancario[]       @relation("PrestamoCreador")
+  prestamosActualizados PrestamoBancario[]       @relation("PrestamoActualizador")
+  desembolsosCreados    DesembolsoPrestamo[]
+  lineasCreditoCreadas  LineaCredito[]           @relation("LineaCreditoCreador")
+  lineasCreditoActualizadas LineaCredito[]       @relation("LineaCreditoActualizador")
+  inversionesCreadas    InversionFinanciera[]    @relation("InversionCreador")
+  inversionesActualizadas InversionFinanciera[]  @relation("InversionActualizador")
+  movimientosInversionCreados MovimientoInversion[]
+  tiposPrestamoCreados      TipoPrestamo[]      @relation("TipoPrestamoCreador")
+  tiposPrestamoActualizados TipoPrestamo[]      @relation("TipoPrestamoActualizador")
   sublineasCreditoCreadas      SublineaCredito[]   @relation("SublineaCreditoCreador")
   sublineasCreditoActualizadas SublineaCredito[]   @relation("SublineaCreditoActualizador")
   enlaceEntidadComercial EntidadComercial? @relation("PersonalEnlaceEntidad", fields: [enlaceEntidadComercialId], references: [id])
-comisionesFidelizacion  ComisionFidelizacion[]
-detallesComisionFidelizacion DetComisionFidelizacionEntidad[] @relation("PersonalComisionFidelizacion")
-categoriasTipoMovCreadas       CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovCreador")
-categoriasTipoMovActualizadas  CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovActualizador")
+  comisionesFidelizacion  ComisionFidelizacion[]
+  detallesComisionFidelizacion DetComisionFidelizacionEntidad[] @relation("PersonalComisionFidelizacion")
+  categoriasTipoMovCreadas       CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovCreador")
+  categoriasTipoMovActualizadas  CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovActualizador")
+  diasSinFaenaCreados      DetalleDiaSinFaena[] @relation("DiaSinFaenaCreador")
+  diasSinFaenaActualizados DetalleDiaSinFaena[] @relation("DiaSinFaenaActualizador")
 }
 
 model Producto {
@@ -4134,12 +4160,18 @@ model TemporadaPesca {
   numeroResolucion             String?
   urlResolucionPdf             String?
   BahiaId                      BigInt
-  estadoTemporadaId            BigInt
-  toneladasCapturadasTemporada Decimal?
-  temporadaPescaIniciada       Boolean        @default(false)
-  urlLiquidacionPersonalPesca  String?
+  estadoTemporadaId                 BigInt
+  toneladasCapturadasTemporada      Decimal?
+  temporadaPescaIniciada            Boolean        @default(false)
+  urlLiquidacionPersonalPesca       String?
   urlConsolidadoFaenaCalasDescargas String?
-  urlConsolidadoFinal     String?
+  urlConsolidadoFinal               String?
+  combustibleTotalConsumido         Decimal?  @default(0.00)
+  recorridoTotalMillasNauticas      Decimal?  @default(0.00)
+  consumoTotalPetroleo              Decimal?  @default(0.00)
+  combustibleTotalConsumidoReal     Decimal?  @default(0.00)
+  recorridoTotalMillasNauticasReal  Decimal?  @default(0.00)
+  consumoTotalPetroleoReal          Decimal?  @default(0.00)
 
   porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
@@ -4178,6 +4210,7 @@ model TemporadaPesca {
   entidadEmpresarialAlquilada  EntidadComercial? @relation("EntidadEmpresarialAlquiladaTemporadaPesca", fields: [entidadEmpresarialAlquiladaId], references:[id])
   entidadComercialComisionistaAlq  EntidadComercial? @relation("EntidadComercialComisionistaAlquilerTemporadaPesca", fields: [entidadComercialComisionistaAlquiler], references:[id])
   comisionesFidelizacion  ComisionFidelizacion[]
+  diasSinFaena             DetalleDiaSinFaena[]  @relation("DiaSinFaenaTemporada")
 
 
   // Índices para performance
@@ -4187,6 +4220,48 @@ model TemporadaPesca {
   @@index([fechaInicio])
   @@index([unidadNegocioId])
   @@index([esTemporadaSoloAlquiler])
+}
+
+model DetalleDiaSinFaena {
+  id                    BigInt         @id @default(autoincrement())
+  
+  // Campos polimórficos - solo uno debe estar lleno
+  temporadaPescaId      BigInt?
+  novedadPescaConsumoId BigInt?
+  
+  fecha                 DateTime       // Fecha del día sin faena (sin hora)
+  motivoSinFaenaId      BigInt         // Motivo por el cual no se pescó
+  observaciones         String?        @db.VarChar(500)
+  
+  // Campos de auditoría
+  fechaCreacion         DateTime       @default(now())
+  fechaActualizacion    DateTime?      @updatedAt
+  creadoPor             BigInt?
+  actualizadoPor        BigInt?
+  
+  // Relaciones
+  temporadaPesca        TemporadaPesca?      @relation("DiaSinFaenaTemporada", fields: [temporadaPescaId], references: [id], onDelete: Cascade)
+  novedadPescaConsumo   NovedadPescaConsumo? @relation("DiaSinFaenaNovedadConsumo", fields: [novedadPescaConsumoId], references: [id], onDelete: Cascade)
+  motivoSinFaena        MotivoSinFaena       @relation("MotivoDetalleDiaSinFaena", fields: [motivoSinFaenaId], references: [id])
+  personalCreador       Personal?            @relation("DiaSinFaenaCreador", fields: [creadoPor], references: [id])
+  personalActualizador  Personal?            @relation("DiaSinFaenaActualizador", fields: [actualizadoPor], references: [id])
+  
+  // Índices
+  @@index([temporadaPescaId])
+  @@index([novedadPescaConsumoId])
+  @@index([fecha])
+  @@index([motivoSinFaenaId])
+}
+ 
+model MotivoSinFaena {
+  id                BigInt                @id @default(autoincrement())
+  descripcion       String                @db.VarChar(250)
+  activo            Boolean               @default(true)
+  
+  // Relaciones
+  detallesDiasSinFaena DetalleDiaSinFaena[] @relation("MotivoDetalleDiaSinFaena")
+  
+  @@index([activo])
 }
 
 model TipoAccesoInstalacion {
