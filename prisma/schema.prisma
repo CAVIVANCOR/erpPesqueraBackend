@@ -3612,6 +3612,9 @@ model NovedadPescaConsumo {
   consumoTotalPetroleoReal          Decimal?  @default(0.00)
   combustibleTotalComprado          Decimal?  @default(0.00)
   combustibleTotalCompradoSoles     Decimal?  @default(0.00)
+  combustibleStockInicialTemporada  Decimal?  @default(0.00)
+  combustibleStockFinalTemporada    Decimal?  @default(0.00)
+
 
   porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
@@ -4178,6 +4181,8 @@ model TemporadaPesca {
   consumoTotalPetroleoReal          Decimal?  @default(0.00)
   combustibleTotalComprado          Decimal?  @default(0.00)
   combustibleTotalCompradoSoles     Decimal?  @default(0.00)
+  combustibleStockInicialTemporada  Decimal?  @default(0.00)
+  combustibleStockFinalTemporada    Decimal?  @default(0.00)
 
 
   porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
