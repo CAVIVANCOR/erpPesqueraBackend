@@ -1410,6 +1410,7 @@ model DescargaFaenaConsumo {
   precioTotal                  Decimal? @default(0.00) @db.Decimal(18,2)
   katanaTripulacionId          BigInt?
   plataformaRecepcionPescaId   BigInt?
+  lugarUbicacionGeografica  String?
   combustibleConsumido         Decimal? @default(0.00)
   recorridoMillasNauticas      Decimal? @default(0.00)
 
@@ -1482,6 +1483,7 @@ model DescargaFaenaPesca {
   puertoFondeoId               BigInt?
   precioPorTonComisionFidelizacion Decimal? @default(0.00) @db.Decimal(7,2)
   plataformaRecepcionPescaId   BigInt?
+  lugarUbicacionGeografica  String?
   combustibleConsumido         Decimal? @default(0.00)
   recorridoMillasNauticas      Decimal? @default(0.00)
 
@@ -3608,6 +3610,8 @@ model NovedadPescaConsumo {
   combustibleTotalConsumidoReal     Decimal?  @default(0.00)
   recorridoTotalMillasNauticasReal  Decimal?  @default(0.00)
   consumoTotalPetroleoReal          Decimal?  @default(0.00)
+  combustibleTotalComprado          Decimal?  @default(0.00)
+  combustibleTotalCompradoSoles     Decimal?  @default(0.00)
 
   porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
@@ -4172,6 +4176,9 @@ model TemporadaPesca {
   combustibleTotalConsumidoReal     Decimal?  @default(0.00)
   recorridoTotalMillasNauticasReal  Decimal?  @default(0.00)
   consumoTotalPetroleoReal          Decimal?  @default(0.00)
+  combustibleTotalComprado          Decimal?  @default(0.00)
+  combustibleTotalCompradoSoles     Decimal?  @default(0.00)
+
 
   porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
