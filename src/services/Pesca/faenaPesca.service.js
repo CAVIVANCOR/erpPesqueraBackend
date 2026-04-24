@@ -6,8 +6,9 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import recalcularToneladasService from "./recalcularToneladas.service.js"; // ⭐ AGREGAR ESTE IMPORT
+import { obtenerPrecioCombustibleVigente } from "../Maestros/precioEntidad.service.js";
+import descargaFaenaPescaService from "./descargaFaenaPesca.service.js";
 import { puedeEditarRegistroCerrado } from "../../utils/checkSuperUsuario.js";
-
 /**
  * Servicio CRUD para FaenaPesca con cálculo dinámico de toneladas capturadas
  * Valida existencia de claves foráneas y previene borrado si tiene dependencias asociadas.
@@ -148,11 +149,13 @@ const crear = async (data) => {
       });
 
       await actualizarToneladasTemporada(data.temporadaId);
+      await actualizarCombustibleYRecorridoTemporada(data.temporadaId);
       return faenaActualizada;
     }
 
     const faena = await prisma.faenaPesca.create({ data });
     await actualizarToneladasTemporada(data.temporadaId);
+    await actualizarCombustibleYRecorridoTemporada(data.temporadaId);
     return faena;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
@@ -229,6 +232,10 @@ const actualizar = async (id, data, usuarioId = null) => {
       "urlDeclaracionDesembarqueArmador",
       "estadoFaenaId",
       "toneladasCapturadasFaena",
+      "combustibleAbastecidoGalones",
+      "combustibleConsumido",
+      "recorridoMillasNauticas",
+      "PrecioGalonPetroleoSoles",
     ];
 
     const dataFiltrada = {};
@@ -267,6 +274,34 @@ const actualizar = async (id, data, usuarioId = null) => {
     });
     await actualizarToneladasTemporada(existente.temporadaId);
 
+    // ⭐ RECALCULAR COMBUSTIBLE Y RECORRIDO
+    await descargaFaenaPescaService.actualizarCombustibleYRecorridoFaena(id);
+
+    // ⭐ OBTENER Y ACTUALIZAR PRECIO DEL COMBUSTIBLE
+    const descargaExiste = await prisma.descargaFaenaPesca.findUnique({
+      where: { faenaPescaId: id },
+      select: { id: true },
+    });
+
+    if (descargaExiste) {
+      const fechaReferencia =
+        dataFiltrada.fechaSalida || existente.fechaSalida || new Date();
+      const precioCombustible = await obtenerPrecioCombustibleFaena(
+        id,
+        fechaReferencia,
+      );
+
+      if (precioCombustible > 0) {
+        await prisma.faenaPesca.update({
+          where: { id },
+          data: {
+            PrecioGalonPetroleoSoles: precioCombustible,
+            updatedAt: new Date(),
+          },
+        });
+      }
+    }
+
     // ⭐ RECALCULAR PORCENTAJE JUVENILES AUTOMÁTICAMENTE DESPUÉS DE ACTUALIZAR
     try {
       await recalcularToneladasService.actualizarPorcentajeJuvenilesFaena(
@@ -280,7 +315,12 @@ const actualizar = async (id, data, usuarioId = null) => {
       // No lanzar error, solo registrar - la actualización de faena ya se completó
     }
 
-    return faena;
+    // Obtener la faena actualizada con todos los campos calculados
+    const faenaActualizada = await prisma.faenaPesca.findUnique({
+      where: { id },
+    });
+
+    return faenaActualizada;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
@@ -319,6 +359,7 @@ const eliminar = async (id) => {
     }
     await prisma.faenaPesca.delete({ where: { id } });
     await actualizarToneladasTemporada(existente.temporadaId);
+    await actualizarCombustibleYRecorridoTemporada(existente.temporadaId);
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
@@ -358,10 +399,127 @@ async function actualizarToneladasTemporada(temporadaId) {
   }
 }
 
+/**
+ * Actualiza los campos de combustible y recorrido de una TemporadaPesca
+ * sumando los datos de todas sus FaenasPesca
+ */
+async function actualizarCombustibleYRecorridoTemporada(temporadaId) {
+  try {
+    // Obtener todas las faenas de la temporada
+    const faenas = await prisma.faenaPesca.findMany({
+      where: { temporadaId },
+      select: {
+        combustibleConsumido: true,
+        recorridoMillasNauticas: true,
+        PrecioGalonPetroleoSoles: true,
+      },
+    });
+
+    // Calcular totales
+    let combustibleTotal = 0;
+    let recorridoTotal = 0;
+    let consumoTotal = 0;
+
+    faenas.forEach((faena) => {
+      const combustible = Number(faena.combustibleConsumido || 0);
+      const recorrido = Number(faena.recorridoMillasNauticas || 0);
+      const precio = Number(faena.PrecioGalonPetroleoSoles || 0);
+
+      combustibleTotal += combustible;
+      recorridoTotal += recorrido;
+      consumoTotal += combustible * precio;
+    });
+
+    // Actualizar temporada
+    await prisma.temporadaPesca.update({
+      where: { id: temporadaId },
+      data: {
+        combustibleTotalConsumido: combustibleTotal,
+        recorridoTotalMillasNauticas: recorridoTotal,
+        consumoTotalPetroleo: consumoTotal,
+        fechaActualizacion: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error(
+      `❌ Error actualizando combustible/recorrido de temporada ${temporadaId}:`,
+      error,
+    );
+    // No lanzar error para no interrumpir la operación principal
+  }
+}
+
+/**
+ * Obtiene el precio del combustible para una faena
+ * Búsqueda en cascada: cliente (si existe descarga) → empresa
+ * @param {BigInt} faenaPescaId - ID de la faena
+ * @param {Date} fechaReferencia - Fecha de referencia para el precio
+ * @returns {Promise<number>} Precio del galón de petróleo en soles
+ */
+async function obtenerPrecioCombustibleFaena(faenaPescaId, fechaReferencia) {
+  try {
+    // Obtener la faena con sus relaciones necesarias
+    const faena = await prisma.faenaPesca.findUnique({
+      where: { id: faenaPescaId },
+      include: {
+        temporada: {
+          include: {
+            empresa: {
+              select: {
+                entidadComercialId: true,
+              },
+            },
+          },
+        },
+        descargaFaena: {
+          select: {
+            clienteId: true,
+          },
+        },
+      },
+    });
+
+    if (!faena) {
+      return 0;
+    }
+
+    let precio = null;
+
+    // 1. Intentar obtener precio especial por cliente (si existe descarga)
+    if (faena.descargaFaena?.clienteId) {
+      precio = await obtenerPrecioCombustibleVigente(
+        faena.descargaFaena.clienteId,
+        fechaReferencia,
+      );
+      
+    }
+
+    // 2. Si no hay precio especial, obtener precio general por empresa
+    if (!precio && faena.temporada?.empresa?.entidadComercialId) {
+      precio = await obtenerPrecioCombustibleVigente(
+        faena.temporada.empresa.entidadComercialId,
+        fechaReferencia,
+      );
+    }
+
+    const precioFinal = Number(precio?.precioUnitario || 0);
+
+    return precioFinal;
+  } catch (error) {
+    console.error(
+      `❌ Error obteniendo precio combustible para faena ${faenaPescaId}:`,
+      error,
+    );
+    return 0;
+  }
+}
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
+  actualizarCombustibleYRecorridoTemporada,
+  obtenerPrecioCombustibleFaena,
 };

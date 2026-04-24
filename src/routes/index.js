@@ -242,6 +242,8 @@ import unidadNegocioRoutes from './Usuarios/unidadNegocio.routes.js';
 import detComisionFidelizacionEntidadRoutes from './Maestros/detComisionFidelizacionEntidad.routes.js';
 import categoriaTipoMovEntregaRendirRoutes from './Pesca/categoriaTipoMovEntregaRendir.routes.js';
 import detPlataformaRecepcionPescaRoutes from './Pesca/detPlataformaRecepcionPesca.routes.js';
+import motivoSinFaenaRoutes from './Maestros/motivoSinFaena.routes.js';
+import detalleDiaSinFaenaRoutes from './Pesca/detalleDiaSinFaena.routes.js';
 const router = express.Router();
 
 // Rutas públicas de autenticación
@@ -375,6 +377,8 @@ router.use('/empresas-centro-costo', empresaCentroCostoRoutes);
 router.use('/parametros-aprobador', parametroAprobadorRoutes);
 // Rutas para Consultas Externas (RENIEC y SUNAT)
 router.use('/consultas-externas', consultaExternaRoutes);
+// Rutas para DetalleDiaSinFaena
+router.use('/detalle-dias-sin-faena', detalleDiaSinFaenaRoutes);
 // Rutas para AccesoInstalacion
 router.use('/accesos-instalacion', accesoInstalacionRoutes);
 // Rutas para TipoEquipo
@@ -440,6 +444,8 @@ router.use('/det-movs-entrega-rendir-ot-mantenimiento', detMovsEntregaRendirOTMa
 router.use('/det-movs-entrega-rendir-ot-mantenimiento-pdf', detMovsEntregaRendirOTMantenimientoPdfRoutes);
 // Rutas para TipoMantenimiento
 router.use('/tipos-mantenimiento', tipoMantenimientoRoutes);
+// Rutas para MotivoSinFaena
+router.use('/motivos-sin-faena', motivoSinFaenaRoutes);
 // Rutas para MotivoOriginoOT
 router.use('/motivos-origen-ot', motivoOriginoOTRoutes);
 // Rutas para DetPermisoGestionadoOT

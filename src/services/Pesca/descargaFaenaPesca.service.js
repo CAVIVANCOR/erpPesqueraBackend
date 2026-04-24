@@ -1,6 +1,11 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
-import { puedeEditarDetalleFaena } from '../../utils/checkSuperUsuario.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
+import { puedeEditarDetalleFaena } from "../../utils/checkSuperUsuario.js";
 
 /**
  * Servicio CRUD para DescargaFaenaPesca
@@ -10,70 +15,111 @@ import { puedeEditarDetalleFaena } from '../../utils/checkSuperUsuario.js';
 
 async function validarClavesForaneas(data) {
   const validaciones = [];
-  
+
   // Validaciones obligatorias
-  validaciones.push(prisma.faenaPesca.findUnique({ where: { id: data.faenaPescaId } }));
-  validaciones.push(prisma.temporadaPesca.findUnique({ where: { id: data.temporadaPescaId } }));
-  validaciones.push(prisma.personal.findUnique({ where: { id: data.patronId } }));
-  validaciones.push(prisma.personal.findUnique({ where: { id: data.motoristaId } }));
-  validaciones.push(prisma.personal.findUnique({ where: { id: data.bahiaId } }));
-  
+  validaciones.push(
+    prisma.faenaPesca.findUnique({ where: { id: data.faenaPescaId } }),
+  );
+  validaciones.push(
+    prisma.temporadaPesca.findUnique({ where: { id: data.temporadaPescaId } }),
+  );
+  validaciones.push(
+    prisma.personal.findUnique({ where: { id: data.patronId } }),
+  );
+  validaciones.push(
+    prisma.personal.findUnique({ where: { id: data.motoristaId } }),
+  );
+  validaciones.push(
+    prisma.personal.findUnique({ where: { id: data.bahiaId } }),
+  );
+
   // Validaciones opcionales (solo si el campo tiene valor)
   if (data.puertoDescargaId) {
-    validaciones.push(prisma.puertoPesca.findUnique({ where: { id: data.puertoDescargaId } }));
+    validaciones.push(
+      prisma.puertoPesca.findUnique({ where: { id: data.puertoDescargaId } }),
+    );
   } else {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
-  
+
   if (data.puertoFondeoId) {
-    validaciones.push(prisma.puertoPesca.findUnique({ where: { id: data.puertoFondeoId } }));
+    validaciones.push(
+      prisma.puertoPesca.findUnique({ where: { id: data.puertoFondeoId } }),
+    );
   } else {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
-  
+
   if (data.clienteId) {
-    validaciones.push(prisma.entidadComercial.findUnique({ where: { id: data.clienteId } }));
+    validaciones.push(
+      prisma.entidadComercial.findUnique({ where: { id: data.clienteId } }),
+    );
   } else {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
-  
+
   // movIngresoAlmacenId es gestionado automáticamente, no requiere validación
   validaciones.push(Promise.resolve(true)); // placeholder
-  
+
   if (data.especieId) {
-    validaciones.push(prisma.especie.findUnique({ where: { id: data.especieId } }));
+    validaciones.push(
+      prisma.especie.findUnique({ where: { id: data.especieId } }),
+    );
   } else {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
-  
+
   if (data.plataformaRecepcionPescaId) {
-    validaciones.push(prisma.detPlataformaRecepcionPesca.findUnique({ where: { id: data.plataformaRecepcionPescaId } }));
+    validaciones.push(
+      prisma.detPlataformaRecepcionPesca.findUnique({
+        where: { id: data.plataformaRecepcionPescaId },
+      }),
+    );
   } else {
     validaciones.push(Promise.resolve(true)); // placeholder
   }
-  
-  const [faenaPesca, temporada, patron, motorista, bahia, puerto, puertoFondeo, cliente, movIngresoAlmacen, especie, plataformaRecepcion] = await Promise.all(validaciones);
-  
+
+  const [
+    faenaPesca,
+    temporada,
+    patron,
+    motorista,
+    bahia,
+    puerto,
+    puertoFondeo,
+    cliente,
+    movIngresoAlmacen,
+    especie,
+    plataformaRecepcion,
+  ] = await Promise.all(validaciones);
+
   // Validar campos obligatorios
-  if (!faenaPesca) throw new ValidationError('El faenaPescaId no existe.');
-  if (!temporada) throw new ValidationError('El temporadaPescaId no existe.');
-  if (!patron) throw new ValidationError('El patronId no existe.');
-  if (!motorista) throw new ValidationError('El motoristaId no existe.');
-  if (!bahia) throw new ValidationError('El bahiaId no existe en la tabla personal.');
-  
+  if (!faenaPesca) throw new ValidationError("El faenaPescaId no existe.");
+  if (!temporada) throw new ValidationError("El temporadaPescaId no existe.");
+  if (!patron) throw new ValidationError("El patronId no existe.");
+  if (!motorista) throw new ValidationError("El motoristaId no existe.");
+  if (!bahia)
+    throw new ValidationError("El bahiaId no existe en la tabla personal.");
+
   // Validar campos opcionales solo si se proporcionaron (y no son null)
-  if (data.puertoDescargaId && !puerto) throw new ValidationError('El puertoDescargaId no existe.');
-  if (data.puertoFondeoId && !puertoFondeo) throw new ValidationError('El puertoFondeoId no existe.');
-  if (data.clienteId && !cliente) throw new ValidationError('El clienteId no existe.');
-   // movIngresoAlmacenId no se valida porque es gestionado automáticamente por el sistema
-  if (data.especieId && !especie) throw new ValidationError('El especieId no existe.');
-  if (data.plataformaRecepcionPescaId && !plataformaRecepcion) throw new ValidationError('El plataformaRecepcionPescaId no existe.');
+  if (data.puertoDescargaId && !puerto)
+    throw new ValidationError("El puertoDescargaId no existe.");
+  if (data.puertoFondeoId && !puertoFondeo)
+    throw new ValidationError("El puertoFondeoId no existe.");
+  if (data.clienteId && !cliente)
+    throw new ValidationError("El clienteId no existe.");
+  // movIngresoAlmacenId no se valida porque es gestionado automáticamente por el sistema
+  if (data.especieId && !especie)
+    throw new ValidationError("El especieId no existe.");
+  if (data.plataformaRecepcionPescaId && !plataformaRecepcion)
+    throw new ValidationError("El plataformaRecepcionPescaId no existe.");
 }
 
 async function validarUnicidadFaenaPescaId(faenaPescaId, id = null) {
   const where = id ? { faenaPescaId, NOT: { id } } : { faenaPescaId };
   const existe = await prisma.descargaFaenaPesca.findFirst({ where });
-  if (existe) throw new ConflictError('Ya existe una descarga para esa faenaPescaId.');
+  if (existe)
+    throw new ConflictError("Ya existe una descarga para esa faenaPescaId.");
 }
 
 /**
@@ -83,15 +129,15 @@ async function validarUnicidadFaenaPescaId(faenaPescaId, id = null) {
 async function sincronizarFaenaConUltimaDescarga(faenaPescaId) {
   try {
     if (!faenaPescaId) return;
-    
+
     // Buscar la última descarga asociada a esta faena, ordenada por ID descendente
     const ultimaDescarga = await prisma.descargaFaenaPesca.findFirst({
       where: { faenaPescaId },
-      orderBy: { id: 'desc' }
+      orderBy: { id: "desc" },
     });
-    
+
     if (!ultimaDescarga) return;
-    
+
     // Actualizar los campos de FaenaPesca con los datos de la última descarga
     await prisma.faenaPesca.update({
       where: { id: faenaPescaId },
@@ -99,13 +145,81 @@ async function sincronizarFaenaConUltimaDescarga(faenaPescaId) {
         fechaDescarga: ultimaDescarga.fechaHoraInicioDescarga,
         puertoDescargaId: ultimaDescarga.puertoDescargaId,
         fechaHoraFondeo: ultimaDescarga.fechaHoraFondeo,
-        puertoFondeoId: ultimaDescarga.puertoFondeoId
-      }
+        puertoFondeoId: ultimaDescarga.puertoFondeoId,
+      },
     });
   } catch (err) {
     // Propagar el error manteniendo el patrón del servicio
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos al sincronizar faena', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError(
+        "Error de base de datos al sincronizar faena",
+        err.message,
+      );
     throw err;
+  }
+}
+
+/**
+ * Actualiza los campos de combustible y recorrido de una FaenaPesca
+ * sumando los datos de todas sus Calas y DescargaFaenaPesca
+ */
+async function actualizarCombustibleYRecorridoFaena(faenaPescaId) {
+  try {
+    // Obtener todas las calas de la faena
+    const calas = await prisma.cala.findMany({
+      where: { faenaPescaId },
+      select: {
+        combustibleConsumido: true,
+        recorridoMillasNauticas: true,
+      },
+    });
+
+    // Obtener la descarga de la faena (relación 1:1)
+    const descarga = await prisma.descargaFaenaPesca.findUnique({
+      where: { faenaPescaId },
+      select: {
+        combustibleConsumido: true,
+        combustibleAbastecidoGalones: true,
+        recorridoMillasNauticas: true,
+      },
+    });
+
+    // Si no hay calas ni descarga, no hacer nada
+    if (calas.length === 0 && !descarga) {
+      return;
+    }
+
+    // Calcular totales de calas
+    let combustibleTotalCalas = 0;
+    let recorridoTotalCalas = 0;
+
+    calas.forEach((cala) => {
+      combustibleTotalCalas += Number(cala.combustibleConsumido || 0);
+      recorridoTotalCalas += Number(cala.recorridoMillasNauticas || 0);
+    });
+
+    // Sumar descarga si existe
+    const combustibleDescarga = Number(descarga?.combustibleConsumido || 0);
+    const recorridoDescarga = Number(descarga?.recorridoMillasNauticas || 0);
+
+    // ⭐ TOTAL = Solo suma de CONSUMOS (no abastecimientos)
+    const combustibleTotal = combustibleTotalCalas + combustibleDescarga;
+    const recorridoTotal = recorridoTotalCalas + recorridoDescarga;
+
+    // Actualizar faena
+    await prisma.faenaPesca.update({
+      where: { id: faenaPescaId },
+      data: {
+        combustibleConsumido: combustibleTotal,
+        recorridoMillasNauticas: recorridoTotal,
+        updatedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error(
+      `❌ Error actualizando combustible/recorrido de faena ${faenaPescaId}:`,
+      error,
+    );
   }
 }
 
@@ -121,18 +235,19 @@ const listar = async () => {
         patron: true,
         motorista: true,
         bahia: true,
-        plataformaRecepcionPesca: true
-      }
+        plataformaRecepcionPesca: true,
+      },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
 
 const obtenerPorId = async (id) => {
   try {
-    const descarga = await prisma.descargaFaenaPesca.findUnique({ 
+    const descarga = await prisma.descargaFaenaPesca.findUnique({
       where: { id },
       include: {
         faenaPesca: true,
@@ -143,19 +258,20 @@ const obtenerPorId = async (id) => {
         patron: true,
         motorista: true,
         bahia: true,
-        plataformaRecepcionPesca: true
-      }
+        plataformaRecepcionPesca: true,
+      },
     });
-    if (!descarga) throw new NotFoundError('DescargaFaenaPesca no encontrada');
+    if (!descarga) throw new NotFoundError("DescargaFaenaPesca no encontrada");
     return descarga;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
+
 const obtenerPorFaena = async (faenaPescaId) => {
   try {
-    
     if (!faenaPescaId) {
       return [];
     }
@@ -171,15 +287,16 @@ const obtenerPorFaena = async (faenaPescaId) => {
         patron: true,
         motorista: true,
         bahia: true,
-        plataformaRecepcionPesca: true
+        plataformaRecepcionPesca: true,
       },
-      orderBy: { id: 'desc' }
+      orderBy: { id: "desc" },
     });
-    
+
     return result;
   } catch (err) {
-    console.error('obtenerPorFaena service - Error:', err);
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    console.error("obtenerPorFaena service - Error:", err);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -188,74 +305,94 @@ const crear = async (data) => {
   try {
     // Solo campos obligatorios según el nuevo modelo
     const obligatorios = [
-      'faenaPescaId', 'temporadaPescaId', 'patronId', 'motoristaId', 'bahiaId'
+      "faenaPescaId",
+      "temporadaPescaId",
+      "patronId",
+      "motoristaId",
+      "bahiaId",
     ];
     for (const campo of obligatorios) {
-      if (typeof data[campo] === 'undefined' || data[campo] === null) {
+      if (typeof data[campo] === "undefined" || data[campo] === null) {
         throw new ValidationError(`El campo ${campo} es obligatorio.`);
       }
     }
     await validarClavesForaneas(data);
     await validarUnicidadFaenaPescaId(data.faenaPescaId);
-    
+
     // Agregar timestamp automático para actualizadoEn
     const dataConTimestamp = {
       ...data,
-      actualizadoEn: new Date()
+      actualizadoEn: new Date(),
     };
-    
-    const descargaCreada = await prisma.descargaFaenaPesca.create({ data: dataConTimestamp });
-    
+
+    const descargaCreada = await prisma.descargaFaenaPesca.create({
+      data: dataConTimestamp,
+    });
+
     // Sincronizar FaenaPesca con la última descarga asociada
     await sincronizarFaenaConUltimaDescarga(data.faenaPescaId);
-    
+    await actualizarCombustibleYRecorridoFaena(data.faenaPescaId);
+
     return descargaCreada;
   } catch (err) {
-    if (err instanceof ValidationError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof ValidationError || err instanceof ConflictError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
 
 const actualizar = async (id, data, usuarioId = null) => {
   try {
-    const existente = await prisma.descargaFaenaPesca.findUnique({ 
+    const existente = await prisma.descargaFaenaPesca.findUnique({
       where: { id },
       include: {
         faenaPesca: {
           include: {
             temporada: {
               include: {
-                estadoTemporada: true
-              }
-            }
-          }
-        }
-      }
+                estadoTemporada: true,
+              },
+            },
+          },
+        },
+      },
     });
-    if (!existente) throw new NotFoundError('DescargaFaenaPesca no encontrada');
+    if (!existente) throw new NotFoundError("DescargaFaenaPesca no encontrada");
 
     // ========================================
     // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
     // ========================================
-    const puedeEditar = await puedeEditarDetalleFaena(usuarioId, existente.faenaPescaId);
-    
+    const puedeEditar = await puedeEditarDetalleFaena(
+      usuarioId,
+      existente.faenaPescaId,
+    );
+
     if (!puedeEditar) {
       throw new ValidationError(
         `No se puede editar la descarga porque la temporada está en estado "${existente.faenaPesca?.temporada?.estadoTemporada?.descripcion}". ` +
-        `Solo los superusuarios pueden editar descargas de temporadas finalizadas o canceladas.`
+          `Solo los superusuarios pueden editar descargas de temporadas finalizadas o canceladas.`,
       );
     }
-    
+
     // Validar claves foráneas si cambian (incluyendo campos opcionales)
     const claves = [
-      'faenaPescaId', 'temporadaPescaId', 'puertoDescargaId', 'puertoFondeoId', 'clienteId', 
-      'patronId', 'motoristaId', 'bahiaId', 'movIngresoAlmacenId', 'especieId'
+      "faenaPescaId",
+      "temporadaPescaId",
+      "puertoDescargaId",
+      "puertoFondeoId",
+      "clienteId",
+      "patronId",
+      "motoristaId",
+      "bahiaId",
+      "movIngresoAlmacenId",
+      "especieId",
     ];
-    if (claves.some(k => data[k] !== undefined && data[k] !== existente[k])) {
+    if (claves.some((k) => data[k] !== undefined && data[k] !== existente[k])) {
       // Preservar movIngresoAlmacenId del existente si no está en data
       const dataParaValidar = { ...existente, ...data };
-      if (!('movIngresoAlmacenId' in data)) {
+      if (!("movIngresoAlmacenId" in data)) {
         dataParaValidar.movIngresoAlmacenId = existente.movIngresoAlmacenId;
       }
       await validarClavesForaneas(dataParaValidar);
@@ -263,30 +400,40 @@ const actualizar = async (id, data, usuarioId = null) => {
         await validarUnicidadFaenaPescaId(data.faenaPescaId, id);
       }
     }
-    
+
     // Agregar timestamp automático para actualizadoEn
     // Excluir movIngresoAlmacenId porque es gestionado automáticamente por el sistema
     const { movIngresoAlmacenId, ...dataParaActualizar } = data;
     const dataConTimestamp = {
       ...dataParaActualizar,
-      actualizadoEn: new Date()
+      actualizadoEn: new Date(),
     };
-    
-    const descargaActualizada = await prisma.descargaFaenaPesca.update({ where: { id }, data: dataConTimestamp });
-    
+
+    const descargaActualizada = await prisma.descargaFaenaPesca.update({
+      where: { id },
+      data: dataConTimestamp,
+    });
+
     // Sincronizar FaenaPesca con la última descarga asociada
     // Usar el faenaPescaId actualizado o el existente
-    const faenaPescaIdParaSincronizar = data.faenaPescaId || existente.faenaPescaId;
+    const faenaPescaIdParaSincronizar =
+      data.faenaPescaId || existente.faenaPescaId;
     await sincronizarFaenaConUltimaDescarga(faenaPescaIdParaSincronizar);
-    
+    await actualizarCombustibleYRecorridoFaena(faenaPescaIdParaSincronizar);
+
     return descargaActualizada;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      console.error('❌ Error de base de datos en actualizar:', err);
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (
+      err instanceof NotFoundError ||
+      err instanceof ValidationError ||
+      err instanceof ConflictError
+    )
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      console.error("❌ Error de base de datos en actualizar:", err);
+      throw new DatabaseError("Error de base de datos", err.message);
     }
-    console.error('❌ Error desconocido en actualizar:', err);
+    console.error("❌ Error desconocido en actualizar:", err);
     throw err;
   }
 };
@@ -294,14 +441,16 @@ const actualizar = async (id, data, usuarioId = null) => {
 const eliminar = async (id) => {
   try {
     const existente = await prisma.descargaFaenaPesca.findUnique({
-      where: { id }
+      where: { id },
     });
-    if (!existente) throw new NotFoundError('DescargaFaenaPesca no encontrada');
+    if (!existente) throw new NotFoundError("DescargaFaenaPesca no encontrada");
     await prisma.descargaFaenaPesca.delete({ where: { id } });
+    await actualizarCombustibleYRecorridoFaena(existente.faenaPescaId);
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -315,46 +464,46 @@ const obtenerPorTemporada = async (temporadaId) => {
     const descargas = await prisma.descargaFaenaPesca.findMany({
       where: {
         faenaPesca: {
-          temporadaId: BigInt(temporadaId)
-        }
+          temporadaId: BigInt(temporadaId),
+        },
       },
       include: {
         cliente: {
           select: {
             id: true,
             razonSocial: true,
-            precioPorTonComisionFidelizacion: true
-          }
+            precioPorTonComisionFidelizacion: true,
+          },
         },
         faenaPesca: {
           select: {
             id: true,
             descripcion: true,
-            temporadaId: true
-          }
+            temporadaId: true,
+          },
         },
         puertoDescarga: {
           select: {
             id: true,
-            nombre: true
-          }
+            nombre: true,
+          },
         },
         especie: {
           select: {
             id: true,
-            nombre: true
-          }
-        }
+            nombre: true,
+          },
+        },
       },
       orderBy: {
-        fechaHoraInicioDescarga: 'desc'
-      }
+        fechaHoraInicioDescarga: "desc",
+      },
     });
 
     return descargas;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -368,5 +517,6 @@ export default {
   actualizar,
   eliminar,
   sincronizarFaenaConUltimaDescarga,
-  obtenerPorTemporada
+  obtenerPorTemporada,
+  actualizarCombustibleYRecorridoFaena,
 };
