@@ -10,7 +10,8 @@ router.get('/:id', faenaPescaController.obtenerPorId);
 router.post('/', faenaPescaController.crear);
 router.put('/:id', faenaPescaController.actualizar);
 router.delete('/:id', faenaPescaController.eliminar);
-
+// Ruta para recalcular totales de temporada
+router.post('/temporada/:temporadaId/recalcular-totales', faenaPescaController.recalcularTotalesTemporada);
 // Ruta para crear faena completa con todos sus registros asociados
 router.post('/crear-completa', faenaPescaController.crearFaenaCompleta);
 

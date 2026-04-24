@@ -6,6 +6,13 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import { puedeEditarDetalleFaena } from "../../utils/checkSuperUsuario.js";
+import faenaPescaService from "./faenaPesca.service.js";
+
+/**
+ * Servicio CRUD para DescargaFaenaPesca
+
+/**
+ * Servicio CRUD para DescargaFaenaPesca
 
 /**
  * Servicio CRUD para DescargaFaenaPesca
@@ -329,9 +336,12 @@ const crear = async (data) => {
       data: dataConTimestamp,
     });
 
-    // Sincronizar FaenaPesca con la última descarga asociada
+        // Sincronizar FaenaPesca con la última descarga asociada
     await sincronizarFaenaConUltimaDescarga(data.faenaPescaId);
     await actualizarCombustibleYRecorridoFaena(data.faenaPescaId);
+    
+    // ⭐ Actualizar totales de la temporada
+    await faenaPescaService.actualizarCombustibleYRecorridoTemporada(data.temporadaPescaId);
 
     return descargaCreada;
   } catch (err) {
@@ -414,12 +424,17 @@ const actualizar = async (id, data, usuarioId = null) => {
       data: dataConTimestamp,
     });
 
-    // Sincronizar FaenaPesca con la última descarga asociada
+        // Sincronizar FaenaPesca con la última descarga asociada
     // Usar el faenaPescaId actualizado o el existente
     const faenaPescaIdParaSincronizar =
       data.faenaPescaId || existente.faenaPescaId;
     await sincronizarFaenaConUltimaDescarga(faenaPescaIdParaSincronizar);
     await actualizarCombustibleYRecorridoFaena(faenaPescaIdParaSincronizar);
+    
+        // ⭐ Actualizar totales de la temporada
+    const temporadaPescaIdParaActualizar =
+      data.temporadaPescaId || existente.temporadaPescaId;
+    await faenaPescaService.actualizarCombustibleYRecorridoTemporada(temporadaPescaIdParaActualizar);
 
     return descargaActualizada;
   } catch (err) {

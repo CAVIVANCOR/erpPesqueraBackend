@@ -59,6 +59,17 @@ export async function eliminar(req, res, next) {
   }
 }
 
+export async function recalcularTotalesTemporada(req, res, next) {
+  try {
+    const temporadaId = BigInt(req.params.temporadaId);
+    const resultado = await faenaPescaService.recalcularTotalesTemporada(temporadaId);
+    res.status(200).json(resultado);
+  } catch (err) {
+    next(err);
+  }
+}
+
+
 /**
  * Crear una faena completa con todos sus registros asociados
  * Replica la lógica de creación de faena del proceso "Iniciar Temporada"

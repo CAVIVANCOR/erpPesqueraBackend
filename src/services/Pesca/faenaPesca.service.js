@@ -412,23 +412,60 @@ async function actualizarCombustibleYRecorridoTemporada(temporadaId) {
         combustibleConsumido: true,
         recorridoMillasNauticas: true,
         PrecioGalonPetroleoSoles: true,
+        combustibleAbastecidoGalones: true,
       },
     });
 
-    // Calcular totales
-    let combustibleTotal = 0;
-    let recorridoTotal = 0;
-    let consumoTotal = 0;
+    // Obtener todas las descargas de la temporada
+    const descargas = await prisma.descargaFaenaPesca.findMany({
+      where: { temporadaPescaId: temporadaId },
+      select: {
+        combustibleConsumido: true,
+        recorridoMillasNauticas: true,
+        combustibleAbastecidoGalones: true,
+      },
+    });
+
+    // Calcular totales de faenas
+    let combustibleTotalFaenas = 0;
+    let recorridoTotalFaenas = 0;
+    let consumoTotalFaenas = 0;
+    let combustibleCompradoFaenas = 0;
+    let combustibleCompradoSolesFaenas = 0;
 
     faenas.forEach((faena) => {
-      const combustible = Number(faena.combustibleConsumido || 0);
-      const recorrido = Number(faena.recorridoMillasNauticas || 0);
+      combustibleTotalFaenas += Number(faena.combustibleConsumido || 0);
+      recorridoTotalFaenas += Number(faena.recorridoMillasNauticas || 0);
       const precio = Number(faena.PrecioGalonPetroleoSoles || 0);
-
-      combustibleTotal += combustible;
-      recorridoTotal += recorrido;
-      consumoTotal += combustible * precio;
+      const abastecido = Number(faena.combustibleAbastecidoGalones || 0);
+      consumoTotalFaenas += Number(faena.combustibleConsumido || 0) * precio;
+      combustibleCompradoFaenas += abastecido;
+      combustibleCompradoSolesFaenas += abastecido * precio;
     });
+
+    // Calcular totales de descargas
+    let combustibleTotalDescargas = 0;
+    let recorridoTotalDescargas = 0;
+    let combustibleCompradoDescargas = 0;
+
+    descargas.forEach((descarga) => {
+      combustibleTotalDescargas += Number(descarga.combustibleConsumido || 0);
+      recorridoTotalDescargas += Number(descarga.recorridoMillasNauticas || 0);
+      combustibleCompradoDescargas += Number(descarga.combustibleAbastecidoGalones || 0);
+    });
+
+    // Calcular precio promedio para descargas
+    const precioPromedio = faenas.length > 0 
+      ? faenas.reduce((sum, f) => sum + Number(f.PrecioGalonPetroleoSoles || 0), 0) / faenas.length
+      : 0;
+    const combustibleCompradoSolesDescargas = combustibleCompradoDescargas * precioPromedio;
+
+    // TOTALES
+    const combustibleTotal = combustibleTotalFaenas + combustibleTotalDescargas;
+    const recorridoTotal = recorridoTotalFaenas + recorridoTotalDescargas;
+    const consumoTotal = consumoTotalFaenas;
+    const combustibleCompradoTotal = combustibleCompradoFaenas + combustibleCompradoDescargas;
+    const combustibleCompradoSolesTotal = combustibleCompradoSolesFaenas + combustibleCompradoSolesDescargas;
 
     // Actualizar temporada
     await prisma.temporadaPesca.update({
@@ -437,6 +474,8 @@ async function actualizarCombustibleYRecorridoTemporada(temporadaId) {
         combustibleTotalConsumido: combustibleTotal,
         recorridoTotalMillasNauticas: recorridoTotal,
         consumoTotalPetroleo: consumoTotal,
+        combustibleTotalComprado: combustibleCompradoTotal,
+        combustibleTotalCompradoSoles: combustibleCompradoSolesTotal,
         fechaActualizacion: new Date(),
       },
     });
@@ -445,7 +484,6 @@ async function actualizarCombustibleYRecorridoTemporada(temporadaId) {
       `❌ Error actualizando combustible/recorrido de temporada ${temporadaId}:`,
       error,
     );
-    // No lanzar error para no interrumpir la operación principal
   }
 }
 
@@ -514,6 +552,15 @@ async function obtenerPrecioCombustibleFaena(faenaPescaId, fechaReferencia) {
   }
 }
 
+/**
+ * Recalcular manualmente los totales de combustible y recorrido de una temporada
+ * Endpoint público para llamar desde el frontend
+ */
+async function recalcularTotalesTemporada(temporadaId) {
+  await actualizarCombustibleYRecorridoTemporada(temporadaId);
+  return { success: true, message: "Totales recalculados correctamente" };
+}
+
 export default {
   listar,
   obtenerPorId,
@@ -522,4 +569,5 @@ export default {
   eliminar,
   actualizarCombustibleYRecorridoTemporada,
   obtenerPrecioCombustibleFaena,
+  recalcularTotalesTemporada,
 };
