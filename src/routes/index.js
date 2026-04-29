@@ -224,6 +224,7 @@ import garantiaPrestamoRoutes from './Tesoreria/garantiaPrestamo.routes.js';
 import movimientoInversionRoutes from './Tesoreria/movimientoInversion.routes.js';
 import tipoPrestamoRoutes from './Tesoreria/tipoPrestamo.routes.js';
 import sublineaCreditoRoutes from './Tesoreria/sublineaCredito.routes.js';
+import migracionAsientosPrestamosRoutes from './Tesoreria/migracionAsientosPrestamos.routes.js';
 
 import flujoCajaProyectadoRoutes from './Tesoreria/flujoCajaProyectado.routes.js';
 import ubicacionLetraRoutes from './Tesoreria/ubicacionLetra.routes.js';
@@ -678,6 +679,7 @@ router.use('/tesoreria/retenciones', retencionTesoreriaRoutes);
 router.use('/tesoreria/percepciones', percepcionTesoreriaRoutes);
 router.use('/tesoreria/presupuestos-anuales', presupuestoAnualRoutes);
 router.use('/tesoreria/ejecuciones-presupuestales', ejecucionPresupuestalRoutes);
+router.use('/tesoreria/migracion-asientos-prestamos', migracionAsientosPrestamosRoutes);
 
 // Rutas para Letras de Cambio
 router.use('/letras-cambio', letraCambioRoutes);

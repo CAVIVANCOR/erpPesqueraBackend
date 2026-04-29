@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import integracionContablePrestamo from './integracionContablePrestamo.service.js';
 
 /**
  * Servicio CRUD para CuotaPrestamo
@@ -406,7 +407,7 @@ const registrarPago = async (id, dataPago) => {
       estadoPago = 'PARCIAL';
     }
 
-    // Actualizar cuota en una transacción
+        // Actualizar cuota en una transacción
     const cuotaActualizada = await prisma.$transaction(async (tx) => {
       const updated = await tx.cuotaPrestamo.update({
         where: { id },
@@ -421,11 +422,30 @@ const registrarPago = async (id, dataPago) => {
           observaciones: observaciones || null
         },
         include: {
-          prestamo: true,
+          prestamo: {
+            include: {
+              banco: true,
+              moneda: true
+            }
+          },
           movimientoCaja: true,
           asientoContable: true
         }
       });
+
+      // ⭐ GENERAR ASIENTO CONTABLE DE PAGO DE CUOTA
+      if (!asientoContableId) {
+        try {
+          await integracionContablePrestamo.generarAsientoPagoCuota(
+            updated,
+            updated.prestamo,
+            tx,
+            null
+          );
+        } catch (err) {
+          console.error('Error al generar asiento de pago de cuota:', err);
+        }
+      }
 
       // Actualizar saldos del préstamo
       await actualizarSaldosPrestamo(cuota.prestamoBancarioId);
@@ -442,7 +462,7 @@ const registrarPago = async (id, dataPago) => {
         // Todas las cuotas pagadas, actualizar estado del préstamo a PAGADO (ID 82)
         await tx.prestamoBancario.update({
           where: { id: cuota.prestamoBancarioId },
-          data: { estadoId: 82 }
+          data: { estadoId: BigInt(82) }
         });
       }
 

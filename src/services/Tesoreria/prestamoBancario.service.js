@@ -6,6 +6,7 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import lineaCreditoService from "./lineaCredito.service.js";
+import integracionContablePrestamo from './integracionContablePrestamo.service.js';
 const { obtenerTipoCambio } = lineaCreditoService;
 /**
  * Servicio CRUD para PrestamoBancario
@@ -13,7 +14,6 @@ const { obtenerTipoCambio } = lineaCreditoService;
  * Actualiza automáticamente los saldos de las líneas de crédito vinculadas.
  * Documentado en español.
  */
-
 /**
  * Valida los datos de un préstamo bancario.
  * @param {Object} data - Datos del préstamo
@@ -412,7 +412,7 @@ const crear = async (data) => {
     // Generar cronograma de cuotas
     const cuotas = calcularCronogramaCuotas(data);
 
-    // Crear préstamo con cuotas en una transacción
+        // Crear préstamo con cuotas en una transacción
     const prestamo = await prisma.$transaction(async (tx) => {
       const nuevoPrestamo = await tx.prestamoBancario.create({
         data: {
@@ -423,6 +423,10 @@ const crear = async (data) => {
           capitalPagado,
           interesPagado,
         },
+        include: {
+          banco: true,
+          moneda: true
+        }
       });
 
       // Crear cuotas
@@ -439,6 +443,18 @@ const crear = async (data) => {
           where: { id: data.prestamoRefinanciadoId },
           data: { estadoId: BigInt(84) }, // Estado REFINANCIADO
         });
+      }
+
+      // ⭐ GENERAR ASIENTO CONTABLE DE DESEMBOLSO
+      try {
+        await integracionContablePrestamo.generarAsientoDesembolso(
+          nuevoPrestamo,
+          tx,
+          data.creadoPor
+        );
+      } catch (err) {
+        console.error('Error al generar asiento de desembolso:', err);
+        // No fallar la transacción, solo registrar el error
       }
 
       return nuevoPrestamo;
