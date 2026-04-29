@@ -57,8 +57,13 @@ async function validarAsientoContable(data) {
  * @param {Array} detalles - Array de detalles del asiento
  */
 async function validarDetallesAsiento(detalles) {
+  // VALIDACIÓN DESACTIVADA: Permitir asientos sin detalles (para asientos en proceso)
+  // if (!detalles || detalles.length === 0) {
+  //   throw new ValidationError('El asiento debe tener al menos un detalle.');
+  // }
+  
   if (!detalles || detalles.length === 0) {
-    throw new ValidationError('El asiento debe tener al menos un detalle.');
+    return { totalDebe: 0, totalHaber: 0 };
   }
 
   let totalDebe = 0;
@@ -96,11 +101,14 @@ async function validarDetallesAsiento(detalles) {
   }
 
   const diferencia = Math.abs(totalDebe - totalHaber);
-  if (diferencia > 0.01) {
-    throw new ValidationError(
-      `El asiento no está balanceado. Debe: ${totalDebe.toFixed(2)}, Haber: ${totalHaber.toFixed(2)}, Diferencia: ${diferencia.toFixed(2)}`
-    );
-  }
+  
+  // VALIDACIÓN DESACTIVADA: Permitir asientos descuadrados (útil para asientos en proceso)
+  // Los asientos descuadrados se marcarán con estaCuadrado = false
+  // if (diferencia > 0.01) {
+  //   throw new ValidationError(
+  //     `El asiento no está balanceado. Debe: ${totalDebe.toFixed(2)}, Haber: ${totalHaber.toFixed(2)}, Diferencia: ${diferencia.toFixed(2)}`
+  //   );
+  // }
 
   return { totalDebe, totalHaber };
 }
@@ -230,6 +238,8 @@ const crear = async (data) => {
                 haber: detalle.haber || 0,
                 monedaId: detalle.monedaId,
                 tipoCambio: detalle.tipoCambio,
+                debeMonedaExtranjera: detalle.debeMonedaExtranjera,
+                haberMonedaExtranjera: detalle.haberMonedaExtranjera,
                 creadoPor: data.creadoPor
               }
             })
@@ -327,6 +337,8 @@ const actualizar = async (id, data) => {
                 haber: detalle.haber || 0,
                 monedaId: detalle.monedaId,
                 tipoCambio: detalle.tipoCambio,
+                debeMonedaExtranjera: detalle.debeMonedaExtranjera,
+                haberMonedaExtranjera: detalle.haberMonedaExtranjera,
                 actualizadoPor: data.actualizadoPor
               }
             })
