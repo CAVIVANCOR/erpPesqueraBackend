@@ -1185,6 +1185,8 @@ model PreFactura {
   
   // Relaciones inversas
   detalles                    DetallePreFactura[]                                                                                          // Detalles de productos
+  detallesAsientoContable     DetalleAsientoContable[]
+
   
   // Índices
   @@index([empresaId, fechaDocumento])
@@ -5453,6 +5455,7 @@ model DetalleAsientoContable {
   tipoDocumentoOrigenId BigInt?                                      // Tipo de documento (Factura, Boleta, etc)
   numeroDocumentoOrigen String?                 @db.VarChar(50)      // Número del documento origen
   fechaDocumentoOrigen  DateTime?                                    // Fecha del documento origen
+  documentoOrigenId     BigInt?                                      // Id Documento Origen en PreFactura
   
   // ========================================
   // AUDITORÍA
@@ -5471,6 +5474,7 @@ model DetalleAsientoContable {
   centroCosto           CentroCosto?            @relation(fields: [centroCostoId], references: [id])
   entidadComercial      EntidadComercial?       @relation(fields: [entidadComercialId], references: [id])
   tipoDocumentoOrigen   TipoDocumento?          @relation(fields: [tipoDocumentoOrigenId], references: [id])
+  documentoOrigenPrefactura            PreFactura?             @relation(fields: [documentoOrigenId], references: [id])
   
   // ========================================
   // ÍNDICES
@@ -5481,6 +5485,7 @@ model DetalleAsientoContable {
   @@index([centroCostoId])
   @@index([entidadComercialId])
   @@index([monedaId])
+  @@index([documentoOrigenId])
 }
 
 model FormaPago {
