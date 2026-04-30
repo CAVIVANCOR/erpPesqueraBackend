@@ -4156,6 +4156,8 @@ model SubmoduloSistema {
   @@unique([moduloId, nombre])
   @@index([moduloId])
   @@index([activo])
+  @@index([nombreModeloOrigen])  // 🆕 Índice para filtrado rápido
+
 }
 
 model TemporadaPesca {
