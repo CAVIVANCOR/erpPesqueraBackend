@@ -1185,7 +1185,6 @@ model PreFactura {
   
   // Relaciones inversas
   detalles                    DetallePreFactura[]                                                                                          // Detalles de productos
-  detallesAsientoContable     DetalleAsientoContable[]
 
   
   // Índices
@@ -4142,6 +4141,9 @@ model SubmoduloSistema {
   orden          Int?             // Para ordenar en el menú
   activo         Boolean          @default(true)
 
+  // 🆕 MODELO PRISMA QUE GENERA REGISTROS PARA ASIENTOS
+  nombreModeloOrigen   String?          @db.VarChar(50)   // "PreFactura", "OrdenCompra", "MovimientoCaja", etc.
+
   modulo         ModuloSistema @relation(fields: [moduloId], references: [id])
   accesosUsuario AccesosUsuario[]
   asientosContablesInterfaz                AsientoContableInterfaz[]
@@ -4149,6 +4151,7 @@ model SubmoduloSistema {
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
   asientosContables               AsientoContable[]
+  detallesAsientoContable         DetalleAsientoContable[]   @relation("DetalleAsientoSubmodulo")  // 🆕
 
   @@unique([moduloId, nombre])
   @@index([moduloId])
@@ -5449,13 +5452,21 @@ model DetalleAsientoContable {
   entidadComercialId    BigInt?                                      // Cliente/Proveedor (obligatorio si la cuenta lo requiere)
   proyectoId            BigInt?                                      // Proyecto (si aplica)
   
+ // ========================================
+  // 🆕 ORIGEN POLIMÓRFICO DE LA LÍNEA
   // ========================================
-  // REFERENCIA A DOCUMENTO ORIGEN
+  // submoduloOrigenLineaId → FK real a SubmoduloSistema (integridad)
+  // procesoOrigenLineaId   → ID polimórfico (sin FK, resuelto vía SubmoduloSistema.nombreModeloOrigen)
+  submoduloOrigenLineaId    BigInt?
+  procesoOrigenLineaId      BigInt?
+  
   // ========================================
-  tipoDocumentoOrigenId BigInt?                                      // Tipo de documento (Factura, Boleta, etc)
-  numeroDocumentoOrigen String?                 @db.VarChar(50)      // Número del documento origen
-  fechaDocumentoOrigen  DateTime?                                    // Fecha del documento origen
-  documentoOrigenId     BigInt?                                      // Id Documento Origen en PreFactura
+  // REFERENCIA AL DOCUMENTO COMERCIAL (desnormalizado para reportes/SUNAT)
+  // ========================================
+  tipoDocumentoOrigenId       BigInt?                                // Tipo: Factura, Boleta, NC, ND
+  numeroDocumentoOrigen       String?                @db.VarChar(50)
+  fechaDocumentoOrigen        DateTime?                              // Fecha emisión
+  fechaVenceDocumentoOrigen   DateTime?                              // 🆕 Fecha vencimiento (CxC/CxP)
   
   // ========================================
   // AUDITORÍA
@@ -5474,8 +5485,8 @@ model DetalleAsientoContable {
   centroCosto           CentroCosto?            @relation(fields: [centroCostoId], references: [id])
   entidadComercial      EntidadComercial?       @relation(fields: [entidadComercialId], references: [id])
   tipoDocumentoOrigen   TipoDocumento?          @relation(fields: [tipoDocumentoOrigenId], references: [id])
-  documentoOrigenPrefactura            PreFactura?             @relation(fields: [documentoOrigenId], references: [id])
-  
+  submoduloOrigenLinea  SubmoduloSistema?       @relation("DetalleAsientoSubmodulo", fields: [submoduloOrigenLineaId], references: [id])  // 🆕
+
   // ========================================
   // ÍNDICES
   // ========================================
@@ -5485,7 +5496,8 @@ model DetalleAsientoContable {
   @@index([centroCostoId])
   @@index([entidadComercialId])
   @@index([monedaId])
-  @@index([documentoOrigenId])
+  @@index([submoduloOrigenLineaId, procesoOrigenLineaId])     // 🆕 Búsqueda polimórfica
+  @@index([fechaVenceDocumentoOrigen])                        // 🆕 Reportes vencimientos
 }
 
 model FormaPago {
