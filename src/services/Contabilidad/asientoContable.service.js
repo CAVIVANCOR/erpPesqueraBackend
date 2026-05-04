@@ -290,7 +290,15 @@ const crear = async (data) => {
                 fechaDocumentoOrigen: detalle.fechaDocumentoOrigen
                   ? new Date(detalle.fechaDocumentoOrigen)
                   : null,
-                documentoOrigenId: detalle.documentoOrigenId,
+                fechaVenceDocumentoOrigen: detalle.fechaVenceDocumentoOrigen
+                  ? new Date(detalle.fechaVenceDocumentoOrigen)
+                  : null,
+                submoduloOrigenLineaId: detalle.submoduloOrigenLineaId
+                  ? BigInt(detalle.submoduloOrigenLineaId)
+                  : null,
+                procesoOrigenLineaId: detalle.procesoOrigenLineaId
+                  ? BigInt(detalle.procesoOrigenLineaId)
+                  : null,
                 creadoPor: data.creadoPor,
               },
             }),
@@ -429,7 +437,15 @@ const actualizar = async (id, data) => {
               fechaDocumentoOrigen: detalle.fechaDocumentoOrigen
                 ? new Date(detalle.fechaDocumentoOrigen)
                 : null,
-              documentoOrigenId: detalle.documentoOrigenId,
+              fechaVenceDocumentoOrigen: detalle.fechaVenceDocumentoOrigen
+                ? new Date(detalle.fechaVenceDocumentoOrigen)
+                : null,
+              submoduloOrigenLineaId: detalle.submoduloOrigenLineaId
+                ? BigInt(detalle.submoduloOrigenLineaId)
+                : null,
+              procesoOrigenLineaId: detalle.procesoOrigenLineaId
+                ? BigInt(detalle.procesoOrigenLineaId)
+                : null,
               actualizadoPor: data.actualizadoPor,
             };
 
@@ -549,11 +565,11 @@ const listarPorEmpresa = async (empresaId) => {
         personalAnulador: true,
         detalles: {
           include: {
-           planCuenta: true,
-            entidadComercial:true,
-            centroCosto:true,
-            moneda:true,
-            tipoDocumentoOrigen:true
+            planCuenta: true,
+            entidadComercial: true,
+            centroCosto: true,
+            moneda: true,
+            tipoDocumentoOrigen: true,
           },
           orderBy: { numeroLinea: "asc" },
         },
@@ -581,10 +597,10 @@ const listarPorPeriodo = async (periodoContableId) => {
         detalles: {
           include: {
             planCuenta: true,
-            entidadComercial:true,
-            centroCosto:true,
-            moneda:true,
-            tipoDocumentoOrigen:true
+            entidadComercial: true,
+            centroCosto: true,
+            moneda: true,
+            tipoDocumentoOrigen: true,
           },
           orderBy: { numeroLinea: "asc" },
         },
@@ -670,10 +686,10 @@ const aprobarAsiento = async (id, aprobadoPorId) => {
         detalles: {
           include: {
             planCuenta: true,
-            entidadComercial:true,
-            centroCosto:true,
-            moneda:true,
-            tipoDocumentoOrigen:true
+            entidadComercial: true,
+            centroCosto: true,
+            moneda: true,
+            tipoDocumentoOrigen: true,
           },
           orderBy: { numeroLinea: "asc" },
         },
@@ -752,10 +768,10 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
         detalles: {
           include: {
             planCuenta: true,
-            entidadComercial:true,
-            centroCosto:true,
-            moneda:true,
-            tipoDocumentoOrigen:true
+            entidadComercial: true,
+            centroCosto: true,
+            moneda: true,
+            tipoDocumentoOrigen: true,
           },
           orderBy: { numeroLinea: "asc" },
         },
@@ -802,10 +818,10 @@ const listarPorMovimiento = async (movimientoCajaId, submoduloId = null) => {
       detalles: {
         include: {
           planCuenta: true,
-            entidadComercial:true,
-            centroCosto:true,
-            moneda:true,
-            tipoDocumentoOrigen:true
+          entidadComercial: true,
+          centroCosto: true,
+          moneda: true,
+          tipoDocumentoOrigen: true,
         },
         orderBy: { numeroLinea: "asc" },
       },

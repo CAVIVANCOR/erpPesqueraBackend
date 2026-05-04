@@ -32,9 +32,6 @@ async function migrarAsientosPrestamos(empresaId = null, creadoPor = null) {
       },
       orderBy: { fechaDesembolso: 'asc' }
     });
-
-    console.log(`📊 Préstamos encontrados sin asiento: ${prestamos.length}`);
-
     const resultados = {
       total: prestamos.length,
       exitosos: 0,
@@ -52,9 +49,7 @@ async function migrarAsientosPrestamos(empresaId = null, creadoPor = null) {
             creadoPor
           );
         });
-
         resultados.exitosos++;
-        console.log(`✅ Asiento generado para préstamo ${prestamo.numeroPrestamo}`);
       } catch (err) {
         resultados.fallidos++;
         resultados.errores.push({
