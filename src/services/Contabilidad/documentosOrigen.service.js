@@ -1,5 +1,9 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio para obtener documentos origen polimórficos
@@ -22,10 +26,14 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
  * @param {string} empresaId - ID de la empresa
  * @returns {Promise<Array>} Lista de documentos origen
  */
-const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => {
+const obtenerPorModelo = async (
+  nombreModelo,
+  entidadComercialId,
+  empresaId,
+) => {
   try {
     if (!empresaId) {
-      throw new ValidationError('Se requiere empresaId');
+      throw new ValidationError("Se requiere empresaId");
     }
     // entidadComercialId es OPCIONAL
 
@@ -35,44 +43,50 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
       // ========================================
       // GRUPO A: DOCUMENTOS COMERCIALES
       // ========================================
-      
-      case 'PreFactura':
+
+      case "PreFactura":
         {
           const wherePreFactura = {
             empresaId: BigInt(empresaId),
             // SIN FILTRO DE ESTADO - Cargar todas las prefacturas
           };
-          
+
           if (entidadComercialId) {
             wherePreFactura.clienteId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.preFactura.findMany({
             where: wherePreFactura,
             include: {
               tipoDocumento: true,
               cliente: true,
               moneda: true,
-              estado: true, // INCLUIR ESTADO
+              // NO incluir estado - PreFactura no tiene esa relación en el schema
             },
             orderBy: {
-              fechaDocumento: 'desc',
+              fechaDocumento: "desc",
             },
           });
+
+          // Agregar estadoId manualmente al resultado para el frontend
+          registros = registros.map((pf) => ({
+            ...pf,
+            estado: { id: pf.estadoId, descripcion: null }, // Solo incluir el ID
+          }));
         }
         break;
 
-      case 'OrdenCompra':
+      case "OrdenCompra":
         {
           const whereOrdenCompra = {
             empresaId: BigInt(empresaId),
             // SIN FILTRO DE ESTADO - Cargar todas las órdenes
           };
-          
+
           if (entidadComercialId) {
             whereOrdenCompra.proveedorId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.ordenCompra.findMany({
             where: whereOrdenCompra,
             include: {
@@ -82,7 +96,7 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               estado: true, // INCLUIR ESTADO
             },
             orderBy: {
-              fechaDocumento: 'desc',
+              fechaDocumento: "desc",
             },
           });
         }
@@ -92,17 +106,17 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
       // GRUPO B: CUENTAS POR COBRAR/PAGAR
       // ========================================
 
-      case 'CuentaPorCobrar':
+      case "CuentaPorCobrar":
         {
           const whereCxC = {
             empresaId: BigInt(empresaId),
             // SIN FILTRO DE ESTADO
           };
-          
+
           if (entidadComercialId) {
             whereCxC.clienteId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.cuentaPorCobrar.findMany({
             where: whereCxC,
             include: {
@@ -112,23 +126,23 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               estado: true, // INCLUIR ESTADO
             },
             orderBy: {
-              fechaEmision: 'desc',
+              fechaEmision: "desc",
             },
           });
         }
         break;
 
-      case 'CuentaPorPagar':
+      case "CuentaPorPagar":
         {
           const whereCxP = {
             empresaId: BigInt(empresaId),
             // SIN FILTRO DE ESTADO
           };
-          
+
           if (entidadComercialId) {
             whereCxP.proveedorId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.cuentaPorPagar.findMany({
             where: whereCxP,
             include: {
@@ -138,7 +152,7 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               estado: true, // INCLUIR ESTADO
             },
             orderBy: {
-              fechaEmision: 'desc',
+              fechaEmision: "desc",
             },
           });
         }
@@ -148,16 +162,16 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
       // GRUPO C: TESORERÍA
       // ========================================
 
-      case 'MovimientoCaja':
+      case "MovimientoCaja":
         {
           const whereMovCaja = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             whereMovCaja.entidadComercialId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.movimientoCaja.findMany({
             where: whereMovCaja,
             include: {
@@ -166,22 +180,23 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaMovimiento: 'desc',
+              fechaMovimiento: "desc",
             },
           });
         }
         break;
 
-      case 'CuentaCorriente':
+      case "CuentaCorriente":
         {
           const whereCuentaCorriente = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
-            whereCuentaCorriente.entidadFinancieraId = BigInt(entidadComercialId);
+            whereCuentaCorriente.entidadFinancieraId =
+              BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.cuentaCorriente.findMany({
             where: whereCuentaCorriente,
             include: {
@@ -190,22 +205,22 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaMovimiento: 'desc',
+              fechaMovimiento: "desc",
             },
           });
         }
         break;
 
-      case 'PrestamoBancario':
+      case "PrestamoBancario":
         {
           const wherePrestamo = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             wherePrestamo.entidadFinancieraId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.prestamoBancario.findMany({
             where: wherePrestamo,
             include: {
@@ -214,7 +229,7 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaDesembolso: 'desc',
+              fechaDesembolso: "desc",
             },
           });
         }
@@ -224,16 +239,16 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
       // GRUPO D: ALMACÉN
       // ========================================
 
-      case 'MovimientoAlmacen':
+      case "MovimientoAlmacen":
         {
           const whereMovAlmacen = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             whereMovAlmacen.entidadComercialId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.movimientoAlmacen.findMany({
             where: whereMovAlmacen,
             include: {
@@ -241,7 +256,7 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               entidadComercial: true,
             },
             orderBy: {
-              fechaMovimiento: 'desc',
+              fechaMovimiento: "desc",
             },
           });
         }
@@ -251,16 +266,16 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
       // GRUPO E: ENTREGAS A RENDIR
       // ========================================
 
-      case 'EntregaARendir':
+      case "EntregaARendir":
         {
           const whereEntrega = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             whereEntrega.personalId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.entregaARendir.findMany({
             where: whereEntrega,
             include: {
@@ -269,22 +284,22 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaEntrega: 'desc',
+              fechaEntrega: "desc",
             },
           });
         }
         break;
 
-      case 'EntregaARendirPVentas':
+      case "EntregaARendirPVentas":
         {
           const whereEntregaVentas = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             whereEntregaVentas.personalId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.entregaARendirPVentas.findMany({
             where: whereEntregaVentas,
             include: {
@@ -293,22 +308,22 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaEntrega: 'desc',
+              fechaEntrega: "desc",
             },
           });
         }
         break;
 
-      case 'EntregaARendirPCompras':
+      case "EntregaARendirPCompras":
         {
           const whereEntregaCompras = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             whereEntregaCompras.personalId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.entregaARendirPCompras.findMany({
             where: whereEntregaCompras,
             include: {
@@ -317,22 +332,22 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaEntrega: 'desc',
+              fechaEntrega: "desc",
             },
           });
         }
         break;
 
-      case 'EntregaARendirMovAlmacen':
+      case "EntregaARendirMovAlmacen":
         {
           const whereEntregaAlmacen = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             whereEntregaAlmacen.personalId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.entregaARendirMovAlmacen.findMany({
             where: whereEntregaAlmacen,
             include: {
@@ -341,22 +356,22 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaEntrega: 'desc',
+              fechaEntrega: "desc",
             },
           });
         }
         break;
 
-      case 'EntregaARendirPescaConsumo':
+      case "EntregaARendirPescaConsumo":
         {
           const whereEntregaPesca = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             whereEntregaPesca.personalId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.entregaARendirPescaConsumo.findMany({
             where: whereEntregaPesca,
             include: {
@@ -365,22 +380,22 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaEntrega: 'desc',
+              fechaEntrega: "desc",
             },
           });
         }
         break;
 
-      case 'EntregaARendirContratoServicios':
+      case "EntregaARendirContratoServicios":
         {
           const whereEntregaServicios = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             whereEntregaServicios.personalId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.entregaARendirContratoServicios.findMany({
             where: whereEntregaServicios,
             include: {
@@ -389,22 +404,22 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaEntrega: 'desc',
+              fechaEntrega: "desc",
             },
           });
         }
         break;
 
-      case 'EntregaARendirOTMantenimiento':
+      case "EntregaARendirOTMantenimiento":
         {
           const whereEntregaOT = {
             empresaId: BigInt(empresaId),
           };
-          
+
           if (entidadComercialId) {
             whereEntregaOT.personalId = BigInt(entidadComercialId);
           }
-          
+
           registros = await prisma.entregaARendirOTMantenimiento.findMany({
             where: whereEntregaOT,
             include: {
@@ -413,7 +428,7 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
               moneda: true,
             },
             orderBy: {
-              fechaEntrega: 'desc',
+              fechaEntrega: "desc",
             },
           });
         }
@@ -421,15 +436,15 @@ const obtenerPorModelo = async (nombreModelo, entidadComercialId, empresaId) => 
 
       default:
         throw new ValidationError(
-          `Modelo "${nombreModelo}" no soportado. Modelos válidos: PreFactura, OrdenCompra, CuentaPorCobrar, CuentaPorPagar, MovimientoCaja, CuentaCorriente, PrestamoBancario, MovimientoAlmacen, EntregaARendir, EntregaARendirPVentas, EntregaARendirPCompras, EntregaARendirMovAlmacen, EntregaARendirPescaConsumo, EntregaARendirContratoServicios, EntregaARendirOTMantenimiento`
+          `Modelo "${nombreModelo}" no soportado. Modelos válidos: PreFactura, OrdenCompra, CuentaPorCobrar, CuentaPorPagar, MovimientoCaja, CuentaCorriente, PrestamoBancario, MovimientoAlmacen, EntregaARendir, EntregaARendirPVentas, EntregaARendirPCompras, EntregaARendirMovAlmacen, EntregaARendirPescaConsumo, EntregaARendirContratoServicios, EntregaARendirOTMantenimiento`,
         );
     }
 
     return registros;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
