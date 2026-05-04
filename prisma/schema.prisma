@@ -6263,6 +6263,7 @@ model OrdenCompra {
   actualizadoPor       BigInt?
   porcentajeIGV        Decimal?
   esExoneradoAlIGV     Boolean?    @default(false)
+
   
   // ========================================
   // ⭐ CAMPOS NUEVOS - DOCUMENTO FINAL (COMPROBANTE DEL PROVEEDOR)
@@ -6276,6 +6277,8 @@ model OrdenCompra {
   fechaRecepcionComprobante   DateTime?                                  // ⭐ NUEVO: Fecha de recepción del comprobante
   facturado                   Boolean?    @default(false)                // ⭐ NUEVO: true = Ya se generó CxP (Negra o Blanca)
   fechaFacturacion            DateTime?                                  // ⭐ NUEVO: Fecha de generación de CxP
+  fechaVencimiento            DateTime?   @default(now())
+
   
   // ========================================
   // ⭐ CAMPOS NUEVOS - TIPO DE FACTURACIÓN Y PARTICIÓN
