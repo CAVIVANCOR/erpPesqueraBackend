@@ -159,7 +159,7 @@ const listar = async (filtros = {}) => {
       where.cesado = filtros.cesado;
     }
 
-    const productos = await prisma.producto.findMany({
+        const productos = await prisma.producto.findMany({
       where,
       include: includeRelaciones,
       orderBy: {
@@ -176,8 +176,8 @@ const listar = async (filtros = {}) => {
         // Consultar empresa si existe empresaId
         if (producto.empresaId) {
           empresa = await prisma.empresa.findUnique({
-            where: { id: producto.empresaId },
-            select: { id: true, razonSocial: true, nombreComercial: true }
+            where: { id: Number(producto.empresaId) },
+            select: { id: true, razonSocial: true, nombreComercial: true, ruc: true }
           });
         }
 
@@ -189,11 +189,23 @@ const listar = async (filtros = {}) => {
           });
         }
 
-        return {
+        // Construir objeto con empresa y cliente ya agregados
+        const productoCompleto = {
           ...producto,
-          empresa,
-          cliente
+          empresa: empresa ? {
+            id: Number(empresa.id),
+            razonSocial: empresa.razonSocial,
+            nombreComercial: empresa.nombreComercial,
+            ruc: empresa.ruc
+          } : null,
+          cliente: cliente ? {
+            id: Number(cliente.id),
+            razonSocial: cliente.razonSocial,
+            nombreComercial: cliente.nombreComercial
+          } : null
         };
+
+        return productoCompleto;
       })
     );
 

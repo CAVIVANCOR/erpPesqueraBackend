@@ -169,13 +169,14 @@ const listar = async (filtros = {}) => {
       where.detMovEntregaRendirOTId = filtros.detMovEntregaRendirOTId;
     }
 
-    const gastos = await prisma.detGastosPlanificados.findMany({
+       const gastos = await prisma.detGastosPlanificados.findMany({
       where,
       include: {
         producto: {
           select: {
             id: true,
             descripcionArmada: true,
+            empresaId: true,
           },
         },
         moneda: {
@@ -183,7 +184,7 @@ const listar = async (filtros = {}) => {
             id: true,
             nombreLargo: true,
             simbolo: true,
-            codigoSunat:true,
+            codigoSunat: true,
           },
         },
       },
@@ -192,7 +193,33 @@ const listar = async (filtros = {}) => {
       },
     });
 
-    return gastos;
+    // Agregar manualmente empresa a cada producto
+    const gastosConEmpresa = await Promise.all(
+      gastos.map(async (gasto) => {
+        if (gasto.producto && gasto.producto.empresaId) {
+          const empresa = await prisma.empresa.findUnique({
+            where: { id: Number(gasto.producto.empresaId) },
+            select: { id: true, razonSocial: true, nombreComercial: true, ruc: true }
+          });
+          
+          return {
+            ...gasto,
+            producto: {
+              ...gasto.producto,
+              empresa: empresa ? {
+                id: Number(empresa.id),
+                razonSocial: empresa.razonSocial,
+                nombreComercial: empresa.nombreComercial,
+                ruc: empresa.ruc
+              } : null
+            }
+          };
+        }
+        return gasto;
+      })
+    );
+
+    return gastosConEmpresa;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -212,6 +239,14 @@ const obtenerPorId = async (id) => {
           select: {
             id: true,
             descripcionArmada: true,
+            empresa: {
+              select: {
+                id: true,
+                razonSocial: true,
+                nombreComercial: true,
+                ruc: true,
+              },
+            },
           },
         },
         moneda: {
