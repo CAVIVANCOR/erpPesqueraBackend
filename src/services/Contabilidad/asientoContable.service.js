@@ -846,6 +846,254 @@ const listarPorMovimiento = async (movimientoCajaId, submoduloId = null) => {
     throw err;
   }
 };
+/**
+ * Une múltiples asientos contables en uno solo
+ * El primer asiento de la lista permanece y recibe todos los detalles de los demás
+ * Los asientos restantes son eliminados
+ * 
+ * VALIDACIONES:
+ * - Mínimo 2 asientos
+ * - Todos en estado PENDIENTE (76)
+ * - Misma empresa
+ * - Mismo período
+ * - Misma glosa
+ * 
+ * @param {Array<BigInt>} asientoIds - Array de IDs de asientos a unir (el primero permanece)
+ * @param {BigInt} usuarioId - ID del usuario que realiza la operación
+ * @returns {Promise<Object>} - Asiento resultante con todos los detalles unidos
+ */
+const unirAsientos = async (asientoIds, usuarioId) => {
+  try {
+    // ========================================
+    // VALIDACIÓN 1: Cantidad mínima
+    // ========================================
+    if (!asientoIds || asientoIds.length < 2) {
+      throw new ValidationError(
+        "Debe seleccionar al menos 2 asientos para unir."
+      );
+    }
+
+    // ========================================
+    // VALIDACIÓN 2: Obtener todos los asientos con sus detalles
+    // ========================================
+    const asientos = await prisma.asientoContable.findMany({
+      where: {
+        id: { in: asientoIds.map((id) => BigInt(id)) },
+      },
+      include: {
+        empresa: true,
+        periodoContable: true,
+        estado: true,
+        detalles: {
+          include: {
+            planCuenta: true,
+            entidadComercial: true,
+            centroCosto: true,
+            moneda: true,
+            tipoDocumentoOrigen: true,
+          },
+          orderBy: { numeroLinea: "asc" },
+        },
+      },
+    });
+
+    if (asientos.length !== asientoIds.length) {
+      throw new NotFoundError(
+        "Uno o más asientos seleccionados no existen."
+      );
+    }
+
+    // ========================================
+    // VALIDACIÓN 3: Todos deben estar en estado PENDIENTE (76)
+    // ========================================
+    const asientosNoPendientes = asientos.filter(
+      (a) => Number(a.estadoId) !== 76
+    );
+    if (asientosNoPendientes.length > 0) {
+      const numerosAsientos = asientosNoPendientes
+        .map((a) => a.numeroAsiento)
+        .join(", ");
+      throw new ConflictError(
+        `Solo se pueden unir asientos en estado PENDIENTE. Los siguientes asientos tienen estado diferente: ${numerosAsientos}`
+      );
+    }
+
+    // ========================================
+    // VALIDACIÓN 4: Misma empresa
+    // ========================================
+    const empresaId = asientos[0].empresaId;
+    const asientosDiferenteEmpresa = asientos.filter(
+      (a) => Number(a.empresaId) !== Number(empresaId)
+    );
+    if (asientosDiferenteEmpresa.length > 0) {
+      throw new ValidationError(
+        "Todos los asientos deben ser de la misma empresa."
+      );
+    }
+
+    // ========================================
+    // VALIDACIÓN 5: Mismo período
+    // ========================================
+    const periodoId = asientos[0].periodoContableId;
+    const asientosDiferentePeriodo = asientos.filter(
+      (a) => Number(a.periodoContableId) !== Number(periodoId)
+    );
+    if (asientosDiferentePeriodo.length > 0) {
+      throw new ValidationError(
+        "Todos los asientos deben ser del mismo período contable."
+      );
+    }
+
+    // ========================================
+    // VALIDACIÓN 6: Misma glosa
+    // ========================================
+    const glosa = asientos[0].glosa;
+    const asientosDiferenteGlosa = asientos.filter(
+      (a) => a.glosa !== glosa
+    );
+    if (asientosDiferenteGlosa.length > 0) {
+      throw new ValidationError(
+        "Todos los asientos deben tener la misma glosa."
+      );
+    }
+
+    // ========================================
+    // VALIDACIÓN 7: Período debe estar ABIERTO
+    // ========================================
+    const estadoPeriodoAbierto = await prisma.estadoMultiFuncion.findFirst({
+      where: { tipoProvieneDeId: 19, descripcion: "ABIERTO" },
+    });
+    if (
+      !estadoPeriodoAbierto ||
+      Number(asientos[0].periodoContable.estadoId) !==
+        Number(estadoPeriodoAbierto.id)
+    ) {
+      throw new ConflictError(
+        "No se pueden unir asientos de un período que no está ABIERTO."
+      );
+    }
+
+    // ========================================
+    // PROCESO DE UNIÓN
+    // ========================================
+    return await prisma.$transaction(async (tx) => {
+      // El primer asiento es el que permanece
+      const asientoPrincipal = asientos[0];
+      const asientosAEliminar = asientos.slice(1);
+
+      // Obtener el último número de línea del asiento principal
+      let ultimoNumeroLinea = Math.max(
+        ...asientoPrincipal.detalles.map((d) => d.numeroLinea),
+        0
+      );
+
+      // Transferir detalles de los asientos a eliminar al asiento principal
+      for (const asiento of asientosAEliminar) {
+        for (const detalle of asiento.detalles) {
+          ultimoNumeroLinea++;
+
+          // Crear nuevo detalle en el asiento principal
+          await tx.detalleAsientoContable.create({
+            data: {
+              asientoContableId: asientoPrincipal.id,
+              numeroLinea: ultimoNumeroLinea,
+              planCuentaId: detalle.planCuentaId,
+              codigoCuenta: detalle.codigoCuenta,
+              nombreCuenta: detalle.nombreCuenta,
+              glosa: detalle.glosa,
+              debe: detalle.debe,
+              haber: detalle.haber,
+              monedaId: detalle.monedaId,
+              tipoCambio: detalle.tipoCambio,
+              debeMonedaExtranjera: detalle.debeMonedaExtranjera,
+              haberMonedaExtranjera: detalle.haberMonedaExtranjera,
+              centroCostoId: detalle.centroCostoId,
+              entidadComercialId: detalle.entidadComercialId,
+              tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId,
+              numeroDocumentoOrigen: detalle.numeroDocumentoOrigen,
+              fechaDocumentoOrigen: detalle.fechaDocumentoOrigen,
+              fechaVenceDocumentoOrigen: detalle.fechaVenceDocumentoOrigen,
+              submoduloOrigenLineaId: detalle.submoduloOrigenLineaId,
+              procesoOrigenLineaId: detalle.procesoOrigenLineaId,
+              creadoPor: usuarioId,
+            },
+          });
+        }
+      }
+
+      // Recalcular totales del asiento principal
+      const todosLosDetalles = await tx.detalleAsientoContable.findMany({
+        where: { asientoContableId: asientoPrincipal.id },
+      });
+
+      let totalDebe = 0;
+      let totalHaber = 0;
+      for (const detalle of todosLosDetalles) {
+        totalDebe += Number(detalle.debe);
+        totalHaber += Number(detalle.haber);
+      }
+
+      const diferencia = totalDebe - totalHaber;
+      const estaCuadrado = Math.abs(diferencia) < 0.01;
+
+      // Actualizar totales del asiento principal
+      await tx.asientoContable.update({
+        where: { id: asientoPrincipal.id },
+        data: {
+          totalDebe,
+          totalHaber,
+          diferencia,
+          estaCuadrado,
+          actualizadoPor: usuarioId,
+        },
+      });
+
+      // Eliminar los asientos secundarios (sus detalles se eliminan en cascada)
+      for (const asiento of asientosAEliminar) {
+        await tx.detalleAsientoContable.deleteMany({
+          where: { asientoContableId: asiento.id },
+        });
+        await tx.asientoContable.delete({
+          where: { id: asiento.id },
+        });
+      }
+
+      // Retornar el asiento principal actualizado con todos sus detalles
+      return await tx.asientoContable.findUnique({
+        where: { id: asientoPrincipal.id },
+        include: {
+          empresa: true,
+          periodoContable: true,
+          estado: true,
+          moneda: true,
+          personalAprobador: true,
+          personalAnulador: true,
+          detalles: {
+            include: {
+              planCuenta: true,
+              entidadComercial: true,
+              centroCosto: true,
+              moneda: true,
+              tipoDocumentoOrigen: true,
+            },
+            orderBy: { numeroLinea: "asc" },
+          },
+        },
+      });
+    });
+  } catch (err) {
+    if (
+      err instanceof NotFoundError ||
+      err instanceof ValidationError ||
+      err instanceof ConflictError
+    )
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos al unir asientos", err.message);
+    }
+    throw err;
+  }
+};
 
 export default {
   listar,
@@ -858,4 +1106,5 @@ export default {
   aprobarAsiento,
   anularAsiento,
   listarPorMovimiento,
+  unirAsientos,
 };

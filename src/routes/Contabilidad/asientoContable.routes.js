@@ -84,4 +84,13 @@ router.post(
   asientoContableController.anularAsiento
 );
 
+
+// Ruta para unir múltiples asientos en uno solo
+router.post(
+  '/unir', 
+  autenticarJWT, 
+  checkPermission('asientoContable', 'editar'),
+  asientoContableController.unirAsientos
+);
+
 export default router;

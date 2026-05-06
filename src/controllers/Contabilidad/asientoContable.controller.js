@@ -116,3 +116,33 @@ export async function listarPorMovimiento(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Une múltiples asientos contables en uno solo
+ */
+export async function unirAsientos(req, res, next) {
+  try {
+    const { asientoIds, usuarioId } = req.body;
+    
+    if (!asientoIds || !Array.isArray(asientoIds)) {
+      return res.status(400).json({
+        message: "Se requiere un array de IDs de asientos (asientoIds)."
+      });
+    }
+
+    if (!usuarioId) {
+      return res.status(400).json({
+        message: "Se requiere el ID del usuario (usuarioId)."
+      });
+    }
+
+    const asientoResultante = await asientoContableService.unirAsientos(
+      asientoIds,
+      usuarioId
+    );
+    
+    res.json(toJSONBigInt(asientoResultante));
+  } catch (err) {
+    next(err);
+  }
+}
