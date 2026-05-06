@@ -5405,41 +5405,12 @@ enum OrigenAsiento {
 
 model DetalleAsientoContable {
   id                    BigInt                  @id @default(autoincrement())
-  
-  // ========================================
-  // RELACIÓN CON ASIENTO (Cabecera)
-  // ========================================
   asientoContableId     BigInt
-  
-  // ========================================
-  // NÚMERO DE LÍNEA
-  // ========================================
   numeroLinea           Int                                          // 1, 2, 3, ... (orden dentro del asiento)
-  
-  // ========================================
-  // CUENTA CONTABLE
-  // ========================================
   planCuentaId          BigInt                                       // FK a PlanCuentasContable
-  codigoCuenta          String                  @db.VarChar(20)      // "1011", "4011", etc (desnormalizado para performance)
-  nombreCuenta          String                  @db.VarChar(200)     // Nombre de la cuenta (desnormalizado)
-  
-  // ========================================
-  // DESCRIPCIÓN (Glosa de la línea)
-  // ========================================
   glosa                 String                  @db.Text             // Descripción específica de esta línea
-  
-  // ========================================
-  // MONTOS (Partida Doble)
-  // ========================================
   debe                  Decimal                 @db.Decimal(18, 2)   // Monto en el DEBE
-  haber                 Decimal                 @db.Decimal(18, 2)   // Monto en el HABER
-  
-  // Regla: debe > 0 Y haber = 0  O  debe = 0 Y haber > 0
-  // NO puede tener ambos con valor > 0
-  
-  // ========================================
-  // MONEDA Y TIPO DE CAMBIO
-  // ========================================
+  haber                 Decimal                 @db.Decimal(18, 2)   // Monto en el HABER  Regla: debe > 0 Y haber = 0  O  debe = 0 Y haber > 0, NO puede tener ambos con valor > 0
   monedaId              BigInt
   tipoCambio            Decimal?                @db.Decimal(10, 4)   // Si es moneda extranjera
   
@@ -5457,16 +5428,14 @@ model DetalleAsientoContable {
  // ========================================
   // 🆕 ORIGEN POLIMÓRFICO DE LA LÍNEA
   // ========================================
-  // submoduloOrigenLineaId → FK real a SubmoduloSistema (integridad)
-  // procesoOrigenLineaId   → ID polimórfico (sin FK, resuelto vía SubmoduloSistema.nombreModeloOrigen)
-  submoduloOrigenLineaId    BigInt?
-  procesoOrigenLineaId      BigInt?
+  submoduloOrigenLineaId    BigInt?       // submoduloOrigenLineaId → FK real a SubmoduloSistema (integridad)
+  procesoOrigenLineaId      BigInt?       // procesoOrigenLineaId   → ID polimórfico (sin FK, resuelto vía SubmoduloSistema.nombreModeloOrigen)
   
   // ========================================
   // REFERENCIA AL DOCUMENTO COMERCIAL (desnormalizado para reportes/SUNAT)
   // ========================================
   tipoDocumentoOrigenId       BigInt?                                // Tipo: Factura, Boleta, NC, ND
-  numeroDocumentoOrigen       String?                @db.VarChar(50)
+  numeroDocumentoOrigen       String?    @db.VarChar(50)
   fechaDocumentoOrigen        DateTime?                              // Fecha emisión
   fechaVenceDocumentoOrigen   DateTime?                              // 🆕 Fecha vencimiento (CxC/CxP)
   
@@ -5494,7 +5463,6 @@ model DetalleAsientoContable {
   // ========================================
   @@index([asientoContableId])
   @@index([planCuentaId])
-  @@index([codigoCuenta])
   @@index([centroCostoId])
   @@index([entidadComercialId])
   @@index([monedaId])
