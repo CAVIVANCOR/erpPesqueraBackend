@@ -1,51 +1,99 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import hpp from 'hpp';
-import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
-import { errorHandler } from './middlewares/errorHandler.js';
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import hpp from "hpp";
+import rateLimit from "express-rate-limit";
+import dotenv from "dotenv";
+import { errorHandler } from "./middlewares/errorHandler.js";
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-app.set('trust proxy', 1); // Confiar en el primer proxy (nginx/apache)
+app.set("trust proxy", 1); // Confiar en el primer proxy (nginx/apache)
 
-
-import path from 'path';
+import path from "path";
 // Middleware para servir archivos de logo de empresa de forma pública y segura
-app.use('/public/logos', express.static(path.join(process.cwd(), 'uploads/logos')));
+app.use(
+  "/public/logos",
+  express.static(path.join(process.cwd(), "uploads/logos")),
+);
 // Middleware para servir fotos de personal
-app.use('/public/personal', express.static(path.join(process.cwd(), 'uploads/personal')));
+app.use(
+  "/public/personal",
+  express.static(path.join(process.cwd(), "uploads/personal")),
+);
 // Middleware para servir fotos de productos
-app.use('/public/productos', express.static(path.join(process.cwd(), 'uploads/productos')));
+app.use(
+  "/public/productos",
+  express.static(path.join(process.cwd(), "uploads/productos")),
+);
 // Middleware para servir fotos de embarcaciones
-app.use('/public/embarcaciones', express.static(path.join(process.cwd(), 'uploads/embarcaciones')));
+app.use(
+  "/public/embarcaciones",
+  express.static(path.join(process.cwd(), "uploads/embarcaciones")),
+);
 // Middleware para servir fichas técnicas de productos
-app.use('/public/fichas-tecnicas', express.static(path.join(process.cwd(), 'uploads/fichas-tecnicas')));
+app.use(
+  "/public/fichas-tecnicas",
+  express.static(path.join(process.cwd(), "uploads/fichas-tecnicas")),
+);
 // Middleware para servir fichas técnicas de boliches red
-app.use('/public/fichas-tecnicas-boliches', express.static(path.join(process.cwd(), 'uploads/fichas-tecnicas-boliches')));
+app.use(
+  "/public/fichas-tecnicas-boliches",
+  express.static(path.join(process.cwd(), "uploads/fichas-tecnicas-boliches")),
+);
 // Middleware para servir certificados de embarcaciones
-app.use('/public/certificados-embarcacion', express.static(path.join(process.cwd(), 'uploads/certificados-embarcacion')));
+app.use(
+  "/public/certificados-embarcacion",
+  express.static(path.join(process.cwd(), "uploads/certificados-embarcacion")),
+);
 // Middleware para servir documentos de visitantes (protegido con JWT)
-app.use('/uploads/documentos-visitantes', express.static(path.join(process.cwd(), 'uploads/documentos-visitantes')));
+app.use(
+  "/uploads/documentos-visitantes",
+  express.static(path.join(process.cwd(), "uploads/documentos-visitantes")),
+);
 // Middleware para servir PDFs de movimientos de almacén
-app.use('/uploads/movimientos-almacen', express.static(path.join(process.cwd(), 'uploads/movimientos-almacen')));
+app.use(
+  "/uploads/movimientos-almacen",
+  express.static(path.join(process.cwd(), "uploads/movimientos-almacen")),
+);
 // Middleware para servir PDFs de requerimientos de compra
-app.use('/uploads/requerimientos-compra', express.static(path.join(process.cwd(), 'uploads/requerimientos-compra')));
+app.use(
+  "/uploads/requerimientos-compra",
+  express.static(path.join(process.cwd(), "uploads/requerimientos-compra")),
+);
 // Middleware para servir PDFs de órdenes de compra
-app.use('/uploads/ordenes-compra', express.static(path.join(process.cwd(), 'uploads/ordenes-compra')));
+app.use(
+  "/uploads/ordenes-compra",
+  express.static(path.join(process.cwd(), "uploads/ordenes-compra")),
+);
 // Middleware para servir PDFs de contratos de servicio
-app.use('/uploads/contratos-servicio', express.static(path.join(process.cwd(), 'uploads/contratos-servicio')));
+app.use(
+  "/uploads/contratos-servicio",
+  express.static(path.join(process.cwd(), "uploads/contratos-servicio")),
+);
 // Middleware para servir PDFs de entregas a rendir de Contratos de Servicio
-app.use('/uploads/det-movs-entrega-rendir-contrato', express.static(path.join(process.cwd(), 'uploads/det-movs-entrega-rendir-contrato')));
+app.use(
+  "/uploads/det-movs-entrega-rendir-contrato",
+  express.static(
+    path.join(process.cwd(), "uploads/det-movs-entrega-rendir-contrato"),
+  ),
+);
 // Middleware para servir PDFs de entregas a rendir de OT Mantenimiento
-app.use('/uploads/det-movs-entrega-rendir-ot-mantenimiento', express.static(path.join(process.cwd(), 'uploads/det-movs-entrega-rendir-ot-mantenimiento')));
+app.use(
+  "/uploads/det-movs-entrega-rendir-ot-mantenimiento",
+  express.static(
+    path.join(
+      process.cwd(),
+      "uploads/det-movs-entrega-rendir-ot-mantenimiento",
+    ),
+  ),
+);
 
 // Middlewares globales
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cors());
 app.use(helmet());
 app.use(hpp());
@@ -68,17 +116,21 @@ app.use(limiter);
  */
 
 // Rutas públicas de consultas externas (RENIEC y SUNAT) - ANTES del middleware JWT
-import consultaExternaRoutes from './routes/Maestros/consultaExterna.routes.js';
-app.use('/api/consultas-externas', consultaExternaRoutes);
+import consultaExternaRoutes from "./routes/Maestros/consultaExterna.routes.js";
+app.use("/api/consultas-externas", consultaExternaRoutes);
 
 // Rutas principales (protegidas por JWT)
-import routes from './routes/index.js';
-app.use('/api', routes);
+import routes from "./routes/index.js";
+app.use("/api", routes);
 
 // Middleware de manejo de errores
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.info(`Servidor ERP escuchando en puerto ${PORT}`);
+const HOST = process.env.HOST || "0.0.0.0"; // Escuchar en todas las interfaces
+
+app.listen(PORT, HOST, () => {
+  console.info(`Servidor ERP escuchando en ${HOST}:${PORT}`);
+  console.info(`Red local: http://192.168.1.36:${PORT}`);
+  console.info(`Localhost: http://localhost:${PORT}`);
 });
