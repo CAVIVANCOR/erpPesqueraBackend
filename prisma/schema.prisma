@@ -86,6 +86,7 @@ model Activo {
   embarcacion Embarcacion?
   ordenesMantenimiento OTMantenimiento[]
   contratosServicio       ContratoServicio[]    @relation("ContratoServicioActivo")
+  detallesAsientosContables DetalleAsientoContable[]  // Relación inversa con DetalleAsientoContable
 
 }
 
@@ -5314,7 +5315,6 @@ model AsientoContable {
   origenAsiento         OrigenAsiento                                // MANUAL | AUTOMATICO
   submoduloOrigenId     BigInt?                                      // Si es automático, de qué módulo viene
   procesoOrigenId       BigInt?                                      // ID del registro origen (MovimientoCaja, ComprobanteVenta, etc)
-  
   estadoId              BigInt
   
   // ========================================
@@ -5355,7 +5355,7 @@ model AsientoContable {
   submoduloOrigen       SubmoduloSistema?       @relation(fields: [submoduloOrigenId], references: [id])
   personalAprobador     Personal?               @relation("AsientoAprobadoPor", fields: [aprobadoPor], references: [id])
   personalAnulador      Personal?               @relation("AsientoAnuladoPor", fields: [anuladoPor], references: [id])
-  
+
   detalles              DetalleAsientoContable[]
 
 // Nuevas relaciones con Tesorería Avanzada
@@ -5424,7 +5424,8 @@ model DetalleAsientoContable {
   centroCostoId         BigInt?                                      // Centro de costo (obligatorio si la cuenta lo requiere)
   entidadComercialId    BigInt?                                      // Cliente/Proveedor (obligatorio si la cuenta lo requiere)
   proyectoId            BigInt?                                      // Proyecto (si aplica)
-  
+  activoId              BigInt?                                      // Activo relacionado a la línea (si aplica)
+
  // ========================================
   // 🆕 ORIGEN POLIMÓRFICO DE LA LÍNEA
   // ========================================
@@ -5457,6 +5458,7 @@ model DetalleAsientoContable {
   entidadComercial      EntidadComercial?       @relation(fields: [entidadComercialId], references: [id])
   tipoDocumentoOrigen   TipoDocumento?          @relation(fields: [tipoDocumentoOrigenId], references: [id])
   submoduloOrigenLinea  SubmoduloSistema?       @relation("DetalleAsientoSubmodulo", fields: [submoduloOrigenLineaId], references: [id])  // 🆕
+  activo                Activo?                 @relation(fields: [activoId], references: [id])
 
   // ========================================
   // ÍNDICES
@@ -5468,6 +5470,7 @@ model DetalleAsientoContable {
   @@index([monedaId])
   @@index([submoduloOrigenLineaId, procesoOrigenLineaId])     // 🆕 Búsqueda polimórfica
   @@index([fechaVenceDocumentoOrigen])                        // 🆕 Reportes vencimientos
+  @@index([activoId])                                         // Índice para búsquedas por activo
 }
 
 model FormaPago {
