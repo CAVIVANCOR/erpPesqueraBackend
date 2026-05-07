@@ -7,6 +7,73 @@ import {
 } from "../../utils/errors.js";
 
 /**
+ * Maneja errores de Prisma y los convierte en errores específicos
+ * @param {Error} err - Error de Prisma
+ * @param {string} contexto - Contexto de la operación
+ */
+function manejarErrorPrisma(err, contexto = "operación") {
+  if (!err.code || !err.code.startsWith("P")) {
+    throw err;
+  }
+
+  // P2002: Violación de constraint único
+  if (err.code === "P2002") {
+    const target = err.meta?.target;
+    if (target) {
+      if (target.includes("numeroAsiento")) {
+        throw new ValidationError(
+          `El número de asiento ya existe en esta empresa. Por favor, ingrese un número diferente o deje el campo vacío para generar uno automáticamente.`
+        );
+      }
+      if (target.includes("correlativo")) {
+        throw new ValidationError(
+          `El correlativo ya existe. Por favor, intente nuevamente.`
+        );
+      }
+      throw new ValidationError(
+        `Ya existe un registro con el mismo ${target.join(", ")}. Por favor, verifique los datos.`
+      );
+    }
+    throw new ValidationError("Ya existe un registro con estos datos únicos.");
+  }
+
+  // P2003: Violación de foreign key
+  if (err.code === "P2003") {
+    const field = err.meta?.field_name;
+    throw new ValidationError(
+      `Referencia inválida en el campo ${field || "desconocido"}. El registro relacionado no existe.`
+    );
+  }
+
+  // P2025: Registro no encontrado
+  if (err.code === "P2025") {
+    throw new NotFoundError(
+      `No se encontró el registro para ${contexto}. Es posible que haya sido eliminado.`
+    );
+  }
+
+  // P2014: Violación de relación requerida
+  if (err.code === "P2014") {
+    throw new ValidationError(
+      `No se puede eliminar este registro porque tiene datos relacionados. Elimine primero las referencias.`
+    );
+  }
+
+  // P2016: Error de interpretación de query
+  if (err.code === "P2016") {
+    throw new ValidationError(
+      `Error en los datos proporcionados para ${contexto}. Verifique el formato.`
+    );
+  }
+
+  // Error genérico de Prisma
+  throw new DatabaseError(
+    `Error de base de datos en ${contexto}: ${err.code}`,
+    err.message
+  );
+}
+
+/**
  * Servicio CRUD para AsientoContable con DetalleAsientoContable (maestro-detalle)
  * Gestiona los asientos contables con validación de partida doble.
  * Flujo: PENDIENTE (76) → APROBADO (77) → ANULADO (78)
@@ -64,6 +131,23 @@ async function validarAsientoContable(data) {
     });
     if (!moneda) {
       throw new ValidationError("La moneda referenciada no existe.");
+    }
+  }
+
+  // Validación de duplicidad de número de asiento
+  if (data.numeroAsiento) {
+    const asientoDuplicado = await prisma.asientoContable.findFirst({
+      where: {
+        numeroAsiento: data.numeroAsiento,
+        empresaId: data.empresaId,
+        ...(data.id && { id: { not: data.id } }),
+      },
+    });
+    
+    if (asientoDuplicado) {
+      throw new ValidationError(
+        `El número de asiento "${data.numeroAsiento}" ya existe en esta empresa. Por favor, ingrese un número diferente o deje el campo vacío para generar uno automáticamente.`
+      );
     }
   }
 }
@@ -159,10 +243,7 @@ const listar = async () => {
       orderBy: { fechaAsiento: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "listar asientos contables");
   }
 };
 
@@ -193,10 +274,7 @@ const obtenerPorId = async (id) => {
     return asiento;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "obtener asiento contable");
   }
 };
 
@@ -215,14 +293,14 @@ const crear = async (data) => {
 
     // Siempre crear en estado PENDIENTE (76)
     const estadoPendiente = await prisma.estadoMultiFuncion.findUnique({
-      where: { id: BigInt(76) },
+      where: { id: Number(76) },
     });
     if (!estadoPendiente) {
       throw new ValidationError(
         "Estado PENDIENTE (76) no encontrado en el sistema.",
       );
     }
-    data.estadoId = BigInt(76);
+    data.estadoId = Number(76);
 
     await validarAsientoContable(data);
 
@@ -240,9 +318,10 @@ const crear = async (data) => {
         orderBy: { correlativo: "desc" },
       });
       const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
+      const anioAsiento = new Date(data.fechaAsiento).getFullYear();
       const numeroAsiento =
         data.numeroAsiento ||
-        `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, "0")}`;
+        `ASI-${anioAsiento}-${String(correlativo).padStart(6, "0")}`;
 
       const asiento = await tx.asientoContable.create({
         data: {
@@ -292,10 +371,10 @@ const crear = async (data) => {
                   ? new Date(detalle.fechaVenceDocumentoOrigen)
                   : null,
                 submoduloOrigenLineaId: detalle.submoduloOrigenLineaId
-                  ? BigInt(detalle.submoduloOrigenLineaId)
+                  ? Number(detalle.submoduloOrigenLineaId)
                   : null,
                 procesoOrigenLineaId: detalle.procesoOrigenLineaId
-                  ? BigInt(detalle.procesoOrigenLineaId)
+                  ? Number(detalle.procesoOrigenLineaId)
                   : null,
                 creadoPor: data.creadoPor,
               },
@@ -328,10 +407,7 @@ const crear = async (data) => {
     });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "crear asiento contable");
   }
 };
 
@@ -370,9 +446,35 @@ const actualizar = async (id, data) => {
     }
 
     return await prisma.$transaction(async (tx) => {
+      // Si cambió el periodo, regenerar numeroAsiento
+      let nuevoNumeroAsiento = undefined;
+      let nuevoCorrelativo = undefined;
+
+      if (
+        data.periodoContableId &&
+        Number(data.periodoContableId) !== Number(existente.periodoContableId)
+      ) {
+        // Obtener el último correlativo del nuevo periodo
+        const ultimoAsiento = await tx.asientoContable.findFirst({
+          where: {
+            empresaId: data.empresaId || existente.empresaId,
+            periodoContableId: data.periodoContableId,
+          },
+          orderBy: { correlativo: "desc" },
+        });
+
+        nuevoCorrelativo = (ultimoAsiento?.correlativo || 0) + 1;
+        const anioAsiento = new Date(
+          data.fechaAsiento || existente.fechaAsiento,
+        ).getFullYear();
+        nuevoNumeroAsiento = `ASI-${anioAsiento}-${String(nuevoCorrelativo).padStart(6, "0")}`;
+      }
       await tx.asientoContable.update({
         where: { id },
         data: {
+          periodoContableId: data.periodoContableId,
+          ...(nuevoNumeroAsiento && { numeroAsiento: nuevoNumeroAsiento }),
+          ...(nuevoCorrelativo && { correlativo: nuevoCorrelativo }),
           fechaAsiento: data.fechaAsiento
             ? new Date(data.fechaAsiento)
             : undefined,
@@ -437,10 +539,10 @@ const actualizar = async (id, data) => {
                 ? new Date(detalle.fechaVenceDocumentoOrigen)
                 : null,
               submoduloOrigenLineaId: detalle.submoduloOrigenLineaId
-                ? BigInt(detalle.submoduloOrigenLineaId)
+                ? Number(detalle.submoduloOrigenLineaId)
                 : null,
               procesoOrigenLineaId: detalle.procesoOrigenLineaId
-                ? BigInt(detalle.procesoOrigenLineaId)
+                ? Number(detalle.procesoOrigenLineaId)
                 : null,
               actualizadoPor: data.actualizadoPor,
             };
@@ -493,10 +595,7 @@ const actualizar = async (id, data) => {
       err instanceof ConflictError
     )
       throw err;
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "actualizar asiento contable");
   }
 };
 
@@ -542,10 +641,7 @@ const eliminar = async (id) => {
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "eliminar asiento contable");
   }
 };
 
@@ -573,10 +669,7 @@ const listarPorEmpresa = async (empresaId) => {
       orderBy: { fechaAsiento: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "obtener asientos por empresa");
   }
 };
 
@@ -604,10 +697,7 @@ const listarPorPeriodo = async (periodoContableId) => {
       orderBy: { fechaAsiento: "asc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "obtener asientos por periodo");
   }
 };
 
@@ -657,7 +747,7 @@ const aprobarAsiento = async (id, aprobadoPorId) => {
 
     // Validar que el estado APROBADO (77) exista
     const estadoAprobado = await prisma.estadoMultiFuncion.findUnique({
-      where: { id: BigInt(77) },
+      where: { id: Number(77) },
     });
     if (!estadoAprobado) {
       throw new ValidationError(
@@ -668,7 +758,7 @@ const aprobarAsiento = async (id, aprobadoPorId) => {
     return await prisma.asientoContable.update({
       where: { id },
       data: {
-        estadoId: BigInt(77), // Estado APROBADO
+        estadoId: Number(77), // Estado APROBADO
         fechaAprobacion: new Date(),
         aprobadoPor: aprobadoPorId,
       },
@@ -698,10 +788,7 @@ const aprobarAsiento = async (id, aprobadoPorId) => {
       err instanceof ConflictError
     )
       throw err;
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "aprobar asiento contable");
   }
 };
 
@@ -738,7 +825,7 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
 
     // Validar que el estado ANULADO (78) exista
     const estadoAnulado = await prisma.estadoMultiFuncion.findUnique({
-      where: { id: BigInt(78) },
+      where: { id: Number(78) },
     });
     if (!estadoAnulado) {
       throw new ValidationError(
@@ -749,7 +836,7 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
     return await prisma.asientoContable.update({
       where: { id },
       data: {
-        estadoId: BigInt(78), // Estado ANULADO
+        estadoId: Number(78), // Estado ANULADO
         fechaAnulacion: new Date(),
         anuladoPor: anuladoPorId,
         motivoAnulacion,
@@ -780,10 +867,7 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
       err instanceof ConflictError
     )
       throw err;
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "anular asiento contable");
   }
 };
 
@@ -833,27 +917,22 @@ const listarPorMovimiento = async (movimientoCajaId, submoduloId = null) => {
 
     return asientos;
   } catch (err) {
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError(
-        "Error de base de datos al listar asientos por movimiento",
-        err.message,
-      );
-    }
-    throw err;
+    manejarErrorPrisma(err, "listar asientos por movimiento");
   }
 };
+
 /**
  * Une múltiples asientos contables en uno solo
  * El primer asiento de la lista permanece y recibe todos los detalles de los demás
  * Los asientos restantes son eliminados
- * 
+ *
  * VALIDACIONES:
  * - Mínimo 2 asientos
  * - Todos en estado PENDIENTE (76)
  * - Misma empresa
  * - Mismo período
  * - Misma glosa
- * 
+ *
  * @param {Array<BigInt>} asientoIds - Array de IDs de asientos a unir (el primero permanece)
  * @param {BigInt} usuarioId - ID del usuario que realiza la operación
  * @returns {Promise<Object>} - Asiento resultante con todos los detalles unidos
@@ -865,7 +944,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
     // ========================================
     if (!asientoIds || asientoIds.length < 2) {
       throw new ValidationError(
-        "Debe seleccionar al menos 2 asientos para unir."
+        "Debe seleccionar al menos 2 asientos para unir.",
       );
     }
 
@@ -874,7 +953,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
     // ========================================
     const asientos = await prisma.asientoContable.findMany({
       where: {
-        id: { in: asientoIds.map((id) => BigInt(id)) },
+        id: { in: asientoIds.map((id) => Number(id)) },
       },
       include: {
         empresa: true,
@@ -894,23 +973,21 @@ const unirAsientos = async (asientoIds, usuarioId) => {
     });
 
     if (asientos.length !== asientoIds.length) {
-      throw new NotFoundError(
-        "Uno o más asientos seleccionados no existen."
-      );
+      throw new NotFoundError("Uno o más asientos seleccionados no existen.");
     }
 
     // ========================================
     // VALIDACIÓN 3: Todos deben estar en estado PENDIENTE (76)
     // ========================================
     const asientosNoPendientes = asientos.filter(
-      (a) => Number(a.estadoId) !== 76
+      (a) => Number(a.estadoId) !== 76,
     );
     if (asientosNoPendientes.length > 0) {
       const numerosAsientos = asientosNoPendientes
         .map((a) => a.numeroAsiento)
         .join(", ");
       throw new ConflictError(
-        `Solo se pueden unir asientos en estado PENDIENTE. Los siguientes asientos tienen estado diferente: ${numerosAsientos}`
+        `Solo se pueden unir asientos en estado PENDIENTE. Los siguientes asientos tienen estado diferente: ${numerosAsientos}`,
       );
     }
 
@@ -919,11 +996,11 @@ const unirAsientos = async (asientoIds, usuarioId) => {
     // ========================================
     const empresaId = asientos[0].empresaId;
     const asientosDiferenteEmpresa = asientos.filter(
-      (a) => Number(a.empresaId) !== Number(empresaId)
+      (a) => Number(a.empresaId) !== Number(empresaId),
     );
     if (asientosDiferenteEmpresa.length > 0) {
       throw new ValidationError(
-        "Todos los asientos deben ser de la misma empresa."
+        "Todos los asientos deben ser de la misma empresa.",
       );
     }
 
@@ -932,11 +1009,11 @@ const unirAsientos = async (asientoIds, usuarioId) => {
     // ========================================
     const periodoId = asientos[0].periodoContableId;
     const asientosDiferentePeriodo = asientos.filter(
-      (a) => Number(a.periodoContableId) !== Number(periodoId)
+      (a) => Number(a.periodoContableId) !== Number(periodoId),
     );
     if (asientosDiferentePeriodo.length > 0) {
       throw new ValidationError(
-        "Todos los asientos deben ser del mismo período contable."
+        "Todos los asientos deben ser del mismo período contable.",
       );
     }
 
@@ -944,12 +1021,10 @@ const unirAsientos = async (asientoIds, usuarioId) => {
     // VALIDACIÓN 6: Misma glosa
     // ========================================
     const glosa = asientos[0].glosa;
-    const asientosDiferenteGlosa = asientos.filter(
-      (a) => a.glosa !== glosa
-    );
+    const asientosDiferenteGlosa = asientos.filter((a) => a.glosa !== glosa);
     if (asientosDiferenteGlosa.length > 0) {
       throw new ValidationError(
-        "Todos los asientos deben tener la misma glosa."
+        "Todos los asientos deben tener la misma glosa.",
       );
     }
 
@@ -965,7 +1040,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
         Number(estadoPeriodoAbierto.id)
     ) {
       throw new ConflictError(
-        "No se pueden unir asientos de un período que no está ABIERTO."
+        "No se pueden unir asientos de un período que no está ABIERTO.",
       );
     }
 
@@ -980,7 +1055,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
       // Obtener el último número de línea del asiento principal
       let ultimoNumeroLinea = Math.max(
         ...asientoPrincipal.detalles.map((d) => d.numeroLinea),
-        0
+        0,
       );
 
       // Transferir detalles de los asientos a eliminar al asiento principal
@@ -1082,10 +1157,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
       err instanceof ConflictError
     )
       throw err;
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos al unir asientos", err.message);
-    }
-    throw err;
+    manejarErrorPrisma(err, "unir asientos contables");
   }
 };
 

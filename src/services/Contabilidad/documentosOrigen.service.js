@@ -47,12 +47,12 @@ const obtenerPorModelo = async (
       case "PreFactura":
         {
           const wherePreFactura = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
             // SIN FILTRO DE ESTADO - Cargar todas las prefacturas
           };
 
           if (entidadComercialId) {
-            wherePreFactura.clienteId = BigInt(entidadComercialId);
+            wherePreFactura.clienteId = Number(entidadComercialId);
           }
 
           registros = await prisma.preFactura.findMany({
@@ -79,12 +79,12 @@ const obtenerPorModelo = async (
       case "OrdenCompra":
         {
           const whereOrdenCompra = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
             // SIN FILTRO DE ESTADO - Cargar todas las órdenes
           };
 
           if (entidadComercialId) {
-            whereOrdenCompra.proveedorId = BigInt(entidadComercialId);
+            whereOrdenCompra.proveedorId = Number(entidadComercialId);
           }
 
           registros = await prisma.ordenCompra.findMany({
@@ -109,12 +109,12 @@ const obtenerPorModelo = async (
       case "CuentaPorCobrar":
         {
           const whereCxC = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
             // SIN FILTRO DE ESTADO
           };
 
           if (entidadComercialId) {
-            whereCxC.clienteId = BigInt(entidadComercialId);
+            whereCxC.clienteId = Number(entidadComercialId);
           }
 
           registros = await prisma.cuentaPorCobrar.findMany({
@@ -135,12 +135,12 @@ const obtenerPorModelo = async (
       case "CuentaPorPagar":
         {
           const whereCxP = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
             // SIN FILTRO DE ESTADO
           };
 
           if (entidadComercialId) {
-            whereCxP.proveedorId = BigInt(entidadComercialId);
+            whereCxP.proveedorId = Number(entidadComercialId);
           }
 
           registros = await prisma.cuentaPorPagar.findMany({
@@ -165,11 +165,11 @@ const obtenerPorModelo = async (
       case "MovimientoCaja":
         {
           const whereMovCaja = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            whereMovCaja.entidadComercialId = BigInt(entidadComercialId);
+            whereMovCaja.entidadComercialId = Number(entidadComercialId);
           }
 
           registros = await prisma.movimientoCaja.findMany({
@@ -189,12 +189,12 @@ const obtenerPorModelo = async (
       case "CuentaCorriente":
         {
           const whereCuentaCorriente = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
             whereCuentaCorriente.entidadFinancieraId =
-              BigInt(entidadComercialId);
+              Number(entidadComercialId);
           }
 
           registros = await prisma.cuentaCorriente.findMany({
@@ -214,11 +214,11 @@ const obtenerPorModelo = async (
       case "PrestamoBancario":
         {
           const wherePrestamo = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            wherePrestamo.entidadFinancieraId = BigInt(entidadComercialId);
+            wherePrestamo.entidadFinancieraId = Number(entidadComercialId);
           }
 
           registros = await prisma.prestamoBancario.findMany({
@@ -242,11 +242,11 @@ const obtenerPorModelo = async (
       case "MovimientoAlmacen":
         {
           const whereMovAlmacen = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            whereMovAlmacen.entidadComercialId = BigInt(entidadComercialId);
+            whereMovAlmacen.entidadComercialId = Number(entidadComercialId);
           }
 
           registros = await prisma.movimientoAlmacen.findMany({
@@ -269,11 +269,11 @@ const obtenerPorModelo = async (
       case "EntregaARendir":
         {
           const whereEntrega = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            whereEntrega.personalId = BigInt(entidadComercialId);
+            whereEntrega.personalId = Number(entidadComercialId);
           }
 
           registros = await prisma.entregaARendir.findMany({
@@ -293,11 +293,11 @@ const obtenerPorModelo = async (
       case "EntregaARendirPVentas":
         {
           const whereEntregaVentas = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            whereEntregaVentas.personalId = BigInt(entidadComercialId);
+            whereEntregaVentas.personalId = Number(entidadComercialId);
           }
 
           registros = await prisma.entregaARendirPVentas.findMany({
@@ -317,11 +317,11 @@ const obtenerPorModelo = async (
       case "EntregaARendirPCompras":
         {
           const whereEntregaCompras = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            whereEntregaCompras.personalId = BigInt(entidadComercialId);
+            whereEntregaCompras.personalId = Number(entidadComercialId);
           }
 
           registros = await prisma.entregaARendirPCompras.findMany({
@@ -341,11 +341,11 @@ const obtenerPorModelo = async (
       case "EntregaARendirMovAlmacen":
         {
           const whereEntregaAlmacen = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            whereEntregaAlmacen.personalId = BigInt(entidadComercialId);
+            whereEntregaAlmacen.personalId = Number(entidadComercialId);
           }
 
           registros = await prisma.entregaARendirMovAlmacen.findMany({
@@ -365,11 +365,11 @@ const obtenerPorModelo = async (
       case "EntregaARendirPescaConsumo":
         {
           const whereEntregaPesca = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            whereEntregaPesca.personalId = BigInt(entidadComercialId);
+            whereEntregaPesca.personalId = Number(entidadComercialId);
           }
 
           registros = await prisma.entregaARendirPescaConsumo.findMany({
@@ -389,11 +389,11 @@ const obtenerPorModelo = async (
       case "EntregaARendirContratoServicios":
         {
           const whereEntregaServicios = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            whereEntregaServicios.personalId = BigInt(entidadComercialId);
+            whereEntregaServicios.personalId = Number(entidadComercialId);
           }
 
           registros = await prisma.entregaARendirContratoServicios.findMany({
@@ -413,11 +413,11 @@ const obtenerPorModelo = async (
       case "EntregaARendirOTMantenimiento":
         {
           const whereEntregaOT = {
-            empresaId: BigInt(empresaId),
+            empresaId: Number(empresaId),
           };
 
           if (entidadComercialId) {
-            whereEntregaOT.personalId = BigInt(entidadComercialId);
+            whereEntregaOT.personalId = Number(entidadComercialId);
           }
 
           registros = await prisma.entregaARendirOTMantenimiento.findMany({
