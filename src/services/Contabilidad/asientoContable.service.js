@@ -22,16 +22,16 @@ function manejarErrorPrisma(err, contexto = "operación") {
     if (target) {
       if (target.includes("numeroAsiento")) {
         throw new ValidationError(
-          `El número de asiento ya existe en esta empresa. Por favor, ingrese un número diferente o deje el campo vacío para generar uno automáticamente.`
+          `El número de asiento ya existe en esta empresa. Por favor, ingrese un número diferente o deje el campo vacío para generar uno automáticamente.`,
         );
       }
       if (target.includes("correlativo")) {
         throw new ValidationError(
-          `El correlativo ya existe. Por favor, intente nuevamente.`
+          `El correlativo ya existe. Por favor, intente nuevamente.`,
         );
       }
       throw new ValidationError(
-        `Ya existe un registro con el mismo ${target.join(", ")}. Por favor, verifique los datos.`
+        `Ya existe un registro con el mismo ${target.join(", ")}. Por favor, verifique los datos.`,
       );
     }
     throw new ValidationError("Ya existe un registro con estos datos únicos.");
@@ -41,35 +41,35 @@ function manejarErrorPrisma(err, contexto = "operación") {
   if (err.code === "P2003") {
     const field = err.meta?.field_name;
     throw new ValidationError(
-      `Referencia inválida en el campo ${field || "desconocido"}. El registro relacionado no existe.`
+      `Referencia inválida en el campo ${field || "desconocido"}. El registro relacionado no existe.`,
     );
   }
 
   // P2025: Registro no encontrado
   if (err.code === "P2025") {
     throw new NotFoundError(
-      `No se encontró el registro para ${contexto}. Es posible que haya sido eliminado.`
+      `No se encontró el registro para ${contexto}. Es posible que haya sido eliminado.`,
     );
   }
 
   // P2014: Violación de relación requerida
   if (err.code === "P2014") {
     throw new ValidationError(
-      `No se puede eliminar este registro porque tiene datos relacionados. Elimine primero las referencias.`
+      `No se puede eliminar este registro porque tiene datos relacionados. Elimine primero las referencias.`,
     );
   }
 
   // P2016: Error de interpretación de query
   if (err.code === "P2016") {
     throw new ValidationError(
-      `Error en los datos proporcionados para ${contexto}. Verifique el formato.`
+      `Error en los datos proporcionados para ${contexto}. Verifique el formato.`,
     );
   }
 
   // Error genérico de Prisma
   throw new DatabaseError(
     `Error de base de datos en ${contexto}: ${err.code}`,
-    err.message
+    err.message,
   );
 }
 
@@ -143,10 +143,10 @@ async function validarAsientoContable(data) {
         ...(data.id && { id: { not: data.id } }),
       },
     });
-    
+
     if (asientoDuplicado) {
       throw new ValidationError(
-        `El número de asiento "${data.numeroAsiento}" ya existe en esta empresa. Por favor, ingrese un número diferente o deje el campo vacío para generar uno automáticamente.`
+        `El número de asiento "${data.numeroAsiento}" ya existe en esta empresa. Por favor, ingrese un número diferente o deje el campo vacío para generar uno automáticamente.`,
       );
     }
   }
@@ -233,6 +233,7 @@ const listar = async () => {
           include: {
             planCuenta: true,
             entidadComercial: true,
+            activo: true,
             centroCosto: true,
             moneda: true,
             tipoDocumentoOrigen: true,
@@ -262,6 +263,7 @@ const obtenerPorId = async (id) => {
           include: {
             planCuenta: true,
             entidadComercial: true,
+            activo: true,
             centroCosto: true,
             moneda: true,
             tipoDocumentoOrigen: true,
@@ -362,6 +364,7 @@ const crear = async (data) => {
                 haberMonedaExtranjera: detalle.haberMonedaExtranjera,
                 centroCostoId: detalle.centroCostoId,
                 entidadComercialId: detalle.entidadComercialId,
+                activoId: detalle.activoId,
                 tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId,
                 numeroDocumentoOrigen: detalle.numeroDocumentoOrigen,
                 fechaDocumentoOrigen: detalle.fechaDocumentoOrigen
@@ -396,6 +399,7 @@ const crear = async (data) => {
             include: {
               planCuenta: true,
               entidadComercial: true,
+              activo: true,
               centroCosto: true,
               moneda: true,
               tipoDocumentoOrigen: true,
@@ -530,6 +534,7 @@ const actualizar = async (id, data) => {
               haberMonedaExtranjera: detalle.haberMonedaExtranjera,
               centroCostoId: detalle.centroCostoId,
               entidadComercialId: detalle.entidadComercialId,
+              activoId: detalle.activoId,
               tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId,
               numeroDocumentoOrigen: detalle.numeroDocumentoOrigen,
               fechaDocumentoOrigen: detalle.fechaDocumentoOrigen
@@ -579,6 +584,7 @@ const actualizar = async (id, data) => {
             include: {
               planCuenta: true,
               entidadComercial: true,
+              activo: true,
               centroCosto: true,
               moneda: true,
               tipoDocumentoOrigen: true,
@@ -659,6 +665,7 @@ const listarPorEmpresa = async (empresaId) => {
           include: {
             planCuenta: true,
             entidadComercial: true,
+            activo: true,
             centroCosto: true,
             moneda: true,
             tipoDocumentoOrigen: true,
@@ -687,6 +694,7 @@ const listarPorPeriodo = async (periodoContableId) => {
           include: {
             planCuenta: true,
             entidadComercial: true,
+            activo: true,
             centroCosto: true,
             moneda: true,
             tipoDocumentoOrigen: true,
@@ -773,6 +781,7 @@ const aprobarAsiento = async (id, aprobadoPorId) => {
           include: {
             planCuenta: true,
             entidadComercial: true,
+            activo: true,
             centroCosto: true,
             moneda: true,
             tipoDocumentoOrigen: true,
@@ -852,6 +861,7 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
           include: {
             planCuenta: true,
             entidadComercial: true,
+            activo: true,
             centroCosto: true,
             moneda: true,
             tipoDocumentoOrigen: true,
@@ -899,6 +909,7 @@ const listarPorMovimiento = async (movimientoCajaId, submoduloId = null) => {
         include: {
           planCuenta: true,
           entidadComercial: true,
+          activo: true,
           centroCosto: true,
           moneda: true,
           tipoDocumentoOrigen: true,
@@ -963,6 +974,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
           include: {
             planCuenta: true,
             entidadComercial: true,
+            activo: true,
             centroCosto: true,
             moneda: true,
             tipoDocumentoOrigen: true,
@@ -1078,6 +1090,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
               haberMonedaExtranjera: detalle.haberMonedaExtranjera,
               centroCostoId: detalle.centroCostoId,
               entidadComercialId: detalle.entidadComercialId,
+              activoId: detalle.activoId,
               tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId,
               numeroDocumentoOrigen: detalle.numeroDocumentoOrigen,
               fechaDocumentoOrigen: detalle.fechaDocumentoOrigen,
@@ -1141,6 +1154,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
             include: {
               planCuenta: true,
               entidadComercial: true,
+              activo: true,
               centroCosto: true,
               moneda: true,
               tipoDocumentoOrigen: true,
