@@ -81,12 +81,13 @@ model Activo {
   createdAt            DateTime               @default(now())
   updatedAt            DateTime
 
-  tipo        TipoActivo @relation(fields: [tipoId], references: [id])
-  permisos    DetallePermisoActivo[]
-  embarcacion Embarcacion?
-  ordenesMantenimiento OTMantenimiento[]
-  contratosServicio       ContratoServicio[]    @relation("ContratoServicioActivo")
-  detallesAsientosContables DetalleAsientoContable[]  // Relación inversa con DetalleAsientoContable
+  tipo                          TipoActivo @relation(fields: [tipoId], references: [id])
+  permisos                      DetallePermisoActivo[]
+  embarcacion                   Embarcacion?
+  ordenesMantenimiento          OTMantenimiento[]
+  contratosServicio             ContratoServicio[]    @relation("ContratoServicioActivo")
+  detallesAsientosContables     DetalleAsientoContable[]  // Relación inversa con DetalleAsientoContable
+  contratistasOT                DetContratistasOT[] @relation("ActivoContratistaOT")
 
 }
 
@@ -1186,6 +1187,7 @@ model PreFactura {
   
   // Relaciones inversas
   detalles                    DetallePreFactura[]                                                                                          // Detalles de productos
+  contratistasOT              DetContratistasOT[] @relation("PreFacturaContratistaOT")
 
   
   // Índices
@@ -2000,7 +2002,6 @@ model DetalleMovimientoAlmacen {
   movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
   producto              Producto @relation(fields: [productoId], references: [id])
   detalleReqCompra      DetalleReqCompra? @relation(fields: [detalleReqCompraId], references: [id])
-  insumosOT  DetInsumosTareaOT[] @relation("DetMovAlmacenInsumoOT")
   ubicacionFisicaOrigen   UbicacionFisica? @relation("DetMovAlmacenUbicacionOrigen", fields: [ubicacionFisicaOrigenId], references: [id])
   ubicacionFisicaDestino  UbicacionFisica? @relation("DetMovAlmacenUbicacionDestino", fields: [ubicacionFisicaDestinoId], references: [id])
  
@@ -2048,7 +2049,6 @@ model DetalleOrdenCompra {
   
   ordenCompra    OrdenCompra @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
   producto       Producto @relation(fields: [productoId], references: [id])
-  insumosOT  DetInsumosTareaOT[] @relation("DetOCInsumoOT")
 
   @@index([ordenCompraId])
   @@index([productoId])
@@ -2503,8 +2503,6 @@ model EntidadComercial {
   costosExportacionCotizacion CostosExportacionCotizacion[] @relation("ProveedorCostoExport")
   costosExportacionPorIncoterm CostoExportacionPorIncoterm[] @relation("ProveedorDefaultCostoIncoterm")
   detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[] @relation("ProveedorMovInventario")
-  tareasContratista         DetTareasOT[]       @relation("ContratistaTareaOT")
-  insumosProveedorSugerido  DetInsumosTareaOT[] @relation("ProveedorSugeridoInsumoOT")
   contratosServicioCliente  ContratoServicio[]  @relation("ContratoServicioCliente")
   movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[] @relation("ProveedorMovContratoServicio")
   detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("ProveedorMovOTMantenimiento")
@@ -2526,16 +2524,16 @@ model EntidadComercial {
   percepciones                    Percepcion[]
   detallesAsientos                DetalleAsientoContable[]
     // Relación inversa para TarifaCostoExportacionRuta
-  tarifasRutaProveedor TarifaCostoExportacionRuta[] @relation("ProveedorTarifaRuta")
-  detCuotasPesca       DetCuotaPesca[]   @relation("EntidadEmpresarialDetCuotaPesca")
-  detCuotasPescaComisionista DetCuotaPesca[] @relation("EntidadComisionistaAlquilerDetCuotaPesca")
-  temporadasPescaAlquiladas TemporadaPesca[] @relation("EntidadEmpresarialAlquiladaTemporadaPesca")
-  temporadasPescaComisionista TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
-  personalEnlazado Personal[] @relation("PersonalEnlaceEntidad")
-  comisionesFidelizacion  ComisionFidelizacion[]
-  detallesComisionFidelizacion DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
-  plataformasRecepcionPesca  DetPlataformaRecepcionPesca[]
-
+  tarifasRutaProveedor          TarifaCostoExportacionRuta[] @relation("ProveedorTarifaRuta")
+  detCuotasPesca                DetCuotaPesca[]   @relation("EntidadEmpresarialDetCuotaPesca")
+  detCuotasPescaComisionista    DetCuotaPesca[] @relation("EntidadComisionistaAlquilerDetCuotaPesca")
+  temporadasPescaAlquiladas     TemporadaPesca[] @relation("EntidadEmpresarialAlquiladaTemporadaPesca")
+  temporadasPescaComisionista   TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
+  personalEnlazado              Personal[] @relation("PersonalEnlaceEntidad")
+  comisionesFidelizacion        ComisionFidelizacion[]
+  detallesComisionFidelizacion  DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
+  plataformasRecepcionPesca     DetPlataformaRecepcionPesca[]
+  contratistasOT                DetContratistasOT[] @relation("ContratistaOT")
 }
 
 model DetPlataformaRecepcionPesca {
@@ -3066,23 +3064,21 @@ model EstadoMultiFuncion {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime
   tipoProvieneDeId BigInt?
-  severityColor String?
+  severityColor    String?
 
-  tipoProvieneDe    TipoProvieneDe? @relation(fields: [tipoProvieneDeId], references: [id])
-  cotizacionVentas CotizacionVentas[]
-  ordenesCompra OrdenCompra[]
-  movimientosAlmacen MovimientoAlmacen[]
-  requerimientoCompra RequerimientoCompra[]
-  movimientosCaja MovimientoCaja[]
-  ordenesMantenimiento OTMantenimiento[]
-  tareasOT                  DetTareasOT[]           @relation("EstadoTareaOT")
-  insumosOT                 DetInsumosTareaOT[]     @relation("EstadoInsumoOT")
-    contratosServicio       ContratoServicio[]    @relation("EstadoContratoServicio")
-temporadasPesca  TemporadaPesca[]  @relation("TemporadaPescaEstado")
-novedadesPescaConsumo  NovedadPescaConsumo[]  @relation("NovedadPescaConsumoEstado")
-faenasPesca                       FaenaPesca[]         @relation("FaenaPescaEstado")
-faenasPescaConsumo                FaenaPescaConsumo[]  @relation("FaenaPescaConsumoEstado")
-// ========================================
+  tipoProvieneDe          TipoProvieneDe? @relation(fields: [tipoProvieneDeId], references: [id])
+  cotizacionVentas        CotizacionVentas[]
+  ordenesCompra           OrdenCompra[]
+  movimientosAlmacen      MovimientoAlmacen[]
+  requerimientoCompra     RequerimientoCompra[]
+  movimientosCaja         MovimientoCaja[]
+  ordenesMantenimiento    OTMantenimiento[]
+  contratosServicio       ContratoServicio[]      @relation("EstadoContratoServicio")
+  temporadasPesca         TemporadaPesca[]        @relation("TemporadaPescaEstado")
+  novedadesPescaConsumo   NovedadPescaConsumo[]   @relation("NovedadPescaConsumoEstado")
+  faenasPesca             FaenaPesca[]            @relation("FaenaPescaEstado")
+  faenasPescaConsumo      FaenaPescaConsumo[]     @relation("FaenaPescaConsumoEstado")
+  // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
   periodosContables               PeriodoContable[]
@@ -3097,9 +3093,11 @@ faenasPescaConsumo                FaenaPescaConsumo[]  @relation("FaenaPescaCons
   presupuestosAnuales             PresupuestoAnual[]
 
   // Relaciones con Tesorería Avanzada
-prestamos             PrestamoBancario[]
-lineasCredito         LineaCredito[]
-inversiones           InversionFinanciera[]
+  prestamos             PrestamoBancario[]
+  lineasCredito         LineaCredito[]
+  inversiones           InversionFinanciera[]
+  contratistasOT                DetContratistasOT[] @relation("EstadoContratistaOT")
+
 }
 
 model FaenaPesca {
@@ -3398,7 +3396,8 @@ model Moneda {
     // Relación inversa para TarifaCostoExportacionRuta
   tarifasRuta TarifaCostoExportacionRuta[] @relation("MonedaTarifaRuta")
   gastosPlanificados DetGastosPlanificados[]
-
+  contratistasOT         DetContratistasOT[]              // ← AGREGAR
+  repuestosContratistasOT DetRepuestosContratistaOT[]     // ← AGREGAR
 }
 
 model MotivoAcceso {
@@ -3465,7 +3464,6 @@ model MovimientoAlmacen {
   detalles            DetalleMovimientoAlmacen[]
   preFacturas PreFactura[] @relation("MovimientoAlmacenToPreFactura")
   entregaARendirMovAlmacen EntregaARendirMovAlmacen?
-  insumosOT  DetInsumosTareaOT[] @relation("MovAlmacenInsumoOT")
   // Relaciones con Descargas (Ingreso)
   descargasIngresoFaenaPesca    DescargaFaenaPesca[]   @relation("DescargaMovimientoIngreso")
   descargasIngresoFaenaConsumo  DescargaFaenaConsumo[] @relation("DescargaConsumoMovimientoIngreso")
@@ -3753,11 +3751,6 @@ model Personal {
 
   otSolicitadas    OTMantenimiento[] @relation("SolicitanteOT")
   otResponsable    OTMantenimiento[] @relation("ResponsableOT")
-  otAutorizadas    OTMantenimiento[] @relation("AutorizadorOT")
-  tareasResponsable DetTareasOT[] @relation("ResponsableTareaOT")
-  tareasValidadas   DetTareasOT[] @relation("ValidadorTareaOT")
-  insumosAprobados  DetInsumosTareaOT[] @relation("AprobadorComprasInsumoOT")
-  otValidadas               OTMantenimiento[]       @relation("ValidadorOT")
   contratosResponsable    ContratoServicio[]    @relation("ContratoServicioResponsable")
   contratosAprobador      ContratoServicio[]    @relation("ContratoServicioAprobador")
     // Entregas a Rendir - Contratos de Servicios
@@ -3902,33 +3895,34 @@ model Producto {
   color                   Color?               @relation(fields: [colorId], references: [id])
   tipoAlmacenamiento      TipoAlmacenamiento   @relation(fields: [tipoAlmacenamientoId], references: [id])
   marca                   Marca                @relation(fields: [marcaId], references: [id])
-  detallesMovimiento      DetalleMovimientoAlmacen[]
-  kardexAlmacenes   KardexAlmacen[]
-  detallesRequerimientosCompra DetalleReqCompra[]
-  detallesOrdenCompra     DetalleOrdenCompra[]
-  detallesPreFactura DetallePreFactura[]
-  detallesCotizacionVentas DetCotizacionVentas[]
-  saldosDetProductoCliente SaldosDetProductoCliente[]
-  saldosProductoCliente SaldosProductoCliente[]
-  detalleCotizacionProveedor DetalleCotizacionProveedor[]
-  detMovsEntregaRendirPCompras DetMovsEntregaRendirPCompras[]
-  detMovsEntregaRendir DetMovsEntregaRendir[]
-  detMovsEntregaRendirPescaConsumo DetMovsEntRendirPescaConsumo[]
-  detMovsEntregaRendirPVentas DetMovsEntregaRendirPVentas[] @relation("MovimientoGastoExportacion")
-  costosExportacionCotizacion CostosExportacionCotizacion[] @relation("CostoExportacionProducto")
-  costosExportacionPorIncoterm CostoExportacionPorIncoterm[]
-  precioEntidad PrecioEntidad[]
-  movimientosCaja           MovimientoCaja[]
-  detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[]
-  insumosOT  DetInsumosTareaOT[]
-  serviciosContrato       DetServicioContrato[] @relation("ServicioContrato")
-  movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
-  detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[]
+  detallesMovimiento                    DetalleMovimientoAlmacen[]
+  kardexAlmacenes                       KardexAlmacen[]
+  detallesRequerimientosCompra          DetalleReqCompra[]
+  detallesOrdenCompra                   DetalleOrdenCompra[]
+  detallesPreFactura                    DetallePreFactura[]
+  detallesCotizacionVentas              DetCotizacionVentas[]
+  saldosDetProductoCliente              SaldosDetProductoCliente[]
+  saldosProductoCliente                 SaldosProductoCliente[]
+  detalleCotizacionProveedor            DetalleCotizacionProveedor[]
+  detMovsEntregaRendirPCompras          DetMovsEntregaRendirPCompras[]
+  detMovsEntregaRendir                  DetMovsEntregaRendir[]
+  detMovsEntregaRendirPescaConsumo      DetMovsEntRendirPescaConsumo[]
+  detMovsEntregaRendirPVentas           DetMovsEntregaRendirPVentas[] @relation("MovimientoGastoExportacion")
+  costosExportacionCotizacion           CostosExportacionCotizacion[] @relation("CostoExportacionProducto")
+  costosExportacionPorIncoterm          CostoExportacionPorIncoterm[]
+  precioEntidad                         PrecioEntidad[]
+  movimientosCaja                       MovimientoCaja[]
+  detMovsEntregaRendirMovAlmacen        DetMovsEntregaRendirMovAlmacen[]
+  serviciosContrato                     DetServicioContrato[] @relation("ServicioContrato")
+  movimientosContratoServicio           DetMovsEntregaRendirContratoServicios[]
+  detMovsEntregaOTMantenimiento         DetMovsEntregaRendirOTMantenimiento[]
   // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
-  detallesComprobante             DetalleComprobante[]
-  gastosPlanificados DetGastosPlanificados[]
+  detallesComprobante                   DetalleComprobante[]
+  gastosPlanificados                    DetGastosPlanificados[]
+  serviciosContratistasOT               DetContratistasOT[] @relation("ProductoServicioOT")
+  repuestosContratistasOT               DetRepuestosContratistaOT[]
 
 }
 
@@ -4660,19 +4654,21 @@ model OTMantenimiento {
   fechaProgramada        DateTime?
   fechaInicio            DateTime?
   fechaFin               DateTime?
+  
+  porcentajeAvance       Decimal?  @db.Decimal(5, 2)
+  totalMontoPactado      Decimal?  @db.Decimal(18, 2)
+  totalMontoPagado       Decimal?  @db.Decimal(18, 2)
+  totalSaldo             Decimal?  @db.Decimal(18, 2)
 
-    // Documento
-  tipoDocumentoId         BigInt
-  serieDocId              BigInt
-  numeroSerie             String                @db.VarChar(10)
-  numeroCorrelativo       Int
-  numeroCompleto          String                @db.VarChar(20)
+  tipoDocumentoId        BigInt
+  serieDocId             BigInt
+  numeroSerie            String    @db.VarChar(10)
+  numeroCorrelativo      Int
+  numeroCompleto         String    @db.VarChar(20)
 
   monedaId               BigInt
   solicitanteId          BigInt?
   responsableId          BigInt?
-  autorizadoPorId        BigInt?
-  validadoPorId          BigInt? 
   descripcionProblema    String?   @db.Text
   solucionAplicada       String?   @db.Text
   observaciones          String?   @db.Text
@@ -4694,14 +4690,27 @@ model OTMantenimiento {
   moneda                 Moneda              @relation(fields: [monedaId], references: [id])
   solicitante            Personal?           @relation("SolicitanteOT", fields: [solicitanteId], references: [id])
   responsable            Personal?           @relation("ResponsableOT", fields: [responsableId], references: [id])
-  autorizadoPor          Personal?           @relation("AutorizadorOT", fields: [autorizadoPorId], references: [id])
-  validadoPor            Personal?           @relation("ValidadorOT", fields: [validadoPorId], references: [id])
   tipoDocumento          TipoDocumento       @relation(fields: [tipoDocumentoId], references: [id])
-  serieDoc               SerieDoc           @relation(fields: [serieDocId], references: [id])
+  serieDoc               SerieDoc            @relation(fields: [serieDocId], references: [id])
 
+  contratistas           DetContratistasOT[]
+  entregaARendir         EntregaARendirOTMantenimiento? @relation("EntregaRendirOTMantenimiento")
   permisosGestionados    DetPermisoGestionadoOT[]
-  tareas                 DetTareasOT[]
-  entregaARendir  EntregaARendirOTMantenimiento? @relation("EntregaRendirOTMantenimiento")
+
+  @@unique([empresaId, numeroCompleto])
+  @@index([empresaId])
+  @@index([activoId])
+  @@index([estadoId])
+  @@index([tipoMantenimientoId])
+  @@index([responsableId])
+  @@index([fechaDocumento])
+  @@index([fechaProgramada])
+  @@index([fechaInicio])
+  @@index([fechaFin])
+  @@index([empresaId, estadoId])
+  @@index([empresaId, activoId])
+  @@index([empresaId, fechaDocumento])
+  @@index([numeroCompleto])
 }
 
 model TipoMantenimiento {
@@ -4713,64 +4722,74 @@ model TipoMantenimiento {
   ordenesMantenimiento    OTMantenimiento[]
 }
 
-model DetTareasOT {
-  id                           BigInt              @id @default(autoincrement())
-  otMantenimientoId            BigInt
-  numeroTarea                  Int
-  descripcion                  String              @db.Text
-  responsableId                BigInt?
-  personalValidaId             BigInt?
-  contratistaId                BigInt?
-  fechaProgramada              DateTime?
-  fechaInicio                  DateTime?
-  fechaFin                     DateTime?
-  estadoTareaId                BigInt
-  realizado                    Boolean             @default(false)
-  observaciones                String?             @db.Text
-  creadoEn                     DateTime            @default(now())
-  actualizadoEn                DateTime            @updatedAt
-  creadoPor                    BigInt?
-  actualizadoPor               BigInt?
-
-  otMantenimiento              OTMantenimiento     @relation(fields: [otMantenimientoId], references: [id], onDelete: Cascade)
-  estadoTarea                  EstadoMultiFuncion  @relation("EstadoTareaOT", fields: [estadoTareaId], references: [id])
-  responsable                  Personal?           @relation("ResponsableTareaOT", fields: [responsableId], references: [id])
-  personalValida               Personal?           @relation("ValidadorTareaOT", fields: [personalValidaId], references: [id])
-  contratista                  EntidadComercial?   @relation("ContratistaTareaOT", fields: [contratistaId], references: [id])
-  insumos                      DetInsumosTareaOT[]
-
-  @@unique([otMantenimientoId, numeroTarea])
+model DetContratistasOT {
+  id                      BigInt              @id @default(autoincrement())
+  otMantenimientoId       BigInt
+  numeroLinea             Int
+  contratistaId           BigInt
+  productoServicioId      BigInt
+  activoId                BigInt?
+  servicioDescripcion     String              @db.Text
+  montoPactado            Decimal             @db.Decimal(18, 2)
+  montoPagado             Decimal             @db.Decimal(18, 2)  @default(0)
+  saldo                   Decimal             @db.Decimal(18, 2)
+  monedaId                BigInt
+  estadoId                BigInt
+  preFacturaId            BigInt?
+  urlDocumentoContratista String?             @db.VarChar(500)
+  urlFotosProductos       String?             @db.VarChar(500)
+  urlFotosAntes           String?             @db.VarChar(500)
+  urlFotosDespues         String?             @db.VarChar(500)
+  creadoEn                DateTime            @default(now())
+  actualizadoEn           DateTime            @updatedAt
+  creadoPor               BigInt?
+  actualizadoPor          BigInt?
+  
+  otMantenimiento         OTMantenimiento     @relation(fields: [otMantenimientoId], references: [id], onDelete: Cascade)
+  contratista             EntidadComercial    @relation("ContratistaOT", fields: [contratistaId], references: [id])
+  productoServicio        Producto            @relation("ProductoServicioOT", fields: [productoServicioId], references: [id])
+  activo                  Activo?             @relation("ActivoContratistaOT", fields: [activoId], references: [id])
+  moneda                  Moneda              @relation(fields: [monedaId], references: [id])
+  estado                  EstadoMultiFuncion  @relation("EstadoContratistaOT", fields: [estadoId], references: [id])
+  preFactura              PreFactura?         @relation("PreFacturaContratistaOT", fields: [preFacturaId], references: [id])
+  repuestos               DetRepuestosContratistaOT[]
+  
+  @@unique([otMantenimientoId, numeroLinea])
+  @@index([otMantenimientoId])
+  @@index([contratistaId])
+  @@index([productoServicioId])
+  @@index([activoId])
+  @@index([monedaId])
+  @@index([estadoId])
+  @@index([preFacturaId])
 }
 
-model DetInsumosTareaOT {
-  id                          BigInt    @id @default(autoincrement())
-  tareaId                     BigInt
-  productoId                  BigInt
-  cantidadRequerida           Decimal
-  cantidadConsumida           Decimal   @default(0)
-  estadoInsumoId              BigInt
-  movimientoAlmacenId         BigInt?
-  detalleMovAlmacenId         BigInt?
-  ordenCompraId               BigInt?
-  detalleOrdenCompraId        BigInt?
-  proveedorSugeridoId         BigInt?
-  personalApruebaComprasId    BigInt?
-  observaciones               String?   @db.Text
-  creadoEn                    DateTime  @default(now())
-  actualizadoEn               DateTime  @updatedAt
-  creadoPor                   BigInt?
-  actualizadoPor              BigInt?
-
-  tarea                       DetTareasOT              @relation(fields: [tareaId], references: [id], onDelete: Cascade)
-  producto                    Producto                 @relation(fields: [productoId], references: [id])
-  estadoInsumo                EstadoMultiFuncion       @relation("EstadoInsumoOT", fields: [estadoInsumoId], references: [id])
-  movimientoAlmacen           MovimientoAlmacen?       @relation("MovAlmacenInsumoOT", fields: [movimientoAlmacenId], references: [id])
-  detalleMovAlmacen           DetalleMovimientoAlmacen? @relation("DetMovAlmacenInsumoOT", fields: [detalleMovAlmacenId], references: [id])
-  ordenCompra                 OrdenCompra?             @relation("OCInsumoOT", fields: [ordenCompraId], references: [id])
-  detalleOrdenCompra          DetalleOrdenCompra?      @relation("DetOCInsumoOT", fields: [detalleOrdenCompraId], references: [id])
-  proveedorSugerido           EntidadComercial?        @relation("ProveedorSugeridoInsumoOT", fields: [proveedorSugeridoId], references: [id])
-  personalApruebaCompras      Personal?                @relation("AprobadorComprasInsumoOT", fields: [personalApruebaComprasId], references: [id])
-
+model DetRepuestosContratistaOT {
+  id                        BigInt              @id @default(autoincrement())
+  detContratistaOTId        BigInt
+  numeroLinea               Int
+  productoId                BigInt
+  descripcion               String              @db.Text
+  cantidad                  Decimal             @db.Decimal(18, 4)
+  precioUnitario            Decimal             @db.Decimal(18, 2)
+  total                     Decimal             @db.Decimal(18, 2)
+  monedaId                  BigInt
+  incluidoEnPresupuesto     Boolean             @default(true)
+  ordenCompraId             BigInt?
+  creadoEn                  DateTime            @default(now())
+  actualizadoEn             DateTime            @updatedAt
+  creadoPor                 BigInt?
+  actualizadoPor            BigInt?
+  
+  detContratistaOT          DetContratistasOT   @relation(fields: [detContratistaOTId], references: [id], onDelete: Cascade)
+  producto                  Producto            @relation(fields: [productoId], references: [id])
+  moneda                    Moneda              @relation(fields: [monedaId], references: [id])
+  ordenCompra               OrdenCompra?        @relation(fields: [ordenCompraId], references: [id])
+  
+  @@unique([detContratistaOTId, numeroLinea])
+  @@index([detContratistaOTId])
+  @@index([productoId])
+  @@index([ordenCompraId])
 }
 
 model Ubigeo {
@@ -6275,7 +6294,6 @@ model OrdenCompra {
   empresa              Empresa @relation(fields: [empresaId], references: [id])
   moneda               Moneda? @relation(fields: [monedaId], references: [id])
   estado               EstadoMultiFuncion @relation(fields: [estadoId], references: [id])
-  insumosOT            DetInsumosTareaOT[] @relation("OCInsumoOT")
   
   // ========================================
   // ⭐ RELACIONES NUEVAS - COMPROBANTE DEL PROVEEDOR
@@ -6298,6 +6316,8 @@ model OrdenCompra {
   percepciones         Percepcion[]
   datosAdicionales     DetDatosAdicionalesOrdenCompra[]
   detalles             DetalleOrdenCompra[]
+  repuestosContratistasOT       DetRepuestosContratistaOT[]
+
   
   // ========================================
   // ÍNDICES EXISTENTES
