@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import periodoContableService from '../Contabilidad/periodoContable.service.js';
 
 /**
  * Servicio CRUD para MovimientoActivoFijo
@@ -216,11 +217,358 @@ const listarPorActivo = async (activoId) => {
   }
 };
 
+/**
+ * Genera un BORRADOR de asiento contable para un movimiento de activo fijo.
+ * El usuario podrá revisar y modificar las cuentas antes de guardarlo.
+ * @param {BigInt} movimientoId - ID del movimiento
+ * @returns {Promise<Object>} - Borrador del asiento contable
+ */
+const generarBorradorAsiento = async (movimientoId) => {
+  try {
+    const movimiento = await prisma.movimientoActivoFijo.findUnique({
+      where: { id: movimientoId },
+      include: {
+        empresa: true,
+        activo: {
+          include: {
+            tipoActivo: {
+              include: {
+                cuentaContableActivo: true,
+                cuentaContableDepreciacion: true,
+                cuentaContableDepreciacionAcumulada: true
+              }
+            }
+          }
+        },
+        tipoMovimiento: true,
+        moneda: true
+      }
+    });
+
+    if (!movimiento) {
+      throw new NotFoundError('Movimiento de activo fijo no encontrado');
+    }
+
+    const tipoActivo = movimiento.activo?.tipoActivo;
+    if (!tipoActivo) {
+      throw new ValidationError('El activo no tiene un tipo de activo configurado');
+    }
+
+    if (!tipoActivo.cuentaContableActivoId || !tipoActivo.cuentaContableActivo) {
+      throw new ValidationError(
+        'El tipo de activo no tiene configurada la cuenta contable de activo. ' +
+        'Configure las cuentas contables en el tipo de activo antes de generar el asiento.'
+      );
+    }
+
+    let periodoContable = null;
+    try {
+      periodoContable = await periodoContableService.obtenerPeriodoActivo(movimiento.empresaId);
+    } catch (error) {
+      const periodos = await prisma.periodoContable.findMany({
+        where: { 
+          empresaId: movimiento.empresaId,
+          estadoId: 50n
+        },
+        orderBy: { fechaInicio: 'desc' },
+        take: 1
+      });
+      
+      if (periodos.length > 0) {
+        periodoContable = periodos[0];
+      } else {
+        const cualquierPeriodo = await prisma.periodoContable.findFirst({
+          where: { empresaId: movimiento.empresaId },
+          orderBy: { fechaInicio: 'desc' }
+        });
+        
+        if (!cualquierPeriodo) {
+          throw new ValidationError(
+            'No hay períodos contables configurados para esta empresa. ' +
+            'Por favor, cree un período contable antes de generar asientos.'
+          );
+        }
+        periodoContable = cualquierPeriodo;
+      }
+    }
+
+    const monto = Number(movimiento.monto);
+    const tipoMovimientoNombre = movimiento.tipoMovimiento?.nombre || '';
+    const activoNombre = movimiento.activo?.nombre || '';
+    
+    const borrador = {
+      empresaId: movimiento.empresaId,
+      periodoContableId: periodoContable.id,
+      fechaAsiento: movimiento.fechaContable || movimiento.fechaMovimiento,
+      glosa: `${tipoMovimientoNombre} - ${activoNombre}`,
+      tipoLibro: 'FISCAL',
+      origenAsiento: 'AUTOMATICO',
+      monedaId: movimiento.monedaId,
+      detalles: []
+    };
+
+    const tipoMovimientoNombreLower = tipoMovimientoNombre.toLowerCase();
+
+    if (tipoMovimientoNombreLower.includes('compra') || tipoMovimientoNombreLower.includes('saldo inicial')) {
+      const cuentaContrapartida = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: { startsWith: '591' },
+          activo: true
+        }
+      });
+
+      if (!cuentaContrapartida) {
+        throw new ValidationError('No se encontró la cuenta de Resultados Acumulados (591)');
+      }
+
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: tipoActivo.cuentaContableActivoId,
+          glosa: `${tipoMovimientoNombre} - ${activoNombre}`,
+          debe: monto,
+          haber: 0,
+          centroCostoId: null
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaContrapartida.id,
+          glosa: `${tipoMovimientoNombre} - ${activoNombre}`,
+          debe: 0,
+          haber: monto,
+          centroCostoId: null
+        }
+      ];
+    } else if (tipoMovimientoNombreLower.includes('depreciación')) {
+      if (!tipoActivo.cuentaContableDepreciacionId || !tipoActivo.cuentaContableDepreciacionAcumuladaId) {
+        throw new ValidationError(
+          'El tipo de activo no tiene configuradas las cuentas de depreciación. ' +
+          'Configure las cuentas contables en el tipo de activo antes de generar el asiento.'
+        );
+      }
+
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: tipoActivo.cuentaContableDepreciacionId,
+          glosa: `Depreciación ${activoNombre}`,
+          debe: monto,
+          haber: 0,
+          centroCostoId: null
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: tipoActivo.cuentaContableDepreciacionAcumuladaId,
+          glosa: `Depreciación acumulada ${activoNombre}`,
+          debe: 0,
+          haber: monto,
+          centroCostoId: null
+        }
+      ];
+    } else if (tipoMovimientoNombreLower.includes('venta') || tipoMovimientoNombreLower.includes('baja')) {
+      const depreciacionAcumulada = Number(movimiento.depreciacionAcumulada || 0);
+      const valorNeto = Number(movimiento.valorNeto || 0);
+
+      if (!tipoActivo.cuentaContableDepreciacionAcumuladaId) {
+        throw new ValidationError(
+          'El tipo de activo no tiene configurada la cuenta de depreciación acumulada. ' +
+          'Configure las cuentas contables en el tipo de activo antes de generar el asiento.'
+        );
+      }
+
+      const cuentaPerdidaGanancia = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: { startsWith: '655' },
+          activo: true
+        }
+      });
+
+      if (!cuentaPerdidaGanancia) {
+        throw new ValidationError('No se encontró la cuenta de Pérdida en Venta de Activos (655)');
+      }
+
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: tipoActivo.cuentaContableDepreciacionAcumuladaId,
+          glosa: `${tipoMovimientoNombre} - Depreciación acumulada ${activoNombre}`,
+          debe: depreciacionAcumulada,
+          haber: 0,
+          centroCostoId: null
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaPerdidaGanancia.id,
+          glosa: `${tipoMovimientoNombre} - Valor neto ${activoNombre}`,
+          debe: valorNeto,
+          haber: 0,
+          centroCostoId: null
+        },
+        {
+          numeroLinea: 3,
+          planCuentaId: tipoActivo.cuentaContableActivoId,
+          glosa: `${tipoMovimientoNombre} - ${activoNombre}`,
+          debe: 0,
+          haber: monto,
+          centroCostoId: null
+        }
+      ];
+    } else {
+      const cuentaContrapartida = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: { startsWith: '591' },
+          activo: true
+        }
+      });
+
+      if (!cuentaContrapartida) {
+        throw new ValidationError('No se encontró la cuenta de Resultados Acumulados (591)');
+      }
+
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: tipoActivo.cuentaContableActivoId,
+          glosa: `${tipoMovimientoNombre} - ${activoNombre}`,
+          debe: monto,
+          haber: 0,
+          centroCostoId: null
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaContrapartida.id,
+          glosa: `${tipoMovimientoNombre} - ${activoNombre}`,
+          debe: 0,
+          haber: monto,
+          centroCostoId: null
+        }
+      ];
+    }
+
+    return borrador;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Guarda el asiento contable editado por el usuario y lo vincula al movimiento.
+ * @param {BigInt} movimientoId - ID del movimiento
+ * @param {Object} asientoData - Datos del asiento editado por el usuario
+ * @param {BigInt} creadoPor - ID del usuario que crea el asiento
+ * @returns {Promise<Object>} - Asiento contable creado
+ */
+const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
+  try {
+    const movimiento = await prisma.movimientoActivoFijo.findUnique({
+      where: { id: movimientoId }
+    });
+
+    if (!movimiento) {
+      throw new NotFoundError('Movimiento no encontrado');
+    }
+
+    if (movimiento.asientoContableId) {
+      throw new ValidationError('Este movimiento ya tiene un asiento contable generado');
+    }
+
+    const totalDebe = asientoData.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+    const totalHaber = asientoData.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
+    const diferencia = Math.abs(totalDebe - totalHaber);
+
+    if (diferencia > 0.01) {
+      throw new ValidationError(
+        `El asiento no está balanceado. Debe: ${totalDebe.toFixed(2)}, Haber: ${totalHaber.toFixed(2)}, Diferencia: ${diferencia.toFixed(2)}`
+      );
+    }
+
+    const moneda = await prisma.moneda.findUnique({
+      where: { id: asientoData.monedaId }
+    });
+    if (!moneda) {
+      throw new ValidationError('Moneda no encontrada');
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const ultimoAsiento = await tx.asientoContable.findFirst({
+        where: {
+          empresaId: asientoData.empresaId,
+          periodoContableId: asientoData.periodoContableId
+        },
+        orderBy: { correlativo: 'desc' }
+      });
+      const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
+      const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, '0')}`;
+
+      const asiento = await tx.asientoContable.create({
+        data: {
+          empresaId: asientoData.empresaId,
+          periodoContableId: asientoData.periodoContableId,
+          numeroAsiento,
+          correlativo,
+          fechaAsiento: new Date(asientoData.fechaAsiento),
+          glosa: asientoData.glosa,
+          tipoLibro: asientoData.tipoLibro || 'FISCAL',
+          origenAsiento: asientoData.origenAsiento || 'AUTOMATICO',
+          monedaId: asientoData.monedaId,
+          totalDebe: totalDebe,
+          totalHaber: totalHaber,
+          estadoId: 50n,
+          creadoPor,
+          actualizadoPor: creadoPor,
+          detalles: {
+            create: asientoData.detalles.map((detalle, index) => ({
+              numeroLinea: index + 1,
+              planCuentaId: detalle.planCuentaId,
+              glosa: detalle.glosa || asientoData.glosa,
+              debe: Number(detalle.debe || 0),
+              haber: Number(detalle.haber || 0),
+              centroCostoId: detalle.centroCostoId || null,
+              creadoPor,
+              actualizadoPor: creadoPor
+            }))
+          }
+        },
+        include: {
+          detalles: {
+            include: {
+              planCuenta: true,
+              centroCosto: true
+            }
+          },
+          empresa: true,
+          periodoContable: true,
+          moneda: true
+        }
+      });
+
+      await tx.movimientoActivoFijo.update({
+        where: { id: movimientoId },
+        data: { asientoContableId: asiento.id }
+      });
+
+      return asiento;
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
-  listarPorActivo
+  listarPorActivo,
+  generarBorradorAsiento,
+  guardarAsientoContable
 };

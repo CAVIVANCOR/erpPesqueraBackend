@@ -62,3 +62,29 @@ export async function listarPorActivo(req, res, next) {
     next(err);
   }
 }
+
+export async function generarBorradorAsiento(req, res, next) {
+  try {
+    const movimientoId = Number(req.params.id);
+    const borrador = await movimientoActivoFijoService.generarBorradorAsiento(movimientoId);
+    res.json(toJSONBigInt(borrador));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function guardarAsientoContable(req, res, next) {
+  try {
+    const movimientoId = Number(req.params.id);
+    const { asientoData } = req.body;
+    const creadoPor = req.user?.id || null;
+    const asiento = await movimientoActivoFijoService.guardarAsientoContable(
+      movimientoId,
+      asientoData,
+      creadoPor
+    );
+    res.status(201).json(toJSONBigInt(asiento));
+  } catch (err) {
+    next(err);
+  }
+}

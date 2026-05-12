@@ -38,6 +38,20 @@ router.post(
   movimientoActivoFijoController.crear
 );
 
+router.post(
+  '/:id/generar-borrador-asiento',
+  autenticarJWT,
+  checkPermission('movimientoActivoFijo', 'ver'),
+  movimientoActivoFijoController.generarBorradorAsiento
+);
+
+router.post(
+  '/:id/guardar-asiento',
+  autenticarJWT,
+  checkPermission('movimientoActivoFijo', 'crear'),
+  movimientoActivoFijoController.guardarAsientoContable
+);
+
 router.put(
   '/:id', 
   autenticarJWT, 
