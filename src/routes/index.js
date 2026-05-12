@@ -89,6 +89,8 @@ import tipoMovimientoAccesoRoutes from '../routes/AccesoInstalaciones/tipoMovimi
 import tipoAccesoInstalacionRoutes from '../routes/AccesoInstalaciones/tipoAccesoInstalacion.routes.js';
 import tipoPersonaRoutes from '../routes/AccesoInstalaciones/tipoPersona.routes.js';
 import motivoAccesoRoutes from '../routes/AccesoInstalaciones/motivoAcceso.routes.js';
+import movimientoActivoFijoRoutes from '../routes/ActivosFijos/movimientoActivoFijo.routes.js';
+import tipoMovimientoActivoFijoRoutes from '../routes/ActivosFijos/tipoMovimientoActivoFijo.routes.js';
 import documentosVisitanteRoutes from '../routes/AccesoInstalaciones/documentos.visitante.routes.js';
 import confirmacionesAccionesPreviasRoutes from '../routes/Pesca/confirmaciones.acciones.previas.routes.js';
 import confirmacionesAccionesPreviasConsumoRoutes from '../routes/Pesca/confirmaciones.acciones.previas.consumo.routes.js';
@@ -394,6 +396,10 @@ router.use('/tipos-acceso-instalacion', tipoAccesoInstalacionRoutes);
 router.use('/tipos-persona', tipoPersonaRoutes);
 // Rutas para MotivoAcceso
 router.use('/motivos-acceso', motivoAccesoRoutes);
+// Rutas para MovimientoActivoFijo
+router.use('/movimientos-activo-fijo', movimientoActivoFijoRoutes);
+// Rutas para TipoMovimientoActivoFijo
+router.use('/tipos-movimiento-activo-fijo', tipoMovimientoActivoFijoRoutes);
 // Rutas para DocumentosVisitante (upload y serving de PDFs de documentos)
 router.use('/documentos-visitantes', documentosVisitanteRoutes);
 // Rutas para ConfirmacionesAccionesPrevias (upload y serving de PDFs de confirmaciones)

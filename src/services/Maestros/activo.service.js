@@ -1,5 +1,10 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio CRUD para Activo
@@ -14,12 +19,30 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  */
 async function validarActivo(data) {
   if (data.empresaId !== undefined && data.empresaId !== null) {
-    const existeEmpresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
-    if (!existeEmpresa) throw new ValidationError('Empresa no existente para el campo empresaId.');
+    const existeEmpresa = await prisma.empresa.findUnique({
+      where: { id: data.empresaId },
+    });
+    if (!existeEmpresa)
+      throw new ValidationError(
+        "Empresa no existente para el campo empresaId.",
+      );
   }
   if (data.tipoId !== undefined && data.tipoId !== null) {
-    const existeTipo = await prisma.tipoActivo.findUnique({ where: { id: data.tipoId } });
-    if (!existeTipo) throw new ValidationError('Tipo de activo no existente para el campo tipoId.');
+    const existeTipo = await prisma.tipoActivo.findUnique({
+      where: { id: data.tipoId },
+    });
+    if (!existeTipo)
+      throw new ValidationError(
+        "Tipo de activo no existente para el campo tipoId.",
+      );
+  }
+  // Validar monedaId (opcional - para saldos iniciales)
+  if (data.monedaId !== undefined && data.monedaId !== null) {
+    const existeMoneda = await prisma.moneda.findUnique({
+      where: { id: data.monedaId },
+    });
+    if (!existeMoneda)
+      throw new ValidationError("Moneda no existente para el campo monedaId.");
   }
 }
 
@@ -28,9 +51,12 @@ async function validarActivo(data) {
  */
 const listar = async () => {
   try {
-    return await prisma.activo.findMany({ include: { tipo: true, permisos: true } });
+    return await prisma.activo.findMany({
+      include: { tipo: true, moneda: true, permisos: true },
+    });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -40,11 +66,20 @@ const listar = async () => {
  */
 const obtenerPorId = async (id) => {
   try {
-    const activo = await prisma.activo.findUnique({ where: { id }, include: { tipo: true, permisos: true } });
-    if (!activo) throw new NotFoundError('Activo no encontrado');
+    const activo = await prisma.activo.findUnique({
+      where: { id },
+      include: {
+        tipo: true,
+        moneda: true,
+        permisos: true,
+        movimientosActivoFijo: true,
+      },
+    });
+    if (!activo) throw new NotFoundError("Activo no encontrado");
     return activo;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -57,7 +92,7 @@ const obtenerVehiculosPorRuc = async (rucEmpresa) => {
   try {
     // Primero obtenemos la empresa por RUC
     const empresa = await prisma.empresa.findFirst({
-      where: { ruc: rucEmpresa }
+      where: { ruc: rucEmpresa },
     });
     if (!empresa) {
       return [];
@@ -69,18 +104,19 @@ const obtenerVehiculosPorRuc = async (rucEmpresa) => {
         cesado: false,
         empresaId: empresa.id,
         tipo: {
-          codigo: "VEHICULO"
-        }
+          codigo: "VEHICULO",
+        },
       },
       include: {
-        tipo: true
+        tipo: true,
       },
       orderBy: {
-        nombre: 'asc'
-      }
+        nombre: "asc",
+      },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -96,18 +132,20 @@ const obtenerPorEmpresaYTipo = async (empresaId, tipoId) => {
       where: {
         empresaId: empresaId,
         tipoId: tipoId,
-        cesado: false
+        cesado: false,
       },
       include: {
         tipo: true,
-        embarcacion: true
+        moneda: true,
+        embarcacion: true,
       },
       orderBy: {
-        nombre: 'asc'
-      }
+        nombre: "asc",
+      },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -118,15 +156,16 @@ const obtenerPorEmpresaYTipo = async (empresaId, tipoId) => {
 const crear = async (data) => {
   try {
     await validarActivo(data);
-    return await prisma.activo.create({ 
+    return await prisma.activo.create({
       data: {
         ...data,
-        updatedAt: new Date()
-      }
+        updatedAt: new Date(),
+      },
     });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -137,18 +176,20 @@ const crear = async (data) => {
 const actualizar = async (id, data) => {
   try {
     const existente = await prisma.activo.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Activo no encontrado');
+    if (!existente) throw new NotFoundError("Activo no encontrado");
     await validarActivo(data);
-    return await prisma.activo.update({ 
-      where: { id }, 
+    return await prisma.activo.update({
+      where: { id },
       data: {
         ...data,
-        updatedAt: new Date()
-      }
+        updatedAt: new Date(),
+      },
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -158,16 +199,22 @@ const actualizar = async (id, data) => {
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.activo.findUnique({ where: { id }, include: { permisos: true } });
-    if (!existente) throw new NotFoundError('Activo no encontrado');
+    const existente = await prisma.activo.findUnique({
+      where: { id },
+      include: { permisos: true },
+    });
+    if (!existente) throw new NotFoundError("Activo no encontrado");
     if (existente.permisos && existente.permisos.length > 0) {
-      throw new ConflictError('No se puede eliminar el activo porque tiene permisos asociados.');
+      throw new ConflictError(
+        "No se puede eliminar el activo porque tiene permisos asociados.",
+      );
     }
     await prisma.activo.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -179,5 +226,5 @@ export default {
   obtenerPorEmpresaYTipo,
   crear,
   actualizar,
-  eliminar
+  eliminar,
 };
