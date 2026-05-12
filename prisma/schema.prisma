@@ -122,63 +122,43 @@ model TipoMovimientoActivoFijo {
 }
 
 model MovimientoActivoFijo {
-  id                    BigInt                  @id @default(autoincrement())
-  
-  // ========================================
-  // IDENTIFICACIÓN
-  // ========================================
+  id                    BigInt    @id @default(autoincrement())
   empresaId             BigInt
   activoId              BigInt
   tipoMovimientoId      BigInt
+  periodoContableId     BigInt    // 🆕 NUEVO CAMPO
   
-  // ========================================
-  // FECHA Y VALORES
-  // ========================================
-  fechaMovimiento       DateTime                // Fecha del movimiento
-  fechaContable         DateTime?               // Fecha contable (para saldos iniciales: 31/12/2025)
-  
-  // ========================================
-  // VALORES MONETARIOS
-  // ========================================
-  monto                 Decimal                 @db.Decimal(18, 2)  // Monto del movimiento
+  fechaMovimiento       DateTime
+  fechaContable         DateTime?
+  monto                 Decimal   @db.Decimal(18, 2)
   monedaId              BigInt
   
-  // ========================================
-  // DEPRECIACIÓN
-  // ========================================
-  depreciacionMensual   Decimal?                @db.Decimal(18, 2)  // Depreciación mensual calculada
-  depreciacionAcumulada Decimal?                @db.Decimal(18, 2)  // Depreciación acumulada hasta la fecha
-  valorNeto             Decimal?                @db.Decimal(18, 2)  // Valor neto (costo - depreciación)
+  depreciacionMensual   Decimal?  @db.Decimal(18, 2)
+  depreciacionAcumulada Decimal?  @db.Decimal(18, 2)
+  valorNeto             Decimal?  @db.Decimal(18, 2)
   
-  // ========================================
-  // OBSERVACIONES
-  // ========================================
-  observaciones         String?                 @db.Text
+  observaciones         String?
+  asientoContableId     BigInt?   @unique
+  centroCostoId         BigInt?
   
-  // ========================================
-  // INTEGRACIÓN CONTABLE
-  // ========================================
-  asientoContableId     BigInt?                 // Asiento contable generado
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime
+  creadoPor             BigInt
+  actualizadoPor        BigInt
+
+  // Relaciones
+  empresa           Empresa                     @relation(fields: [empresaId], references: [id])
+  activo            Activo                      @relation(fields: [activoId], references: [id])
+  tipoMovimiento    TipoMovimientoActivoFijo    @relation(fields: [tipoMovimientoId], references: [id])
+  periodoContable   PeriodoContable             @relation(fields: [periodoContableId], references: [id])  // 🆕 NUEVA RELACIÓN
+  moneda            Moneda                      @relation(fields: [monedaId], references: [id])
+  asientoContable   AsientoContable?            @relation(fields: [asientoContableId], references: [id])
+  centroCosto       CentroCosto?                @relation(fields: [centroCostoId], references: [id])
   
-  // ========================================
-  // AUDITORÍA
-  // ========================================
-  creadoEn              DateTime                @default(now())
-  creadoPor             BigInt?
-  actualizadoEn         DateTime                @updatedAt
-  actualizadoPor        BigInt?
-  
-  // ========================================
-  // RELACIONES
-  // ========================================
-  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
-  activo                Activo                  @relation(fields: [activoId], references: [id])
-  tipoMovimiento        TipoMovimientoActivoFijo @relation(fields: [tipoMovimientoId], references: [id])
-  moneda                Moneda                  @relation(fields: [monedaId], references: [id])
-  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
-  
-  @@index([empresaId, activoId, fechaMovimiento])
-  @@index([asientoContableId])
+  @@index([empresaId])
+  @@index([activoId])
+  @@index([periodoContableId])  // 🆕 NUEVO ÍNDICE
+  @@index([fechaMovimiento])
 }
 
 /// Modelo centralizado para almacenar archivos adjuntos PDF de cualquier submódulo del ERP Megui.
@@ -450,6 +430,7 @@ model CentroCosto {
   ejecucionesPresupuestales       EjecucionPresupuestal[]
   subfamiliasProducto      SubfamiliaProducto[] @relation("SubfamiliaCentroCosto")  // 🆕 NUEVO
   unidadesNegocio          UnidadNegocio[]  // 🆕 NUEVO
+  movimientosActivoFijo    MovimientoActivoFijo[]  // 🆕 NUEVA RELACIÓN
 }
 
 model Color {
@@ -4498,10 +4479,21 @@ model TipoActivo {
   codigo      String   @unique
   nombre      String
   descripcion String?
+  
+  // 🆕 CUENTAS CONTABLES
+  cuentaActivoId                    BigInt?  // Cuenta del activo (33x)
+  cuentaDepreciacionId              BigInt?  // Cuenta de gasto depreciación (68x)
+  cuentaDepreciacionAcumuladaId     BigInt?  // Cuenta de depreciación acumulada (39x)
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime
   cesado      Boolean  @default(false)
 
+  // Relaciones
+  cuentaActivo                PlanCuentasContable? @relation("TipoActivoCuentaActivo", fields: [cuentaActivoId], references: [id])
+  cuentaDepreciacion          PlanCuentasContable? @relation("TipoActivoCuentaDepreciacion", fields: [cuentaDepreciacionId], references: [id])
+  cuentaDepreciacionAcumulada PlanCuentasContable? @relation("TipoActivoCuentaDepAcum", fields: [cuentaDepreciacionAcumuladaId], references: [id])
+  
   activos     Activo[]
 }
 
@@ -5371,12 +5363,15 @@ model PlanCuentasContable {
   subcuentas            PlanCuentasContable[]   @relation("JerarquiaCuentas")
   
   detallesAsientos      DetalleAsientoContable[]
-    lineasPresupuesto     LineaPresupuesto[]
+  lineasPresupuesto     LineaPresupuesto[]
   ejecucionesPresupuestales EjecucionPresupuestal[]
-    configuracionesDebe           ConfiguracionCuentaContable[]  @relation("CuentaDebe")
+  configuracionesDebe           ConfiguracionCuentaContable[]  @relation("CuentaDebe")
   configuracionesHaber          ConfiguracionCuentaContable[]  @relation("CuentaHaber")
   cuentasCorrientes     CuentaCorriente[]       @relation("CuentaCorrientePlanContable")
-
+  // 🆕 RELACIONES CON TIPO ACTIVO
+  tiposActivoActivo               TipoActivo[]  @relation("TipoActivoCuentaActivo")
+  tiposActivoDepreciacion         TipoActivo[]  @relation("TipoActivoCuentaDepreciacion")
+  tiposActivoDepreciacionAcum     TipoActivo[]  @relation("TipoActivoCuentaDepAcum")
   // ========================================
   // ÍNDICES
   // ========================================
@@ -5488,6 +5483,7 @@ model PeriodoContable {
   personalBloqueo       Personal?               @relation("PeriodoBloqueadoPor", fields: [bloqueadoPor], references: [id])
   
   asientosContables     AsientoContable[]
+  movimientosActivoFijo MovimientoActivoFijo[]  // 🆕 NUEVA RELACIÓN
   
   // ========================================
   // ÍNDICES
