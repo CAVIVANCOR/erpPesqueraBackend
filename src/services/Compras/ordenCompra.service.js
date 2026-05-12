@@ -561,13 +561,6 @@ const aprobar = async (id) => {
       );
     }
 
-    // ⭐ VALIDACIÓN OBLIGATORIA: Contacto del Proveedor
-    if (!orden.contactoProveedorId) {
-      throw new ValidationError(
-        "Debe seleccionar un contacto del proveedor antes de aprobar la orden de compra",
-      );
-    }
-
     // ⭐ VALIDACIÓN OBLIGATORIA: Dirección de Recepción de Mercadería
     if (!orden.direccionRecepcionAlmacenId) {
       throw new ValidationError(

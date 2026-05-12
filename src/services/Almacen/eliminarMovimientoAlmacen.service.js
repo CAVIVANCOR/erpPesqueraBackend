@@ -84,29 +84,6 @@ const eliminarMovimientoAlmacenCompleto = async (
         );
       }
 
-      // ========================================
-      // VALIDAR QUE NO TENGA INSUMOS DE OT ASOCIADOS
-      // ========================================
-
-      const detallesIds = movimiento.detalles.map((d) => d.id);
-
-      if (detallesIds.length > 0) {
-        const insumosAsociados = await tx.detInsumosTareaOT.count({
-          where: {
-            OR: [
-              { movimientoAlmacenId: movimiento.id },
-              { detalleMovAlmacenId: { in: detallesIds } },
-            ],
-          },
-        });
-
-        if (insumosAsociados > 0) {
-          throw new ValidationError(
-            `No se puede eliminar el movimiento porque tiene ${insumosAsociados} insumo(s) de Orden de Trabajo asociado(s). Primero debe desvincular los insumos de las OT.`,
-          );
-        }
-      }
-
       const resultados = {
         movimientoId: movimiento.id,
         numeroDocumento: movimiento.numeroDocumento,

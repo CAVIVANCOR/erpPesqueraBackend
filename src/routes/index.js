@@ -116,9 +116,8 @@ import tipoMantenimientoRoutes from '../routes/Mantenimiento/tipoMantenimiento.r
 import otMantenimientoRoutes from '../routes/Mantenimiento/otMantenimiento.routes.js';
 import motivoOriginoOTRoutes from '../routes/Mantenimiento/motivoOriginoOT.routes.js';
 import detPermisoGestionadoOTRoutes from '../routes/Mantenimiento/detPermisoGestionadoOT.routes.js';
-import detTareasOTRoutes from '../routes/Mantenimiento/detTareasOT.routes.js';
-import detInsumosTareaOTRoutes from '../routes/Mantenimiento/detInsumosTareaOT.routes.js';
-import otMantenimientoAlmacenRoutes from '../routes/Mantenimiento/otMantenimientoAlmacen.routes.js';
+import detContratistasOTRoutes from '../routes/Mantenimiento/detContratistasOT.routes.js';
+import detRepuestosContratistaOTRoutes from '../routes/Mantenimiento/detRepuestosContratistaOT.routes.js';
 import otMantenimientoPdfRoutes from '../routes/Mantenimiento/otMantenimientoPdf.routes.js';
 import requerimientoCompraRoutes from '../routes/Compras/requerimientoCompra.routes.js';
 import detalleReqCompraRoutes from '../routes/Compras/detalleReqCompra.routes.js';
@@ -452,12 +451,10 @@ router.use('/motivos-sin-faena', motivoSinFaenaRoutes);
 router.use('/motivos-origen-ot', motivoOriginoOTRoutes);
 // Rutas para DetPermisoGestionadoOT
 router.use('/permisos-gestionados-ot', detPermisoGestionadoOTRoutes);
-// Rutas para DetTareasOT
-router.use('/tareas-ot', detTareasOTRoutes);
-// Rutas para DetInsumosTareaOT
-router.use('/insumos-tarea-ot', detInsumosTareaOTRoutes);
-// Rutas para integración OT Mantenimiento con Almacén
-router.use('/ot-mantenimiento-almacen', otMantenimientoAlmacenRoutes);
+// Rutas para DetContratistasOT
+router.use('/contratistas-ot', detContratistasOTRoutes);
+// Rutas para DetRepuestosContratistaOT
+router.use('/repuestos-contratista-ot', detRepuestosContratistaOTRoutes);
 // Rutas para PDFs de OT Mantenimiento (upload y serving)
 router.use('/ot-mantenimiento', otMantenimientoPdfRoutes);
 // Rutas para RequerimientoCompra
