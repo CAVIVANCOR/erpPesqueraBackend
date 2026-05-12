@@ -78,17 +78,28 @@ model Activo {
   nombre               String
   descripcion          String?
   cesado               Boolean                @default(false)
+  
+  // ========================================
+  // 🆕 CAMPOS PARA SALDOS INICIALES
+  // ========================================
+  fechaAdquisicion         DateTime?              // Fecha de compra del activo
+  costoOriginal            Decimal?               @db.Decimal(18, 2)  // Costo de adquisición
+  depreciacionAcumulada    Decimal?               @db.Decimal(18, 2)  // Depreciación acumulada al 31/12/2025
+  vidaUtilAnios            Int?                   // Vida útil en años
+  monedaId                 BigInt?                // Moneda del costo
+  
   createdAt            DateTime               @default(now())
   updatedAt            DateTime
 
   tipo                          TipoActivo @relation(fields: [tipoId], references: [id])
+  moneda                        Moneda?    @relation(fields: [monedaId], references: [id])  // 🆕 RELACIÓN
   permisos                      DetallePermisoActivo[]
   embarcacion                   Embarcacion?
   ordenesMantenimiento          OTMantenimiento[]
   contratosServicio             ContratoServicio[]    @relation("ContratoServicioActivo")
-  detallesAsientosContables     DetalleAsientoContable[]  // Relación inversa con DetalleAsientoContable
+  detallesAsientosContables     DetalleAsientoContable[]
   contratistasOT                DetContratistasOT[] @relation("ActivoContratistaOT")
-
+  movimientosActivoFijo         MovimientoActivoFijo[]  // 🆕 RELACIÓN
 }
 
 model AgrupacionEntidad {
@@ -99,6 +110,75 @@ model AgrupacionEntidad {
   esProveedor      Boolean            @default(false)
 
   entidades   EntidadComercial[]
+}
+
+model TipoMovimientoActivoFijo {
+  id                    BigInt                  @id @default(autoincrement())
+  nombre                String                  @db.VarChar(50)
+  descripcion           String?
+  activo                Boolean                 @default(true)
+  
+  movimientos           MovimientoActivoFijo[]
+}
+
+model MovimientoActivoFijo {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // IDENTIFICACIÓN
+  // ========================================
+  empresaId             BigInt
+  activoId              BigInt
+  tipoMovimientoId      BigInt
+  
+  // ========================================
+  // FECHA Y VALORES
+  // ========================================
+  fechaMovimiento       DateTime                // Fecha del movimiento
+  fechaContable         DateTime?               // Fecha contable (para saldos iniciales: 31/12/2025)
+  
+  // ========================================
+  // VALORES MONETARIOS
+  // ========================================
+  monto                 Decimal                 @db.Decimal(18, 2)  // Monto del movimiento
+  monedaId              BigInt
+  
+  // ========================================
+  // DEPRECIACIÓN
+  // ========================================
+  depreciacionMensual   Decimal?                @db.Decimal(18, 2)  // Depreciación mensual calculada
+  depreciacionAcumulada Decimal?                @db.Decimal(18, 2)  // Depreciación acumulada hasta la fecha
+  valorNeto             Decimal?                @db.Decimal(18, 2)  // Valor neto (costo - depreciación)
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  asientoContableId     BigInt?                 // Asiento contable generado
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
+  activo                Activo                  @relation(fields: [activoId], references: [id])
+  tipoMovimiento        TipoMovimientoActivoFijo @relation(fields: [tipoMovimientoId], references: [id])
+  moneda                Moneda                  @relation(fields: [monedaId], references: [id])
+  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
+  
+  @@index([empresaId, activoId, fechaMovimiento])
+  @@index([asientoContableId])
 }
 
 /// Modelo centralizado para almacenar archivos adjuntos PDF de cualquier submódulo del ERP Megui.
@@ -2275,17 +2355,17 @@ model Embarcacion {
   tipoEmbarcacionId                      BigInt
   estadoActivoId                         BigInt
   urlFotoEmbarcacion                     String?
-  millasNauticasPorGalon  Decimal?  @db.Decimal(10, 2)
+  millasNauticasPorGalon                 Decimal?  @db.Decimal(10, 2)
 
 
-  tipoEmbarcacion   TipoEmbarcacion @relation(fields: [tipoEmbarcacionId], references: [id])
-  documentaciones DocumentacionEmbarcacion[]
-  faenas FaenaPesca[] @relation("EmbarcacionFaenas")
-  faenasConsumo FaenaPescaConsumo[] @relation("EmbarcacionFaenasConsumo")
-  activo            Activo          @relation(fields: [activoId], references: [id])
-  calas                Cala[]
-  calasFaenaConsumo    CalaFaenaConsumo[] @relation("CalaFaenaConsumo_Embarcacion")
-  detMovsEntregaRendir DetMovsEntregaRendir[]
+  tipoEmbarcacion               TipoEmbarcacion @relation(fields: [tipoEmbarcacionId], references: [id])
+  documentaciones               DocumentacionEmbarcacion[]
+  faenas                        FaenaPesca[] @relation("EmbarcacionFaenas")
+  faenasConsumo                 FaenaPescaConsumo[] @relation("EmbarcacionFaenasConsumo")
+  activo                        Activo          @relation(fields: [activoId], references: [id])
+  calas                         Cala[]
+  calasFaenaConsumo             CalaFaenaConsumo[] @relation("CalaFaenaConsumo_Embarcacion")
+  detMovsEntregaRendir          DetMovsEntregaRendir[]
   detMovsEntRendirPescaConsumo  DetMovsEntRendirPescaConsumo[]
 
 }
@@ -2316,40 +2396,39 @@ model Empresa {
   margenMinimoPermitido Decimal?            @default(20.00) @db.Decimal(5, 2)  // % mínimo de margen (ej: 20.00%)
   margenUtilidadObjetivo Decimal?           @default(50.00) @db.Decimal(5, 2)  // % objetivo de margen (ej: 50.00%)
 
-  porcentajeBaseLiqPesca Decimal? @default(0.00) @db.Decimal(7,2)
-  porcentajeComisionPatron Decimal? @default(0.00) @db.Decimal(7,2)
-  cantPersonalCalcComisionMotorista Decimal? @default(0.00) @db.Decimal(7,2)
-  cantDivisoriaCalcComisionMotorista Decimal? @default(0.00) @db.Decimal(7,2)
-  porcentajeCalcComisionPanguero Decimal? @default(0.00) @db.Decimal(7,2)
-  monedaCalculosLiqId BigInt? @default(1)
+  porcentajeBaseLiqPesca              Decimal? @default(0.00) @db.Decimal(7,2)
+  porcentajeComisionPatron            Decimal? @default(0.00) @db.Decimal(7,2)
+  cantPersonalCalcComisionMotorista   Decimal? @default(0.00) @db.Decimal(7,2)
+  cantDivisoriaCalcComisionMotorista  Decimal? @default(0.00) @db.Decimal(7,2)
+  porcentajeCalcComisionPanguero      Decimal? @default(0.00) @db.Decimal(7,2)
+  monedaCalculosLiqId                 BigInt? @default(1)
   // ========================================
   // ⭐ CAMPOS NUBEFACT - FACTURACIÓN ELECTRÓNICA
   // ========================================
   nubefactUrl          String?     @db.VarChar(255)        // URL del API de Nubefact
   nubefactToken        String?     @db.VarChar(500)        // Token de autenticación de Nubefact
 
-  sedes SedesEmpresa[]
-  centrosCosto EmpresaCentroCosto[]
-  movimientosAlmacen MovimientoAlmacen[]
-  ordenesCompra OrdenCompra[]
-  requerimientosCompra RequerimientoCompra[]
-  usuarios Usuario[]
-  cotizacionVentas CotizacionVentas[]
-  preFactura PreFactura[]
-  temporadasPesca  TemporadaPesca[]
-  novedadesPescaConsumo  NovedadPescaConsumo[]
-
-  movimientosCajaOrigen   MovimientoCaja[] @relation("EmpresaOrigenMovCaja")
-  movimientosCajaDestino  MovimientoCaja[] @relation("EmpresaDestinoMovCaja")
-  ordenesMantenimiento OTMantenimiento[]
-  contratosServicio       ContratoServicio[]    @relation("ContratoServicioEmpresa")
-  detallesCuotaPesca  DetCuotaPesca[]
-  monedaCalculosLiq Moneda? @relation("EmpresaMonedaCalculosLiq", fields: [monedaCalculosLiqId], references: [id])
-  katanasTripulacion KatanaTripulacion[]
-  cuentasCorrientes      CuentaCorriente[]  @relation("CuentaCorrienteEmpresa")
-    saldosCuentaCorriente  SaldoCuentaCorriente[]  @relation("SaldoCuentaCorrienteEmpresa")
-  configuracionesCuentaContable  ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableEmpresa")
-  asientosContablesInterfaz                AsientoContableInterfaz[]
+  sedes                         SedesEmpresa[]
+  centrosCosto                  EmpresaCentroCosto[]
+  movimientosAlmacen            MovimientoAlmacen[]
+  ordenesCompra                 OrdenCompra[]
+  requerimientosCompra          RequerimientoCompra[]
+  usuarios                      Usuario[]
+  cotizacionVentas              CotizacionVentas[]
+  preFactura                    PreFactura[]
+  temporadasPesca               TemporadaPesca[]
+  novedadesPescaConsumo         NovedadPescaConsumo[]
+  movimientosCajaOrigen         MovimientoCaja[] @relation("EmpresaOrigenMovCaja")
+  movimientosCajaDestino        MovimientoCaja[] @relation("EmpresaDestinoMovCaja")
+  ordenesMantenimiento          OTMantenimiento[]
+  contratosServicio             ContratoServicio[]    @relation("ContratoServicioEmpresa")
+  detallesCuotaPesca            DetCuotaPesca[]
+  monedaCalculosLiq             Moneda? @relation("EmpresaMonedaCalculosLiq", fields: [monedaCalculosLiqId], references: [id])
+  katanasTripulacion            KatanaTripulacion[]
+  cuentasCorrientes             CuentaCorriente[]  @relation("CuentaCorrienteEmpresa")
+  saldosCuentaCorriente         SaldoCuentaCorriente[]  @relation("SaldoCuentaCorrienteEmpresa")
+  configuracionesCuentaContable ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableEmpresa")
+  asientosContablesInterfaz     AsientoContableInterfaz[]
  // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
@@ -2367,9 +2446,11 @@ model Empresa {
   ejecucionesPresupuestales       EjecucionPresupuestal[]
 
 // Relaciones con Tesorería Avanzada
-prestamos             PrestamoBancario[]
-lineasCredito         LineaCredito[]
-inversiones           InversionFinanciera[]
+  prestamos                PrestamoBancario[]
+  lineasCredito            LineaCredito[]
+  inversiones              InversionFinanciera[]
+  movimientosActivoFijo    MovimientoActivoFijo[]  // 🆕 Relación
+  deudasConPersonal        DeudaConPersonal[]      // 🆕 AGREGAR ESTA LÍNEA
 
 @@index([monedaCalculosLiqId])
 
@@ -3096,8 +3177,8 @@ model EstadoMultiFuncion {
   prestamos             PrestamoBancario[]
   lineasCredito         LineaCredito[]
   inversiones           InversionFinanciera[]
-  contratistasOT                DetContratistasOT[] @relation("EstadoContratistaOT")
-
+  contratistasOT        DetContratistasOT[] @relation("EstadoContratistaOT")
+  deudasConPersonal     DeudaConPersonal[]  // 🆕 AGREGAR ESTA LÍNEA
 }
 
 model FaenaPesca {
@@ -3370,7 +3451,7 @@ model Moneda {
   movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[]
   detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[]
   empresasCalculosLiq Empresa[] @relation("EmpresaMonedaCalculosLiq")
-    asientosContablesInterfaz                AsientoContableInterfaz[]
+  asientosContablesInterfaz                AsientoContableInterfaz[]
 
     // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
@@ -3390,14 +3471,17 @@ model Moneda {
   presupuestosAnuales             PresupuestoAnual[]
 
   // Relaciones con Tesorería Avanzada
-  prestamos    PrestamoBancario[]
-  lineasCredito  LineaCredito[]
-  inversiones InversionFinanciera[]
+  prestamos                 PrestamoBancario[]
+  lineasCredito             LineaCredito[]
+  inversiones               InversionFinanciera[]
     // Relación inversa para TarifaCostoExportacionRuta
-  tarifasRuta TarifaCostoExportacionRuta[] @relation("MonedaTarifaRuta")
-  gastosPlanificados DetGastosPlanificados[]
-  contratistasOT         DetContratistasOT[]              // ← AGREGAR
-  repuestosContratistasOT DetRepuestosContratistaOT[]     // ← AGREGAR
+  tarifasRuta               TarifaCostoExportacionRuta[] @relation("MonedaTarifaRuta")
+  gastosPlanificados        DetGastosPlanificados[]
+  contratistasOT            DetContratistasOT[]              // ← AGREGAR
+  repuestosContratistasOT   DetRepuestosContratistaOT[]     // ← AGREGAR
+  activos                   Activo[]  // 🆕 Relación inversa con Activo
+  movimientosActivoFijo     MovimientoActivoFijo[]   // 🆕 Nueva relación
+  deudasConPersonal         DeudaConPersonal[]       // 🆕 AGREGAR ESTA LÍNEA
 }
 
 model MotivoAcceso {
@@ -3757,12 +3841,12 @@ model Personal {
   entregasRendirContratoServicioLiquidadas    EntregaARendirContratoServicios[] @relation("LiquidadorContratoServicio")
   entregasRendirContratoServicioResponsable   EntregaARendirContratoServicios[] @relation("ResponsableEntregaContratoServicio")
   movimientosContratoServicioResponsable      DetMovsEntregaRendirContratoServicios[] @relation("ResponsableMovContratoServicio")
-  movimientosInventarioResponsable DetMovsEntregaRendirMovAlmacen[] @relation("ResponsableMovInventario")
-  entregasRendirOTMantenimientoResp      EntregaARendirOTMantenimiento[] @relation("ResponsableEntregaOTMantenimiento")
-  entregasRendirOTMantenimientoLiq       EntregaARendirOTMantenimiento[] @relation("LiquidadorOTMantenimiento")
-  detMovsEntregaOTMantenimiento          DetMovsEntregaRendirOTMantenimiento[] @relation("ResponsableMovOTMantenimiento")
-  temporadasPescaComoBahia  TemporadaPesca[]  @relation("TemporadaPescaBahia")
-  novedadesPescaConsumoComoBahia  NovedadPescaConsumo[]  @relation("NovedadPescaConsumoBahia")
+  movimientosInventarioResponsable  DetMovsEntregaRendirMovAlmacen[] @relation("ResponsableMovInventario")
+  entregasRendirOTMantenimientoResp EntregaARendirOTMantenimiento[] @relation("ResponsableEntregaOTMantenimiento")
+  entregasRendirOTMantenimientoLiq  EntregaARendirOTMantenimiento[] @relation("LiquidadorOTMantenimiento")
+  detMovsEntregaOTMantenimiento     DetMovsEntregaRendirOTMantenimiento[] @relation("ResponsableMovOTMantenimiento")
+  temporadasPescaComoBahia          TemporadaPesca[]  @relation("TemporadaPescaBahia")
+  novedadesPescaConsumoComoBahia    NovedadPescaConsumo[]  @relation("NovedadPescaConsumoBahia")
   faenasPescaComoBahia              FaenaPesca[]         @relation("FaenaPescaBahia")
   faenasPescaComoMotorista          FaenaPesca[]         @relation("FaenaPescaMotorista")
   faenasPescaComoPatron             FaenaPesca[]         @relation("FaenaPescaPatron")
@@ -3770,29 +3854,29 @@ model Personal {
   faenasPescaConsumoComoBahia       FaenaPescaConsumo[]  @relation("FaenaPescaConsumoBahia")
   faenasPescaConsumoComoMotorista   FaenaPescaConsumo[]  @relation("FaenaPescaConsumoMotorista")
   faenasPescaConsumoComoPatron      FaenaPescaConsumo[]  @relation("FaenaPescaConsumoPatron")
-  detallesCuotaPescaActualizados  DetCuotaPesca[]  @relation("DetCuotaPescaActualizador")
-  descargasFaenaPescaPatron       DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Patron")
-  descargasFaenaPescaMotorista    DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Motorista")
-  descargasFaenaPescaBahia        DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Bahia")
-  descargasFaenaConsumoPatron     DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Patron")
-  descargasFaenaConsumoMotorista  DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Motorista")
-  descargasFaenaConsumoBahia      DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Bahia")
-  calasPatron                     Cala[]                 @relation("Cala_Patron")
-  calasMotorista                  Cala[]                 @relation("Cala_Motorista")
-  calasBahia                      Cala[]                 @relation("Cala_Bahia")
-  calasFaenaConsumoPatron         CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Patron")
-  calasFaenaConsumoMotorista      CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Motorista")
-  calasFaenaConsumoBahia          CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Bahia")
+  detallesCuotaPescaActualizados    DetCuotaPesca[]  @relation("DetCuotaPescaActualizador")
+  descargasFaenaPescaPatron         DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Patron")
+  descargasFaenaPescaMotorista      DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Motorista")
+  descargasFaenaPescaBahia          DescargaFaenaPesca[]   @relation("DescargaFaenaPesca_Bahia")
+  descargasFaenaConsumoPatron       DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Patron")
+  descargasFaenaConsumoMotorista    DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Motorista")
+  descargasFaenaConsumoBahia        DescargaFaenaConsumo[] @relation("DescargaFaenaConsumo_Bahia")
+  calasPatron                       Cala[]                 @relation("Cala_Patron")
+  calasMotorista                    Cala[]                 @relation("Cala_Motorista")
+  calasBahia                        Cala[]                 @relation("Cala_Bahia")
+  calasFaenaConsumoPatron           CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Patron")
+  calasFaenaConsumoMotorista        CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Motorista")
+  calasFaenaConsumoBahia            CalaFaenaConsumo[]     @relation("CalaFaenaConsumo_Bahia")
 
-  videoconferenciasOrganizadas  Videoconferencia[]  @relation("OrganizadorReunion")
-  participacionesReunion        ParticipanteReunion[]
-  cuentasCorrientesCreadas      CuentaCorriente[]  @relation("CuentaCorrienteCreadorId")
-  cuentasCorrientesActualizadas CuentaCorriente[]  @relation("CuentaCorrienteActualizadorId")
-  movimientosAprobados   MovimientoCaja[]  @relation("MovimientoCajaAprobadorId")
-  movimientosRechazados  MovimientoCaja[]  @relation("MovimientoCajaRechazadorId")
-  asientosContablesEnviados  AsientoContableInterfaz[]  @relation("AsientoContableEnviadoPorId")
-  configuracionesCuentaContableCreadas      ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableCreadorId")
-  configuracionesCuentaContableActualizadas ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableActualizadorId")
+  videoconferenciasOrganizadas                Videoconferencia[]  @relation("OrganizadorReunion")
+  participacionesReunion                      ParticipanteReunion[]
+  cuentasCorrientesCreadas                    CuentaCorriente[]  @relation("CuentaCorrienteCreadorId")
+  cuentasCorrientesActualizadas               CuentaCorriente[]  @relation("CuentaCorrienteActualizadorId")
+  movimientosAprobados                        MovimientoCaja[]  @relation("MovimientoCajaAprobadorId")
+  movimientosRechazados                       MovimientoCaja[]  @relation("MovimientoCajaRechazadorId")
+  asientosContablesEnviados                   AsientoContableInterfaz[]  @relation("AsientoContableEnviadoPorId")
+  configuracionesCuentaContableCreadas        ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableCreadorId")
+  configuracionesCuentaContableActualizadas   ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableActualizadorId")
 
 
   // ========================================
@@ -3815,26 +3899,148 @@ model Personal {
   preFacturasAutoriza             PreFactura[]            @relation("AutorizaVenta")
 
   // Nuevas relaciones con Tesorería Avanzada
-  prestamosCreados      PrestamoBancario[]       @relation("PrestamoCreador")
-  prestamosActualizados PrestamoBancario[]       @relation("PrestamoActualizador")
-  desembolsosCreados    DesembolsoPrestamo[]
-  lineasCreditoCreadas  LineaCredito[]           @relation("LineaCreditoCreador")
-  lineasCreditoActualizadas LineaCredito[]       @relation("LineaCreditoActualizador")
-  inversionesCreadas    InversionFinanciera[]    @relation("InversionCreador")
-  inversionesActualizadas InversionFinanciera[]  @relation("InversionActualizador")
-  movimientosInversionCreados MovimientoInversion[]
-  tiposPrestamoCreados      TipoPrestamo[]      @relation("TipoPrestamoCreador")
-  tiposPrestamoActualizados TipoPrestamo[]      @relation("TipoPrestamoActualizador")
-  sublineasCreditoCreadas      SublineaCredito[]   @relation("SublineaCreditoCreador")
-  sublineasCreditoActualizadas SublineaCredito[]   @relation("SublineaCreditoActualizador")
-  enlaceEntidadComercial EntidadComercial? @relation("PersonalEnlaceEntidad", fields: [enlaceEntidadComercialId], references: [id])
-  comisionesFidelizacion  ComisionFidelizacion[]
-  detallesComisionFidelizacion DetComisionFidelizacionEntidad[] @relation("PersonalComisionFidelizacion")
-  categoriasTipoMovCreadas       CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovCreador")
-  categoriasTipoMovActualizadas  CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovActualizador")
-  diasSinFaenaCreados      DetalleDiaSinFaena[] @relation("DiaSinFaenaCreador")
-  diasSinFaenaActualizados DetalleDiaSinFaena[] @relation("DiaSinFaenaActualizador")
+  prestamosCreados                PrestamoBancario[]       @relation("PrestamoCreador")
+  prestamosActualizados           PrestamoBancario[]       @relation("PrestamoActualizador")
+  desembolsosCreados              DesembolsoPrestamo[]
+  lineasCreditoCreadas            LineaCredito[]           @relation("LineaCreditoCreador")
+  lineasCreditoActualizadas       LineaCredito[]       @relation("LineaCreditoActualizador")
+  inversionesCreadas              InversionFinanciera[]    @relation("InversionCreador")
+  inversionesActualizadas         InversionFinanciera[]  @relation("InversionActualizador")
+  movimientosInversionCreados     MovimientoInversion[]
+  tiposPrestamoCreados            TipoPrestamo[]      @relation("TipoPrestamoCreador")
+  tiposPrestamoActualizados       TipoPrestamo[]      @relation("TipoPrestamoActualizador")
+  sublineasCreditoCreadas         SublineaCredito[]   @relation("SublineaCreditoCreador")
+  sublineasCreditoActualizadas    SublineaCredito[]   @relation("SublineaCreditoActualizador")
+  enlaceEntidadComercial          EntidadComercial? @relation("PersonalEnlaceEntidad", fields: [enlaceEntidadComercialId], references: [id])
+  comisionesFidelizacion          ComisionFidelizacion[]
+  detallesComisionFidelizacion    DetComisionFidelizacionEntidad[] @relation("PersonalComisionFidelizacion")
+  categoriasTipoMovCreadas        CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovCreador")
+  categoriasTipoMovActualizadas   CategoriaTipoMovEntregaRendir[] @relation("CategoriaTipoMovActualizador")
+  diasSinFaenaCreados             DetalleDiaSinFaena[] @relation("DiaSinFaenaCreador")
+  diasSinFaenaActualizados        DetalleDiaSinFaena[] @relation("DiaSinFaenaActualizador")
+  deudasConPersonal               DeudaConPersonal[]   // 🆕 AGREGAR ESTA LÍNEA
 }
+
+model TipoDeudaPersonal {
+  id                    BigInt                  @id @default(autoincrement())
+  nombre                String                  @db.VarChar(100)
+  descripcion           String?
+  activo                Boolean                 @default(true)
+  
+  deudas                DeudaConPersonal[]
+}
+
+model DeudaConPersonal {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // IDENTIFICACIÓN
+  // ========================================
+  empresaId             BigInt
+  personalId            BigInt
+  tipoDeudaId           BigInt
+  
+  // ========================================
+  // FECHA Y DOCUMENTO
+  // ========================================
+  fecha                 DateTime                // Fecha de generación de la deuda
+  fechaContable         DateTime?               // Fecha contable (para saldos iniciales: 31/12/2025)
+  numeroDocumento       String?                 @db.VarChar(40)
+  
+  // ========================================
+  // VALORES MONETARIOS
+  // ========================================
+  montoOriginal         Decimal                 @db.Decimal(18, 2)  // Monto original de la deuda
+  montoPagado           Decimal                 @db.Decimal(18, 2)  @default(0)  // Monto pagado
+  saldo                 Decimal                 @db.Decimal(18, 2)  // Saldo pendiente
+  monedaId              BigInt
+  
+  // ========================================
+  // ESTADO
+  // ========================================
+  estadoId              BigInt                  // PENDIENTE, PAGADA, PARCIAL
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  asientoContableId     BigInt?                 // Asiento contable generado
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
+  personal              Personal                @relation(fields: [personalId], references: [id])
+  tipoDeuda             TipoDeudaPersonal       @relation(fields: [tipoDeudaId], references: [id])
+  moneda                Moneda                  @relation(fields: [monedaId], references: [id])
+  estado                EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
+  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
+  pagos                 PagoDeudaPersonal[]
+  
+  @@index([empresaId, personalId, estadoId])
+  @@index([asientoContableId])
+}
+
+model PagoDeudaPersonal {
+  id                    BigInt                  @id @default(autoincrement())
+  
+  // ========================================
+  // IDENTIFICACIÓN
+  // ========================================
+  deudaConPersonalId    BigInt
+  
+  // ========================================
+  // FECHA Y PAGO
+  // ========================================
+  fechaPago             DateTime
+  montoPago             Decimal                 @db.Decimal(18, 2)
+  
+  // ========================================
+  // MÉTODO DE PAGO
+  // ========================================
+  medioPagoId           BigInt?
+  numeroOperacion       String?                 @db.VarChar(40)
+  
+  // ========================================
+  // OBSERVACIONES
+  // ========================================
+  observaciones         String?                 @db.Text
+  
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  asientoContableId     BigInt?
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  deudaConPersonal      DeudaConPersonal        @relation(fields: [deudaConPersonalId], references: [id])
+  medioPago             MedioPago?              @relation(fields: [medioPagoId], references: [id])  // 🆕 RELACIÓN
+  asientoContable       AsientoContable?        @relation(fields: [asientoContableId], references: [id])
+  
+  @@index([deudaConPersonalId])
+  @@index([asientoContableId])
+  @@index([medioPagoId])  // 🆕 ÍNDICE
+}
+
 
 model Producto {
   codigo                            String?                             @unique @db.VarChar(40)
@@ -5378,14 +5584,17 @@ model AsientoContable {
   detalles              DetalleAsientoContable[]
 
 // Nuevas relaciones con Tesorería Avanzada
-cuotasPrestamo        CuotaPrestamo[]
-desembolsosPrestamo   DesembolsoPrestamo[]
-inversionesLiquidadas InversionFinanciera[]
-movimientosInversion  MovimientoInversion[]
-prestamos             PrestamoBancario[]    @relation("AsientoPrestamo")
+  cuotasPrestamo        CuotaPrestamo[]
+  desembolsosPrestamo   DesembolsoPrestamo[]
+  inversionesLiquidadas InversionFinanciera[]
+  movimientosInversion  MovimientoInversion[]
+  prestamos             PrestamoBancario[]    @relation("AsientoPrestamo")
   cuentasPorCobrar      CuentaPorCobrar[]       // Relación inversa
   cuentasPorPagar       CuentaPorPagar[]        // Relación inversa
   saldosCuentaCorriente SaldoCuentaCorriente[]  // 🆕 Relación inversa
+  movimientosActivoFijo MovimientoActivoFijo[]  // 🆕 Relación
+  deudasConPersonal     DeudaConPersonal[]      // 🆕 AGREGAR ESTA LÍNEA
+  pagosDeudaPersonal    PagoDeudaPersonal[]     // 🆕 AGREGAR ESTA LÍNEA
 
   // ========================================
   // ÍNDICES - CRÍTICO: índice en tipoLibro para filtrado rápido
@@ -6219,6 +6428,7 @@ model MedioPago {
   movimientos           MovimientoCaja[]
   configuracionesCuentaContable  ConfiguracionCuentaContable[]
   asientosContables     AsientoContableInterfaz[]
+  pagosDeudaPersonal    PagoDeudaPersonal[]  // 🆕 AGREGAR ESTA LÍNEA
   
   @@index([activo])
 }
