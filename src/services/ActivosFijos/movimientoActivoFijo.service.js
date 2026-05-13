@@ -1,6 +1,5 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
-import periodoContableService from '../Contabilidad/periodoContable.service.js';
 
 /**
  * Servicio CRUD para MovimientoActivoFijo
@@ -29,10 +28,25 @@ async function validarForaneas(data) {
     const tipo = await prisma.tipoMovimientoActivoFijo.findUnique({ where: { id: data.tipoMovimientoId } });
     if (!tipo) throw new ValidationError('El tipo de movimiento referenciado no existe.');
   }
+  // Validar periodoContableId (obligatorio)
+  if (data.periodoContableId !== undefined && data.periodoContableId !== null) {
+    const periodo = await prisma.periodoContable.findUnique({ where: { id: data.periodoContableId } });
+    if (!periodo) throw new ValidationError('El período contable referenciado no existe.');
+    
+    // Validar que el período esté ABIERTO (estadoId = 73)
+    if (Number(periodo.estadoId) !== 73) {
+      throw new ValidationError('El período contable debe estar ABIERTO para registrar movimientos.');
+    }
+  }
   // Validar monedaId
   if (data.monedaId !== undefined && data.monedaId !== null) {
     const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
     if (!moneda) throw new ValidationError('La moneda referenciada no existe.');
+  }
+  // Validar centroCostoId (opcional)
+  if (data.centroCostoId !== undefined && data.centroCostoId !== null) {
+    const centroCosto = await prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } });
+    if (!centroCosto) throw new ValidationError('El centro de costo referenciado no existe.');
   }
   // Validar asientoContableId (opcional)
   if (data.asientoContableId !== undefined && data.asientoContableId !== null) {
@@ -49,11 +63,18 @@ const listar = async () => {
     return await prisma.movimientoActivoFijo.findMany({ 
       include: { 
         empresa: true,
-        activo: true,
+        activo: {
+          include: {
+            tipo: true
+          }
+        },
         tipoMovimiento: true,
+        periodoContable: true,
         moneda: true,
+        centroCosto: true,
         asientoContable: true
-      } 
+      },
+      orderBy: { fechaMovimiento: 'desc' }
     });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -70,9 +91,15 @@ const obtenerPorId = async (id) => {
       where: { id }, 
       include: { 
         empresa: true,
-        activo: true,
+        activo: {
+          include: {
+            tipo: true
+          }
+        },
         tipoMovimiento: true,
+        periodoContable: true,
         moneda: true,
+        centroCosto: true,
         asientoContable: true
       } 
     });
@@ -93,9 +120,12 @@ const crear = async (data) => {
     if (!data.empresaId) throw new ValidationError('El campo empresaId es obligatorio.');
     if (!data.activoId) throw new ValidationError('El campo activoId es obligatorio.');
     if (!data.tipoMovimientoId) throw new ValidationError('El campo tipoMovimientoId es obligatorio.');
+    if (!data.periodoContableId) throw new ValidationError('El campo periodoContableId es obligatorio.');
     if (!data.fechaMovimiento) throw new ValidationError('El campo fechaMovimiento es obligatorio.');
     if (!data.monto) throw new ValidationError('El campo monto es obligatorio.');
     if (!data.monedaId) throw new ValidationError('El campo monedaId es obligatorio.');
+    if (!data.creadoPor) throw new ValidationError('El campo creadoPor es obligatorio.');
+    if (!data.actualizadoPor) throw new ValidationError('El campo actualizadoPor es obligatorio.');
     
     await validarForaneas(data);
     
@@ -104,6 +134,7 @@ const crear = async (data) => {
       empresaId: data.empresaId,
       activoId: data.activoId,
       tipoMovimientoId: data.tipoMovimientoId,
+      periodoContableId: data.periodoContableId,
       fechaMovimiento: new Date(data.fechaMovimiento),
       fechaContable: data.fechaContable ? new Date(data.fechaContable) : null,
       monto: data.monto,
@@ -112,18 +143,26 @@ const crear = async (data) => {
       depreciacionAcumulada: data.depreciacionAcumulada || null,
       valorNeto: data.valorNeto || null,
       observaciones: data.observaciones || null,
+      centroCostoId: data.centroCostoId || null,
       asientoContableId: data.asientoContableId || null,
-      creadoPor: data.creadoPor || null,
-      actualizadoPor: data.actualizadoPor || null
+      creadoPor: data.creadoPor,
+      actualizadoPor: data.actualizadoPor,
+      updatedAt: new Date()
     };
     
     return await prisma.movimientoActivoFijo.create({ 
       data: dataCreacion,
       include: { 
         empresa: true,
-        activo: true,
+        activo: {
+          include: {
+            tipo: true
+          }
+        },
         tipoMovimiento: true,
+        periodoContable: true,
         moneda: true,
+        centroCosto: true,
         asientoContable: true
       }
     });
@@ -142,6 +181,11 @@ const actualizar = async (id, data) => {
     const existente = await prisma.movimientoActivoFijo.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('MovimientoActivoFijo no encontrado');
     
+    // No permitir actualizar si ya tiene asiento contable
+    if (existente.asientoContableId && data.asientoContableId === undefined) {
+      throw new ValidationError('No se puede modificar un movimiento que ya tiene asiento contable generado.');
+    }
+    
     await validarForaneas(data);
     
     // Preparar datos para actualización
@@ -149,6 +193,7 @@ const actualizar = async (id, data) => {
     if (data.empresaId !== undefined) dataActualizacion.empresaId = data.empresaId;
     if (data.activoId !== undefined) dataActualizacion.activoId = data.activoId;
     if (data.tipoMovimientoId !== undefined) dataActualizacion.tipoMovimientoId = data.tipoMovimientoId;
+    if (data.periodoContableId !== undefined) dataActualizacion.periodoContableId = data.periodoContableId;
     if (data.fechaMovimiento !== undefined) dataActualizacion.fechaMovimiento = new Date(data.fechaMovimiento);
     if (data.fechaContable !== undefined) dataActualizacion.fechaContable = data.fechaContable ? new Date(data.fechaContable) : null;
     if (data.monto !== undefined) dataActualizacion.monto = data.monto;
@@ -157,17 +202,25 @@ const actualizar = async (id, data) => {
     if (data.depreciacionAcumulada !== undefined) dataActualizacion.depreciacionAcumulada = data.depreciacionAcumulada;
     if (data.valorNeto !== undefined) dataActualizacion.valorNeto = data.valorNeto;
     if (data.observaciones !== undefined) dataActualizacion.observaciones = data.observaciones;
+    if (data.centroCostoId !== undefined) dataActualizacion.centroCostoId = data.centroCostoId;
     if (data.asientoContableId !== undefined) dataActualizacion.asientoContableId = data.asientoContableId;
     if (data.actualizadoPor !== undefined) dataActualizacion.actualizadoPor = data.actualizadoPor;
+    dataActualizacion.updatedAt = new Date();
     
     return await prisma.movimientoActivoFijo.update({ 
       where: { id }, 
       data: dataActualizacion,
       include: { 
         empresa: true,
-        activo: true,
+        activo: {
+          include: {
+            tipo: true
+          }
+        },
         tipoMovimiento: true,
+        periodoContable: true,
         moneda: true,
+        centroCosto: true,
         asientoContable: true
       }
     });
@@ -186,10 +239,15 @@ const eliminar = async (id) => {
     const existente = await prisma.movimientoActivoFijo.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('MovimientoActivoFijo no encontrado');
     
+    // No permitir eliminar si ya tiene asiento contable
+    if (existente.asientoContableId) {
+      throw new ValidationError('No se puede eliminar un movimiento que ya tiene asiento contable generado.');
+    }
+    
     await prisma.movimientoActivoFijo.delete({ where: { id } });
     return true;
   } catch (err) {
-    if (err instanceof NotFoundError) throw err;
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -204,9 +262,15 @@ const listarPorActivo = async (activoId) => {
       where: { activoId },
       include: { 
         empresa: true,
-        activo: true,
+        activo: {
+          include: {
+            tipo: true
+          }
+        },
         tipoMovimiento: true,
+        periodoContable: true,
         moneda: true,
+        centroCosto: true,
         asientoContable: true
       },
       orderBy: { fechaMovimiento: 'desc' }
@@ -231,17 +295,19 @@ const generarBorradorAsiento = async (movimientoId) => {
         empresa: true,
         activo: {
           include: {
-            tipoActivo: {
+            tipo: {
               include: {
-                cuentaContableActivo: true,
-                cuentaContableDepreciacion: true,
-                cuentaContableDepreciacionAcumulada: true
+                cuentaActivo: true,
+                cuentaDepreciacion: true,
+                cuentaDepreciacionAcumulada: true
               }
             }
           }
         },
         tipoMovimiento: true,
-        moneda: true
+        periodoContable: true,
+        moneda: true,
+        centroCosto: true
       }
     });
 
@@ -249,52 +315,37 @@ const generarBorradorAsiento = async (movimientoId) => {
       throw new NotFoundError('Movimiento de activo fijo no encontrado');
     }
 
-    const tipoActivo = movimiento.activo?.tipoActivo;
+    if (movimiento.asientoContableId) {
+      throw new ValidationError('Este movimiento ya tiene un asiento contable generado');
+    }
+
+    const tipoActivo = movimiento.activo?.tipo;
     if (!tipoActivo) {
       throw new ValidationError('El activo no tiene un tipo de activo configurado');
     }
 
-    if (!tipoActivo.cuentaContableActivoId || !tipoActivo.cuentaContableActivo) {
+    if (!tipoActivo.cuentaActivoId || !tipoActivo.cuentaActivo) {
       throw new ValidationError(
         'El tipo de activo no tiene configurada la cuenta contable de activo. ' +
         'Configure las cuentas contables en el tipo de activo antes de generar el asiento.'
       );
     }
 
-    let periodoContable = null;
-    try {
-      periodoContable = await periodoContableService.obtenerPeriodoActivo(movimiento.empresaId);
-    } catch (error) {
-      const periodos = await prisma.periodoContable.findMany({
-        where: { 
-          empresaId: movimiento.empresaId,
-          estadoId: 50n
-        },
-        orderBy: { fechaInicio: 'desc' },
-        take: 1
-      });
-      
-      if (periodos.length > 0) {
-        periodoContable = periodos[0];
-      } else {
-        const cualquierPeriodo = await prisma.periodoContable.findFirst({
-          where: { empresaId: movimiento.empresaId },
-          orderBy: { fechaInicio: 'desc' }
-        });
-        
-        if (!cualquierPeriodo) {
-          throw new ValidationError(
-            'No hay períodos contables configurados para esta empresa. ' +
-            'Por favor, cree un período contable antes de generar asientos.'
-          );
-        }
-        periodoContable = cualquierPeriodo;
-      }
+    // Usar el período contable del movimiento
+    const periodoContable = movimiento.periodoContable;
+    if (!periodoContable) {
+      throw new ValidationError('El movimiento no tiene un período contable asignado.');
+    }
+
+    // Validar que el período esté ABIERTO
+    if (Number(periodoContable.estadoId) !== 73) {
+      throw new ValidationError('El período contable debe estar ABIERTO para generar asientos.');
     }
 
     const monto = Number(movimiento.monto);
     const tipoMovimientoNombre = movimiento.tipoMovimiento?.nombre || '';
     const activoNombre = movimiento.activo?.nombre || '';
+    const centroCostoId = movimiento.centroCostoId || null;
     
     const borrador = {
       empresaId: movimiento.empresaId,
@@ -324,11 +375,11 @@ const generarBorradorAsiento = async (movimientoId) => {
       borrador.detalles = [
         {
           numeroLinea: 1,
-          planCuentaId: tipoActivo.cuentaContableActivoId,
+          planCuentaId: tipoActivo.cuentaActivoId,
           glosa: `${tipoMovimientoNombre} - ${activoNombre}`,
           debe: monto,
           haber: 0,
-          centroCostoId: null
+          centroCostoId: centroCostoId
         },
         {
           numeroLinea: 2,
@@ -340,7 +391,7 @@ const generarBorradorAsiento = async (movimientoId) => {
         }
       ];
     } else if (tipoMovimientoNombreLower.includes('depreciación')) {
-      if (!tipoActivo.cuentaContableDepreciacionId || !tipoActivo.cuentaContableDepreciacionAcumuladaId) {
+      if (!tipoActivo.cuentaDepreciacionId || !tipoActivo.cuentaDepreciacionAcumuladaId) {
         throw new ValidationError(
           'El tipo de activo no tiene configuradas las cuentas de depreciación. ' +
           'Configure las cuentas contables en el tipo de activo antes de generar el asiento.'
@@ -350,15 +401,15 @@ const generarBorradorAsiento = async (movimientoId) => {
       borrador.detalles = [
         {
           numeroLinea: 1,
-          planCuentaId: tipoActivo.cuentaContableDepreciacionId,
+          planCuentaId: tipoActivo.cuentaDepreciacionId,
           glosa: `Depreciación ${activoNombre}`,
           debe: monto,
           haber: 0,
-          centroCostoId: null
+          centroCostoId: centroCostoId
         },
         {
           numeroLinea: 2,
-          planCuentaId: tipoActivo.cuentaContableDepreciacionAcumuladaId,
+          planCuentaId: tipoActivo.cuentaDepreciacionAcumuladaId,
           glosa: `Depreciación acumulada ${activoNombre}`,
           debe: 0,
           haber: monto,
@@ -369,7 +420,7 @@ const generarBorradorAsiento = async (movimientoId) => {
       const depreciacionAcumulada = Number(movimiento.depreciacionAcumulada || 0);
       const valorNeto = Number(movimiento.valorNeto || 0);
 
-      if (!tipoActivo.cuentaContableDepreciacionAcumuladaId) {
+      if (!tipoActivo.cuentaDepreciacionAcumuladaId) {
         throw new ValidationError(
           'El tipo de activo no tiene configurada la cuenta de depreciación acumulada. ' +
           'Configure las cuentas contables en el tipo de activo antes de generar el asiento.'
@@ -390,7 +441,7 @@ const generarBorradorAsiento = async (movimientoId) => {
       borrador.detalles = [
         {
           numeroLinea: 1,
-          planCuentaId: tipoActivo.cuentaContableDepreciacionAcumuladaId,
+          planCuentaId: tipoActivo.cuentaDepreciacionAcumuladaId,
           glosa: `${tipoMovimientoNombre} - Depreciación acumulada ${activoNombre}`,
           debe: depreciacionAcumulada,
           haber: 0,
@@ -402,11 +453,11 @@ const generarBorradorAsiento = async (movimientoId) => {
           glosa: `${tipoMovimientoNombre} - Valor neto ${activoNombre}`,
           debe: valorNeto,
           haber: 0,
-          centroCostoId: null
+          centroCostoId: centroCostoId
         },
         {
           numeroLinea: 3,
-          planCuentaId: tipoActivo.cuentaContableActivoId,
+          planCuentaId: tipoActivo.cuentaActivoId,
           glosa: `${tipoMovimientoNombre} - ${activoNombre}`,
           debe: 0,
           haber: monto,
@@ -428,11 +479,11 @@ const generarBorradorAsiento = async (movimientoId) => {
       borrador.detalles = [
         {
           numeroLinea: 1,
-          planCuentaId: tipoActivo.cuentaContableActivoId,
+          planCuentaId: tipoActivo.cuentaActivoId,
           glosa: `${tipoMovimientoNombre} - ${activoNombre}`,
           debe: monto,
           haber: 0,
-          centroCostoId: null
+          centroCostoId: centroCostoId
         },
         {
           numeroLinea: 2,
@@ -465,7 +516,10 @@ const generarBorradorAsiento = async (movimientoId) => {
 const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
   try {
     const movimiento = await prisma.movimientoActivoFijo.findUnique({
-      where: { id: movimientoId }
+      where: { id: movimientoId },
+      include: {
+        periodoContable: true
+      }
     });
 
     if (!movimiento) {
@@ -475,6 +529,9 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
     if (movimiento.asientoContableId) {
       throw new ValidationError('Este movimiento ya tiene un asiento contable generado');
     }
+
+    // Usar el período contable del movimiento
+    const periodoContableId = movimiento.periodoContableId;
 
     const totalDebe = asientoData.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
     const totalHaber = asientoData.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
@@ -497,7 +554,7 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
       const ultimoAsiento = await tx.asientoContable.findFirst({
         where: {
           empresaId: asientoData.empresaId,
-          periodoContableId: asientoData.periodoContableId
+          periodoContableId: periodoContableId
         },
         orderBy: { correlativo: 'desc' }
       });
@@ -507,7 +564,7 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
       const asiento = await tx.asientoContable.create({
         data: {
           empresaId: asientoData.empresaId,
-          periodoContableId: asientoData.periodoContableId,
+          periodoContableId: periodoContableId,
           numeroAsiento,
           correlativo,
           fechaAsiento: new Date(asientoData.fechaAsiento),

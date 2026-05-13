@@ -22,11 +22,49 @@ async function validarTipoActivo(data, id = null) {
 }
 
 /**
+ * Valida existencia de claves foráneas (cuentas contables).
+ * @param {Object} data - Datos del tipo de activo
+ */
+async function validarForaneas(data) {
+  // Validar cuentaActivoId (opcional)
+  if (data.cuentaActivoId !== undefined && data.cuentaActivoId !== null) {
+    const cuenta = await prisma.planCuentasContable.findUnique({ 
+      where: { id: data.cuentaActivoId } 
+    });
+    if (!cuenta) throw new ValidationError('La cuenta de activo referenciada no existe.');
+  }
+  
+  // Validar cuentaDepreciacionId (opcional)
+  if (data.cuentaDepreciacionId !== undefined && data.cuentaDepreciacionId !== null) {
+    const cuenta = await prisma.planCuentasContable.findUnique({ 
+      where: { id: data.cuentaDepreciacionId } 
+    });
+    if (!cuenta) throw new ValidationError('La cuenta de depreciación referenciada no existe.');
+  }
+  
+  // Validar cuentaDepreciacionAcumuladaId (opcional)
+  if (data.cuentaDepreciacionAcumuladaId !== undefined && data.cuentaDepreciacionAcumuladaId !== null) {
+    const cuenta = await prisma.planCuentasContable.findUnique({ 
+      where: { id: data.cuentaDepreciacionAcumuladaId } 
+    });
+    if (!cuenta) throw new ValidationError('La cuenta de depreciación acumulada referenciada no existe.');
+  }
+}
+
+/**
  * Lista todos los tipos de activo.
  */
 const listar = async () => {
   try {
-    return await prisma.tipoActivo.findMany({ include: { activos: true } });
+    return await prisma.tipoActivo.findMany({ 
+      include: { 
+        activos: true,
+        cuentaActivo: true,
+        cuentaDepreciacion: true,
+        cuentaDepreciacionAcumulada: true
+      },
+      orderBy: { codigo: 'asc' }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -38,7 +76,15 @@ const listar = async () => {
  */
 const obtenerPorId = async (id) => {
   try {
-    const tipo = await prisma.tipoActivo.findUnique({ where: { id }, include: { activos: true } });
+    const tipo = await prisma.tipoActivo.findUnique({ 
+      where: { id }, 
+      include: { 
+        activos: true,
+        cuentaActivo: true,
+        cuentaDepreciacion: true,
+        cuentaDepreciacionAcumulada: true
+      } 
+    });
     if (!tipo) throw new NotFoundError('Tipo de activo no encontrado');
     return tipo;
   } catch (err) {
@@ -53,10 +99,17 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     await validarTipoActivo(data);
+    await validarForaneas(data);
     return await prisma.tipoActivo.create({ 
       data: {
         ...data,
         updatedAt: new Date()
+      },
+      include: { 
+        activos: true,
+        cuentaActivo: true,
+        cuentaDepreciacion: true,
+        cuentaDepreciacionAcumulada: true
       }
     });
   } catch (err) {
@@ -74,11 +127,18 @@ const actualizar = async (id, data) => {
     const existente = await prisma.tipoActivo.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Tipo de activo no encontrado');
     await validarTipoActivo(data, id);
+    await validarForaneas(data);
     return await prisma.tipoActivo.update({ 
       where: { id }, 
       data: {
         ...data,
         updatedAt: new Date()
+      },
+      include: { 
+        activos: true,
+        cuentaActivo: true,
+        cuentaDepreciacion: true,
+        cuentaDepreciacionAcumulada: true
       }
     });
   } catch (err) {
@@ -107,10 +167,32 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Lista tipos de activos activos (no cesados).
+ */
+const listarActivos = async () => {
+  try {
+    return await prisma.tipoActivo.findMany({ 
+      where: { cesado: false },
+      include: { 
+        activos: true,
+        cuentaActivo: true,
+        cuentaDepreciacion: true,
+        cuentaDepreciacionAcumulada: true
+      },
+      orderBy: { codigo: 'asc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  listarActivos
 };

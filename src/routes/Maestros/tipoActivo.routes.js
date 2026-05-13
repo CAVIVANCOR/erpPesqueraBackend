@@ -18,6 +18,13 @@ router.get(
 );
 
 router.get(
+  '/activos/lista', 
+  autenticarJWT, 
+  checkPermission('tipoActivo', 'ver'),
+  tipoActivoController.listarActivos
+);
+
+router.get(
   '/:id', 
   autenticarJWT, 
   checkPermission('tipoActivo', 'ver'),

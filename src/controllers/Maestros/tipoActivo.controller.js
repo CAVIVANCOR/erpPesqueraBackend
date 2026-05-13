@@ -14,6 +14,15 @@ export async function listar(req, res, next) {
   }
 }
 
+export async function listarActivos(req, res, next) {
+  try {
+    const tipos = await tipoActivoService.listarActivos();
+    res.json(toJSONBigInt(tipos));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);
