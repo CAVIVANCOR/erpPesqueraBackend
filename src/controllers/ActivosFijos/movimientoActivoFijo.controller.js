@@ -88,3 +88,19 @@ export async function guardarAsientoContable(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Elimina el asiento contable asociado a un movimiento
+ */
+export async function eliminarAsientoContable(req, res, next) {
+  try {
+    const movimientoId = BigInt(req.params.id);
+    await movimientoActivoFijoService.eliminarAsientoContable(movimientoId);
+    res.status(200).json({
+      success: true,
+      message: "Asiento contable eliminado correctamente",
+    });
+  } catch (err) {
+    next(err);
+  }
+}

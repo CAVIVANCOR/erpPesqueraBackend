@@ -66,4 +66,12 @@ router.delete(
   movimientoActivoFijoController.eliminar
 );
 
+// Eliminar asiento contable de un movimiento
+router.delete(
+  "/:id/asiento-contable",
+  autenticarJWT,
+  checkPermission('movimientoActivoFijo', 'eliminar'),
+  movimientoActivoFijoController.eliminarAsientoContable
+);
+
 export default router;
