@@ -316,10 +316,6 @@ const buscarPersonaPorDNI = async (dni) => {
 
     // ========================================
     // 2️⃣ SEGUNDA BÚSQUEDA: ContactoEntidad
-    // ⚠️ DESHABILITADO - Falta campo numeroDocumento en schema
-    // ========================================
-    // TODO: Habilitar cuando se agregue campo numeroDocumento a ContactoEntidad
-    /*
     const contacto = await prisma.contactoEntidad.findFirst({
       where: {
         numeroDocumento: dniLimpio,
@@ -350,7 +346,7 @@ const buscarPersonaPorDNI = async (dni) => {
         }
       };
     }
-    */
+    
 
     // ========================================
     // 3️⃣ TERCERA BÚSQUEDA: Histórico AccesoInstalacion
