@@ -2784,6 +2784,7 @@ model ContactoEntidad {
   fechaActualizacion   DateTime?
   creadoPor            BigInt?
   actualizadoPor       BigInt?
+  numeroDocumento      String?
 
   entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
   contratosServicio  ContratoServicio[]    @relation("ContratoServicioContacto")
