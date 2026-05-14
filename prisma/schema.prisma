@@ -13,17 +13,33 @@ model AccesoInstalacion {
   areaDestinoVisitaId         BigInt?
   empresaId                   BigInt?
   tipoAccesoId                BigInt
-  tipoPersonaId               BigInt?
+  tipoPersonaId               BigInt?                    // ✅ YA EXISTE - Usa tu catálogo TipoPersona
   motivoId                    BigInt?
   tipoEquipoId                BigInt?
   fechaHora                   DateTime
   nombrePersona               String?
   tipoDocIdentidadId          BigInt?
   numeroDocumento             String?
+  
+  // ========================================
+  // ⭐ CAMPO NUEVO - PERSONA QUE INGRESA
+  // ========================================
+  personalIngresoId           BigInt?                    // ⭐ NUEVO - ID del personal que ingresa (si trabaja en la empresa)
+  // ========================================
+  
   vehiculoNroPlaca            String?
   vehiculoMarca               String?
   equipoMarca                 String?
   equipoSerie                 String?
+  
+  // ========================================
+  // ⭐ CAMPOS NUEVOS PARA DESTINO DE VISITA
+  // ========================================
+  personalDestinoId           BigInt?                    // ⭐ AHORA OPCIONAL - Solo para visitas a personal interno
+  entidadComercialId          BigInt?                    // ⭐ NUEVO - Cliente/Arrendatario a visitar
+  contactoEntidadId           BigInt?                    // ⭐ NUEVO - Contacto específico del cliente
+  // ========================================
+  
   personaFirmaDestinoVisitaId BigInt?
   observaciones               String?
   incidenteResaltante         Boolean                    @default(false)
@@ -37,11 +53,23 @@ model AccesoInstalacion {
   accesoSellado               Boolean                    @default(false)
   fechaHoraSalidaDefinitiva   DateTime?
 
+  // ========================================
+  // RELACIONES EXISTENTES
+  // ========================================
   tipoAcceso         TipoAccesoInstalacion @relation(fields: [tipoAccesoId], references: [id])
   tipoPersona        TipoPersona?          @relation(fields: [tipoPersonaId], references: [id])
   motivoAcceso       MotivoAcceso?         @relation(fields: [motivoId], references: [id])
-  detalles   AccesoInstalacionDetalle[]
-  tipoEquipo        TipoEquipo?          @relation(fields: [tipoEquipoId], references: [id])
+  tipoEquipo         TipoEquipo?           @relation(fields: [tipoEquipoId], references: [id])
+  detalles           AccesoInstalacionDetalle[]
+  
+  // ========================================
+  // ⭐ RELACIONES NUEVAS
+  // ========================================
+  personalIngreso    Personal?             @relation("AccesoPersonalIngreso", fields: [personalIngresoId], references: [id])
+  personalDestino    Personal?             @relation("AccesoPersonalDestino", fields: [personalDestinoId], references: [id])
+  entidadComercial   EntidadComercial?     @relation("AccesoEntidadComercial", fields: [entidadComercialId], references: [id])
+  contactoEntidad    ContactoEntidad?      @relation("AccesoContactoEntidad", fields: [contactoEntidadId], references: [id])
+  // ========================================
 }
 
 model AccesoInstalacionDetalle {
@@ -2596,6 +2624,7 @@ model EntidadComercial {
   detallesComisionFidelizacion  DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
   plataformasRecepcionPesca     DetPlataformaRecepcionPesca[]
   contratistasOT                DetContratistasOT[] @relation("ContratistaOT")
+  accesosInstalacion          AccesoInstalacion[]  @relation("AccesoEntidadComercial")
 }
 
 model DetPlataformaRecepcionPesca {
@@ -2756,11 +2785,10 @@ model ContactoEntidad {
   creadoPor            BigInt?
   actualizadoPor       BigInt?
 
-   entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
-  contratosServicio       ContratoServicio[]    @relation("ContratoServicioContacto")
-    preFacturas           PreFactura[]
-
-
+  entidadComercial   EntidadComercial @relation(fields: [entidadComercialId], references: [id])
+  contratosServicio  ContratoServicio[]    @relation("ContratoServicioContacto")
+  preFacturas        PreFactura[]
+  accesosInstalacion AccesoInstalacion[]  @relation("AccesoContactoEntidad")
 }
 
 model CtaCteEntidad {
@@ -3767,37 +3795,39 @@ model DetallePermisoActivo {
 }
 
 model Personal {
-  id                    BigInt                  @id @default(autoincrement())
-  empresaId             BigInt
-  nombres               String
-  apellidos             String
-  tipoDocumentoId       BigInt?
-  numeroDocumento       String
-  fechaNacimiento       DateTime
-  sexo                  Boolean                 @default(false)
-  direccion             String?
-  telefono              String?
-  correo                String?
-  fechaIngreso          DateTime?
-  fechaCese             DateTime?
-  tipoContratoId        BigInt?
-  cargoId               BigInt?
-  cesado                Boolean                 @default(false)
-  areaFisicaId          BigInt?
-  sedeEmpresaId         BigInt?
-  urlFotoPersona        String?
-  ubigeoId              BigInt?
-  esVendedor            Boolean                 @default(false)
-  paraPescaConsumo      Boolean                 @default(false)
-  paraTemporadaPesca    Boolean                 @default(false)
-  usuario       Usuario?
-  enlaceEntidadComercialId BigInt?
-  
-  documentaciones DocumentacionPersonal[]
-  cargo       CargosPersonal?    @relation(fields: [cargoId], references: [id])
-  ubigeo      Ubigeo?            @relation(fields: [ubigeoId], references: [id])
-  tipoContrato TipoContrato?      @relation(fields: [tipoContratoId], references: [id])
-  tipoDocIdentidad TiposDocIdentidad? @relation(fields: [tipoDocumentoId], references: [id])
+  id                        BigInt                  @id @default(autoincrement())
+  empresaId                 BigInt
+  nombres                   String
+  apellidos                 String
+  tipoDocumentoId           BigInt?
+  numeroDocumento           String
+  fechaNacimiento           DateTime
+  sexo                      Boolean                 @default(false)
+  direccion                 String?
+  telefono                  String?
+  correo                    String?
+  fechaIngreso              DateTime?
+  fechaCese                 DateTime?
+  tipoContratoId            BigInt?
+  cargoId                   BigInt?
+  cesado                    Boolean                 @default(false)
+  areaFisicaId              BigInt?
+  sedeEmpresaId             BigInt?
+  urlFotoPersona            String?
+  ubigeoId                  BigInt?
+  esVendedor                Boolean                 @default(false)
+  paraPescaConsumo          Boolean                 @default(false)
+  paraTemporadaPesca        Boolean                 @default(false)
+  usuario                   Usuario?
+  enlaceEntidadComercialId  BigInt?
+  marcaAsistencia           Boolean                 @default(true)   // ⭐ NUEVO - Si debe marcar asistencia
+  esAdministrativo          Boolean                 @default(true)   // ⭐ NUEVO - true: horario rígido, false: horario flexible
+
+  documentaciones           DocumentacionPersonal[]
+  cargo                     CargosPersonal?    @relation(fields: [cargoId], references: [id])
+  ubigeo                    Ubigeo?            @relation(fields: [ubigeoId], references: [id])
+  tipoContrato              TipoContrato?      @relation(fields: [tipoContratoId], references: [id])
+  tipoDocIdentidad          TiposDocIdentidad? @relation(fields: [tipoDocumentoId], references: [id])
 
    // Relaciones como Liquidador
   entregasLiquidadasVentas      EntregaARendirPVentas[] @relation("LiquidadorVentas")
@@ -3900,6 +3930,8 @@ model Personal {
   diasSinFaenaCreados             DetalleDiaSinFaena[] @relation("DiaSinFaenaCreador")
   diasSinFaenaActualizados        DetalleDiaSinFaena[] @relation("DiaSinFaenaActualizador")
   deudasConPersonal               DeudaConPersonal[]   // 🆕 AGREGAR ESTA LÍNEA
+  accesosComoIngreso          AccesoInstalacion[]  @relation("AccesoPersonalIngreso")
+  accesosComoDestino          AccesoInstalacion[]  @relation("AccesoPersonalDestino")
 }
 
 model TipoDeudaPersonal {
