@@ -7,41 +7,41 @@ const router = Router();
 
 /**
  * Rutas CRUD para TipoMovimientoActivoFijo
- * Ruta del submódulo: 'tipoMovimientoActivoFijo'
+ * Ruta del submódulo: 'tipoMovActivo'
  */
 
 router.get(
   '/', 
   autenticarJWT, 
-  checkPermission('tipoMovimientoActivoFijo', 'ver'),
+  checkPermission('tipoMovActivo', 'ver'),
   tipoMovimientoActivoFijoController.listar
 );
 
 router.get(
   '/:id', 
   autenticarJWT, 
-  checkPermission('tipoMovimientoActivoFijo', 'ver'),
+  checkPermission('tipoMovActivo', 'ver'),
   tipoMovimientoActivoFijoController.obtenerPorId
 );
 
 router.post(
   '/', 
   autenticarJWT, 
-  checkPermission('tipoMovimientoActivoFijo', 'crear'),
+  checkPermission('tipoMovActivo', 'crear'),
   tipoMovimientoActivoFijoController.crear
 );
 
 router.put(
   '/:id', 
   autenticarJWT, 
-  checkPermission('tipoMovimientoActivoFijo', 'editar'),
+  checkPermission('tipoMovActivo', 'editar'),
   tipoMovimientoActivoFijoController.actualizar
 );
 
 router.delete(
   '/:id', 
   autenticarJWT, 
-  checkPermission('tipoMovimientoActivoFijo', 'eliminar'),
+  checkPermission('tipoMovActivo', 'eliminar'),
   tipoMovimientoActivoFijoController.eliminar
 );
 

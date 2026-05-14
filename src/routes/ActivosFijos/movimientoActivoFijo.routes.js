@@ -7,62 +7,62 @@ const router = Router();
 
 /**
  * Rutas CRUD para MovimientoActivoFijo
- * Ruta del submódulo: 'movimientoActivoFijo'
+ * Ruta del submódulo: 'movActivoFijo'
  */
 
 router.get(
   '/', 
   autenticarJWT, 
-  checkPermission('movimientoActivoFijo', 'ver'),
+  checkPermission('movActivoFijo', 'ver'),
   movimientoActivoFijoController.listar
 );
 
 router.get(
   '/:id', 
   autenticarJWT, 
-  checkPermission('movimientoActivoFijo', 'ver'),
+  checkPermission('movActivoFijo', 'ver'),
   movimientoActivoFijoController.obtenerPorId
 );
 
 router.get(
   '/activo/:activoId', 
   autenticarJWT, 
-  checkPermission('movimientoActivoFijo', 'ver'),
+  checkPermission('movActivoFijo', 'ver'),
   movimientoActivoFijoController.listarPorActivo
 );
 
 router.post(
   '/', 
   autenticarJWT, 
-  checkPermission('movimientoActivoFijo', 'crear'),
+  checkPermission('movActivoFijo', 'crear'),
   movimientoActivoFijoController.crear
 );
 
 router.post(
   '/:id/generar-borrador-asiento',
   autenticarJWT,
-  checkPermission('movimientoActivoFijo', 'ver'),
+  checkPermission('movActivoFijo', 'ver'),
   movimientoActivoFijoController.generarBorradorAsiento
 );
 
 router.post(
   '/:id/guardar-asiento',
   autenticarJWT,
-  checkPermission('movimientoActivoFijo', 'crear'),
+  checkPermission('movActivoFijo', 'crear'),
   movimientoActivoFijoController.guardarAsientoContable
 );
 
 router.put(
   '/:id', 
   autenticarJWT, 
-  checkPermission('movimientoActivoFijo', 'editar'),
+  checkPermission('movActivoFijo', 'editar'),
   movimientoActivoFijoController.actualizar
 );
 
 router.delete(
   '/:id', 
   autenticarJWT, 
-  checkPermission('movimientoActivoFijo', 'eliminar'),
+  checkPermission('movActivoFijo', 'eliminar'),
   movimientoActivoFijoController.eliminar
 );
 
@@ -70,7 +70,7 @@ router.delete(
 router.delete(
   "/:id/asiento-contable",
   autenticarJWT,
-  checkPermission('movimientoActivoFijo', 'eliminar'),
+  checkPermission('movActivoFijo', 'eliminar'),
   movimientoActivoFijoController.eliminarAsientoContable
 );
 
