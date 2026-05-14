@@ -208,11 +208,84 @@ const listarPersonalxDescripCargo = async (empresaId,descripcionCargo) => {
   }
 };
 
+/**
+ * Busca personal por número de documento (DNI).
+ * Si encuentra múltiples registros (persona en varias empresas), retorna el que tiene marcaAsistencia = true.
+ * @param {string} numeroDocumento - Número de documento a buscar
+ * @returns {Object|null} - Datos del personal encontrado o null si no existe
+ */
+const buscarPorDNI = async (numeroDocumento) => {
+  try {
+    if (!numeroDocumento || numeroDocumento.trim() === '') {
+      throw new ValidationError('El número de documento es obligatorio.');
+    }
+
+    // Buscar TODOS los registros con ese DNI (puede estar en múltiples empresas)
+    const personales = await prisma.personal.findMany({
+      where: {
+        numeroDocumento: numeroDocumento.trim(),
+        cesado: false  // Solo personal activo
+      },
+      include: {
+        cargo: {
+          select: {
+            id: true,
+            nombre: true,
+            descripcion: true
+          }
+        },
+        tipoDocIdentidad: {
+          select: {
+            id: true,
+            descripcion: true
+          }
+        }
+      },
+      select: {
+        id: true,
+        nombres: true,
+        apellidos: true,
+        empresaId: true,
+        numeroDocumento: true,
+        marcaAsistencia: true,
+        esAdministrativo: true,
+        cargoId: true,
+        cargo: true,
+        tipoDocIdentidad: true
+      }
+    });
+
+    // Si no encuentra ninguno
+    if (personales.length === 0) {
+      return null;  // No es personal de la empresa
+    }
+
+    // Si encuentra UNO o MÁS, buscar el que tiene marcaAsistencia = true
+    const personalConAsistencia = personales.find(
+      p => p.marcaAsistencia === true
+    );
+
+    // Si hay uno con marcaAsistencia = true, retornar ese
+    if (personalConAsistencia) {
+      return personalConAsistencia;
+    }
+
+    // Si NINGUNO tiene marcaAsistencia = true, retornar el primero
+    // (caso raro, pero por seguridad)
+    return personales[0];
+  } catch (err) {
+    if (err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos al buscar personal por DNI', err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
-  listarPersonalxDescripCargo
+  listarPersonalxDescripCargo,
+  buscarPorDNI  // ⭐ NUEVO - Búsqueda por DNI
 };

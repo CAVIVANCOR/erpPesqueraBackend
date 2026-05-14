@@ -111,3 +111,23 @@ export async function procesarSalidaDefinitiva(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Busca persona por DNI en múltiples fuentes (cascada optimizada).
+ * Prioridad: Personal → Histórico → RENIEC
+ * Endpoint: GET /api/acceso-instalacion/buscar-dni/:dni
+ */
+export async function buscarPersonaPorDNI(req, res, next) {
+  try {
+    const { dni } = req.params;
+    const resultado = await accesoInstalacionService.buscarPersonaPorDNI(dni);
+    
+    if (!resultado.encontrado) {
+      return res.status(404).json(resultado);
+    }
+    
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

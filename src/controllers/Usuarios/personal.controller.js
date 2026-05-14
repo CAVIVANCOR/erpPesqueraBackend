@@ -77,3 +77,29 @@ export async function listarPersonalxDescripCargo(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Busca personal por número de documento (DNI).
+ * Si encuentra múltiples registros, retorna el que tiene marcaAsistencia = true.
+ * Endpoint: GET /api/personal/buscar-por-dni/:dni
+ */
+export async function buscarPorDNI(req, res, next) {
+  try {
+    const { dni } = req.params;
+    const personal = await personalService.buscarPorDNI(dni);
+    
+    if (!personal) {
+      return res.status(404).json({ 
+        encontrado: false, 
+        mensaje: 'No se encontró personal con ese número de documento' 
+      });
+    }
+    
+    res.json(toJSONBigInt({ 
+      encontrado: true, 
+      personal 
+    }));
+  } catch (err) {
+    next(err);
+  }
+}

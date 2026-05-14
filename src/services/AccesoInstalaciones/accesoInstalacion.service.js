@@ -31,7 +31,11 @@ const listar = async () => {
         tipoPersona: true,       // Relación con TipoPersona
         motivoAcceso: true,      // Relación con MotivoAcceso
         tipoEquipo: true,        // Relación con TipoEquipo
-        detalles: true           // Relación con AccesoInstalacionDetalle
+        detalles: true,          // Relación con AccesoInstalacionDetalle
+        personalIngreso: true,   // ⭐ NUEVO - Relación con Personal (quien ingresa)
+        personalDestino: true,   // ⭐ NUEVO - Relación con Personal (a quien visita)
+        entidadComercial: true,  // ⭐ NUEVO - Relación con EntidadComercial
+        contactoEntidad: true    // ⭐ NUEVO - Relación con ContactoEntidad
       },
       orderBy: {
         fechaHora: 'desc'        // Ordenar por fecha más reciente primero
@@ -55,7 +59,11 @@ const obtenerPorId = async (id) => {
         tipoPersona: true,       // Relación con TipoPersona
         motivoAcceso: true,      // Relación con MotivoAcceso
         tipoEquipo: true,        // Relación con TipoEquipo
-        detalles: true           // Relación con AccesoInstalacionDetalle
+        detalles: true,          // Relación con AccesoInstalacionDetalle
+        personalIngreso: true,   // ⭐ NUEVO - Relación con Personal (quien ingresa)
+        personalDestino: true,   // ⭐ NUEVO - Relación con Personal (a quien visita)
+        entidadComercial: true,  // ⭐ NUEVO - Relación con EntidadComercial
+        contactoEntidad: true    // ⭐ NUEVO - Relación con ContactoEntidad
       }
     });
     if (!acceso) throw new NotFoundError('AccesoInstalacion no encontrado');
@@ -101,7 +109,11 @@ const crear = async (data) => {
           tipoPersona: true,
           motivoAcceso: true,
           tipoEquipo: true,
-          detalles: true
+          detalles: true,
+          personalIngreso: true,   // ⭐ NUEVO - Relación con Personal (quien ingresa)
+          personalDestino: true,   // ⭐ NUEVO - Relación con Personal (a quien visita)
+          entidadComercial: true,  // ⭐ NUEVO - Relación con EntidadComercial
+          contactoEntidad: true    // ⭐ NUEVO - Relación con ContactoEntidad
         }
       });
     });
@@ -242,6 +254,229 @@ const buscarVehiculoPorPlaca = async (numeroPlaca) => {
 };
 
 /**
+ * Busca persona por DNI en múltiples fuentes (cascada optimizada).
+ * Prioridad: 1) Personal → 2) Histórico AccesoInstalacion → 3) RENIEC
+ * NOTA: ContactoEntidad deshabilitado temporalmente (falta campo numeroDocumento en schema)
+ * 
+ * @param {string} dni - Número de documento a buscar
+ * @returns {Promise<Object>} Resultado con origen y datos de la persona
+ */
+const buscarPersonaPorDNI = async (dni) => {
+  try {
+    if (!dni || dni.trim() === '') {
+      throw new ValidationError('El número de documento es obligatorio.');
+    }
+
+    const dniLimpio = dni.trim();
+
+    // ========================================
+    // 1️⃣ PRIMERA BÚSQUEDA: Tabla PERSONAL
+    // ========================================
+    const personales = await prisma.personal.findMany({
+      where: {
+        numeroDocumento: dniLimpio,
+        cesado: false  // Solo personal activo
+      },
+      include: {
+        cargo: {
+          select: {
+            id: true,
+            descripcion: true  // ✅ CargosPersonal solo tiene 'descripcion'
+          }
+        },
+        tipoDocIdentidad: {
+          select: {
+            id: true,
+            codigo: true,      // ✅ TiposDocIdentidad tiene 'codigo' y 'nombre'
+            nombre: true
+          }
+        }
+      }
+    });
+
+    if (personales.length > 0) {
+      // Si hay múltiples registros, buscar el que tiene marcaAsistencia = true
+      const personalConAsistencia = personales.find(p => p.marcaAsistencia === true);
+      const personalSeleccionado = personalConAsistencia || personales[0];
+
+      return {
+        encontrado: true,
+        origen: 'PERSONAL',
+        tipoPersonaSugerido: 'PERSONAL INTERNO',
+        datos: {
+          nombreCompleto: `${personalSeleccionado.nombres} ${personalSeleccionado.apellidos}`.trim(),
+          numeroDocumento: dniLimpio,
+          personalIngresoId: personalSeleccionado.id,
+          marcaAsistencia: personalSeleccionado.marcaAsistencia,
+          esAdministrativo: personalSeleccionado.esAdministrativo,
+          cargoDescripcion: personalSeleccionado.cargo?.descripcion || null
+        }
+      };
+    }
+
+    // ========================================
+    // 2️⃣ SEGUNDA BÚSQUEDA: ContactoEntidad
+    // ⚠️ DESHABILITADO - Falta campo numeroDocumento en schema
+    // ========================================
+    // TODO: Habilitar cuando se agregue campo numeroDocumento a ContactoEntidad
+    /*
+    const contacto = await prisma.contactoEntidad.findFirst({
+      where: {
+        numeroDocumento: dniLimpio,
+        activo: true
+      },
+      include: {
+        entidadComercial: {
+          select: {
+            id: true,
+            razonSocial: true,
+            numeroDocumento: true
+          }
+        }
+      }
+    });
+
+    if (contacto) {
+      return {
+        encontrado: true,
+        origen: 'CONTACTO_ENTIDAD',
+        tipoPersonaSugerido: 'CLIENTE/PROVEEDOR',
+        datos: {
+          nombreCompleto: contacto.nombres,
+          numeroDocumento: dniLimpio,
+          entidadComercialId: contacto.entidadComercialId,
+          contactoEntidadId: contacto.id,
+          razonSocialEntidad: contacto.entidadComercial.razonSocial
+        }
+      };
+    }
+    */
+
+    // ========================================
+    // 3️⃣ TERCERA BÚSQUEDA: Histórico AccesoInstalacion
+    // ========================================
+    const historico = await prisma.accesoInstalacion.findFirst({
+      where: {
+        numeroDocumento: dniLimpio
+      },
+      orderBy: {
+        fechaHora: 'desc'  // Obtener el registro más reciente
+      },
+      select: {
+        id: true,
+        nombrePersona: true,
+        tipoPersonaId: true,
+        tipoDocIdentidadId: true,
+        numeroDocumento: true,
+        fechaHora: true
+      }
+    });
+
+    if (historico) {
+      return {
+        encontrado: true,
+        origen: 'HISTORICO',
+        tipoPersonaSugerido: 'VISITANTE RECURRENTE',
+        datos: {
+          nombreCompleto: historico.nombrePersona,
+          numeroDocumento: dniLimpio,
+          tipoPersonaId: historico.tipoPersonaId,
+          tipoDocIdentidadId: historico.tipoDocIdentidadId,
+          ultimaVisita: historico.fechaHora
+        }
+      };
+    }
+
+    // ========================================
+    // 4️⃣ CUARTA BÚSQUEDA: API RENIEC (Decoleta)
+    // ========================================
+    try {
+      const token = process.env.TOKEN_API_DECOLETA_SUNAT_RENIEC_TC;
+      
+      if (!token) {
+        console.warn('⚠️ Token RENIEC no configurado - búsqueda RENIEC omitida');
+        return {
+          encontrado: false,
+          mensaje: 'DNI no encontrado en registros internos y servicio RENIEC no disponible'
+        };
+      }
+
+      const response = await fetch(`https://api.decolecta.com/v1/reniec/dni?numero=${dniLimpio}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const reniecData = await response.json();
+        
+        // ✅ LOG para debugging - ver estructura real de la respuesta
+        console.log('📋 Respuesta RENIEC completa:', JSON.stringify(reniecData, null, 2));
+
+        // ✅ Validar que la respuesta tenga los campos necesarios
+        if (!reniecData || typeof reniecData !== 'object') {
+          console.error('❌ Respuesta RENIEC inválida:', reniecData);
+          return {
+            encontrado: false,
+            mensaje: 'Respuesta de RENIEC inválida'
+          };
+        }
+
+        // ✅ Construir nombre completo con validación de campos
+        // API RENIEC usa: first_name, first_last_name, second_last_name
+        const nombres = reniecData.first_name || '';
+        const apellidoPaterno = reniecData.first_last_name || '';
+        const apellidoMaterno = reniecData.second_last_name || '';
+        
+        const nombreCompleto = `${nombres} ${apellidoPaterno} ${apellidoMaterno}`.trim();
+
+        // ✅ Validar que al menos tengamos un nombre
+        if (!nombreCompleto) {
+          console.error('❌ No se pudo extraer nombre de la respuesta RENIEC');
+          return {
+            encontrado: false,
+            mensaje: 'No se pudo obtener el nombre desde RENIEC'
+          };
+        }
+
+        return {
+          encontrado: true,
+          origen: 'RENIEC',
+          tipoPersonaSugerido: 'VISITANTE EXTERNO',
+          datos: {
+            nombreCompleto,
+            numeroDocumento: dniLimpio,
+            nombres,
+            apellidoPaterno,
+            apellidoMaterno
+          }
+        };
+      }
+
+      // RENIEC no encontró el DNI
+      return {
+        encontrado: false,
+        mensaje: 'DNI no encontrado en ninguna base de datos (Personal, Histórico, RENIEC)'
+      };
+
+    } catch (errorReniec) {
+      console.error('❌ Error consultando RENIEC:', errorReniec);
+      return {
+        encontrado: false,
+        mensaje: 'DNI no encontrado en registros internos y error al consultar RENIEC'
+      };
+    }
+
+  } catch (err) {
+    if (err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos al buscar persona por DNI', err.message);
+    throw err;
+  }
+};
+
+/**
  * Procesa la salida definitiva de un acceso a instalación
  * Actualiza fechaHoraSalidaDefinitiva con la fecha/hora actual y marca accesoSellado como true
  * @param {BigInt} id - ID del acceso a instalación
@@ -293,7 +528,11 @@ const procesarSalidaDefinitiva = async (id) => {
           tipoPersona: true,
           motivoAcceso: true,
           tipoEquipo: true,
-          detalles: true
+          detalles: true,
+          personalIngreso: true,   // ⭐ NUEVO - Relación con Personal (quien ingresa)
+          personalDestino: true,   // ⭐ NUEVO - Relación con Personal (a quien visita)
+          entidadComercial: true,  // ⭐ NUEVO - Relación con EntidadComercial
+          contactoEntidad: true    // ⭐ NUEVO - Relación con ContactoEntidad
         }
       });
     });
@@ -331,5 +570,6 @@ export default {
   eliminar,
   buscarPersonaPorDocumento,
   buscarVehiculoPorPlaca,
-  procesarSalidaDefinitiva
+  procesarSalidaDefinitiva,
+  buscarPersonaPorDNI  // ⭐ NUEVO - Búsqueda unificada por DNI
 };

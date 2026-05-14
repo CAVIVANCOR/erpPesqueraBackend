@@ -27,6 +27,15 @@ router.get(
   personalController.listarPersonalxDescripCargo
 );
 
+// ⭐ NUEVO - Búsqueda de personal por DNI
+// IMPORTANTE: Esta ruta debe ir ANTES de '/:id' para evitar conflictos
+router.get(
+  '/buscar-por-dni/:dni',
+  autenticarJWT,
+  checkPermission('personal', 'ver'),
+  personalController.buscarPorDNI
+);
+
 router.get(
   '/:id',
   autenticarJWT,
