@@ -56,8 +56,8 @@ export async function eliminar(req, res, next) {
 
 export async function liquidarEntregaARendir(req, res, next) {
   try {
-    const id = BigInt(req.params.id);
-    const { urlLiquidacionPdf } = req.body;
+    const id = Number(req.params.id);
+    const { urlLiquidacionPdf, permitirRegeneracion } = req.body; // ⭐ NUEVO
     const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
 
     if (!urlLiquidacionPdf) {
@@ -69,7 +69,8 @@ export async function liquidarEntregaARendir(req, res, next) {
     const resultado = await entregaARendirService.liquidarEntregaARendir(
       id,
       urlLiquidacionPdf,
-      usuarioId
+      usuarioId,
+      permitirRegeneracion // ⭐ NUEVO
     );
 
     res.json(toJSONBigInt(resultado));

@@ -76,7 +76,6 @@ export async function getFile(req, res, next) {
   try {
     const { moduleName } = req.params;
     const fileName = req.params[0];
-    
 
     const filePath = await pdfService.getFilePath(moduleName, fileName);
     
@@ -86,6 +85,14 @@ export async function getFile(req, res, next) {
     res.sendFile(filePath);
 
   } catch (error) {
+    // ⭐ MANEJO ESPECÍFICO DE ERRORES 404
+    if (error.statusCode === 404) {
+      return res.status(404).json({
+        success: false,
+        message: 'Archivo no encontrado',
+        file: req.params[0]
+      });
+    }
     next(error);
   }
 }

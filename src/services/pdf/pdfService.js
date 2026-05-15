@@ -77,23 +77,28 @@ class PDFService {
     }
   }
 
-  async getFilePath(moduleName, fileName) {
+    async getFilePath(moduleName, fileName) {
     try {
       const config = getModuleConfig(moduleName);
       const filePath = path.join(__dirname, '../../../', config.uploadPath, fileName);
 
       if (!fs.existsSync(filePath)) {
-        throw new Error('Archivo no encontrado');
+        const error = new Error('Archivo no encontrado');
+        error.statusCode = 404; // ⭐ CÓDIGO HTTP CORRECTO
+        error.isOperational = true; // ⭐ ERROR OPERACIONAL, NO CRÍTICO
+        throw error;
       }
 
       return filePath;
 
     } catch (error) {
-      console.error('Error en getFilePath:', error);
+      // ⭐ NO LOGUEAR ERRORES 404 COMO ERRORES CRÍTICOS
+      if (error.statusCode !== 404) {
+        console.error('Error en getFilePath:', error);
+      }
       throw error;
     }
   }
-
   async deleteFile(moduleName, fileName) {
     try {
       const config = getModuleConfig(moduleName);

@@ -104,7 +104,15 @@ const obtenerPorId = async (id) => {
         tipoDocumento: true,
       },
     });
+    
     if (!mov) throw new NotFoundError("DetMovsEntregaRendir no encontrado");
+    
+    console.log("\n🔍 GET MOVIMIENTO POR ID:", {
+      id: mov.id.toString(),
+      saldoInicialAsignacion: mov.saldoInicialAsignacion?.toString(),
+      saldoFinalAsignacion: mov.saldoFinalAsignacion?.toString(),
+    });
+    
     return mov;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -130,16 +138,23 @@ const crear = async (data) => {
       }
     }
 
+    // Obtener el tipo de movimiento para validar si es asignación
+    const tipoMovimiento = await prisma.tipoMovEntregaRendir.findUnique({
+      where: { id: BigInt(data.tipoMovimientoId) },
+      select: { categoriaId: true },
+    });
+
+    const esAsignacion = tipoMovimiento?.categoriaId === 17; // GASTOS A RENDIR
+
     // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
-    if (data.tipoMovimientoId === 1 || data.tipoMovimientoId === 2) {
+    if (esAsignacion) {
       data.formaParteCalculoEntregaARendir = true;
     }
 
     // Validación: Si NO es asignación Y formaParteCalculoEntregaARendir=true → asignacionOrigenId es obligatorio
     // NOTA: asignacionOrigenId puede ser 0 (nueva asignación) o un ID > 0 (gasto de asignación existente)
     if (
-      data.tipoMovimientoId !== 1 &&
-      data.tipoMovimientoId !== 2 &&
+      !esAsignacion &&
       data.formaParteCalculoEntregaARendir === true &&
       (data.asignacionOrigenId === null ||
         data.asignacionOrigenId === undefined)
@@ -151,14 +166,15 @@ const crear = async (data) => {
 
     await validarClavesForaneas(data);
 
-    // ⭐ NUEVO: Si es asignación principal, calcular saldo inicial automáticamente
+    // Si es asignación principal, calcular saldo inicial automáticamente
     if (
-      (data.tipoMovimientoId === 1 || data.tipoMovimientoId === 2) &&
+      esAsignacion &&
       data.formaParteCalculoEntregaARendir === true &&
       (data.asignacionOrigenId === null || data.asignacionOrigenId === 0)
     ) {
       const saldoInicial = await obtenerSaldoInicialAsignacion(
         data.entregaARendirId,
+        data.responsableId,
         data.fechaMovimiento,
       );
       data.saldoInicialAsignacion = saldoInicial;
@@ -197,6 +213,9 @@ const actualizar = async (id, data, usuarioId = null) => {
             },
           },
         },
+        tipoMovimiento: {
+          select: { categoriaId: true },
+        },
       },
     });
     if (!existente)
@@ -229,13 +248,26 @@ const actualizar = async (id, data, usuarioId = null) => {
       );
     }
 
+    // Determinar si el tipo de movimiento final es una asignación
+    let esAsignacion = existente.tipoMovimiento?.categoriaId === 17;
+
+    // Si se está cambiando el tipo de movimiento, verificar el nuevo tipo
+    if (
+      data.tipoMovimientoId &&
+      data.tipoMovimientoId !== existente.tipoMovimientoId
+    ) {
+      const nuevoTipoMovimiento = await prisma.tipoMovEntregaRendir.findUnique({
+        where: { id: BigInt(data.tipoMovimientoId) },
+        select: { categoriaId: true },
+      });
+      esAsignacion = nuevoTipoMovimiento?.categoriaId === 17;
+    }
+
     // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
-    if (data.tipoMovimientoId === 1 || data.tipoMovimientoId === 2) {
+    if (esAsignacion) {
       data.formaParteCalculoEntregaARendir = true;
     }
 
-    // Validación: Si NO es asignación Y formaParteCalculoEntregaARendir=true → asignacionOrigenId es obligatorio
-    const tipoMovFinal = data.tipoMovimientoId || existente.tipoMovimientoId;
     const formaParteCalculo =
       data.formaParteCalculoEntregaARendir !== undefined
         ? data.formaParteCalculoEntregaARendir
@@ -245,9 +277,10 @@ const actualizar = async (id, data, usuarioId = null) => {
         ? data.asignacionOrigenId
         : existente.asignacionOrigenId;
 
+    // Validación: Si NO es asignación Y formaParteCalculo=true
+    // ENTONCES debe tener asignacionOrigenId especificado (no null ni undefined)
     if (
-      tipoMovFinal !== 1 &&
-      tipoMovFinal !== 2 &&
+      !esAsignacion &&
       formaParteCalculo === true &&
       (asignacionOrigen === null || asignacionOrigen === undefined)
     ) {
@@ -255,7 +288,6 @@ const actualizar = async (id, data, usuarioId = null) => {
         "Debe especificar una asignación origen cuando el movimiento forma parte del cálculo de entrega a rendir.",
       );
     }
-
     // Validar claves foráneas si cambian
     const claves = [
       "entregaARendirId",
@@ -879,19 +911,24 @@ const obtenerValoresIniciales = async (moduloOrigen, entregaARendirId) => {
  */
 const obtenerSaldoInicialAsignacion = async (
   entregaARendirId,
+  responsableId,
   fechaMovimiento,
 ) => {
   try {
-    // Buscar la última asignación liquidada con los mismos criterios
+    // Buscar la última asignación liquidada del mismo responsable
     const ultimaAsignacionLiquidada =
       await prisma.detMovsEntregaRendir.findFirst({
         where: {
           entregaARendirId: BigInt(entregaARendirId),
-          asignacionOrigenId: null, // Es asignación principal
-          formaParteCalculoEntregaARendir: true, // Forma parte del cálculo
-          entregaARendirLiquidada: true, // Ya está liquidada
+          responsableId: BigInt(responsableId),
+          asignacionOrigenId: null,
+          formaParteCalculoEntregaARendir: true,
+          entregaARendirLiquidada: true,
+          tipoMovimiento: {
+            categoriaId: 17,
+          },
           fechaMovimiento: {
-            lt: new Date(fechaMovimiento), // Anterior a la fecha actual
+            lt: new Date(fechaMovimiento),
           },
         },
         orderBy: [{ fechaMovimiento: "desc" }, { id: "desc" }],
