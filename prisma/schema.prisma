@@ -436,7 +436,6 @@ model CentroCosto {
   empresasCentro EmpresaCentroCosto[]
   
   entregasARendirVentas         EntregaARendirPVentas[] 
-  entregasARendirIndustrial     EntregaARendir[]
   entregasARendirCompras        EntregaARendirPCompras[]
   entregasARendirConsumo        EntregaARendirPescaConsumo[]
 
@@ -459,6 +458,8 @@ model CentroCosto {
   subfamiliasProducto      SubfamiliaProducto[] @relation("SubfamiliaCentroCosto")  // 🆕 NUEVO
   unidadesNegocio          UnidadNegocio[]  // 🆕 NUEVO
   movimientosActivoFijo    MovimientoActivoFijo[]  // 🆕 NUEVA RELACIÓN
+  detMovsEntregaRendir  DetMovsEntregaRendir[]
+
 }
 
 model Color {
@@ -1797,58 +1798,106 @@ model DetMovsEntRendirPescaConsumo {
 
 model DetMovsEntregaRendir {
   id                   BigInt               @id @default(autoincrement())
-  entregaARendirId     BigInt
+  
+  // ═══════════════════════════════════════════════════════════
+  // CAMPOS OBLIGATORIOS
+  // ═══════════════════════════════════════════════════════════
   responsableId        BigInt
   fechaMovimiento      DateTime
   tipoMovimientoId     BigInt
-  productoId           BigInt?
   monto                Decimal
-  descripcion          String?
-  creadoEn             DateTime             @default(now())
-  actualizadoEn        DateTime
   centroCostoId        BigInt
+  empresaId            BigInt               @default(1)   // MEGUI INVESTMENT SAC
+  
+  // ═══════════════════════════════════════════════════════════
+  // CAMPOS DE ORIGEN (CON DEFAULTS PARA COMPATIBILIDAD)
+  // ═══════════════════════════════════════════════════════════
+  moduloOrigenId       BigInt               @default(2)   // Pesca Industrial
+  documentoOrigenId    BigInt               @default(37)  // Temporada actual
+  
+  // ═══════════════════════════════════════════════════════════
+  // AUDITORÍA COMPLETA
+  // ═══════════════════════════════════════════════════════════
+  creadoEn             DateTime             @default(now())
+  creadoPorId          BigInt?
+  actualizadoEn        DateTime             @updatedAt
+  actualizadoPorId     BigInt?
+  
+  // ═══════════════════════════════════════════════════════════
+  // CAMPOS OPCIONALES EXISTENTES
+  // ═══════════════════════════════════════════════════════════
+  productoId           BigInt?
+  descripcion          String?
+  monedaId             BigInt?
+  entidadComercialId   BigInt?
+  tipoDocumentoId      BigInt?
+  numeroSerieComprobante          String?
+  numeroCorrelativoComprobante    String?
   urlComprobanteMovimiento        String?
+  
   validadoTesoreria               Boolean @default(false)
   fechaValidacionTesoreria        DateTime?
-  operacionSinFactura             Boolean @default(false)
-  fechaOperacionMovCaja           DateTime?
   operacionMovCajaId              BigInt?
-  moduloOrigenMovCajaId           BigInt?
-  entidadComercialId              BigInt?
-  monedaId                        BigInt?
+  fechaOperacionMovCaja           DateTime?
   urlComprobanteOperacionMovCaja  String?
-  tipoDocumentoId                 BigInt?                                     // Factura, Boleta, Recibo, Ticket, Sin Comprobante
-  numeroSerieComprobante          String?                              // Número Serie del comprobante
-  numeroCorrelativoComprobante    String?                               // Número Correlativo del comprobante
+  moduloOrigenMovCajaId           BigInt?
+  operacionSinFactura             Boolean @default(false)
+  
   formaParteCalculoLiquidacionTripulantes Boolean? @default(false)
   formaParteCalculoEntregaARendir         Boolean? @default(false)
-  detalleGastosPlanificados               String?     @db.Text
-  asignacionOrigenId                      BigInt?
   formaParteCalculoLiqAlquilerCuota       Boolean? @default(false)
+  
+  asignacionOrigenId                      BigInt?
+  saldoInicialAsignacion                  Decimal?
+  saldoFinalAsignacion                    Decimal?
+  
   entregaARendirLiquidada                 Boolean? @default(false)
   fechaLiquidacionEntregaARendir          DateTime?
   urlLiquidacionEntregaARendir            String?
-  enlaceAOtroDetalleGastoId               BigInt?   // Enlace a otro Detalle de Gastos que no es el propio, cuando realizo gastos para otras Unidades de Negocio
-  embarcacionId                           BigInt?   // Enlace a la Embarcacion para la cual se esta haciendo el gasto
-  saldoInicialAsignacion                  Decimal?  // Saldo arrastrado de la asignación anterior (solo para asignaciones principales)
-  saldoFinalAsignacion                    Decimal?  // Saldo calculado al liquidar esta asignación (solo para asignaciones principales)
-  enlaceGastosPlanificadosId              BigInt?    //Para identificar de que Gasto Planificado Proviene el Gasto Real
+  
+  enlaceGastosPlanificadosId              BigInt?
+  enlaceAOtroDetalleGastoId               BigInt?
+  embarcacionId                           BigInt?
+  detalleGastosPlanificados               String?     @db.Text
 
-  entregaARendir               EntregaARendir @relation(fields: [entregaARendirId], references: [id])
-  tipoMovimiento               TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
-  entidadComercial             EntidadComercial? @relation(fields: [entidadComercialId], references: [id])
-  moneda                       Moneda? @relation(fields: [monedaId], references: [id])
-  tipoDocumento                TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
-  producto                     Producto? @relation(fields: [productoId], references: [id])
-  embarcacion                  Embarcacion?  @relation(fields: [embarcacionId], references: [id])
-  enlaceGastoPlanificado       DetGastosPlanificados? @relation("GastoRealDeGastoPlanificado", fields: [enlaceGastosPlanificadosId], references: [id])
+  // ═══════════════════════════════════════════════════════════
+  // RELACIONES
+  // ═══════════════════════════════════════════════════════════
+  tipoMovimiento       TipoMovEntregaRendir @relation(fields: [tipoMovimientoId], references: [id])
+  responsable          Personal             @relation("ResponsableMovimiento", fields: [responsableId], references: [id])
+  centroCosto          CentroCosto          @relation(fields: [centroCostoId], references: [id])
+  empresa              Empresa              @relation(fields: [empresaId], references: [id])
+  moduloOrigen         ModuloSistema        @relation(fields: [moduloOrigenId], references: [id])
+  
+  // Relaciones de auditoría
+  creadoPor            Personal?            @relation("CreadoPorDetMovsEntregaRendir", fields: [creadoPorId], references: [id])
+  actualizadoPor       Personal?            @relation("ActualizadoPorDetMovsEntregaRendir", fields: [actualizadoPorId], references: [id])
+  
+  // Relaciones opcionales existentes
+  producto             Producto?            @relation(fields: [productoId], references: [id])
+  moneda               Moneda?              @relation(fields: [monedaId], references: [id])
+  entidadComercial     EntidadComercial?    @relation(fields: [entidadComercialId], references: [id])
+  tipoDocumento        TipoDocumento?       @relation(fields: [tipoDocumentoId], references: [id])
+  embarcacion          Embarcacion?         @relation(fields: [embarcacionId], references: [id])
+  enlaceGastoPlanificado DetGastosPlanificados? @relation("GastoRealDeGastoPlanificado", fields: [enlaceGastosPlanificadosId], references: [id])
+  
+  // Self-relations
+  asignacionOrigen     DetMovsEntregaRendir? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
+  gastosAsociados      DetMovsEntregaRendir[] @relation("GastosDeAsignacion")
+  gastosPlanificados   DetGastosPlanificados[]
 
-  asignacionOrigen             DetMovsEntregaRendir? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
-  gastosAsociados              DetMovsEntregaRendir[] @relation("GastosDeAsignacion")
-  gastosPlanificados           DetGastosPlanificados[]
-
+  // ═══════════════════════════════════════════════════════════
+  // ÍNDICES
+  // ═══════════════════════════════════════════════════════════
   @@index([asignacionOrigenId])
   @@index([enlaceGastosPlanificadosId])
+  @@index([empresaId])
+  @@index([moduloOrigenId])
+  @@index([documentoOrigenId])
+  @@index([responsableId])
+  @@index([fechaMovimiento])
+  @@index([creadoPorId])
+  @@index([actualizadoPorId])
 }
 
 model DetGastosPlanificados {
@@ -2460,6 +2509,7 @@ model Empresa {
   inversiones              InversionFinanciera[]
   movimientosActivoFijo    MovimientoActivoFijo[]  // 🆕 Relación
   deudasConPersonal        DeudaConPersonal[]      // 🆕 AGREGAR ESTA LÍNEA
+  detMovsEntregaRendir  DetMovsEntregaRendir[]
 
 @@index([monedaCalculosLiqId])
 
@@ -2812,29 +2862,6 @@ model CtaCteEntidad {
   moneda Moneda @relation(fields: [monedaId], references: [id])
 
   movimientosCaja      MovimientoCaja[]
-}
-
-model EntregaARendir {
-  id                   BigInt                 @id @default(autoincrement())
-  temporadaPescaId     BigInt
-  entregaLiquidada     Boolean                @default(false)
-  fechaLiquidacion     DateTime?
-  fechaCreacion        DateTime               @default(now())
-  fechaActualizacion   DateTime
-  respEntregaRendirId  BigInt
-  centroCostoId        BigInt
-  urlLiquidacionPdf String?
-  respLiquidacionId BigInt?
-  
-  temporadaPesca        TemporadaPesca @relation(fields: [temporadaPescaId], references: [id])
-  respLiquidacion Personal? @relation("LiquidadorIndustrial", fields: [respLiquidacionId], references: [id])
-  respEntregaRendir Personal @relation("ResponsableEntregaIndustrial", fields: [respEntregaRendirId], references: [id])
-  centroCosto CentroCosto @relation(fields: [centroCostoId], references: [id])
-  movimientos           DetMovsEntregaRendir[]
-
-  @@index([respEntregaRendirId])
-  @@index([entregaLiquidada])
-  @@index([temporadaPescaId])
 }
 
 model EntregaARendirPCompras {
@@ -3427,6 +3454,8 @@ model ModuloSistema {
   activo           Boolean            @default(true)
 
   submodulos   SubmoduloSistema[]
+  detMovsEntregaRendir  DetMovsEntregaRendir[]  // ◄─── AGREGAR ESTA LÍNEA
+
 }
 
 model Moneda {
@@ -3832,13 +3861,11 @@ model Personal {
 
    // Relaciones como Liquidador
   entregasLiquidadasVentas      EntregaARendirPVentas[] @relation("LiquidadorVentas")
-  entregasLiquidadasIndustrial  EntregaARendir[] @relation("LiquidadorIndustrial")
   entregasLiquidadasCompras     EntregaARendirPCompras[] @relation("LiquidadorCompras")
   entregasLiquidadasConsumo     EntregaARendirPescaConsumo[] @relation("LiquidadorConsumo")
   
   // Relaciones como Responsable de Entrega
   entregasResponsableVentas     EntregaARendirPVentas[] @relation("ResponsableEntregaVentas")
-  entregasResponsableIndustrial EntregaARendir[] @relation("ResponsableEntregaIndustrial")
   entregasResponsableCompras    EntregaARendirPCompras[] @relation("ResponsableEntregaCompras")
   entregasResponsableConsumo    EntregaARendirPescaConsumo[] @relation("ResponsableEntregaConsumo")
 
@@ -3933,6 +3960,9 @@ model Personal {
   deudasConPersonal               DeudaConPersonal[]   // 🆕 AGREGAR ESTA LÍNEA
   accesosComoIngreso          AccesoInstalacion[]  @relation("AccesoPersonalIngreso")
   accesosComoDestino          AccesoInstalacion[]  @relation("AccesoPersonalDestino")
+  detMovsEntregaRendirResponsable  DetMovsEntregaRendir[] @relation("ResponsableMovimiento")
+  detMovsEntregaRendirCreados      DetMovsEntregaRendir[] @relation("CreadoPorDetMovsEntregaRendir")
+  detMovsEntregaRendirActualizados DetMovsEntregaRendir[] @relation("ActualizadoPorDetMovsEntregaRendir")
 }
 
 model TipoDeudaPersonal {
@@ -4439,7 +4469,6 @@ model TemporadaPesca {
   bahiaComercial               Personal           @relation("TemporadaPescaBahia", fields: [BahiaId], references: [id])
   estadoTemporada              EstadoMultiFuncion @relation("TemporadaPescaEstado", fields: [estadoTemporadaId], references: [id])
   faenas                       FaenaPesca[]       @relation("FaenaTemporadas")
-  entregasARendir              EntregaARendir[]
   unidadNegocio                UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
   entidadEmpresarialAlquilada  EntidadComercial? @relation("EntidadEmpresarialAlquiladaTemporadaPesca", fields: [entidadEmpresarialAlquiladaId], references:[id])
   entidadComercialComisionistaAlq  EntidadComercial? @relation("EntidadComercialComisionistaAlquilerTemporadaPesca", fields: [entidadComercialComisionistaAlquiler], references:[id])
