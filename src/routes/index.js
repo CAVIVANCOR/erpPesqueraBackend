@@ -192,8 +192,6 @@ import calaFaenaConsumoProduceRoutes from '../routes/Pesca/calaFaenaConsumoProdu
 import detCalaFaenaConsumoProduceRoutes from '../routes/Pesca/detCalaFaenaConsumoProduce.routes.js';
 import descargaFaenaConsumoRoutes from '../routes/Pesca/descargaFaenaConsumo.routes.js';
 import detDescargaFaenaConsumoRoutes from '../routes/Pesca/detDescargaFaenaConsumo.routes.js';
-import entregaARendirRoutes from '../routes/Pesca/entregaARendir.routes.js';
-import entregaARendirImpresionRoutes from '../routes/Pesca/entregaARendirImpresion.routes.js';
 import detMovsEntregaRendirRoutes from '../routes/Pesca/detMovsEntregaRendir.routes.js';
 import tipoMovEntregaRendirRoutes from '../routes/Pesca/tipoMovEntregaRendir.routes.js';
 import recalcularToneladasRoutes from '../routes/Pesca/recalcularToneladas.routes.js';
@@ -619,9 +617,6 @@ router.use('/pesca/det-cala-faena-consumo-produce', detCalaFaenaConsumoProduceRo
 router.use('/pesca/descargas-faena-consumo', descargaFaenaConsumoRoutes);
 // Rutas para DetDescargaFaenaConsumo
 router.use('/pesca/det-descarga-faena-consumo', detDescargaFaenaConsumoRoutes);
-// Rutas para EntregaARendir
-router.use('/entregas-a-rendir', entregaARendirImpresionRoutes);
-router.use('/entregas-a-rendir', entregaARendirRoutes);
 // Rutas para DetMovsEntregaRendir
 router.use('/det-movs-entrega-rendir', detMovsEntregaRendirRoutes);
 // Rutas para TipoMovEntregaRendir

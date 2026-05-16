@@ -26,7 +26,8 @@ export async function obtenerPorId(req, res, next) {
 
 export async function crear(req, res, next) {
   try {
-    const nuevo = await detMovsEntregaRendirService.crear(req.body);
+    const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
+    const nuevo = await detMovsEntregaRendirService.crear(req.body, usuarioId);
     res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
     next(err);
@@ -109,8 +110,6 @@ export async function obtenerLabelEnlacePorId(req, res, next) {
   }
 }
 
-
-
 export async function liquidarAsignacion(req, res, next) {
   try {
     const id = Number(req.params.id);
@@ -127,16 +126,19 @@ export async function liquidarAsignacion(req, res, next) {
 
 export async function obtenerSaldoInicial(req, res, next) {
   try {
-    const { entregaARendirId, fechaMovimiento } = req.query;
+    const { empresaId, moduloOrigenId, documentoOrigenId, responsableId, fechaMovimiento } = req.query;
     
-    if (!entregaARendirId || !fechaMovimiento) {
+    if (!empresaId || !moduloOrigenId || !documentoOrigenId || !responsableId || !fechaMovimiento) {
       return res.status(400).json({
-        error: 'Se requieren entregaARendirId y fechaMovimiento',
+        error: 'Se requieren empresaId, moduloOrigenId, documentoOrigenId, responsableId y fechaMovimiento',
       });
     }
 
     const saldoInicial = await detMovsEntregaRendirService.obtenerSaldoInicialAsignacion(
-      Number(entregaARendirId),
+      Number(empresaId),
+      Number(moduloOrigenId),
+      Number(documentoOrigenId),
+      Number(responsableId),
       fechaMovimiento
     );
     res.json({ saldoInicial });

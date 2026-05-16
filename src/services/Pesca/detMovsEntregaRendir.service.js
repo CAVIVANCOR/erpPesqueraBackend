@@ -14,13 +14,30 @@ import { puedeEditarRegistroCerrado } from "../../utils/checkSuperUsuario.js";
 
 async function validarClavesForaneas(data) {
   const validaciones = [
-    prisma.entregaARendir.findUnique({ where: { id: data.entregaARendirId } }),
     prisma.personal.findUnique({ where: { id: data.responsableId } }),
     prisma.tipoMovEntregaRendir.findUnique({
       where: { id: data.tipoMovimientoId },
     }),
     prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }),
   ];
+
+  // Agregar validación de Empresa si se proporciona empresaId
+  if (data.empresaId) {
+    validaciones.push(
+      prisma.empresa.findUnique({
+        where: { id: data.empresaId },
+      }),
+    );
+  }
+
+  // Agregar validación de ModuloSistema si se proporciona moduloOrigenId
+  if (data.moduloOrigenId) {
+    validaciones.push(
+      prisma.moduloSistema.findUnique({
+        where: { id: data.moduloOrigenId },
+      }),
+    );
+  }
 
   // Agregar validación de ModuloSistema si se proporciona moduloOrigenMovCajaId
   if (data.moduloOrigenMovCajaId) {
@@ -41,20 +58,24 @@ async function validarClavesForaneas(data) {
   }
 
   const [
-    entrega,
     responsable,
     tipoMovimiento,
     centroCosto,
+    empresa,
     moduloSistema,
+    moduloSistemaMovCaja,
     entidadComercial,
   ] = await Promise.all(validaciones);
 
-  if (!entrega) throw new ValidationError("El entregaARendirId no existe.");
   if (!responsable) throw new ValidationError("El responsableId no existe.");
   if (!tipoMovimiento)
     throw new ValidationError("El tipoMovimientoId no existe.");
   if (!centroCosto) throw new ValidationError("El centroCostoId no existe.");
-  if (data.moduloOrigenMovCajaId && !moduloSistema)
+  if (data.empresaId && !empresa)
+    throw new ValidationError("El empresaId no existe.");
+  if (data.moduloOrigenId && !moduloSistema)
+    throw new ValidationError("El moduloOrigenId no existe.");
+  if (data.moduloOrigenMovCajaId && !moduloSistemaMovCaja)
     throw new ValidationError("El moduloOrigenMovCajaId no existe.");
   if (data.entidadComercialId && !entidadComercial)
     throw new ValidationError("El entidadComercialId no existe.");
@@ -73,6 +94,8 @@ const listar = async () => {
         moneda: true,
         producto: true,
         tipoDocumento: true,
+        empresa: true,
+        moduloOrigen: true,
         enlaceGastoPlanificado: {
           include: {
             producto: true,
@@ -102,6 +125,8 @@ const obtenerPorId = async (id) => {
         moneda: true,
         producto: true,
         tipoDocumento: true,
+        empresa: true,
+        moduloOrigen: true,
       },
     });
     
@@ -121,10 +146,9 @@ const obtenerPorId = async (id) => {
   }
 };
 
-const crear = async (data) => {
+const crear = async (data, usuarioId = null) => {
   try {
     const obligatorios = [
-      "entregaARendirId",
       "responsableId",
       "fechaMovimiento",
       "tipoMovimientoId",
@@ -136,6 +160,17 @@ const crear = async (data) => {
       if (typeof data[campo] === "undefined" || data[campo] === null) {
         throw new ValidationError(`El campo ${campo} es obligatorio.`);
       }
+    }
+
+    // Asignar defaults si no vienen
+    data.empresaId = data.empresaId || 1; // MEGUI
+    data.moduloOrigenId = data.moduloOrigenId || 2; // Pesca Industrial
+    data.documentoOrigenId = data.documentoOrigenId || 37; // Temporada actual
+
+    // Campos de auditoría
+    if (usuarioId) {
+      data.creadoPorId = usuarioId;
+      data.actualizadoPorId = usuarioId;
     }
 
     // Obtener el tipo de movimiento para validar si es asignación
@@ -152,7 +187,6 @@ const crear = async (data) => {
     }
 
     // Validación: Si NO es asignación Y formaParteCalculoEntregaARendir=true → asignacionOrigenId es obligatorio
-    // NOTA: asignacionOrigenId puede ser 0 (nueva asignación) o un ID > 0 (gasto de asignación existente)
     if (
       !esAsignacion &&
       data.formaParteCalculoEntregaARendir === true &&
@@ -173,7 +207,9 @@ const crear = async (data) => {
       (data.asignacionOrigenId === null || data.asignacionOrigenId === 0)
     ) {
       const saldoInicial = await obtenerSaldoInicialAsignacion(
-        data.entregaARendirId,
+        data.empresaId,
+        data.moduloOrigenId,
+        data.documentoOrigenId,
         data.responsableId,
         data.fechaMovimiento,
       );
@@ -204,15 +240,6 @@ const actualizar = async (id, data, usuarioId = null) => {
     const existente = await prisma.detMovsEntregaRendir.findUnique({
       where: { id },
       include: {
-        entregaARendir: {
-          include: {
-            temporadaPesca: {
-              include: {
-                estadoTemporada: true,
-              },
-            },
-          },
-        },
         tipoMovimiento: {
           select: { categoriaId: true },
         },
@@ -221,31 +248,9 @@ const actualizar = async (id, data, usuarioId = null) => {
     if (!existente)
       throw new NotFoundError("DetMovsEntregaRendir no encontrado");
 
-    // ========================================
-    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
-    // ========================================
-    const estadosCerrados = await prisma.estadoMultiFuncion.findMany({
-      where: {
-        tipoProvieneDeId: 4, // Temporada Pesca
-        descripcion: { in: ["FINALIZADA", "CANCELADA"] },
-        cesado: false,
-      },
-      select: { id: true },
-    });
-
-    const idsEstadosCerrados = estadosCerrados.map((e) => e.id);
-
-    const puedeEditar = await puedeEditarRegistroCerrado(
-      usuarioId,
-      existente.entregaARendir.temporadaPesca.estadoTemporadaId,
-      idsEstadosCerrados,
-    );
-
-    if (!puedeEditar) {
-      throw new ValidationError(
-        `No se puede editar el movimiento porque la temporada está en estado "${existente.entregaARendir?.temporadaPesca?.estadoTemporada?.descripcion}". ` +
-          `Solo los superusuarios pueden editar movimientos de temporadas finalizadas o canceladas.`,
-      );
+    // Campos de auditoría
+    if (usuarioId) {
+      data.actualizadoPorId = usuarioId;
     }
 
     // Determinar si el tipo de movimiento final es una asignación
@@ -278,7 +283,6 @@ const actualizar = async (id, data, usuarioId = null) => {
         : existente.asignacionOrigenId;
 
     // Validación: Si NO es asignación Y formaParteCalculo=true
-    // ENTONCES debe tener asignacionOrigenId especificado (no null ni undefined)
     if (
       !esAsignacion &&
       formaParteCalculo === true &&
@@ -288,12 +292,14 @@ const actualizar = async (id, data, usuarioId = null) => {
         "Debe especificar una asignación origen cuando el movimiento forma parte del cálculo de entrega a rendir.",
       );
     }
+
     // Validar claves foráneas si cambian
     const claves = [
-      "entregaARendirId",
       "responsableId",
       "tipoMovimientoId",
       "centroCostoId",
+      "empresaId",
+      "moduloOrigenId",
       "moduloOrigenMovCajaId",
       "entidadComercialId",
       "monedaId",
@@ -304,7 +310,6 @@ const actualizar = async (id, data, usuarioId = null) => {
 
     // Preparar datos con SOLO campos escalares permitidos
     const datosActualizacion = {
-      entregaARendirId: data.entregaARendirId,
       responsableId: data.responsableId,
       fechaMovimiento: data.fechaMovimiento,
       tipoMovimientoId: data.tipoMovimientoId,
@@ -314,6 +319,11 @@ const actualizar = async (id, data, usuarioId = null) => {
       creadoEn: data.creadoEn,
       actualizadoEn: new Date(),
       centroCostoId: data.centroCostoId,
+      empresaId: data.empresaId,
+      moduloOrigenId: data.moduloOrigenId,
+      documentoOrigenId: data.documentoOrigenId,
+      creadoPorId: data.creadoPorId,
+      actualizadoPorId: data.actualizadoPorId,
       urlComprobanteMovimiento: data.urlComprobanteMovimiento,
       validadoTesoreria: data.validadoTesoreria,
       fechaValidacionTesoreria: data.fechaValidacionTesoreria,
@@ -333,14 +343,14 @@ const actualizar = async (id, data, usuarioId = null) => {
       formaParteCalculoLiqAlquilerCuota: data.formaParteCalculoLiqAlquilerCuota,
       detalleGastosPlanificados: data.detalleGastosPlanificados,
       asignacionOrigenId: data.asignacionOrigenId,
-      entregaARendirLiquidada: data.entregaARendirLiquidada, // ← AGREGAR
-      fechaLiquidacionEntregaARendir: data.fechaLiquidacionEntregaARendir, // ← AGREGAR
-      urlLiquidacionEntregaARendir: data.urlLiquidacionEntregaARendir, // ← AGREGAR
+      entregaARendirLiquidada: data.entregaARendirLiquidada,
+      fechaLiquidacionEntregaARendir: data.fechaLiquidacionEntregaARendir,
+      urlLiquidacionEntregaARendir: data.urlLiquidacionEntregaARendir,
       enlaceAOtroDetalleGastoId: data.enlaceAOtroDetalleGastoId,
       embarcacionId: data.embarcacionId,
       saldoInicialAsignacion: data.saldoInicialAsignacion,
       saldoFinalAsignacion: data.saldoFinalAsignacion,
-      enlaceGastosPlanificadosId: data.enlaceGastosPlanificadosId, // ← AGREGAR AQUÍ
+      enlaceGastosPlanificadosId: data.enlaceGastosPlanificadosId,
     };
 
     // Convertir asignacionOrigenId=0 a null para Prisma (0 es solo indicador lógico, no FK)
@@ -392,18 +402,11 @@ const obtenerConGastosAsociados = async (id) => {
         moneda: true,
         producto: true,
         tipoDocumento: true,
+        empresa: true,
+        moduloOrigen: true,
         embarcacion: {
           include: {
-            activo: true, // ⭐ AGREGAR ESTO
-          },
-        },
-        entregaARendir: {
-          include: {
-            temporadaPesca: {
-              include: {
-                empresa: true,
-              },
-            },
+            activo: true,
           },
         },
         gastosAsociados: {
@@ -430,7 +433,6 @@ const obtenerConGastosAsociados = async (id) => {
           },
         },
         gastosPlanificados: {
-          // ⭐ AGREGAR
           include: {
             producto: true,
             moneda: true,
@@ -484,7 +486,6 @@ const obtenerLabelEnlace = async (enlaceId) => {
 
     // Buscar en todas las tablas de entregas a rendir
     const [
-      pescaIndustrial,
       pescaConsumo,
       ventas,
       compras,
@@ -492,17 +493,6 @@ const obtenerLabelEnlace = async (enlaceId) => {
       contratos,
       otMantenimiento,
     ] = await Promise.all([
-      prisma.entregaARendir.findUnique({
-        where: { id: BigInt(enlaceId) },
-        select: {
-          temporadaPesca: {
-            select: {
-              nombre: true,
-              empresa: { select: { razonSocial: true } },
-            },
-          },
-        },
-      }),
       prisma.entregaARendirPescaConsumo.findUnique({
         where: { id: BigInt(enlaceId) },
         select: {
@@ -586,9 +576,6 @@ const obtenerLabelEnlace = async (enlaceId) => {
       return new Date(fecha).toLocaleDateString("es-PE");
     };
 
-    if (pescaIndustrial) {
-      return `${pescaIndustrial.temporadaPesca?.empresa?.razonSocial || "Sin empresa"} - Temporada Pesca - ${pescaIndustrial.temporadaPesca?.nombre || "Sin nombre"}`;
-    }
     if (pescaConsumo) {
       return `${pescaConsumo.novedadPescaConsumo?.empresa?.razonSocial || "Sin empresa"} - Novedad Pesca Consumo - ${pescaConsumo.novedadPescaConsumo?.nombre || "Sin nombre"}`;
     }
@@ -619,7 +606,6 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
   try {
     // Obtener ENTREGAS A RENDIR de todos los módulos que NO estén liquidadas
     const [
-      pescaIndustrial,
       pescaConsumo,
       ventas,
       compras,
@@ -627,26 +613,7 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
       contratos,
       otMantenimiento,
     ] = await Promise.all([
-      // 1. Pesca Industrial
-      prisma.entregaARendir.findMany({
-        where: {
-          entregaLiquidada: false,
-        },
-        select: {
-          id: true,
-          temporadaPesca: {
-            select: {
-              nombre: true,
-              empresa: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      // 2. Pesca Consumo
+      // Pesca Consumo
       prisma.entregaARendirPescaConsumo.findMany({
         where: {
           entregaLiquidada: false,
@@ -665,7 +632,7 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
           },
         },
       }),
-      // 3. Ventas
+      // Ventas
       prisma.entregaARendirPVentas.findMany({
         where: {
           entregaLiquidada: false,
@@ -690,7 +657,7 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
           },
         },
       }),
-      // 4. Compras
+      // Compras
       prisma.entregaARendirPCompras.findMany({
         where: {
           entregaLiquidada: false,
@@ -715,7 +682,7 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
           },
         },
       }),
-      // 5. Movimiento Almacén
+      // Movimiento Almacén
       prisma.entregaARendirMovAlmacen.findMany({
         where: {
           entregaLiquidada: false,
@@ -740,7 +707,7 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
           },
         },
       }),
-      // 6. Contratos
+      // Contratos
       prisma.entregaARendirContratoServicios.findMany({
         where: {
           entregaLiquidada: false,
@@ -765,7 +732,7 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
           },
         },
       }),
-      // 7. OT Mantenimiento
+      // OT Mantenimiento
       prisma.entregaARendirOTMantenimiento.findMany({
         where: {
           entregaLiquidada: false,
@@ -787,6 +754,7 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
         },
       }),
     ]);
+
     // Formatear y unificar resultados
     const formatearFecha = (fecha) => {
       if (!fecha) return "";
@@ -794,11 +762,6 @@ const obtenerTodasAsignacionesNoLiquidadas = async () => {
     };
 
     const asignacionesFormateadas = [
-      ...pescaIndustrial.map((a) => ({
-        id: Number(a.id),
-        modulo: "PESCA_INDUSTRIAL",
-        label: `${a.temporadaPesca?.empresa?.razonSocial || "Sin empresa"} - Temporada Pesca - ${a.temporadaPesca?.nombre || "Sin nombre"}`,
-      })),
       ...pescaConsumo.map((a) => ({
         id: Number(a.id),
         modulo: "PESCA_CONSUMO",
@@ -852,29 +815,8 @@ const obtenerValoresIniciales = async (moduloOrigen, entregaARendirId) => {
       embarcacionId: null,
     };
 
-    // Solo para PESCA_INDUSTRIAL y PESCA_CONSUMO se calcula embarcacionId
-    if (moduloOrigen === "PESCA_INDUSTRIAL") {
-      // Obtener la EntregaARendir para sacar el temporadaPescaId
-      const entrega = await prisma.entregaARendir.findUnique({
-        where: { id: BigInt(entregaARendirId) },
-        select: { temporadaPescaId: true },
-      });
-
-      if (!entrega) {
-        throw new NotFoundError("EntregaARendir no encontrada");
-      }
-
-      // Buscar la faena más reciente de esa temporada
-      const faenaMasReciente = await prisma.faenaPesca.findFirst({
-        where: { temporadaId: entrega.temporadaPescaId },
-        orderBy: { fechaSalida: "desc" },
-        select: { embarcacionId: true },
-      });
-
-      if (faenaMasReciente && faenaMasReciente.embarcacionId) {
-        resultado.embarcacionId = Number(faenaMasReciente.embarcacionId);
-      }
-    } else if (moduloOrigen === "PESCA_CONSUMO") {
+    // Solo para PESCA_CONSUMO se calcula embarcacionId
+    if (moduloOrigen === "PESCA_CONSUMO") {
       // Obtener la EntregaARendirPescaConsumo para sacar el novedadPescaConsumoId
       const entrega = await prisma.entregaARendirPescaConsumo.findUnique({
         where: { id: BigInt(entregaARendirId) },
@@ -910,16 +852,20 @@ const obtenerValoresIniciales = async (moduloOrigen, entregaARendirId) => {
  * para obtener el saldo inicial de una nueva asignación
  */
 const obtenerSaldoInicialAsignacion = async (
-  entregaARendirId,
+  empresaId,
+  moduloOrigenId,
+  documentoOrigenId,
   responsableId,
   fechaMovimiento,
 ) => {
   try {
-    // Buscar la última asignación liquidada del mismo responsable
+    // Buscar la última asignación liquidada del mismo responsable y contexto
     const ultimaAsignacionLiquidada =
       await prisma.detMovsEntregaRendir.findFirst({
         where: {
-          entregaARendirId: BigInt(entregaARendirId),
+          empresaId: BigInt(empresaId),
+          moduloOrigenId: BigInt(moduloOrigenId),
+          documentoOrigenId: BigInt(documentoOrigenId),
           responsableId: BigInt(responsableId),
           asignacionOrigenId: null,
           formaParteCalculoEntregaARendir: true,
@@ -1046,14 +992,20 @@ const liquidarAsignacion = async (asignacionId, usuarioId = null) => {
     const saldoFinal = await calcularSaldoFinalAsignacion(asignacionId);
 
     // Actualizar la asignación
+    const dataActualizacion = {
+      entregaARendirLiquidada: true,
+      fechaLiquidacionEntregaARendir: new Date(),
+      saldoFinalAsignacion: saldoFinal,
+      actualizadoEn: new Date(),
+    };
+
+    if (usuarioId) {
+      dataActualizacion.actualizadoPorId = usuarioId;
+    }
+
     const asignacionActualizada = await prisma.detMovsEntregaRendir.update({
       where: { id: BigInt(asignacionId) },
-      data: {
-        entregaARendirLiquidada: true,
-        fechaLiquidacionEntregaARendir: new Date(),
-        saldoFinalAsignacion: saldoFinal,
-        actualizadoEn: new Date(),
-      },
+      data: dataActualizacion,
     });
 
     return asignacionActualizada;
