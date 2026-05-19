@@ -3452,7 +3452,8 @@ model ModuloSistema {
   nombre           String             @unique
   descripcion      String?
   activo           Boolean            @default(true)
-
+  // 🆕 ÚNICO CAMPO NECESARIO
+  modeloDocumentoOrigen   String?            // Nombre del modelo Prisma, NULL = no tiene documentos asociados
   submodulos   SubmoduloSistema[]
   detMovsEntregaRendir  DetMovsEntregaRendir[]  // ◄─── AGREGAR ESTA LÍNEA
 
