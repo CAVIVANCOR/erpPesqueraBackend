@@ -853,13 +853,11 @@ const obtenerSaldoInicialAsignacion = async (
   fechaMovimiento,
 ) => {
   try {
-    // Buscar la última asignación liquidada del mismo responsable y contexto
+      // Buscar la última asignación liquidada del mismo responsable
+    // SIN filtrar por documentoOrigenId para arrastrar saldo entre temporadas
     const ultimaAsignacionLiquidada =
       await prisma.detMovsEntregaRendir.findFirst({
         where: {
-          empresaId: BigInt(empresaId),
-          moduloOrigenId: BigInt(moduloOrigenId),
-          documentoOrigenId: BigInt(documentoOrigenId),
           responsableId: BigInt(responsableId),
           asignacionOrigenId: null,
           formaParteCalculoEntregaARendir: true,
