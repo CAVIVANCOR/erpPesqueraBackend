@@ -169,14 +169,13 @@ const listar = async (filtros = {}) => {
       where.detMovEntregaRendirOTId = filtros.detMovEntregaRendirOTId;
     }
 
-       const gastos = await prisma.detGastosPlanificados.findMany({
+    const gastos = await prisma.detGastosPlanificados.findMany({
       where,
-      include: {
+          include: {
         producto: {
-          select: {
-            id: true,
-            descripcionArmada: true,
-            empresaId: true,
+          include: {
+            familia: true,
+            subfamilia: true,
           },
         },
         moneda: {
@@ -199,24 +198,31 @@ const listar = async (filtros = {}) => {
         if (gasto.producto && gasto.producto.empresaId) {
           const empresa = await prisma.empresa.findUnique({
             where: { id: Number(gasto.producto.empresaId) },
-            select: { id: true, razonSocial: true, nombreComercial: true, ruc: true }
+            select: {
+              id: true,
+              razonSocial: true,
+              nombreComercial: true,
+              ruc: true,
+            },
           });
-          
+
           return {
             ...gasto,
             producto: {
               ...gasto.producto,
-              empresa: empresa ? {
-                id: Number(empresa.id),
-                razonSocial: empresa.razonSocial,
-                nombreComercial: empresa.nombreComercial,
-                ruc: empresa.ruc
-              } : null
-            }
+              empresa: empresa
+                ? {
+                    id: Number(empresa.id),
+                    razonSocial: empresa.razonSocial,
+                    nombreComercial: empresa.nombreComercial,
+                    ruc: empresa.ruc,
+                  }
+                : null,
+            },
           };
         }
         return gasto;
-      })
+      }),
     );
 
     return gastosConEmpresa;
@@ -289,53 +295,8 @@ const actualizar = async (id, data, usuarioId = null) => {
   try {
     const existente = await prisma.detGastosPlanificados.findUnique({
       where: { id },
-      include: {
-        detMovEntregaRendirTemporadaPesca: {
-          include: {
-            entregaARendir: {
-              include: {
-                temporadaPesca: {
-                  include: {
-                    estadoTemporada: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
     });
     if (!existente) throw new NotFoundError("Gasto planificado no encontrado");
-
-    // ========================================
-    // ⭐ VALIDACIÓN DE PERMISOS PARA EDITAR
-    // ========================================
-    if (existente.detMovEntregaRendirTemporadaPesca) {
-      const estadosCerrados = await prisma.estadoMultiFuncion.findMany({
-        where: {
-          tipoProvieneDeId: 4, // Temporada Pesca
-          descripcion: { in: ["FINALIZADA", "CANCELADA"] },
-          cesado: false,
-        },
-        select: { id: true },
-      });
-
-      const idsEstadosCerrados = estadosCerrados.map((e) => e.id);
-
-      const puedeEditar = await puedeEditarRegistroCerrado(
-        usuarioId,
-        existente.detMovEntregaRendirTemporadaPesca.entregaARendir
-          .temporadaPesca.estadoTemporadaId,
-        idsEstadosCerrados,
-      );
-
-      if (!puedeEditar) {
-        throw new ValidationError(
-          `No se puede editar el gasto porque la temporada está en estado "${existente.detMovEntregaRendirTemporadaPesca?.entregaARendir?.temporadaPesca?.estadoTemporada?.descripcion}". ` +
-            `Solo los superusuarios pueden editar gastos de temporadas finalizadas o canceladas.`,
-        );
-      }
-    }
 
     await validarDetGastosPlanificados(data);
     return await prisma.detGastosPlanificados.update({ where: { id }, data });

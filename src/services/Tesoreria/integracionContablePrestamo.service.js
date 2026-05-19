@@ -43,8 +43,8 @@ async function generarAsientoDesembolso(prestamo, tx, creadoPor) {
     // Cuenta 45: Obligaciones Financieras (HABER - aumenta pasivo)
     const cuentaPrestamo = await tx.planCuentasContable.findFirst({
       where: {
-        empresaId: prestamo.empresaId,
-        codigoCuenta: { startsWith: '45' }
+        codigoCuenta: { startsWith: '45' },
+        activo: true
       }
     });
 
@@ -56,8 +56,8 @@ async function generarAsientoDesembolso(prestamo, tx, creadoPor) {
     // Cuenta 10: Efectivo y Equivalentes (DEBE - aumenta activo)
     const cuentaEfectivo = await tx.planCuentasContable.findFirst({
       where: {
-        empresaId: prestamo.empresaId,
-        codigoCuenta: { startsWith: '10' }
+        codigoCuenta: { startsWith: '10' },
+        activo: true
       }
     });
 
@@ -181,24 +181,24 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
     // Cuenta 45: Obligaciones Financieras (DEBE - disminuye pasivo por capital)
     const cuentaPrestamo = await tx.planCuentasContable.findFirst({
       where: {
-        empresaId: prestamo.empresaId,
-        codigoCuenta: { startsWith: '45' }
+        codigoCuenta: { startsWith: '45' },
+        activo: true
       }
     });
 
     // Cuenta 67: Gastos Financieros (DEBE - gasto por interés)
     const cuentaInteres = await tx.planCuentasContable.findFirst({
       where: {
-        empresaId: prestamo.empresaId,
-        codigoCuenta: { startsWith: '67' }
+        codigoCuenta: { startsWith: '67' },
+        activo: true
       }
     });
 
     // Cuenta 10: Efectivo (HABER - disminuye activo)
     const cuentaEfectivo = await tx.planCuentasContable.findFirst({
       where: {
-        empresaId: prestamo.empresaId,
-        codigoCuenta: { startsWith: '10' }
+        codigoCuenta: { startsWith: '10' },
+        activo: true
       }
     });
 

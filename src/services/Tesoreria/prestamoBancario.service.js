@@ -412,11 +412,25 @@ const crear = async (data) => {
     // Generar cronograma de cuotas
     const cuotas = calcularCronogramaCuotas(data);
 
-        // Crear préstamo con cuotas en una transacción
+    // Normalizar datos: convertir strings vacíos en null para campos enum y opcionales
+    const datosNormalizados = {
+      ...data,
+      tipoGarantia: data.tipoGarantia && data.tipoGarantia.trim() !== "" ? data.tipoGarantia : null,
+      numeroContrato: data.numeroContrato && data.numeroContrato.trim() !== "" ? data.numeroContrato : null,
+      numeroGarantia: data.numeroGarantia && data.numeroGarantia.trim() !== "" ? data.numeroGarantia : null,
+      numeroCartaCredito: data.numeroCartaCredito && data.numeroCartaCredito.trim() !== "" ? data.numeroCartaCredito : null,
+      beneficiario: data.beneficiario && data.beneficiario.trim() !== "" ? data.beneficiario : null,
+      destinoFondos: data.destinoFondos && data.destinoFondos.trim() !== "" ? data.destinoFondos : null,
+      descripcionGarantia: data.descripcionGarantia && data.descripcionGarantia.trim() !== "" ? data.descripcionGarantia : null,
+      observaciones: data.observaciones && data.observaciones.trim() !== "" ? data.observaciones : null,
+      refNroProformaVentaExportacion: data.refNroProformaVentaExportacion && data.refNroProformaVentaExportacion.trim() !== "" ? data.refNroProformaVentaExportacion : null,
+    };
+
+    // Crear préstamo con cuotas en una transacción
     const prestamo = await prisma.$transaction(async (tx) => {
       const nuevoPrestamo = await tx.prestamoBancario.create({
         data: {
-          ...data,
+          ...datosNormalizados,
           tipoCambioAplicado,
           saldoCapital,
           saldoInteres,
@@ -535,10 +549,24 @@ const actualizar = async (id, data) => {
 
     const lineaCreditoIdNueva = data.lineaCreditoId;
 
+    // Normalizar datos: convertir strings vacíos en null
+    const datosNormalizados = {
+      ...data,
+      tipoGarantia: data.tipoGarantia && data.tipoGarantia.trim() !== "" ? data.tipoGarantia : null,
+      numeroContrato: data.numeroContrato && data.numeroContrato.trim() !== "" ? data.numeroContrato : null,
+      numeroGarantia: data.numeroGarantia && data.numeroGarantia.trim() !== "" ? data.numeroGarantia : null,
+      numeroCartaCredito: data.numeroCartaCredito && data.numeroCartaCredito.trim() !== "" ? data.numeroCartaCredito : null,
+      beneficiario: data.beneficiario && data.beneficiario.trim() !== "" ? data.beneficiario : null,
+      destinoFondos: data.destinoFondos && data.destinoFondos.trim() !== "" ? data.destinoFondos : null,
+      descripcionGarantia: data.descripcionGarantia && data.descripcionGarantia.trim() !== "" ? data.descripcionGarantia : null,
+      observaciones: data.observaciones && data.observaciones.trim() !== "" ? data.observaciones : null,
+      refNroProformaVentaExportacion: data.refNroProformaVentaExportacion && data.refNroProformaVentaExportacion.trim() !== "" ? data.refNroProformaVentaExportacion : null,
+    };
+
     const prestamoActualizado = await prisma.prestamoBancario.update({
       where: { id },
       data: {
-        ...data,
+        ...datosNormalizados,
         tipoCambioAplicado: tipoCambioAplicado,
       },
       include: {

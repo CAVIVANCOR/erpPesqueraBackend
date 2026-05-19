@@ -408,9 +408,6 @@ const buscarPersonaPorDNI = async (dni) => {
       if (response.ok) {
         const reniecData = await response.json();
         
-        // ✅ LOG para debugging - ver estructura real de la respuesta
-        console.log('📋 Respuesta RENIEC completa:', JSON.stringify(reniecData, null, 2));
-
         // ✅ Validar que la respuesta tenga los campos necesarios
         if (!reniecData || typeof reniecData !== 'object') {
           console.error('❌ Respuesta RENIEC inválida:', reniecData);

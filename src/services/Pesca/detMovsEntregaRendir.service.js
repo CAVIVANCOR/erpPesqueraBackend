@@ -132,12 +132,6 @@ const obtenerPorId = async (id) => {
     
     if (!mov) throw new NotFoundError("DetMovsEntregaRendir no encontrado");
     
-    console.log("\n🔍 GET MOVIMIENTO POR ID:", {
-      id: mov.id.toString(),
-      saldoInicialAsignacion: mov.saldoInicialAsignacion?.toString(),
-      saldoFinalAsignacion: mov.saldoFinalAsignacion?.toString(),
-    });
-    
     return mov;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
