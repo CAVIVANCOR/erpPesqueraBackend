@@ -205,6 +205,7 @@ import centrosAlmacenRoutes from './Almacen/centrosAlmacen.routes.js';
 import almacenRoutes from './Almacen/almacen.routes.js';
 import { autenticarJWT } from '../middlewares/authMiddleware.js';
 import * as usuarioController from '../controllers/Usuarios/usuario.controller.js'
+import documentoDinamicoRoutes from './Common/documentoDinamico.routes.js';
 
 import cotizacionProveedorRoutes from './Compras/cotizacionProveedor.routes.js';
 import requerimientoCompraImpresionRoutes from '../routes/Compras/requerimientoCompraImpresion.routes.js';
@@ -680,6 +681,8 @@ router.use('/tesoreria/percepciones', percepcionTesoreriaRoutes);
 router.use('/tesoreria/presupuestos-anuales', presupuestoAnualRoutes);
 router.use('/tesoreria/ejecuciones-presupuestales', ejecucionPresupuestalRoutes);
 router.use('/tesoreria/migracion-asientos-prestamos', migracionAsientosPrestamosRoutes);
+// Rutas para DocumentoDinamico (obtener documentos por modelo)
+router.use('/documentos', documentoDinamicoRoutes);
 
 // Rutas para Letras de Cambio
 router.use('/letras-cambio', letraCambioRoutes);
