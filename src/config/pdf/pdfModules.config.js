@@ -32,6 +32,20 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
+
+    "faena-pesca-consumo": {
+    uploadPath: "uploads/pdf-system/faena-pesca-consumo",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/faena-pesca-consumo",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "FaenaPescaConsumo",
+      field: "urlInformeFaena",
+    },
+  },
+
   "tesoreria-prestamos-principal": {
     uploadPath: "uploads/pdf-system/tesoreria-prestamos-principal",
     oldPaths: [],

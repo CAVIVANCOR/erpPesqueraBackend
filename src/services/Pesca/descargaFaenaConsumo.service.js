@@ -68,14 +68,10 @@ async function validarClavesForaneas(data) {
 }
 
 async function tieneDetalles(id) {
-  const descarga = await prisma.descargaFaenaConsumo.findUnique({
-    where: { id },
-    include: { detalles: true }
-  });
-  if (!descarga) throw new NotFoundError('DescargaFaenaConsumo no encontrada');
-  return descarga.detalles && descarga.detalles.length > 0;
+  // DescargaFaenaConsumo NO tiene relación 'detalles'
+  // Retornar false para permitir eliminación
+  return false;
 }
-
 /**
  * Actualiza FaenaPescaConsumo con datos agregados de todas las descargas
  * Se ejecuta automáticamente después de crear, actualizar o eliminar una descarga
@@ -166,6 +162,16 @@ const crear = async (data) => {
         throw new ValidationError(`El campo ${campo} es obligatorio.`);
       }
     }
+    
+    // Validar que no exista ya una descarga para esta faena
+    const descargaExistente = await prisma.descargaFaenaConsumo.findUnique({
+      where: { faenaPescaConsumoId: data.faenaPescaConsumoId }
+    });
+    
+    if (descargaExistente) {
+      throw new ValidationError('No se puede crear más de una Descarga en cada Faena.');
+    }
+    
     await validarClavesForaneas(data);
     
     // Agregar timestamp automático para actualizadoEn
