@@ -1,6 +1,8 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 import { calcularPorcentajeJuveniles } from '../../utils/calcularPorcentajeJuveniles.js';
+import calaFaenaConsumoService from './calaFaenaConsumo.service.js';
+
 /**
  * Servicio CRUD para DetCalaPescaConsumo
  * Valida existencia de claves foráneas y campos obligatorios.
@@ -55,7 +57,12 @@ const crear = async (data) => {
       totalEjemplares
     };
     
-    return await prisma.detCalaPescaConsumo.create({ data: dataConCalculos });
+    const creado = await prisma.detCalaPescaConsumo.create({ data: dataConCalculos });
+    
+    // ⭐ ACTUALIZAR TONELADAS DE LA CALA Y LA FAENA
+    await calaFaenaConsumoService.actualizarToneladasCala(data.calaFaenaConsumoId);
+    
+    return creado;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -82,7 +89,12 @@ const actualizar = async (id, data) => {
       totalEjemplares
     };
     
-    return await prisma.detCalaPescaConsumo.update({ where: { id }, data: dataConCalculos });
+    const actualizado = await prisma.detCalaPescaConsumo.update({ where: { id }, data: dataConCalculos });
+    
+    // ⭐ ACTUALIZAR TONELADAS DE LA CALA Y LA FAENA
+    await calaFaenaConsumoService.actualizarToneladasCala(actualizado.calaFaenaConsumoId);
+    
+    return actualizado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -94,7 +106,12 @@ const eliminar = async (id) => {
   try {
     const existente = await prisma.detCalaPescaConsumo.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('DetCalaPescaConsumo no encontrado');
+    
     await prisma.detCalaPescaConsumo.delete({ where: { id } });
+    
+    // ⭐ ACTUALIZAR TONELADAS DE LA CALA Y LA FAENA
+    await calaFaenaConsumoService.actualizarToneladasCala(existente.calaFaenaConsumoId);
+    
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;

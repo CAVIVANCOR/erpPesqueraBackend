@@ -5,7 +5,7 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
-
+import novedadPescaConsumoService from "./novedadPescaConsumo.service.js";
 /**
  * Servicio CRUD para FaenaPescaConsumo
  * Valida existencia de claves foráneas y previene borrado si tiene detalles asociados.
@@ -75,6 +75,56 @@ async function validarClavesForaneas(data) {
   if (data.bolicheRedId && !boliche)
     throw new ValidationError("El bolicheRedId no existe.");
 }
+/**
+ * Actualiza el campo toneladasCapturadasFaena de una FaenaPescaConsumo
+ * PRIMERO recalcula las toneladas de TODAS sus calas desde las especies
+ * LUEGO suma las toneladas de todas las calas
+ */
+async function actualizarToneladasFaenaDesdeCalas(faenaPescaConsumoId) {
+  try {
+    // 1️⃣ OBTENER TODAS LAS CALAS DE LA FAENA
+    const calas = await prisma.calaFaenaConsumo.findMany({
+      where: { faenaPescaConsumoId },
+      select: { id: true },
+    });
+
+    // 2️⃣ RECALCULAR TONELADAS DE CADA CALA DESDE SUS ESPECIES
+    for (const cala of calas) {
+      const totalEspecies = await prisma.detCalaPescaConsumo.aggregate({
+        where: { calaFaenaConsumoId: cala.id },
+        _sum: { toneladas: true },
+      });
+
+      const toneladasCala = totalEspecies._sum.toneladas || 0;
+
+      await prisma.calaFaenaConsumo.update({
+        where: { id: cala.id },
+        data: {
+          toneladasCapturadas: toneladasCala,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    // 3️⃣ SUMAR TODAS LAS TONELADAS DE LAS CALAS ACTUALIZADAS
+    const totalToneladas = await prisma.calaFaenaConsumo.aggregate({
+      where: { faenaPescaConsumoId },
+      _sum: { toneladasCapturadas: true },
+    });
+
+    // 4️⃣ ACTUALIZAR LA FAENA
+    const resultado = await prisma.faenaPescaConsumo.update({
+      where: { id: faenaPescaConsumoId },
+      data: {
+        toneladasCapturadasFaena: totalToneladas._sum.toneladasCapturadas || 0,
+        updatedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error("❌ [ACTUALIZAR TONELADAS] Error:", error);
+    // No lanzar error para no interrumpir la operación principal
+  }
+}
 
 async function tieneDependencias(id) {
   const faena = await prisma.faenaPescaConsumo.findUnique({
@@ -140,6 +190,8 @@ const obtenerPorId = async (id) => {
   }
 };
 
+// Eliminado - usar novedadPescaConsumoService.actualizarToneladasNovedad
+
 const crear = async (data) => {
   try {
     // Solo novedadPescaConsumoId es realmente obligatorio (siguiendo patrón de faenaPesca)
@@ -158,7 +210,11 @@ const crear = async (data) => {
       updatedAt: new Date(),
     };
 
-    return await prisma.faenaPescaConsumo.create({ data: dataConFecha });
+    const faena = await prisma.faenaPescaConsumo.create({ data: dataConFecha });
+    await novedadPescaConsumoService.actualizarToneladasNovedad(
+      data.novedadPescaConsumoId,
+    );
+    return faena;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith("P"))
@@ -171,64 +227,54 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.faenaPescaConsumo.findUnique({
       where: { id },
-      include: {
-        novedadPescaConsumo: true,
-      },
     });
     if (!existente) throw new NotFoundError("FaenaPescaConsumo no encontrada");
 
-    // ✅ PATRÓN DE faenaPesca.service.js: Filtrar solo los campos que se pueden actualizar directamente
-    const camposPermitidos = [
-      "descripcion",
-      "fechaSalida",
-      "fechaDescarga",
-      "bahiaId",
-      "motoristaId",
-      "patronId",
-      "puertoSalidaId",
-      "puertoDescargaId",
-      "puertoFondeoId",
-      "embarcacionId",
-      "bolicheRedId",
-      "urlInformeFaena",
-      "estadoFaenaId",
-      "toneladasCapturadasFaena",
-      "fechaHoraFondeo",
-      "bolicheId",
-    ];
-
-    const dataFiltrada = {};
-    for (const campo of camposPermitidos) {
-      if (data.hasOwnProperty(campo)) {
-        dataFiltrada[campo] = data[campo];
-      }
-    }
-
     // Validar claves foráneas si cambian
     const claves = [
+      "novedadPescaConsumoId",
+      "bolicheRedId",
+      "embarcacionId",
+      "puertoDescargaId",
+      "puertoSalidaId",
       "bahiaId",
       "motoristaId",
       "patronId",
-      "puertoSalidaId",
-      "puertoDescargaId",
+      "estadoFaenaId",
       "puertoFondeoId",
-      "embarcacionId",
-      "bolicheRedId",
     ];
-    if (
-      claves.some((k) => dataFiltrada[k] && dataFiltrada[k] !== existente[k])
-    ) {
-      await validarClavesForaneas({ ...existente, ...dataFiltrada });
+
+    if (claves.some((k) => data[k] && data[k] !== existente[k])) {
+      await validarClavesForaneas({ ...existente, ...data });
     }
 
-    // Agregar updatedAt requerido por el modelo
+    // Filtrar campos no permitidos
+    const camposNoPermitidos = ["id", "createdAt"];
+    const dataFiltrada = Object.keys(data)
+      .filter((key) => !camposNoPermitidos.includes(key))
+      .reduce((obj, key) => {
+        obj[key] = data[key];
+        return obj;
+      }, {});
     dataFiltrada.updatedAt = new Date();
-
-    return await prisma.faenaPescaConsumo.update({
+    await prisma.faenaPescaConsumo.update({
       where: { id },
       data: dataFiltrada,
     });
+
+    // ⭐ RECALCULAR TONELADAS DE LA FAENA DESDE SUS CALAS
+    await actualizarToneladasFaenaDesdeCalas(id);
+    await novedadPescaConsumoService.actualizarToneladasNovedad(
+      existente.novedadPescaConsumoId,
+    );
+
+    // ⭐ VOLVER A LEER LA FAENA ACTUALIZADA PARA RETORNAR LOS VALORES CORRECTOS
+    const faenaActualizada = await prisma.faenaPescaConsumo.findUnique({
+      where: { id },
+    });
+    return faenaActualizada;
   } catch (err) {
+    console.error("❌ [ACTUALIZAR FAENA] Error:", err);
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
     if (err.code && err.code.startsWith("P"))
@@ -244,7 +290,19 @@ const eliminar = async (id) => {
         "No se puede eliminar porque tiene detalles asociados.",
       );
     }
+    const novedadId = (
+      await prisma.faenaPescaConsumo.findUnique({
+        where: { id },
+        select: { novedadPescaConsumoId: true },
+      })
+    )?.novedadPescaConsumoId;
+
     await prisma.faenaPescaConsumo.delete({ where: { id } });
+
+    if (novedadId) {
+      await novedadPescaConsumoService.actualizarToneladasNovedad(novedadId);
+    }
+
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;

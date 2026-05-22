@@ -48,6 +48,34 @@ async function calcularCuotasPorEmpresa(empresaId, limiteMaximoCapturaTn) {
   };
 }
 
+/**
+ * Actualiza el campo toneladasCapturadas de una NovedadPescaConsumo
+ * sumando todas las toneladasCapturadasFaena de sus FaenasPescaConsumo
+ */
+async function actualizarToneladasNovedad(novedadPescaConsumoId) {
+  try {
+    const totalToneladas = await prisma.faenaPescaConsumo.aggregate({
+      where: { novedadPescaConsumoId },
+      _sum: { toneladasCapturadasFaena: true },
+    });
+    const toneladasCalculadas =
+      totalToneladas._sum.toneladasCapturadasFaena || 0;
+    await prisma.novedadPescaConsumo.update({
+      where: { id: novedadPescaConsumoId },
+      data: {
+        toneladasCapturadas: toneladasCalculadas,
+        fechaActualizacion: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error(
+      `❌ Error actualizando toneladas de novedad ${novedadPescaConsumoId}:`,
+      error,
+    );
+    // No lanzar error para no interrumpir la operación principal
+  }
+}
+
 async function validarClavesForaneas(data) {
   const [empresa, bahia] = await Promise.all([
     prisma.empresa.findUnique({ where: { id: data.empresaId } }),
@@ -166,14 +194,8 @@ const obtenerPorId = async (id) => {
     });
     if (!novedad) throw new NotFoundError("NovedadPescaConsumo no encontrada");
 
-    // Calcular toneladas capturadas dinámicamente
-    return {
-      ...novedad,
-      toneladasCapturadas: novedad.faenas.reduce(
-        (total, faena) => total + (parseFloat(faena.toneladasDescargadas) || 0),
-        0,
-      ),
-    };
+    // Devolver la novedad con el valor de toneladasCapturadas de la BD
+    return novedad;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -277,10 +299,22 @@ const actualizar = async (id, data) => {
     // Agregar fechaActualizacion
     dataFiltrada.fechaActualizacion = new Date();
 
-    return await prisma.novedadPescaConsumo.update({
+    const novedadActualizada = await prisma.novedadPescaConsumo.update({
       where: { id },
       data: dataFiltrada,
     });
+
+    // ⭐ RECALCULAR TONELADAS CAPTURADAS AUTOMÁTICAMENTE DESPUÉS DE ACTUALIZAR
+    try {
+      await actualizarToneladasNovedad(id);
+    } catch (recalcError) {
+      console.error(
+        `⚠️ Error al recalcular toneladas para novedad ${id}:`,
+        recalcError,
+      );
+    }
+
+    return novedadActualizada;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
@@ -830,4 +864,5 @@ export default {
   iniciar,
   finalizar,
   cancelar,
+  actualizarToneladasNovedad,
 };
