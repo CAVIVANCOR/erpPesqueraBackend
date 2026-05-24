@@ -3853,6 +3853,7 @@ model Personal {
   enlaceEntidadComercialId  BigInt?
   marcaAsistencia           Boolean                 @default(true)   // ⭐ NUEVO - Si debe marcar asistencia
   esAdministrativo          Boolean                 @default(true)   // ⭐ NUEVO - true: horario rígido, false: horario flexible
+  urlFirma                  String?
 
   documentaciones           DocumentacionPersonal[]
   cargo                     CargosPersonal?    @relation(fields: [cargoId], references: [id])
