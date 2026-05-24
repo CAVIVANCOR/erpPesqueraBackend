@@ -170,6 +170,12 @@ const obtenerPorId = async (id) => {
           },
         },
         novedadPescaConsumo: true,
+        puertoSalida: true,
+        puertoDescarga: true,
+        puertoFondeo: true,
+        bahia: true,
+        motorista: true,
+        patron: true,
         calas: {
           include: {
             especiesPescadas: {
