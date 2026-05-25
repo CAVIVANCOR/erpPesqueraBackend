@@ -1141,7 +1141,8 @@ model PreFactura {
   fechaDocumento              DateTime    @default(now())                  // Fecha de emisión de la PreFactura
   fechaVencimiento            DateTime?                                    // Fecha de vencimiento del pago
   nroLiquidacionFacturacion   String?     @db.VarChar(40)
-  
+  fechaContable               DateTime    @default(now())
+
   // ========================================
   // ⭐ CAMPOS NUEVOS - DOCUMENTO FINAL (COMPROBANTE ELECTRÓNICO)
   // Define qué comprobante electrónico se generará desde esta PreFactura
@@ -6503,6 +6504,7 @@ model OrdenCompra {
   numCorreDoc          String?     @db.VarChar(40)
   numeroDocumento      String?
   fechaDocumento       DateTime    @default(now())
+  fechaContable        DateTime    @default(now())
   requerimientoCompraId BigInt?
   proveedorId          BigInt
   formaPagoId          BigInt?
