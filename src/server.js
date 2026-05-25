@@ -23,6 +23,11 @@ app.use(
   "/public/personal",
   express.static(path.join(process.cwd(), "uploads/personal")),
 );
+// Middleware para servir firmas de personal
+app.use(
+  "/public/personal-firmas",
+  express.static(path.join(process.cwd(), "uploads/personal-firmas")),
+);
 // Middleware para servir fotos de productos
 app.use(
   "/public/productos",

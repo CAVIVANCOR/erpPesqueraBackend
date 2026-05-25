@@ -61,6 +61,7 @@ import empresaRoutes from './Maestros/empresa.routes.js';
 import empresaLogoRoutes from './Maestros/empresa.logo.routes.js';
 import katanaTripulacionRoutes from './Maestros/katanaTripulacion.routes.js';
 import personalFotoRoutes from './Usuarios/personal.foto.routes.js'; // Rutas de manejo de foto de personal
+import personalFirmaRoutes from './Usuarios/personal.firma.routes.js'; // Rutas de manejo de firma de personal
 import productoFotoRoutes from './Maestros/producto.foto.routes.js'; // Rutas de manejo de foto de producto
 import productoFichaTecnicaRoutes from './Maestros/producto.ficha-tecnica.routes.js';
 import fichaTecnicaBolicheRoutes from './Maestros/ficha-tecnica-boliches.routes.js';
@@ -255,6 +256,7 @@ router.use('/auth', authRoutes);
 router.use('/empresas-logo', empresaLogoRoutes);
 // Ruta para manejo de fotos de personal (upload y serving)
 router.use('/personal-foto', personalFotoRoutes); // Permite subir y servir fotos de personal
+router.use('/personal-firma', personalFirmaRoutes); // Permite subir y servir firmas de personal
 // Ruta para manejo de fotos de producto (upload y serving)
 router.use('/producto-foto', productoFotoRoutes); // Permite subir y servir fotos de producto
 // Ruta para manejo de fotos de embarcación (upload y serving)
