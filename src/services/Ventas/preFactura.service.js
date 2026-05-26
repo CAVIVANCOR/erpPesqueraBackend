@@ -377,6 +377,7 @@ const crear = async (data) => {
         numCorreDoc: numCorre,
         fechaDocumento: data.fechaDocumento,
         fechaVencimiento,
+        fechaContable: data.fechaContable,
         tipoDocumentoFinalId: data.tipoDocumentoFinalId,
         serieDocFinalId: data.serieDocFinalId,
         numeroDocumentoFinal: data.numeroDocumentoFinal,
@@ -432,18 +433,25 @@ const crear = async (data) => {
         observaciones: data.observaciones,
         urlPreFacturaPdf: data.urlPreFacturaPdf,
         centroCostoId: data.centroCostoId,
+        unidadNegocioId: data.unidadNegocioId,
         contratoServicioId: data.contratoServicioId,
         movSalidaAlmacenId: data.movSalidaAlmacenId,
         fechaCreacion: data.fechaCreacion || new Date(),
         fechaActualizacion: data.fechaActualizacion || new Date(),
         creadoPor: data.creadoPor,
         actualizadoPor: data.actualizadoPor,
-        nroLiquidacionFacturacion: data.nroLiquidacionFacturacion?.trim() || null,
+        nroLiquidacionFacturacion:
+          data.nroLiquidacionFacturacion?.trim() || null,
       };
 
-      // 11. Crear la pre-factura con los números generados (patrón estándar)
+      // 11. Limpiar campos undefined antes de crear (Prisma strict mode)
+      const datosLimpiosSinUndefined = Object.fromEntries(
+        Object.entries(datosLimpios).filter(([_, v]) => v !== undefined),
+      );
+
+      // 12. Crear la pre-factura con los números generados (patrón estándar)
       const preFacturaCreada = await tx.preFactura.create({
-        data: datosLimpios,
+        data: datosLimpiosSinUndefined,
         include: {
           empresa: true,
           cliente: true,
@@ -493,6 +501,7 @@ const actualizar = async (id, data) => {
       "bancoId",
       "monedaId",
       "centroCostoId",
+      "unidadNegocioId",
     ];
     if (claves.some((k) => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
@@ -513,7 +522,7 @@ const actualizar = async (id, data) => {
         data.fechaCreacion || existente.fechaCreacion || new Date(),
       creadoPor: data.creadoPor || existente.creadoPor || null,
       fechaActualizacion: data.fechaActualizacion || new Date(),
-        nroLiquidacionFacturacion: data.nroLiquidacionFacturacion?.trim() || null,  // ← AGREGAR AQUÍ
+      nroLiquidacionFacturacion: data.nroLiquidacionFacturacion?.trim() || null, // ← AGREGAR AQUÍ
     };
 
     return await prisma.preFactura.update({
@@ -1011,12 +1020,19 @@ const partirPreFactura = async (id) => {
 
       // 2. Validar que NO haya sido particionada previamente
       if (preFacturaOriginal.esParticionada) {
-        throw new ValidationError("Esta PreFactura ya fue particionada anteriormente. No se puede particionar nuevamente.");
+        throw new ValidationError(
+          "Esta PreFactura ya fue particionada anteriormente. No se puede particionar nuevamente.",
+        );
       }
 
       // 3. Validar que esté APROBADA (estado 46)
-      if (!preFacturaOriginal.estadoId || Number(preFacturaOriginal.estadoId) !== 46) {
-        throw new ValidationError(`Solo se pueden particionar PreFacturas APROBADAS (estado 46). Estado actual: ${preFacturaOriginal.estadoId}`);
+      if (
+        !preFacturaOriginal.estadoId ||
+        Number(preFacturaOriginal.estadoId) !== 46
+      ) {
+        throw new ValidationError(
+          `Solo se pueden particionar PreFacturas APROBADAS (estado 46). Estado actual: ${preFacturaOriginal.estadoId}`,
+        );
       }
 
       // 3. Marcar la original como PARTICIONADA (estado 48)
@@ -1031,8 +1047,17 @@ const partirPreFactura = async (id) => {
       // 4. Preparar datos base para clonación (excluir solo campos UNIQUE y autogenerados)
       // UNIQUE: codigo, numeroDocumento, numSerieDoc, numCorreDoc
       // AUTOGENERADOS: id, detalles, fechaCreacion, fechaActualizacion
-      const { id: _, detalles, codigo, numeroDocumento, numSerieDoc, numCorreDoc, 
-              fechaCreacion, fechaActualizacion, ...datosBase } = preFacturaOriginal;
+      const {
+        id: _,
+        detalles,
+        codigo,
+        numeroDocumento,
+        numSerieDoc,
+        numCorreDoc,
+        fechaCreacion,
+        fechaActualizacion,
+        ...datosBase
+      } = preFacturaOriginal;
 
       // 5. Generar códigos únicos para ambas copias ANTES de crearlas
       const año = new Date().getFullYear();
@@ -1056,23 +1081,29 @@ const partirPreFactura = async (id) => {
       const codigoCopia2 = `PF-${año}-${String(correlativoBase + 1).padStart(6, "0")}`;
 
       // 6. Crear COPIA 1 - Idéntica a la original, solo cambia codigo y numeración
-      
+
       // Obtener serie y generar nuevo correlativo para COPIA 1
       const serieCopia1 = await prisma.serieDoc.findUnique({
         where: { id: preFacturaOriginal.serieDocId },
       });
-      
+
       const nuevoCorrelativoCopia1 = Number(serieCopia1.correlativo) + 1;
-      const numSerieCopia1 = String(serieCopia1.serie).padStart(serieCopia1.numCerosIzqSerie, "0");
-      const numCorreCopia1 = String(nuevoCorrelativoCopia1).padStart(serieCopia1.numCerosIzqCorre, "0");
+      const numSerieCopia1 = String(serieCopia1.serie).padStart(
+        serieCopia1.numCerosIzqSerie,
+        "0",
+      );
+      const numCorreCopia1 = String(nuevoCorrelativoCopia1).padStart(
+        serieCopia1.numCerosIzqCorre,
+        "0",
+      );
       const numeroDocumentoCopia1 = `${numSerieCopia1}-${numCorreCopia1}`;
-      
+
       // Actualizar correlativo en SerieDoc
       await prisma.serieDoc.update({
         where: { id: preFacturaOriginal.serieDocId },
         data: { correlativo: BigInt(nuevoCorrelativoCopia1) },
       });
-      
+
       const dataCopia1 = {
         ...datosBase,
         codigo: codigoCopia1,
@@ -1083,29 +1114,35 @@ const partirPreFactura = async (id) => {
         esParticionada: false,
         preFacturaOrigenId: preFacturaOriginal.id,
       };
-      
+
       const copia1 = await prisma.preFactura.create({
         data: dataCopia1,
       });
 
       // 7. Crear COPIA 2 - Idéntica a la original, solo cambia codigo y numeración
-      
+
       // Obtener serie actualizada y generar nuevo correlativo para COPIA 2
       const serieCopia2 = await prisma.serieDoc.findUnique({
         where: { id: preFacturaOriginal.serieDocId },
       });
-      
+
       const nuevoCorrelativoCopia2 = Number(serieCopia2.correlativo) + 1;
-      const numSerieCopia2 = String(serieCopia2.serie).padStart(serieCopia2.numCerosIzqSerie, "0");
-      const numCorreCopia2 = String(nuevoCorrelativoCopia2).padStart(serieCopia2.numCerosIzqCorre, "0");
+      const numSerieCopia2 = String(serieCopia2.serie).padStart(
+        serieCopia2.numCerosIzqSerie,
+        "0",
+      );
+      const numCorreCopia2 = String(nuevoCorrelativoCopia2).padStart(
+        serieCopia2.numCerosIzqCorre,
+        "0",
+      );
       const numeroDocumentoCopia2 = `${numSerieCopia2}-${numCorreCopia2}`;
-      
+
       // Actualizar correlativo en SerieDoc
       await prisma.serieDoc.update({
         where: { id: preFacturaOriginal.serieDocId },
         data: { correlativo: BigInt(nuevoCorrelativoCopia2) },
       });
-      
+
       const copia2 = await prisma.preFactura.create({
         data: {
           ...datosBase,
@@ -1148,8 +1185,10 @@ const partirPreFactura = async (id) => {
         mensaje: `PreFactura ${preFacturaOriginal.codigo} particionada exitosamente. Copias creadas: ${codigoCopia1} y ${codigoCopia2} (Estado: PENDIENTE)`,
       };
     } catch (err) {
-      if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-      if (err.code && err.code.startsWith("P")) throw new DatabaseError("Error de base de datos", err.message);
+      if (err instanceof NotFoundError || err instanceof ValidationError)
+        throw err;
+      if (err.code && err.code.startsWith("P"))
+        throw new DatabaseError("Error de base de datos", err.message);
       throw err;
     }
   });
@@ -1210,91 +1249,105 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           "No se encontró el estado PENDIENTE para CuentaPorCobrar",
         );
       }
-
+      // ⭐ NUEVO: Detectar si es Saldo Inicial (tipo SI-CXC)
+      const esSaldoInicial = preFactura.tipoDocumento.codigo === "SI-CXC";
       // 3. Crear ComprobanteElectronico (pendiente de emisión a SUNAT)
       const ahora = new Date();
-      const horaEmision = ahora.toTimeString().split(' ')[0]; // HH:MM:SS
-      
+      const horaEmision = ahora.toTimeString().split(" ")[0]; // HH:MM:SS
+
       const comprobanteElectronico = await tx.comprobanteElectronico.create({
         data: {
           // Origen
           preFacturaId: preFactura.id,
-          
           // Empresa y sede
           empresaId: preFactura.empresaId,
           sedeId: preFactura.empresa.sedeId || BigInt(1), // Usar sede de empresa o default
-          
           // Tipo y serie SUNAT
           tipoComprobanteId: preFactura.tipoDocumentoId,
           serieDocId: preFactura.serieDocId,
-          numeroSerie: preFactura.numSerieDoc || preFactura.serieDoc?.serie || '001',
+          numeroSerie:
+            preFactura.numSerieDoc || preFactura.serieDoc?.serie || "001",
           numeroCorrelativo: Number(preFactura.numCorreDoc) || 1,
           numeroCompleto: preFactura.numeroDocumento,
-          
           // Fechas
           fechaEmision: ahora,
           horaEmision: horaEmision,
           fechaVencimiento: preFactura.fechaVencimiento,
-          
+
           // Cliente
           entidadComercialId: preFactura.clienteId,
-          tipoDocumentoClienteId: preFactura.cliente.tipoDocumentoId || BigInt(6), // Default RUC
-          numeroDocumentoCliente: preFactura.cliente.numeroDocumento || '',
-          razonSocialCliente: preFactura.cliente.razonSocial || '',
-          direccionCliente: preFactura.cliente.direccion || 'Sin dirección',
+          tipoDocumentoClienteId:
+            preFactura.cliente.tipoDocumentoId || BigInt(6), // Default RUC
+          numeroDocumentoCliente: preFactura.cliente.numeroDocumento || "",
+          razonSocialCliente: preFactura.cliente.razonSocial || "",
+          direccionCliente: preFactura.cliente.direccion || "Sin dirección",
           emailCliente: preFactura.cliente.email,
-          
+
           // Moneda
           monedaId: preFactura.monedaId,
           tipoCambio: preFactura.tipoCambio || 1.0,
-          
+
           // Condiciones de pago
           formaPagoId: preFactura.formaPagoId || BigInt(1), // Default contado
           montoPendientePago: preFactura.total,
-          
+
           // Estados
           estadoOSEId: BigInt(50), // PENDIENTE
           estadoSUNATId: BigInt(60), // ACTIVO
-          
+
           // Observaciones
           observaciones: `Comprobante generado desde PreFactura ${preFactura.codigo}`,
         },
       });
 
       // 5. ANALIZAR DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN (REGLAS SUNAT)
-      
+
       // 5.1 Analizar DETRACCIÓN (basado en productos y monto mínimo)
       let tieneDetraccion = false;
       let porcentajeDetraccion = null;
       let montoDetraccion = 0;
-      
+
       // Verificar si algún producto está sujeto a detracción
       for (const detalle of preFactura.detalles) {
-        if (detalle.producto?.sujetoDetraccion && detalle.producto?.porcentajeDetraccion) {
+        if (
+          detalle.producto?.sujetoDetraccion &&
+          detalle.producto?.porcentajeDetraccion
+        ) {
           tieneDetraccion = true;
           // Usar el porcentaje del primer producto sujeto a detracción
           if (!porcentajeDetraccion) {
-            porcentajeDetraccion = Number(detalle.producto.porcentajeDetraccion);
+            porcentajeDetraccion = Number(
+              detalle.producto.porcentajeDetraccion,
+            );
           }
         }
       }
-      
+
       // Calcular monto de detracción si aplica Y monto >= montoMinimoDetraccion
-      const montoMinimoDetraccion = Number(preFactura.empresa.montoMinimoDetraccion) || 700; // Default S/ 700
-      
-      if (tieneDetraccion && porcentajeDetraccion && Number(preFactura.total) >= montoMinimoDetraccion) {
-        montoDetraccion = Number(preFactura.total) * (porcentajeDetraccion / 100);
-      } else if (tieneDetraccion && Number(preFactura.total) < montoMinimoDetraccion) {
+      const montoMinimoDetraccion =
+        Number(preFactura.empresa.montoMinimoDetraccion) || 700; // Default S/ 700
+
+      if (
+        tieneDetraccion &&
+        porcentajeDetraccion &&
+        Number(preFactura.total) >= montoMinimoDetraccion
+      ) {
+        montoDetraccion =
+          Number(preFactura.total) * (porcentajeDetraccion / 100);
+      } else if (
+        tieneDetraccion &&
+        Number(preFactura.total) < montoMinimoDetraccion
+      ) {
         // Si el monto es menor al mínimo configurado, no aplica detracción
         tieneDetraccion = false;
         porcentajeDetraccion = null;
       }
-      
+
       // 5.2 Analizar RETENCIÓN (basado en cliente) - SOLO SI NO HAY DETRACCIÓN
       // REGLA: Detracción + Retención = Solo Detracción (prioridad)
       let tieneRetencion = false;
       let montoRetencion = 0;
-      
+
       if (!tieneDetraccion) {
         // Solo aplica retención si NO hay detracción
         if (preFactura.cliente.esAgenteRetencion) {
@@ -1305,20 +1358,24 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           montoRetencion = montoIGV * (porcentajeRetencion / 100);
         }
       }
-      
+
       // 5.3 Analizar PERCEPCIÓN (basado en cliente y empresa) - INDEPENDIENTE
       // REGLA: Percepción puede coexistir con Detracción o Retención
       let tienePercepcion = false;
       let porcentajePercepcion = null;
       let montoPercepcion = 0;
-      
+
       // Si el cliente está sujeto a percepción y la empresa es agente de percepción
-      if (preFactura.cliente.sujetoPercepcion && preFactura.empresa.soyAgentePercepcion) {
+      if (
+        preFactura.cliente.sujetoPercepcion &&
+        preFactura.empresa.soyAgentePercepcion
+      ) {
         tienePercepcion = true;
         porcentajePercepcion = 2; // Percepción estándar 2%
-        montoPercepcion = Number(preFactura.total) * (porcentajePercepcion / 100);
+        montoPercepcion =
+          Number(preFactura.total) * (porcentajePercepcion / 100);
       }
-      
+
       // 6. Crear CuentaPorCobrar BLANCA (con comprobante SUNAT)
       const cuentaPorCobrar = await tx.cuentaPorCobrar.create({
         data: {
@@ -1326,48 +1383,49 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           preFacturaId: preFactura.id,
           empresaId: preFactura.empresaId,
           clienteId: preFactura.clienteId,
-          
+
           // DOCUMENTO
           numeroPreFactura: preFactura.codigo,
           fechaEmision: new Date(),
           fechaVencimiento: preFactura.fechaVencimiento || new Date(),
-          
+
           // MONTOS ALMACENADOS
           montoTotal: preFactura.total,
           montoPagado: 0,
           saldoPendiente: preFactura.total,
-          
+
           // DETRACCIÓN SPOT (SUNAT PERÚ) - CALCULADO
           tieneDetraccion,
           montoDetraccion,
           porcentajeDetraccion,
           numeroConstanciaDetraccion: null,
           fechaDetraccion: null,
-          
+
           // RETENCIÓN (SUNAT PERÚ) - CALCULADO
           tieneRetencion,
           montoRetencion,
           numeroComprobanteRetencion: null,
           fechaRetencion: null,
-          
+
           // PERCEPCIÓN (SUNAT PERÚ) - CALCULADO
           tienePercepcion,
           montoPercepcion,
           porcentajePercepcion,
           numeroComprobantePercepcion: null,
           fechaPercepcion: null,
-          
+
           // FLAGS ESPECIALES
-          esSaldoInicial: false,
+          esSaldoInicial: esSaldoInicial, // ⭐ NUEVO: TRUE si tipo es SI-CXC
           esGerencial: false, // BLANCA (Formal/SUNAT)
           comprobanteElectronicoId: comprobanteElectronico.id, // Tiene comprobante SUNAT
-          
+
           // MONEDA Y TIPO DE VENTA
           monedaId: preFactura.monedaId,
           esContado: preFactura.esContado || false,
           estadoId: estadoPendiente.id,
-          observaciones: `CxC Blanca generada desde PreFactura ${preFactura.codigo}`,
-          
+          observaciones: esSaldoInicial
+            ? `Saldo Inicial CxC - ${preFactura.cliente.razonSocial}`
+            : `CxC Blanca generada desde PreFactura ${preFactura.codigo}`,
           // INTEGRACIÓN CONTABLE
           asientoContableId: null,
         },
@@ -1455,41 +1513,56 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
           "No se encontró el estado PENDIENTE para CuentaPorCobrar",
         );
       }
-
+      // ⭐ NUEVO: Detectar si es Saldo Inicial (tipo SI-CXC)
+      const esSaldoInicial = preFactura.tipoDocumento.codigo === "SI-CXC";
       // 3. ANALIZAR DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN (REGLAS SUNAT)
-      
+
       // 3.1 Analizar DETRACCIÓN (basado en productos y monto mínimo)
       let tieneDetraccion = false;
       let porcentajeDetraccion = null;
       let montoDetraccion = 0;
-      
+
       // Verificar si algún producto está sujeto a detracción
       for (const detalle of preFactura.detalles) {
-        if (detalle.producto?.sujetoDetraccion && detalle.producto?.porcentajeDetraccion) {
+        if (
+          detalle.producto?.sujetoDetraccion &&
+          detalle.producto?.porcentajeDetraccion
+        ) {
           tieneDetraccion = true;
           // Usar el porcentaje del primer producto sujeto a detracción
           if (!porcentajeDetraccion) {
-            porcentajeDetraccion = Number(detalle.producto.porcentajeDetraccion);
+            porcentajeDetraccion = Number(
+              detalle.producto.porcentajeDetraccion,
+            );
           }
         }
       }
-      
+
       // Calcular monto de detracción si aplica Y monto >= montoMinimoDetraccion
-      const montoMinimoDetraccion = Number(preFactura.empresa.montoMinimoDetraccion) || 700; // Default S/ 700
-      
-      if (tieneDetraccion && porcentajeDetraccion && Number(preFactura.total) >= montoMinimoDetraccion) {
-        montoDetraccion = Number(preFactura.total) * (porcentajeDetraccion / 100);
-      } else if (tieneDetraccion && Number(preFactura.total) < montoMinimoDetraccion) {
+      const montoMinimoDetraccion =
+        Number(preFactura.empresa.montoMinimoDetraccion) || 700; // Default S/ 700
+
+      if (
+        tieneDetraccion &&
+        porcentajeDetraccion &&
+        Number(preFactura.total) >= montoMinimoDetraccion
+      ) {
+        montoDetraccion =
+          Number(preFactura.total) * (porcentajeDetraccion / 100);
+      } else if (
+        tieneDetraccion &&
+        Number(preFactura.total) < montoMinimoDetraccion
+      ) {
         // Si el monto es menor al mínimo configurado, no aplica detracción
         tieneDetraccion = false;
         porcentajeDetraccion = null;
       }
-      
+
       // 3.2 Analizar RETENCIÓN (basado en cliente) - SOLO SI NO HAY DETRACCIÓN
       // REGLA: Detracción + Retención = Solo Detracción (prioridad)
       let tieneRetencion = false;
       let montoRetencion = 0;
-      
+
       if (!tieneDetraccion) {
         // Solo aplica retención si NO hay detracción
         if (preFactura.cliente.esAgenteRetencion) {
@@ -1500,20 +1573,24 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
           montoRetencion = montoIGV * (porcentajeRetencion / 100);
         }
       }
-      
+
       // 3.3 Analizar PERCEPCIÓN (basado en cliente y empresa) - INDEPENDIENTE
       // REGLA: Percepción puede coexistir con Detracción o Retención
       let tienePercepcion = false;
       let porcentajePercepcion = null;
       let montoPercepcion = 0;
-      
+
       // Si el cliente está sujeto a percepción y la empresa es agente de percepción
-      if (preFactura.cliente.sujetoPercepcion && preFactura.empresa.soyAgentePercepcion) {
+      if (
+        preFactura.cliente.sujetoPercepcion &&
+        preFactura.empresa.soyAgentePercepcion
+      ) {
         tienePercepcion = true;
         porcentajePercepcion = 2; // Percepción estándar 2%
-        montoPercepcion = Number(preFactura.total) * (porcentajePercepcion / 100);
+        montoPercepcion =
+          Number(preFactura.total) * (porcentajePercepcion / 100);
       }
-      
+
       // 4. Crear CuentaPorCobrar NEGRA (Gerencial)
       const cuentaPorCobrar = await tx.cuentaPorCobrar.create({
         data: {
@@ -1521,48 +1598,49 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
           preFacturaId: preFactura.id,
           empresaId: preFactura.empresaId,
           clienteId: preFactura.clienteId,
-          
+
           // DOCUMENTO
           numeroPreFactura: preFactura.codigo,
           fechaEmision: new Date(),
           fechaVencimiento: preFactura.fechaVencimiento || new Date(),
-          
+
           // MONTOS ALMACENADOS
           montoTotal: preFactura.total,
           montoPagado: 0,
           saldoPendiente: preFactura.total,
-          
+
           // DETRACCIÓN SPOT (SUNAT PERÚ) - CALCULADO
           tieneDetraccion,
           montoDetraccion,
           porcentajeDetraccion,
           numeroConstanciaDetraccion: null,
           fechaDetraccion: null,
-          
+
           // RETENCIÓN (SUNAT PERÚ) - CALCULADO
           tieneRetencion,
           montoRetencion,
           numeroComprobanteRetencion: null,
           fechaRetencion: null,
-          
+
           // PERCEPCIÓN (SUNAT PERÚ) - CALCULADO
           tienePercepcion,
           montoPercepcion,
           porcentajePercepcion,
           numeroComprobantePercepcion: null,
           fechaPercepcion: null,
-          
+
           // FLAGS ESPECIALES
-          esSaldoInicial: false,
+          esSaldoInicial: esSaldoInicial, // ⭐ NUEVO: TRUE si tipo es SI-CXC
           esGerencial: true, // NEGRA (Gerencial/No SUNAT)
           comprobanteElectronicoId: null, // No tiene comprobante electrónico
-          
+
           // MONEDA Y TIPO DE VENTA
           monedaId: preFactura.monedaId,
           esContado: preFactura.esContado || false,
           estadoId: estadoPendiente.id,
-          observaciones: `CxC Negra generada desde PreFactura ${preFactura.codigo}`,
-          
+          observaciones: esSaldoInicial
+            ? `Saldo Inicial CxC Gerencial - ${preFactura.cliente.razonSocial}`
+            : `CxC Negra generada desde PreFactura ${preFactura.codigo}`,
           // INTEGRACIÓN CONTABLE
           asientoContableId: null,
         },
