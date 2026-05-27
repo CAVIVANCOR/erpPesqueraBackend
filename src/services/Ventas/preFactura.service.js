@@ -1222,10 +1222,11 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         throw new NotFoundError("PreFactura no encontrada");
       }
 
-      // Validar que esté APROBADA (estado 46)
-      if (Number(preFactura.estadoId) !== 46) {
+      // Validar que esté APROBADA (estado 46) o EMITIDA (estado 96) para regenerar
+      const estadoActual = Number(preFactura.estadoId);
+      if (estadoActual !== 46 && estadoActual !== 96) {
         throw new ValidationError(
-          "Solo se pueden facturar PreFacturas APROBADAS",
+          "Solo se pueden facturar PreFacturas APROBADAS o EMITIDAS",
         );
       }
 
@@ -1249,8 +1250,33 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           "No se encontró el estado PENDIENTE para CuentaPorCobrar",
         );
       }
+
+      // ⭐ REGENERACIÓN: Eliminar CXC y ComprobanteElectronico existentes si ya fueron generados
+      if (estadoActual === 96) {
+        // Eliminar CuentaPorCobrar existente
+        await tx.cuentaPorCobrar.deleteMany({
+          where: { preFacturaId: preFacturaId },
+        });
+
+        // Eliminar ComprobanteElectronico existente
+        await tx.comprobanteElectronico.deleteMany({
+          where: { preFacturaId: preFacturaId },
+        });
+      }
+
       // ⭐ NUEVO: Detectar si es Saldo Inicial (tipo SI-CXC)
       const esSaldoInicial = preFactura.tipoDocumento.codigo === "SI-CXC";
+      // ⭐ CALCULAR MONTO NETO (restar pagos previos SI)
+      const pagosPreviosSI = Number(preFactura.pagosPreviosSI) || 0;
+      const subtotalNeto = Number(preFactura.subtotal) - pagosPreviosSI;
+      const porcentajeIGV = Number(preFactura.porcentajeIgv) || 0;
+      const igvNeto = preFactura.esExoneradoAlIGV
+        ? 0
+        : subtotalNeto * (porcentajeIGV / 100);
+      const totalNeto = subtotalNeto + igvNeto;
+
+      // Usar totalNeto en lugar de preFactura.total para Saldos Iniciales
+      const montoFinal = esSaldoInicial ? totalNeto : Number(preFactura.total);
       // 3. Crear ComprobanteElectronico (pendiente de emisión a SUNAT)
       const ahora = new Date();
       const horaEmision = ahora.toTimeString().split(" ")[0]; // HH:MM:SS
@@ -1282,15 +1308,12 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           razonSocialCliente: preFactura.cliente.razonSocial || "",
           direccionCliente: preFactura.cliente.direccion || "Sin dirección",
           emailCliente: preFactura.cliente.email,
-
           // Moneda
           monedaId: preFactura.monedaId,
           tipoCambio: preFactura.tipoCambio || 1.0,
-
           // Condiciones de pago
           formaPagoId: preFactura.formaPagoId || BigInt(1), // Default contado
-          montoPendientePago: preFactura.total,
-
+          montoPendientePago: montoFinal,
           // Estados
           estadoOSEId: BigInt(50), // PENDIENTE
           estadoSUNATId: BigInt(60), // ACTIVO
@@ -1330,14 +1353,10 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
       if (
         tieneDetraccion &&
         porcentajeDetraccion &&
-        Number(preFactura.total) >= montoMinimoDetraccion
+        montoFinal >= montoMinimoDetraccion
       ) {
-        montoDetraccion =
-          Number(preFactura.total) * (porcentajeDetraccion / 100);
-      } else if (
-        tieneDetraccion &&
-        Number(preFactura.total) < montoMinimoDetraccion
-      ) {
+        montoDetraccion = montoFinal * (porcentajeDetraccion / 100);
+      } else if (tieneDetraccion && montoFinal < montoMinimoDetraccion) {
         // Si el monto es menor al mínimo configurado, no aplica detracción
         tieneDetraccion = false;
         porcentajeDetraccion = null;
@@ -1372,8 +1391,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
       ) {
         tienePercepcion = true;
         porcentajePercepcion = 2; // Percepción estándar 2%
-        montoPercepcion =
-          Number(preFactura.total) * (porcentajePercepcion / 100);
+        montoPercepcion = montoFinal * (porcentajePercepcion / 100);
       }
 
       // 6. Crear CuentaPorCobrar BLANCA (con comprobante SUNAT)
@@ -1390,9 +1408,9 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           fechaVencimiento: preFactura.fechaVencimiento || new Date(),
 
           // MONTOS ALMACENADOS
-          montoTotal: preFactura.total,
+          montoTotal: montoFinal,
           montoPagado: 0,
-          saldoPendiente: preFactura.total,
+          saldoPendiente: montoFinal,
 
           // DETRACCIÓN SPOT (SUNAT PERÚ) - CALCULADO
           tieneDetraccion,
@@ -1486,10 +1504,11 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         throw new NotFoundError("PreFactura no encontrada");
       }
 
-      // Validar que esté APROBADA (estado 46)
-      if (Number(preFactura.estadoId) !== 46) {
+      // Validar que esté APROBADA (estado 46) o EMITIDA (estado 96) para regenerar
+      const estadoActual = Number(preFactura.estadoId);
+      if (estadoActual !== 46 && estadoActual !== 96) {
         throw new ValidationError(
-          "Solo se pueden facturar PreFacturas APROBADAS",
+          "Solo se pueden facturar PreFacturas APROBADAS o EMITIDAS",
         );
       }
 
@@ -1513,8 +1532,30 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
           "No se encontró el estado PENDIENTE para CuentaPorCobrar",
         );
       }
-      // ⭐ NUEVO: Detectar si es Saldo Inicial (tipo SI-CXC)
-      const esSaldoInicial = preFactura.tipoDocumento.codigo === "SI-CXC";
+
+      // ⭐ REGENERACIÓN: Eliminar CXC existente si ya fue generada
+      if (estadoActual === 96) {
+        await tx.cuentaPorCobrar.deleteMany({
+          where: { preFacturaId: preFacturaId },
+        });
+      }
+
+      // ⭐ NUEVO: Detectar si es Saldo Inicial (tipo SI-CXC o SI-CXP)
+      const esSaldoInicial =
+        preFactura.tipoDocumento?.codigo?.startsWith("SI-");
+
+      // ⭐ CALCULAR MONTO NETO (restar pagos previos SI)
+      const pagosPreviosSI = Number(preFactura.pagosPreviosSI) || 0;
+      const subtotalNeto = Number(preFactura.subtotal) - pagosPreviosSI;
+      const porcentajeIGV = Number(preFactura.porcentajeIgv) || 0;
+      const igvNeto = preFactura.esExoneradoAlIGV
+        ? 0
+        : subtotalNeto * (porcentajeIGV / 100);
+      const totalNeto = subtotalNeto + igvNeto;
+
+      // Usar totalNeto en lugar de preFactura.total para Saldos Iniciales
+      const montoFinal = esSaldoInicial ? totalNeto : Number(preFactura.total);
+
       // 3. ANALIZAR DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN (REGLAS SUNAT)
 
       // 3.1 Analizar DETRACCIÓN (basado en productos y monto mínimo)
@@ -1545,14 +1586,10 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
       if (
         tieneDetraccion &&
         porcentajeDetraccion &&
-        Number(preFactura.total) >= montoMinimoDetraccion
+        montoFinal >= montoMinimoDetraccion
       ) {
-        montoDetraccion =
-          Number(preFactura.total) * (porcentajeDetraccion / 100);
-      } else if (
-        tieneDetraccion &&
-        Number(preFactura.total) < montoMinimoDetraccion
-      ) {
+        montoDetraccion = montoFinal * (porcentajeDetraccion / 100);
+      } else if (tieneDetraccion && montoFinal < montoMinimoDetraccion) {
         // Si el monto es menor al mínimo configurado, no aplica detracción
         tieneDetraccion = false;
         porcentajeDetraccion = null;
@@ -1587,8 +1624,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
       ) {
         tienePercepcion = true;
         porcentajePercepcion = 2; // Percepción estándar 2%
-        montoPercepcion =
-          Number(preFactura.total) * (porcentajePercepcion / 100);
+        montoPercepcion = montoFinal * (porcentajePercepcion / 100);
       }
 
       // 4. Crear CuentaPorCobrar NEGRA (Gerencial)
@@ -1605,9 +1641,9 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
           fechaVencimiento: preFactura.fechaVencimiento || new Date(),
 
           // MONTOS ALMACENADOS
-          montoTotal: preFactura.total,
+          montoTotal: montoFinal,
           montoPagado: 0,
-          saldoPendiente: preFactura.total,
+          saldoPendiente: montoFinal,
 
           // DETRACCIÓN SPOT (SUNAT PERÚ) - CALCULADO
           tieneDetraccion,
