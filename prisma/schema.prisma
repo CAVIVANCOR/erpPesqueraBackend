@@ -1142,7 +1142,8 @@ model PreFactura {
   fechaVencimiento            DateTime?                                    // Fecha de vencimiento del pago
   nroLiquidacionFacturacion   String?     @db.VarChar(40)
   fechaContable               DateTime    @default(now())
-
+  // Nuevo campo para Saldos Iniciales
+  pagosPreviosSI              Decimal?  @db.Decimal(18, 2)
   // ========================================
   // ⭐ CAMPOS NUEVOS - DOCUMENTO FINAL (COMPROBANTE ELECTRÓNICO)
   // Define qué comprobante electrónico se generará desde esta PreFactura
@@ -6525,6 +6526,7 @@ model OrdenCompra {
   actualizadoPor       BigInt?
   porcentajeIGV        Decimal?
   esExoneradoAlIGV     Boolean?    @default(false)
+  pagosPreviosSI       Decimal?  @db.Decimal(18, 2)
 
   
   // ========================================
