@@ -1,5 +1,10 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio CRUD para Personal
@@ -16,39 +21,49 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 async function validarPersonal(data, excluirId = null) {
   // Validar unicidad de numeroDocumento por empresa
   if (data.numeroDocumento && data.empresaId) {
-    const where = excluirId ? {
-      numeroDocumento: data.numeroDocumento,
-      empresaId: data.empresaId,
-      id: { not: excluirId }
-    } : {
-      numeroDocumento: data.numeroDocumento,
-      empresaId: data.empresaId
-    };
+    const where = excluirId
+      ? {
+          numeroDocumento: data.numeroDocumento,
+          empresaId: data.empresaId,
+          id: { not: excluirId },
+        }
+      : {
+          numeroDocumento: data.numeroDocumento,
+          empresaId: data.empresaId,
+        };
     const existe = await prisma.personal.findFirst({ where });
-    if (existe) throw new ConflictError('Ya existe un personal con ese número de documento en la empresa.');
+    if (existe)
+      throw new ConflictError(
+        "Ya existe un personal con ese número de documento en la empresa.",
+      );
   }
 
   // Validar existencia de Empresa
   if (data.empresaId) {
-    const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
-    if (!empresa) throw new ValidationError('Empresa no existente.');
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: data.empresaId },
+    });
+    if (!empresa) throw new ValidationError("Empresa no existente.");
   }
 
   // Validar existencia de referencias opcionales si se proveen
   // Solo se validan referencias que existen en el modelo Prisma actual
   const referencias = [
-    { campo: 'tipoDocumentoId', modelo: 'tiposDocIdentidad' },
-    { campo: 'tipoContratoId', modelo: 'tipoContrato' },
-    { campo: 'cargoId', modelo: 'cargosPersonal' },
-    { campo: 'ubigeoId', modelo: 'ubigeo' },
-    { campo: 'areaFisicaId', modelo: 'areaFisicaSede' },
-    { campo: 'sedeEmpresaId', modelo: 'sedesEmpresa' }, // sedeEmpresaId referencia a la tabla sede
-    { campo: 'enlaceEntidadComercialId', modelo: 'entidadComercial' }
+    { campo: "tipoDocumentoId", modelo: "tiposDocIdentidad" },
+    { campo: "tipoContratoId", modelo: "tipoContrato" },
+    { campo: "cargoId", modelo: "cargosPersonal" },
+    { campo: "ubigeoId", modelo: "ubigeo" },
+    { campo: "areaFisicaId", modelo: "areaFisicaSede" },
+    { campo: "sedeEmpresaId", modelo: "sedesEmpresa" }, // sedeEmpresaId referencia a la tabla sede
+    { campo: "enlaceEntidadComercialId", modelo: "entidadComercial" },
   ];
   for (const ref of referencias) {
     if (data[ref.campo] !== undefined && data[ref.campo] !== null) {
-      const existe = await prisma[ref.modelo]?.findUnique?.({ where: { id: data[ref.campo] } });
-      if (!existe) throw new ValidationError(`Referencia no existente para ${ref.campo}`);
+      const existe = await prisma[ref.modelo]?.findUnique?.({
+        where: { id: data[ref.campo] },
+      });
+      if (!existe)
+        throw new ValidationError(`Referencia no existente para ${ref.campo}`);
     }
   }
 }
@@ -62,49 +77,51 @@ async function validarPersonal(data, excluirId = null) {
 const listar = async (filtros = {}) => {
   try {
     const where = {};
-    
+
     if (filtros.empresaId) {
       where.empresaId = filtros.empresaId;
     }
-    
+
     if (filtros.esVendedor !== undefined) {
       where.esVendedor = filtros.esVendedor;
     }
-    
-    const personal = await prisma.personal.findMany({
+
+        const personal = await prisma.personal.findMany({
       where,
       include: {
         usuario: true,
         cargo: true,
         ubigeo: true,
-        enlaceEntidadComercial: true
-      }
+        enlaceEntidadComercial: true,
+      },
     });
 
     // Obtener empresas únicas
-    const empresaIds = [...new Set(personal.map(p => p.empresaId))];
+    const empresaIds = [...new Set(personal.map((p) => p.empresaId))];  // ← AGREGAR ESTA LÍNEA AQUÍ
     const empresas = await prisma.empresa.findMany({
       where: {
-        id: { in: empresaIds }
+        id: { in: empresaIds },  // ✅ Ahora empresaIds existe
       },
       select: {
         id: true,
-        razonSocial: true
-      }
+        razonSocial: true,
+        entidadComercialId: true,
+      },
     });
 
     // Crear un mapa de empresas para acceso rápido
-    const empresaMap = new Map(empresas.map(e => [e.id.toString(), e]));
+    const empresaMap = new Map(empresas.map((e) => [e.id.toString(), e]));
 
     // Agregar empresa a cada personal
-    const personalConEmpresa = personal.map(p => ({
+    const personalConEmpresa = personal.map((p) => ({
       ...p,
-      empresa: empresaMap.get(p.empresaId.toString()) || null
+      empresa: empresaMap.get(p.empresaId.toString()) || null,
     }));
 
     return personalConEmpresa;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -121,13 +138,14 @@ const obtenerPorId = async (id) => {
         cargo: true,
         ubigeo: true,
         tipoDocIdentidad: true,
-        enlaceEntidadComercial: true
-      }
+        enlaceEntidadComercial: true,
+      },
     });
-    if (!persona) throw new NotFoundError('Personal no encontrado');
+    if (!persona) throw new NotFoundError("Personal no encontrado");
     return persona;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -141,9 +159,11 @@ const crear = async (data) => {
     const resultado = await prisma.personal.create({ data });
     return resultado;
   } catch (err) {
-    console.error('❌ Backend - Error al crear personal:', err);
-    if (err instanceof ConflictError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    console.error("❌ Backend - Error al crear personal:", err);
+    if (err instanceof ConflictError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -154,14 +174,20 @@ const crear = async (data) => {
 const actualizar = async (id, data) => {
   try {
     const existente = await prisma.personal.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Personal no encontrado');
+    if (!existente) throw new NotFoundError("Personal no encontrado");
     await validarPersonal(data, id);
     const resultado = await prisma.personal.update({ where: { id }, data });
     return resultado;
   } catch (err) {
-    console.error('❌ Backend - Error al actualizar personal:', err);
-    if (err instanceof ConflictError || err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    console.error("❌ Backend - Error al actualizar personal:", err);
+    if (
+      err instanceof ConflictError ||
+      err instanceof NotFoundError ||
+      err instanceof ValidationError
+    )
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -172,12 +198,13 @@ const actualizar = async (id, data) => {
 const eliminar = async (id) => {
   try {
     const existente = await prisma.personal.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Personal no encontrado');
+    if (!existente) throw new NotFoundError("Personal no encontrado");
     await prisma.personal.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -186,24 +213,25 @@ const eliminar = async (id) => {
  * Lista personal con cargo "BAHIA COMERCIAL" filtrado por empresa.
  * @param {number} empresaId - ID de la empresa para filtrar
  */
-const listarPersonalxDescripCargo = async (empresaId,descripcionCargo) => {
+const listarPersonalxDescripCargo = async (empresaId, descripcionCargo) => {
   try {
     const where = {
       empresaId: empresaId,
       cargo: {
-        descripcion: descripcionCargo
-      }
+        descripcion: descripcionCargo,
+      },
     };
-    
+
     return await prisma.personal.findMany({
       where,
       include: {
         cargo: true,
-        ubigeo: true
-      }
+        ubigeo: true,
+      },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
@@ -216,30 +244,30 @@ const listarPersonalxDescripCargo = async (empresaId,descripcionCargo) => {
  */
 const buscarPorDNI = async (numeroDocumento) => {
   try {
-    if (!numeroDocumento || numeroDocumento.trim() === '') {
-      throw new ValidationError('El número de documento es obligatorio.');
+    if (!numeroDocumento || numeroDocumento.trim() === "") {
+      throw new ValidationError("El número de documento es obligatorio.");
     }
 
     // Buscar TODOS los registros con ese DNI (puede estar en múltiples empresas)
     const personales = await prisma.personal.findMany({
       where: {
         numeroDocumento: numeroDocumento.trim(),
-        cesado: false  // Solo personal activo
+        cesado: false, // Solo personal activo
       },
       include: {
         cargo: {
           select: {
             id: true,
             nombre: true,
-            descripcion: true
-          }
+            descripcion: true,
+          },
         },
         tipoDocIdentidad: {
           select: {
             id: true,
-            descripcion: true
-          }
-        }
+            descripcion: true,
+          },
+        },
       },
       select: {
         id: true,
@@ -251,18 +279,18 @@ const buscarPorDNI = async (numeroDocumento) => {
         esAdministrativo: true,
         cargoId: true,
         cargo: true,
-        tipoDocIdentidad: true
-      }
+        tipoDocIdentidad: true,
+      },
     });
 
     // Si no encuentra ninguno
     if (personales.length === 0) {
-      return null;  // No es personal de la empresa
+      return null; // No es personal de la empresa
     }
 
     // Si encuentra UNO o MÁS, buscar el que tiene marcaAsistencia = true
     const personalConAsistencia = personales.find(
-      p => p.marcaAsistencia === true
+      (p) => p.marcaAsistencia === true,
     );
 
     // Si hay uno con marcaAsistencia = true, retornar ese
@@ -275,7 +303,11 @@ const buscarPorDNI = async (numeroDocumento) => {
     return personales[0];
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos al buscar personal por DNI', err.message);
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError(
+        "Error de base de datos al buscar personal por DNI",
+        err.message,
+      );
     throw err;
   }
 };
@@ -287,5 +319,5 @@ export default {
   actualizar,
   eliminar,
   listarPersonalxDescripCargo,
-  buscarPorDNI  // ⭐ NUEVO - Búsqueda por DNI
+  buscarPorDNI, // ⭐ NUEVO - Búsqueda por DNI
 };
