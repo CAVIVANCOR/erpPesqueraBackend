@@ -77,14 +77,6 @@ async function validarForaneas(data) {
     if (!centroCosto)
       throw new ValidationError("El centro de costo referenciado no existe.");
   }
-  // Validar asientoContableId (opcional)
-  if (data.asientoContableId !== undefined && data.asientoContableId !== null) {
-    const asiento = await prisma.asientoContable.findUnique({
-      where: { id: data.asientoContableId },
-    });
-    if (!asiento)
-      throw new ValidationError("El asiento contable referenciado no existe.");
-  }
 }
 
 /**
@@ -104,7 +96,18 @@ const listar = async () => {
         periodoContable: true,
         moneda: true,
         centroCosto: true,
-        asientoContable: true,
+        asientosContables: {
+          // ✅ Relación 1:N
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
       },
       orderBy: { fechaMovimiento: "desc" },
     });
@@ -133,7 +136,18 @@ const obtenerPorId = async (id) => {
         periodoContable: true,
         moneda: true,
         centroCosto: true,
-        asientoContable: true,
+        asientosContables: {
+          // ✅ Relación 1:N
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
       },
     });
     if (!mov) throw new NotFoundError("MovimientoActivoFijo no encontrado");
@@ -187,7 +201,6 @@ const crear = async (data) => {
       valorNeto: data.valorNeto || null,
       observaciones: data.observaciones || null,
       centroCostoId: data.centroCostoId || null,
-      asientoContableId: data.asientoContableId || null,
       creadoPor: data.creadoPor,
       actualizadoPor: data.actualizadoPor,
       updatedAt: new Date(),
@@ -206,7 +219,18 @@ const crear = async (data) => {
         periodoContable: true,
         moneda: true,
         centroCosto: true,
-        asientoContable: true,
+        asientosContables: {
+          // ✅ Relación 1:N
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
       },
     });
   } catch (err) {
@@ -227,13 +251,6 @@ const actualizar = async (id, data) => {
     });
     if (!existente)
       throw new NotFoundError("MovimientoActivoFijo no encontrado");
-
-    // No permitir actualizar si ya tiene asiento contable
-    if (existente.asientoContableId && data.asientoContableId === undefined) {
-      throw new ValidationError(
-        "No se puede modificar un movimiento que ya tiene asiento contable generado.",
-      );
-    }
 
     await validarForaneas(data);
 
@@ -264,8 +281,6 @@ const actualizar = async (id, data) => {
       dataActualizacion.observaciones = data.observaciones;
     if (data.centroCostoId !== undefined)
       dataActualizacion.centroCostoId = data.centroCostoId;
-    if (data.asientoContableId !== undefined)
-      dataActualizacion.asientoContableId = data.asientoContableId;
     if (data.actualizadoPor !== undefined)
       dataActualizacion.actualizadoPor = data.actualizadoPor;
     dataActualizacion.updatedAt = new Date();
@@ -284,7 +299,18 @@ const actualizar = async (id, data) => {
         periodoContable: true,
         moneda: true,
         centroCosto: true,
-        asientoContable: true,
+        asientosContables: {
+          // ✅ AGREGAR
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
       },
     });
   } catch (err) {
@@ -307,10 +333,15 @@ const eliminar = async (id) => {
     if (!existente)
       throw new NotFoundError("MovimientoActivoFijo no encontrado");
 
-    // No permitir eliminar si ya tiene asiento contable
-    if (existente.asientoContableId) {
+    // ✅ AGREGAR NUEVA VALIDACIÓN:
+    // Verificar si tiene asientos contables generados
+    const asientosCount = await prisma.asientoContable.count({
+      where: { movimientoActivoFijoId: id },
+    });
+
+    if (asientosCount > 0) {
       throw new ValidationError(
-        "No se puede eliminar un movimiento que ya tiene asiento contable generado.",
+        `No se puede eliminar un movimiento que tiene ${asientosCount} asiento(s) contable(s) generado(s).`,
       );
     }
 
@@ -343,7 +374,18 @@ const listarPorActivo = async (activoId) => {
         periodoContable: true,
         moneda: true,
         centroCosto: true,
-        asientoContable: true,
+        asientosContables: {
+          // ✅ Relación 1:N
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
       },
       orderBy: { fechaMovimiento: "desc" },
     });
@@ -388,11 +430,8 @@ const generarBorradorAsiento = async (movimientoId) => {
       throw new NotFoundError("Movimiento de activo fijo no encontrado");
     }
 
-    if (movimiento.asientoContableId) {
-      throw new ValidationError(
-        "Este movimiento ya tiene un asiento contable generado",
-      );
-    }
+    // Nota: Ahora se permiten múltiples asientos por movimiento (diseño 1:N)
+    // No validamos si ya tiene asientos, ya que puede tener varios
 
     const tipoActivo = movimiento.activo?.tipo;
     if (!tipoActivo) {
@@ -607,19 +646,36 @@ const generarBorradorAsiento = async (movimientoId) => {
 
 /**
  * Guarda el asiento contable editado por el usuario y lo vincula al movimiento.
- * Si ya existe un asiento PENDIENTE o con estado incorrecto, lo actualiza (regeneración).
  * @param {BigInt} movimientoId - ID del movimiento
  * @param {Object} asientoData - Datos del asiento editado por el usuario
  * @param {BigInt} creadoPor - ID del usuario que crea el asiento
- * @returns {Promise<Object>} - Asiento contable creado o actualizado
+ * @returns {Promise<Object>} - Asiento contable creado
  */
 const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
   try {
+    // ✅ BUSCAR SUBMÓDULO DINÁMICAMENTE
+    const submodulo = await prisma.submoduloSistema.findFirst({
+      where: {
+        nombreModeloOrigen: "MovimientoActivoFijo",
+        activo: true,
+      },
+    });
+
+    if (!submodulo) {
+      throw new ValidationError(
+        'Submódulo "MovimientoActivoFijo" no encontrado en el sistema.',
+      );
+    }
+
     const movimiento = await prisma.movimientoActivoFijo.findUnique({
       where: { id: movimientoId },
       include: {
         periodoContable: true,
-        asientoContable: true,
+        activo: {
+          include: {
+            tipo: true,
+          },
+        },
       },
     });
 
@@ -634,7 +690,7 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
       );
     }
 
-       // Obtener el estado PENDIENTE para Asientos Contables
+    // Obtener el estado PENDIENTE para Asientos Contables
     const estadoPendiente = await prisma.estadoMultiFuncion.findFirst({
       where: {
         tipoProvieneDeId: 20, // Tipo "ASIENTO CONTABLE"
@@ -648,9 +704,6 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
       );
     }
 
-    // No validar el estado del asiento existente
-    // Solo se valida que el período contable esté ABIERTO (ya validado arriba)
-
     // Usar el período contable del movimiento
     const periodoContableId = movimiento.periodoContableId;
 
@@ -662,83 +715,19 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
       (sum, d) => sum + Number(d.haber || 0),
       0,
     );
-    const diferencia = Math.abs(totalDebe - totalHaber);
+    const diferencia = totalDebe - totalHaber;
 
-    if (diferencia > 0.01) {
+    if (Math.abs(diferencia) > 0.01) {
       throw new ValidationError(
-        `El asiento no está balanceado. Debe: ${totalDebe.toFixed(2)}, Haber: ${totalHaber.toFixed(2)}, Diferencia: ${diferencia.toFixed(2)}`,
+        `El asiento no está cuadrado. Diferencia: ${diferencia}`,
       );
     }
 
-    const moneda = await prisma.moneda.findUnique({
-      where: { id: asientoData.monedaId },
-    });
-    if (!moneda) {
-      throw new ValidationError("Moneda no encontrada");
-    }
-
-    // Obtener tipo de cambio de la fecha del asiento
-    const fechaAsiento = new Date(asientoData.fechaAsiento);
-    const tc = await obtenerTipoCambio(fechaAsiento);
-    const tipoCambio = tc.venta; // Usar TC venta para conversiones
+    const tipoCambio = asientoData.tipoCambio || 1.0;
+    const fechaAsiento = asientoData.fechaAsiento || movimiento.fechaMovimiento;
 
     return await prisma.$transaction(async (tx) => {
-            // Si existe un asiento anterior, actualizarlo en lugar de eliminarlo
-      if (movimiento.asientoContableId) {
-        // Primero eliminar los detalles antiguos (sin validaciones)
-        await tx.detalleAsientoContable.deleteMany({
-          where: { asientoContableId: movimiento.asientoContableId },
-        });
-
-        // Actualizar el asiento con los nuevos datos
-        const asiento = await tx.asientoContable.update({
-          where: { id: movimiento.asientoContableId },
-          data: {
-            fechaAsiento: fechaAsiento,
-            glosa: asientoData.glosa,
-            tipoLibro: asientoData.tipoLibro || "FISCAL",
-            origenAsiento: asientoData.origenAsiento || "AUTOMATICO",
-            monedaId: asientoData.monedaId,
-            totalDebe: totalDebe,
-            totalHaber: totalHaber,
-            diferencia: diferencia,
-            estaCuadrado: true,
-            tipoCambio: tipoCambio,
-            estadoId: estadoPendiente.id,
-            actualizadoPor: creadoPor,
-            detalles: {
-              create: asientoData.detalles.map((detalle, index) => ({
-                numeroLinea: index + 1,
-                planCuentaId: detalle.planCuentaId,
-                glosa: detalle.glosa || asientoData.glosa,
-                debe: Number(detalle.debe || 0),
-                haber: Number(detalle.haber || 0),
-                monedaId: asientoData.monedaId,
-                tipoCambio: tipoCambio,
-                centroCostoId: detalle.centroCostoId || null,
-                creadoPor,
-                actualizadoPor: creadoPor,
-              })),
-            },
-          },
-          include: {
-            detalles: {
-              include: {
-                planCuenta: true,
-                centroCosto: true,
-              },
-            },
-            empresa: true,
-            periodoContable: true,
-            moneda: true,
-            estado: true,
-          },
-        });
-
-        return asiento;
-      }
-
-      // Si NO existe asiento, crear uno nuevo
+      // Obtener correlativo
       const ultimoAsiento = await tx.asientoContable.findFirst({
         where: {
           empresaId: asientoData.empresaId,
@@ -749,6 +738,7 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
       const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
       const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, "0")}`;
 
+      // Crear nuevo asiento vinculado al movimiento mediante procesoOrigenId
       const asiento = await tx.asientoContable.create({
         data: {
           empresaId: asientoData.empresaId,
@@ -759,17 +749,26 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
           glosa: asientoData.glosa,
           tipoLibro: asientoData.tipoLibro || "FISCAL",
           origenAsiento: asientoData.origenAsiento || "AUTOMATICO",
-          monedaId: asientoData.monedaId,
+          submoduloOrigenId: submodulo.id,
+          procesoOrigenId: movimientoId,
+          estadoId: estadoPendiente.id,
           totalDebe: totalDebe,
           totalHaber: totalHaber,
           diferencia: diferencia,
           estaCuadrado: true,
+          monedaId: asientoData.monedaId,
           tipoCambio: tipoCambio,
-          estadoId: estadoPendiente.id,
           creadoPor,
           actualizadoPor: creadoPor,
-          detalles: {
-            create: asientoData.detalles.map((detalle, index) => ({
+        },
+      });
+
+      // Crear detalles
+      await Promise.all(
+        asientoData.detalles.map((detalle, index) =>
+          tx.detalleAsientoContable.create({
+            data: {
+              asientoContableId: asiento.id,
               numeroLinea: index + 1,
               planCuentaId: detalle.planCuentaId,
               glosa: detalle.glosa || asientoData.glosa,
@@ -780,9 +779,14 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
               centroCostoId: detalle.centroCostoId || null,
               creadoPor,
               actualizadoPor: creadoPor,
-            })),
-          },
-        },
+            },
+          }),
+        ),
+      );
+
+      // Retornar asiento completo con includes
+      return await tx.asientoContable.findUnique({
+        where: { id: asiento.id },
         include: {
           detalles: {
             include: {
@@ -796,13 +800,6 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
           estado: true,
         },
       });
-
-      await tx.movimientoActivoFijo.update({
-        where: { id: movimientoId },
-        data: { asientoContableId: asiento.id },
-      });
-
-      return asiento;
     });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
@@ -813,20 +810,18 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
     throw err;
   }
 };
-
 /**
  * Elimina el asiento contable asociado a un movimiento y desvincula el movimiento.
  * Solo permite eliminar si el período contable está ABIERTO.
  * @param {BigInt} movimientoId - ID del movimiento
  * @returns {Promise<boolean>} - true si se eliminó correctamente
  */
-const eliminarAsientoContable = async (movimientoId) => {
+const eliminarAsientoContable = async (movimientoId, asientoId) => {
   try {
     const movimiento = await prisma.movimientoActivoFijo.findUnique({
       where: { id: movimientoId },
       include: {
-        periodoContable: true,
-        asientoContable: true,
+        asientosContables: true,
       },
     });
 
@@ -834,32 +829,26 @@ const eliminarAsientoContable = async (movimientoId) => {
       throw new NotFoundError("Movimiento no encontrado");
     }
 
-    if (!movimiento.asientoContableId) {
-      throw new ValidationError("Este movimiento no tiene asiento contable asociado");
-    }
+    // Verificar que el asiento pertenece al movimiento
+    const asientoExiste = movimiento.asientosContables.find(
+      (a) => a.id === asientoId,
+    );
 
-    // Validar que el período esté ABIERTO
-    if (Number(movimiento.periodoContable.estadoId) !== 73) {
+    if (!asientoExiste) {
       throw new ValidationError(
-        "El período contable debe estar ABIERTO para eliminar asientos.",
+        "El asiento especificado no pertenece a este movimiento",
       );
     }
 
     return await prisma.$transaction(async (tx) => {
-      // 1. Eliminar detalles del asiento
+      // Eliminar detalles del asiento
       await tx.detalleAsientoContable.deleteMany({
-        where: { asientoContableId: movimiento.asientoContableId },
+        where: { asientoContableId: asientoId },
       });
 
-      // 2. Eliminar el asiento contable
+      // Eliminar el asiento
       await tx.asientoContable.delete({
-        where: { id: movimiento.asientoContableId },
-      });
-
-      // 3. Desvincular el asiento del movimiento
-      await tx.movimientoActivoFijo.update({
-        where: { id: movimientoId },
-        data: { asientoContableId: null },
+        where: { id: asientoId },
       });
 
       return true;
@@ -867,9 +856,8 @@ const eliminarAsientoContable = async (movimientoId) => {
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
-    if (err.code && err.code.startsWith("P")) {
+    if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
-    }
     throw err;
   }
 };
@@ -883,5 +871,5 @@ export default {
   listarPorActivo,
   generarBorradorAsiento,
   guardarAsientoContable,
-  eliminarAsientoContable
+  eliminarAsientoContable,
 };

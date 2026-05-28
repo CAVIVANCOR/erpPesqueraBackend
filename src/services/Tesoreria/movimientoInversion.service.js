@@ -1,5 +1,9 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio CRUD para MovimientoInversion
@@ -14,44 +18,44 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
 async function validarMovimientoInversion(data) {
   // Validar inversión
   if (data.inversionFinancieraId) {
-    const inversion = await prisma.inversionFinanciera.findUnique({ 
-      where: { id: data.inversionFinancieraId } 
+    const inversion = await prisma.inversionFinanciera.findUnique({
+      where: { id: data.inversionFinancieraId },
     });
     if (!inversion) {
-      throw new ValidationError('La inversión financiera referenciada no existe.');
+      throw new ValidationError(
+        "La inversión financiera referenciada no existe.",
+      );
     }
   }
 
   // Validar tipo de movimiento
   if (data.tipoMovimiento) {
-    const tiposValidos = ['INVERSION', 'RENDIMIENTO', 'RETIRO', 'AJUSTE', 'LIQUIDACION'];
+    const tiposValidos = [
+      "INVERSION",
+      "RENDIMIENTO",
+      "RETIRO",
+      "AJUSTE",
+      "LIQUIDACION",
+    ];
     if (!tiposValidos.includes(data.tipoMovimiento)) {
-      throw new ValidationError('El tipo de movimiento no es válido.');
+      throw new ValidationError("El tipo de movimiento no es válido.");
     }
   }
 
   // Validar que el monto sea positivo
   if (data.monto && data.monto <= 0) {
-    throw new ValidationError('El monto del movimiento debe ser mayor a cero.');
+    throw new ValidationError("El monto del movimiento debe ser mayor a cero.");
   }
 
   // Validar movimiento de caja si existe
   if (data.movimientoCajaId) {
-    const movimiento = await prisma.movimientoCaja.findUnique({ 
-      where: { id: data.movimientoCajaId } 
+    const movimiento = await prisma.movimientoCaja.findUnique({
+      where: { id: data.movimientoCajaId },
     });
     if (!movimiento) {
-      throw new ValidationError('El movimiento de caja referenciado no existe.');
-    }
-  }
-
-  // Validar asiento contable si existe
-  if (data.asientoContableId) {
-    const asiento = await prisma.asientoContable.findUnique({ 
-      where: { id: data.asientoContableId } 
-    });
-    if (!asiento) {
-      throw new ValidationError('El asiento contable referenciado no existe.');
+      throw new ValidationError(
+        "El movimiento de caja referenciado no existe.",
+      );
     }
   }
 }
@@ -62,21 +66,21 @@ async function validarMovimientoInversion(data) {
  */
 async function actualizarValorInversion(inversionFinancieraId) {
   const movimientos = await prisma.movimientoInversion.findMany({
-    where: { inversionFinancieraId }
+    where: { inversionFinancieraId },
   });
 
   let valorActual = 0;
 
-  movimientos.forEach(mov => {
+  movimientos.forEach((mov) => {
     const monto = parseFloat(mov.monto);
     switch (mov.tipoMovimiento) {
-      case 'INVERSION':
-      case 'RENDIMIENTO':
+      case "INVERSION":
+      case "RENDIMIENTO":
         valorActual += monto;
         break;
-      case 'RETIRO':
-      case 'AJUSTE':
-      case 'LIQUIDACION':
+      case "RETIRO":
+      case "AJUSTE":
+      case "LIQUIDACION":
         valorActual -= monto;
         break;
     }
@@ -84,17 +88,18 @@ async function actualizarValorInversion(inversionFinancieraId) {
 
   // Calcular rendimiento acumulado
   const inversion = await prisma.inversionFinanciera.findUnique({
-    where: { id: inversionFinancieraId }
+    where: { id: inversionFinancieraId },
   });
 
-  const rendimientoAcumulado = valorActual - parseFloat(inversion.montoInvertido);
+  const rendimientoAcumulado =
+    valorActual - parseFloat(inversion.montoInvertido);
 
   await prisma.inversionFinanciera.update({
     where: { id: inversionFinancieraId },
-    data: { 
+    data: {
       valorActual,
-      rendimientoAcumulado
-    }
+      rendimientoAcumulado,
+    },
   });
 }
 
@@ -109,18 +114,28 @@ const listar = async () => {
           include: {
             empresa: true,
             banco: true,
-            moneda: true
-          }
+            moneda: true,
+          },
         },
         movimientoCaja: true,
-        asientoContable: true,
-        personalCreador: true
+        asientosContables: {
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
+        personalCreador: true,
       },
-      orderBy: { fechaMovimiento: 'desc' }
+      orderBy: { fechaMovimiento: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -138,20 +153,31 @@ const obtenerPorId = async (id) => {
           include: {
             empresa: true,
             banco: true,
-            moneda: true
-          }
+            moneda: true,
+          },
         },
         movimientoCaja: true,
-        asientoContable: true,
-        personalCreador: true
-      }
+        asientosContables: {
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
+        personalCreador: true,
+      },
     });
-    if (!movimiento) throw new NotFoundError('Movimiento de inversión no encontrado');
+    if (!movimiento)
+      throw new NotFoundError("Movimiento de inversión no encontrado");
     return movimiento;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -163,23 +189,41 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     // Validar campos obligatorios
-    if (!data.inversionFinancieraId || !data.tipoMovimiento || 
-        !data.fechaMovimiento || data.monto === null || 
-        data.monto === undefined || !data.descripcion) {
-      throw new ValidationError('Faltan campos obligatorios para crear el movimiento.');
+    if (
+      !data.inversionFinancieraId ||
+      !data.tipoMovimiento ||
+      !data.fechaMovimiento ||
+      data.monto === null ||
+      data.monto === undefined ||
+      !data.descripcion
+    ) {
+      throw new ValidationError(
+        "Faltan campos obligatorios para crear el movimiento.",
+      );
     }
 
     await validarMovimientoInversion(data);
 
     // Crear movimiento en una transacción
     const movimiento = await prisma.$transaction(async (tx) => {
-      const nuevo = await tx.movimientoInversion.create({ 
+      const nuevo = await tx.movimientoInversion.create({
         data,
         include: {
           inversion: true,
           movimientoCaja: true,
-          personalCreador: true
-        }
+          asientosContables: {
+            include: {
+              detalles: {
+                include: {
+                  planCuenta: true,
+                },
+                orderBy: { numeroLinea: "asc" },
+              },
+            },
+            orderBy: { fechaAsiento: "desc" },
+          },
+          personalCreador: true,
+        },
       });
 
       // Actualizar valor actual de la inversión
@@ -191,8 +235,8 @@ const crear = async (data) => {
     return movimiento;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -203,8 +247,11 @@ const crear = async (data) => {
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.movimientoInversion.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Movimiento de inversión no encontrado');
+    const existente = await prisma.movimientoInversion.findUnique({
+      where: { id },
+    });
+    if (!existente)
+      throw new NotFoundError("Movimiento de inversión no encontrado");
 
     await validarMovimientoInversion({ ...data, id });
 
@@ -216,9 +263,19 @@ const actualizar = async (id, data) => {
         include: {
           inversion: true,
           movimientoCaja: true,
-          asientoContable: true,
-          personalCreador: true
-        }
+          asientosContables: {
+            include: {
+              detalles: {
+                include: {
+                  planCuenta: true,
+                },
+                orderBy: { numeroLinea: "asc" },
+              },
+            },
+            orderBy: { fechaAsiento: "desc" },
+          },
+          personalCreador: true,
+        },
       });
 
       // Recalcular valor actual de la inversión
@@ -229,9 +286,10 @@ const actualizar = async (id, data) => {
 
     return movimiento;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -242,12 +300,13 @@ const actualizar = async (id, data) => {
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.movimientoInversion.findUnique({ 
+    const existente = await prisma.movimientoInversion.findUnique({
       where: { id },
-      include: { inversion: true }
+      include: { inversion: true },
     });
 
-    if (!existente) throw new NotFoundError('Movimiento de inversión no encontrado');
+    if (!existente)
+      throw new NotFoundError("Movimiento de inversión no encontrado");
 
     // Eliminar movimiento en una transacción
     await prisma.$transaction(async (tx) => {
@@ -260,8 +319,8 @@ const eliminar = async (id) => {
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -276,14 +335,24 @@ const listarPorInversion = async (inversionFinancieraId) => {
       where: { inversionFinancieraId },
       include: {
         movimientoCaja: true,
-        asientoContable: true,
-        personalCreador: true
+        asientosContables: {
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
+        personalCreador: true,
       },
-      orderBy: { fechaMovimiento: 'desc' }
+      orderBy: { fechaMovimiento: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -301,17 +370,17 @@ const listarPorTipo = async (tipoMovimiento) => {
           include: {
             empresa: true,
             banco: true,
-            moneda: true
-          }
+            moneda: true,
+          },
         },
         movimientoCaja: true,
-        personalCreador: true
+        personalCreador: true,
       },
-      orderBy: { fechaMovimiento: 'desc' }
+      orderBy: { fechaMovimiento: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -323,7 +392,7 @@ const listarPorTipo = async (tipoMovimiento) => {
 const obtenerResumenPorInversion = async (inversionFinancieraId) => {
   try {
     const movimientos = await prisma.movimientoInversion.findMany({
-      where: { inversionFinancieraId }
+      where: { inversionFinancieraId },
     });
 
     const resumen = {
@@ -332,25 +401,25 @@ const obtenerResumenPorInversion = async (inversionFinancieraId) => {
       totalRendimientos: 0,
       totalAjustes: 0,
       totalLiquidaciones: 0,
-      cantidadMovimientos: movimientos.length
+      cantidadMovimientos: movimientos.length,
     };
 
-    movimientos.forEach(mov => {
+    movimientos.forEach((mov) => {
       const monto = parseFloat(mov.monto);
       switch (mov.tipoMovimiento) {
-        case 'INVERSION':
+        case "INVERSION":
           resumen.totalInversiones += monto;
           break;
-        case 'RETIRO':
+        case "RETIRO":
           resumen.totalRetiros += monto;
           break;
-        case 'RENDIMIENTO':
+        case "RENDIMIENTO":
           resumen.totalRendimientos += monto;
           break;
-        case 'AJUSTE':
+        case "AJUSTE":
           resumen.totalAjustes += monto;
           break;
-        case 'LIQUIDACION':
+        case "LIQUIDACION":
           resumen.totalLiquidaciones += monto;
           break;
       }
@@ -358,8 +427,8 @@ const obtenerResumenPorInversion = async (inversionFinancieraId) => {
 
     return resumen;
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -373,5 +442,5 @@ export default {
   eliminar,
   listarPorInversion,
   listarPorTipo,
-  obtenerResumenPorInversion
+  obtenerResumenPorInversion,
 };

@@ -6,7 +6,7 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import lineaCreditoService from "./lineaCredito.service.js";
-import integracionContablePrestamo from './integracionContablePrestamo.service.js';
+import integracionContablePrestamo from "./integracionContablePrestamo.service.js";
 const { obtenerTipoCambio } = lineaCreditoService;
 /**
  * Servicio CRUD para PrestamoBancario
@@ -283,7 +283,6 @@ function calcularCronogramaCuotas(prestamo) {
       montoPagado: null,
       montoMora: null,
       movimientoCajaId: null,
-      asientoContableId: null,
       observaciones: null,
     });
   }
@@ -415,15 +414,43 @@ const crear = async (data) => {
     // Normalizar datos: convertir strings vacíos en null para campos enum y opcionales
     const datosNormalizados = {
       ...data,
-      tipoGarantia: data.tipoGarantia && data.tipoGarantia.trim() !== "" ? data.tipoGarantia : null,
-      numeroContrato: data.numeroContrato && data.numeroContrato.trim() !== "" ? data.numeroContrato : null,
-      numeroGarantia: data.numeroGarantia && data.numeroGarantia.trim() !== "" ? data.numeroGarantia : null,
-      numeroCartaCredito: data.numeroCartaCredito && data.numeroCartaCredito.trim() !== "" ? data.numeroCartaCredito : null,
-      beneficiario: data.beneficiario && data.beneficiario.trim() !== "" ? data.beneficiario : null,
-      destinoFondos: data.destinoFondos && data.destinoFondos.trim() !== "" ? data.destinoFondos : null,
-      descripcionGarantia: data.descripcionGarantia && data.descripcionGarantia.trim() !== "" ? data.descripcionGarantia : null,
-      observaciones: data.observaciones && data.observaciones.trim() !== "" ? data.observaciones : null,
-      refNroProformaVentaExportacion: data.refNroProformaVentaExportacion && data.refNroProformaVentaExportacion.trim() !== "" ? data.refNroProformaVentaExportacion : null,
+      tipoGarantia:
+        data.tipoGarantia && data.tipoGarantia.trim() !== ""
+          ? data.tipoGarantia
+          : null,
+      numeroContrato:
+        data.numeroContrato && data.numeroContrato.trim() !== ""
+          ? data.numeroContrato
+          : null,
+      numeroGarantia:
+        data.numeroGarantia && data.numeroGarantia.trim() !== ""
+          ? data.numeroGarantia
+          : null,
+      numeroCartaCredito:
+        data.numeroCartaCredito && data.numeroCartaCredito.trim() !== ""
+          ? data.numeroCartaCredito
+          : null,
+      beneficiario:
+        data.beneficiario && data.beneficiario.trim() !== ""
+          ? data.beneficiario
+          : null,
+      destinoFondos:
+        data.destinoFondos && data.destinoFondos.trim() !== ""
+          ? data.destinoFondos
+          : null,
+      descripcionGarantia:
+        data.descripcionGarantia && data.descripcionGarantia.trim() !== ""
+          ? data.descripcionGarantia
+          : null,
+      observaciones:
+        data.observaciones && data.observaciones.trim() !== ""
+          ? data.observaciones
+          : null,
+      refNroProformaVentaExportacion:
+        data.refNroProformaVentaExportacion &&
+        data.refNroProformaVentaExportacion.trim() !== ""
+          ? data.refNroProformaVentaExportacion
+          : null,
     };
 
     // Crear préstamo con cuotas en una transacción
@@ -439,8 +466,8 @@ const crear = async (data) => {
         },
         include: {
           banco: true,
-          moneda: true
-        }
+          moneda: true,
+        },
       });
 
       // Crear cuotas
@@ -464,10 +491,10 @@ const crear = async (data) => {
         await integracionContablePrestamo.generarAsientoDesembolso(
           nuevoPrestamo,
           tx,
-          data.creadoPor
+          data.creadoPor,
         );
       } catch (err) {
-        console.error('Error al generar asiento de desembolso:', err);
+        console.error("Error al generar asiento de desembolso:", err);
         // No fallar la transacción, solo registrar el error
       }
 
@@ -530,12 +557,18 @@ const actualizar = async (id, data) => {
 
     // Calcular tipo de cambio SOLO si el usuario NO lo estableció manualmente
     let tipoCambioAplicado;
-    
+
     // REGLA: Si el usuario envió un TC (cualquier valor), SIEMPRE respetarlo
-    if (data.tipoCambioAplicado !== null && data.tipoCambioAplicado !== undefined) {
+    if (
+      data.tipoCambioAplicado !== null &&
+      data.tipoCambioAplicado !== undefined
+    ) {
       // Usuario estableció un valor (puede ser 3.00, 3.361, etc.)
       tipoCambioAplicado = data.tipoCambioAplicado;
-    } else if (data.fechaDesembolso && data.fechaDesembolso !== existente.fechaDesembolso) {
+    } else if (
+      data.fechaDesembolso &&
+      data.fechaDesembolso !== existente.fechaDesembolso
+    ) {
       // Usuario cambió la fecha pero no tiene TC, calcular
       const tc = await obtenerTipoCambio(new Date(data.fechaDesembolso));
       tipoCambioAplicado = tc.venta;
@@ -543,7 +576,7 @@ const actualizar = async (id, data) => {
       // No cambió nada, mantener el existente
       tipoCambioAplicado = existente.tipoCambioAplicado;
     }
-    
+
     // Guardar lineaCreditoId anterior para actualizar saldos
     const lineaCreditoIdAnterior = existente.lineaCreditoId;
 
@@ -552,15 +585,43 @@ const actualizar = async (id, data) => {
     // Normalizar datos: convertir strings vacíos en null
     const datosNormalizados = {
       ...data,
-      tipoGarantia: data.tipoGarantia && data.tipoGarantia.trim() !== "" ? data.tipoGarantia : null,
-      numeroContrato: data.numeroContrato && data.numeroContrato.trim() !== "" ? data.numeroContrato : null,
-      numeroGarantia: data.numeroGarantia && data.numeroGarantia.trim() !== "" ? data.numeroGarantia : null,
-      numeroCartaCredito: data.numeroCartaCredito && data.numeroCartaCredito.trim() !== "" ? data.numeroCartaCredito : null,
-      beneficiario: data.beneficiario && data.beneficiario.trim() !== "" ? data.beneficiario : null,
-      destinoFondos: data.destinoFondos && data.destinoFondos.trim() !== "" ? data.destinoFondos : null,
-      descripcionGarantia: data.descripcionGarantia && data.descripcionGarantia.trim() !== "" ? data.descripcionGarantia : null,
-      observaciones: data.observaciones && data.observaciones.trim() !== "" ? data.observaciones : null,
-      refNroProformaVentaExportacion: data.refNroProformaVentaExportacion && data.refNroProformaVentaExportacion.trim() !== "" ? data.refNroProformaVentaExportacion : null,
+      tipoGarantia:
+        data.tipoGarantia && data.tipoGarantia.trim() !== ""
+          ? data.tipoGarantia
+          : null,
+      numeroContrato:
+        data.numeroContrato && data.numeroContrato.trim() !== ""
+          ? data.numeroContrato
+          : null,
+      numeroGarantia:
+        data.numeroGarantia && data.numeroGarantia.trim() !== ""
+          ? data.numeroGarantia
+          : null,
+      numeroCartaCredito:
+        data.numeroCartaCredito && data.numeroCartaCredito.trim() !== ""
+          ? data.numeroCartaCredito
+          : null,
+      beneficiario:
+        data.beneficiario && data.beneficiario.trim() !== ""
+          ? data.beneficiario
+          : null,
+      destinoFondos:
+        data.destinoFondos && data.destinoFondos.trim() !== ""
+          ? data.destinoFondos
+          : null,
+      descripcionGarantia:
+        data.descripcionGarantia && data.descripcionGarantia.trim() !== ""
+          ? data.descripcionGarantia
+          : null,
+      observaciones:
+        data.observaciones && data.observaciones.trim() !== ""
+          ? data.observaciones
+          : null,
+      refNroProformaVentaExportacion:
+        data.refNroProformaVentaExportacion &&
+        data.refNroProformaVentaExportacion.trim() !== ""
+          ? data.refNroProformaVentaExportacion
+          : null,
     };
 
     const prestamoActualizado = await prisma.prestamoBancario.update({
@@ -795,7 +856,10 @@ const listarPorSublinea = async (sublineaCreditoId) => {
     throw err;
   }
 };
-const obtenerDisponiblesParaSublinea = async (lineaCreditoId, tipoPrestamoId) => {
+const obtenerDisponiblesParaSublinea = async (
+  lineaCreditoId,
+  tipoPrestamoId,
+) => {
   try {
     const prestamos = await prisma.prestamoBancario.findMany({
       where: {
@@ -820,19 +884,19 @@ const obtenerDisponiblesParaSublinea = async (lineaCreditoId, tipoPrestamoId) =>
           select: {
             id: true,
             codigoSunat: true,
-            nombreLargo: true,  // ✅ CAMPO CORRECTO
+            nombreLargo: true, // ✅ CAMPO CORRECTO
             simbolo: true,
           },
         },
       },
       orderBy: {
-        fechaDesembolso: 'desc',
+        fechaDesembolso: "desc",
       },
     });
 
     return prestamos;
   } catch (error) {
-    console.error('Error al obtener préstamos disponibles:', error);
+    console.error("Error al obtener préstamos disponibles:", error);
     throw error;
   }
 };
@@ -854,7 +918,7 @@ const asignarASublinea = async (prestamoId, sublineaCreditoId) => {
 
     return prestamo;
   } catch (error) {
-    console.error('Error al asignar préstamo a sublínea:', error);
+    console.error("Error al asignar préstamo a sublínea:", error);
     throw error;
   }
 };
@@ -875,7 +939,7 @@ const desvincularDeSublinea = async (prestamoId) => {
 
     return prestamo;
   } catch (error) {
-    console.error('Error al desvincular préstamo de sublínea:', error);
+    console.error("Error al desvincular préstamo de sublínea:", error);
     throw error;
   }
 };
@@ -900,5 +964,5 @@ export default {
   listarPorSublinea,
   obtenerDisponiblesParaSublinea,
   asignarASublinea,
-  desvincularDeSublinea
+  desvincularDeSublinea,
 };

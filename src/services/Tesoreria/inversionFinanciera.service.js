@@ -1,5 +1,10 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio CRUD para InversionFinanciera
@@ -14,33 +19,41 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 async function validarInversionFinanciera(data) {
   // Validar empresa
   if (data.empresaId) {
-    const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: data.empresaId },
+    });
     if (!empresa) {
-      throw new ValidationError('La empresa referenciada no existe.');
+      throw new ValidationError("La empresa referenciada no existe.");
     }
   }
 
   // Validar banco si existe
   if (data.bancoId) {
-    const banco = await prisma.banco.findUnique({ where: { id: data.bancoId } });
+    const banco = await prisma.banco.findUnique({
+      where: { id: data.bancoId },
+    });
     if (!banco) {
-      throw new ValidationError('El banco referenciado no existe.');
+      throw new ValidationError("El banco referenciado no existe.");
     }
   }
 
   // Validar moneda
   if (data.monedaId) {
-    const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
+    const moneda = await prisma.moneda.findUnique({
+      where: { id: data.monedaId },
+    });
     if (!moneda) {
-      throw new ValidationError('La moneda referenciada no existe.');
+      throw new ValidationError("La moneda referenciada no existe.");
     }
   }
 
   // Validar estado
   if (data.estadoId) {
-    const estado = await prisma.estadoMultiFuncion.findUnique({ where: { id: data.estadoId } });
+    const estado = await prisma.estadoMultiFuncion.findUnique({
+      where: { id: data.estadoId },
+    });
     if (!estado) {
-      throw new ValidationError('El estado referenciado no existe.');
+      throw new ValidationError("El estado referenciado no existe.");
     }
   }
 
@@ -50,33 +63,43 @@ async function validarInversionFinanciera(data) {
       where: {
         empresaId: data.empresaId,
         numeroInversion: data.numeroInversion,
-        id: data.id ? { not: data.id } : undefined
-      }
+        id: data.id ? { not: data.id } : undefined,
+      },
     });
     if (existente) {
-      throw new ValidationError(`El número de inversión "${data.numeroInversion}" ya existe para esta empresa.`);
+      throw new ValidationError(
+        `El número de inversión "${data.numeroInversion}" ya existe para esta empresa.`,
+      );
     }
   }
 
   // Validar tipo de inversión
   if (data.tipoInversion) {
-    const tiposValidos = ['PLAZO_FIJO', 'FONDO_MUTUO', 'BONOS', 'ACCIONES', 'CTS'];
+    const tiposValidos = [
+      "PLAZO_FIJO",
+      "FONDO_MUTUO",
+      "BONOS",
+      "ACCIONES",
+      "CTS",
+    ];
     if (!tiposValidos.includes(data.tipoInversion)) {
-      throw new ValidationError('El tipo de inversión no es válido.');
+      throw new ValidationError("El tipo de inversión no es válido.");
     }
   }
 
   // Validar fechas
   if (data.fechaInversion && data.fechaVencimiento) {
     if (new Date(data.fechaVencimiento) <= new Date(data.fechaInversion)) {
-      throw new ValidationError('La fecha de vencimiento debe ser posterior a la fecha de inversión.');
+      throw new ValidationError(
+        "La fecha de vencimiento debe ser posterior a la fecha de inversión.",
+      );
     }
   }
 
   // Validar montos
   if (data.valorActual && data.montoInvertido) {
     if (data.valorActual < 0) {
-      throw new ValidationError('El valor actual no puede ser negativo.');
+      throw new ValidationError("El valor actual no puede ser negativo.");
     }
   }
 }
@@ -103,15 +126,15 @@ const listar = async () => {
         moneda: true,
         estado: true,
         movimientos: {
-          orderBy: { fechaMovimiento: 'desc' },
-          take: 5
-        }
+          orderBy: { fechaMovimiento: "desc" },
+          take: 5,
+        },
       },
-      orderBy: { fechaInversion: 'desc' }
+      orderBy: { fechaInversion: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -130,18 +153,29 @@ const obtenerPorId = async (id) => {
         moneda: true,
         estado: true,
         movimientos: {
-          orderBy: { fechaMovimiento: 'desc' }
+          orderBy: { fechaMovimiento: "desc" },
         },
         movimientoCaja: true,
-        asientoContable: true
-      }
+        asientosContables: {
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
+      },
     });
-    if (!inversion) throw new NotFoundError('Inversión financiera no encontrada');
+    if (!inversion)
+      throw new NotFoundError("Inversión financiera no encontrada");
     return inversion;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -153,10 +187,20 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     // Validar campos obligatorios
-    if (!data.empresaId || !data.numeroInversion || !data.tipoInversion || 
-        !data.descripcion || !data.fechaInversion || !data.montoInvertido || 
-        !data.monedaId || !data.valorActual || !data.estadoId) {
-      throw new ValidationError('Faltan campos obligatorios para crear la inversión.');
+    if (
+      !data.empresaId ||
+      !data.numeroInversion ||
+      !data.tipoInversion ||
+      !data.descripcion ||
+      !data.fechaInversion ||
+      !data.montoInvertido ||
+      !data.monedaId ||
+      !data.valorActual ||
+      !data.estadoId
+    ) {
+      throw new ValidationError(
+        "Faltan campos obligatorios para crear la inversión.",
+      );
     }
 
     await validarInversionFinanciera(data);
@@ -164,27 +208,27 @@ const crear = async (data) => {
     // Calcular rendimiento acumulado inicial
     const rendimientoAcumulado = calcularRendimientoAcumulado({
       montoInvertido: data.montoInvertido,
-      valorActual: data.valorActual
+      valorActual: data.valorActual,
     });
 
     const inversion = await prisma.inversionFinanciera.create({
       data: {
         ...data,
-        rendimientoAcumulado
+        rendimientoAcumulado,
       },
       include: {
         empresa: true,
         banco: true,
         moneda: true,
-        estado: true
-      }
+        estado: true,
+      },
     });
 
     return inversion;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -195,18 +239,24 @@ const crear = async (data) => {
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.inversionFinanciera.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Inversión financiera no encontrada');
+    const existente = await prisma.inversionFinanciera.findUnique({
+      where: { id },
+    });
+    if (!existente)
+      throw new NotFoundError("Inversión financiera no encontrada");
 
     await validarInversionFinanciera({ ...data, id });
 
     // Recalcular rendimiento si se actualizan montos
     let rendimientoAcumulado = existente.rendimientoAcumulado;
     if (data.valorActual !== undefined) {
-      const montoInvertido = data.montoInvertido !== undefined ? data.montoInvertido : existente.montoInvertido;
+      const montoInvertido =
+        data.montoInvertido !== undefined
+          ? data.montoInvertido
+          : existente.montoInvertido;
       rendimientoAcumulado = calcularRendimientoAcumulado({
         montoInvertido,
-        valorActual: data.valorActual
+        valorActual: data.valorActual,
       });
     }
 
@@ -214,7 +264,7 @@ const actualizar = async (id, data) => {
       where: { id },
       data: {
         ...data,
-        rendimientoAcumulado
+        rendimientoAcumulado,
       },
       include: {
         empresa: true,
@@ -222,14 +272,15 @@ const actualizar = async (id, data) => {
         moneda: true,
         estado: true,
         movimientos: {
-          orderBy: { fechaMovimiento: 'desc' }
-        }
-      }
+          orderBy: { fechaMovimiento: "desc" },
+        },
+      },
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -244,23 +295,30 @@ const eliminar = async (id) => {
     const existente = await prisma.inversionFinanciera.findUnique({
       where: { id },
       include: {
-        movimientos: true
-      }
+        movimientos: true,
+      },
     });
 
-    if (!existente) throw new NotFoundError('Inversión financiera no encontrada');
+    if (!existente)
+      throw new NotFoundError("Inversión financiera no encontrada");
 
     // Validar que no tenga movimientos o esté cancelada
-    if (existente.movimientos && existente.movimientos.length > 0 && existente.estadoId !== 94) {
-      throw new ConflictError('No se puede eliminar la inversión porque tiene movimientos registrados.');
+    if (
+      existente.movimientos &&
+      existente.movimientos.length > 0 &&
+      existente.estadoId !== 94
+    ) {
+      throw new ConflictError(
+        "No se puede eliminar la inversión porque tiene movimientos registrados.",
+      );
     }
 
     await prisma.inversionFinanciera.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -271,21 +329,36 @@ const eliminar = async (id) => {
  */
 const registrarMovimiento = async (inversionFinancieraId, dataMovimiento) => {
   try {
-    const inversion = await prisma.inversionFinanciera.findUnique({ 
-      where: { id: inversionFinancieraId } 
+    const inversion = await prisma.inversionFinanciera.findUnique({
+      where: { id: inversionFinancieraId },
     });
-    if (!inversion) throw new NotFoundError('Inversión financiera no encontrada');
+    if (!inversion)
+      throw new NotFoundError("Inversión financiera no encontrada");
 
-    const { tipoMovimiento, fechaMovimiento, monto, descripcion, movimientoCajaId, asientoContableId } = dataMovimiento;
+    const {
+      tipoMovimiento,
+      fechaMovimiento,
+      monto,
+      descripcion,
+      movimientoCajaId,
+    } = dataMovimiento;
 
     if (!tipoMovimiento || !fechaMovimiento || !monto || !descripcion) {
-      throw new ValidationError('Tipo, fecha, monto y descripción son obligatorios.');
+      throw new ValidationError(
+        "Tipo, fecha, monto y descripción son obligatorios.",
+      );
     }
 
     // Validar tipo de movimiento
-    const tiposValidos = ['INVERSION', 'RENDIMIENTO', 'RETIRO', 'AJUSTE', 'LIQUIDACION'];
+    const tiposValidos = [
+      "INVERSION",
+      "RENDIMIENTO",
+      "RETIRO",
+      "AJUSTE",
+      "LIQUIDACION",
+    ];
     if (!tiposValidos.includes(tipoMovimiento)) {
-      throw new ValidationError('El tipo de movimiento no es válido.');
+      throw new ValidationError("El tipo de movimiento no es válido.");
     }
 
     // Crear movimiento en una transacción
@@ -298,39 +371,39 @@ const registrarMovimiento = async (inversionFinancieraId, dataMovimiento) => {
           monto,
           descripcion,
           movimientoCajaId: movimientoCajaId || null,
-          asientoContableId: asientoContableId || null
-        }
+        },
       });
 
       // Actualizar valor actual de la inversión según tipo de movimiento
       let nuevoValorActual = parseFloat(inversion.valorActual);
-      
+
       switch (tipoMovimiento) {
-        case 'INVERSION':
+        case "INVERSION":
           nuevoValorActual += parseFloat(monto);
           break;
-        case 'RENDIMIENTO':
+        case "RENDIMIENTO":
           nuevoValorActual += parseFloat(monto);
           break;
-        case 'RETIRO':
+        case "RETIRO":
           nuevoValorActual -= parseFloat(monto);
           break;
-        case 'AJUSTE':
+        case "AJUSTE":
           nuevoValorActual = parseFloat(monto);
           break;
-        case 'LIQUIDACION':
+        case "LIQUIDACION":
           nuevoValorActual = 0;
           break;
       }
 
-      const rendimientoAcumulado = nuevoValorActual - parseFloat(inversion.montoInvertido);
+      const rendimientoAcumulado =
+        nuevoValorActual - parseFloat(inversion.montoInvertido);
 
       await tx.inversionFinanciera.update({
         where: { id: inversionFinancieraId },
         data: {
           valorActual: nuevoValorActual,
-          rendimientoAcumulado
-        }
+          rendimientoAcumulado,
+        },
       });
 
       return nuevo;
@@ -343,17 +416,28 @@ const registrarMovimiento = async (inversionFinancieraId, dataMovimiento) => {
           include: {
             empresa: true,
             banco: true,
-            moneda: true
-          }
+            moneda: true,
+          },
         },
         movimientoCaja: true,
-        asientoContable: true
-      }
+        asientosContables: {
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
+      },
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -364,17 +448,27 @@ const registrarMovimiento = async (inversionFinancieraId, dataMovimiento) => {
  */
 const liquidar = async (id, dataLiquidacion) => {
   try {
-    const inversion = await prisma.inversionFinanciera.findUnique({ where: { id } });
-    if (!inversion) throw new NotFoundError('Inversión financiera no encontrada');
+    const inversion = await prisma.inversionFinanciera.findUnique({
+      where: { id },
+    });
+    if (!inversion)
+      throw new NotFoundError("Inversión financiera no encontrada");
 
     if (inversion.estadoId === 93) {
-      throw new ConflictError('La inversión ya está liquidada.');
+      throw new ConflictError("La inversión ya está liquidada.");
     }
 
-    const { fechaLiquidacion, montoLiquidado, movimientoCajaId, asientoContableId, observaciones } = dataLiquidacion;
+    const {
+      fechaLiquidacion,
+      montoLiquidado,
+      movimientoCajaId,
+      observaciones,
+    } = dataLiquidacion;
 
     if (!fechaLiquidacion || !montoLiquidado) {
-      throw new ValidationError('Fecha de liquidación y monto liquidado son obligatorios.');
+      throw new ValidationError(
+        "Fecha de liquidación y monto liquidado son obligatorios.",
+      );
     }
 
     // Liquidar en una transacción
@@ -383,13 +477,12 @@ const liquidar = async (id, dataLiquidacion) => {
       await tx.movimientoInversion.create({
         data: {
           inversionFinancieraId: id,
-          tipoMovimiento: 'LIQUIDACION',
+          tipoMovimiento: "LIQUIDACION",
           fechaMovimiento: fechaLiquidacion,
           monto: montoLiquidado,
-          descripcion: 'Liquidación de inversión',
+          descripcion: "Liquidación de inversión",
           movimientoCajaId: movimientoCajaId || null,
-          asientoContableId: asientoContableId || null
-        }
+        },
       });
 
       // Actualizar inversión
@@ -401,8 +494,7 @@ const liquidar = async (id, dataLiquidacion) => {
           valorActual: 0,
           estadoId: 93, // LIQUIDADA
           movimientoCajaId: movimientoCajaId || null,
-          asientoContableId: asientoContableId || null,
-          observaciones: observaciones || null
+          observaciones: observaciones || null,
         },
         include: {
           empresa: true,
@@ -410,9 +502,21 @@ const liquidar = async (id, dataLiquidacion) => {
           moneda: true,
           estado: true,
           movimientos: {
-            orderBy: { fechaMovimiento: 'desc' }
-          }
-        }
+            orderBy: { fechaMovimiento: "desc" },
+          },
+          movimientoCaja: true,
+          asientosContables: {
+            include: {
+              detalles: {
+                include: {
+                  planCuenta: true,
+                },
+                orderBy: { numeroLinea: "asc" },
+              },
+            },
+            orderBy: { fechaAsiento: "desc" },
+          },
+        },
       });
 
       return updated;
@@ -420,9 +524,14 @@ const liquidar = async (id, dataLiquidacion) => {
 
     return inversionLiquidada;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (
+      err instanceof NotFoundError ||
+      err instanceof ValidationError ||
+      err instanceof ConflictError
+    )
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -440,15 +549,15 @@ const listarPorEmpresa = async (empresaId) => {
         moneda: true,
         estado: true,
         movimientos: {
-          orderBy: { fechaMovimiento: 'desc' },
-          take: 3
-        }
+          orderBy: { fechaMovimiento: "desc" },
+          take: 3,
+        },
       },
-      orderBy: { fechaInversion: 'desc' }
+      orderBy: { fechaInversion: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -462,19 +571,19 @@ const listarVigentes = async () => {
     // Estado: 91=VIGENTE
     return await prisma.inversionFinanciera.findMany({
       where: {
-        estadoId: 91
+        estadoId: 91,
       },
       include: {
         empresa: true,
         banco: true,
         moneda: true,
-        estado: true
+        estado: true,
       },
-      orderBy: { fechaVencimiento: 'asc' }
+      orderBy: { fechaVencimiento: "asc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -491,13 +600,13 @@ const listarPorTipo = async (tipoInversion) => {
         empresa: true,
         banco: true,
         moneda: true,
-        estado: true
+        estado: true,
       },
-      orderBy: { fechaInversion: 'desc' }
+      orderBy: { fechaInversion: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -512,13 +621,23 @@ const listarMovimientos = async (inversionFinancieraId) => {
       where: { inversionFinancieraId },
       include: {
         movimientoCaja: true,
-        asientoContable: true
+        asientosContables: {
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
       },
-      orderBy: { fechaMovimiento: 'desc' }
+      orderBy: { fechaMovimiento: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -530,13 +649,13 @@ const listarMovimientos = async (inversionFinancieraId) => {
 const obtenerResumenRendimientos = async (empresaId) => {
   try {
     const inversiones = await prisma.inversionFinanciera.findMany({
-      where: { 
+      where: {
         empresaId,
-        estadoId: { in: [91, 92] } // VIGENTE o VENCIDA
+        estadoId: { in: [91, 92] }, // VIGENTE o VENCIDA
       },
       include: {
-        moneda: true
-      }
+        moneda: true,
+      },
     });
 
     const resumen = inversiones.reduce((acc, inv) => {
@@ -547,7 +666,7 @@ const obtenerResumenRendimientos = async (empresaId) => {
           totalInvertido: 0,
           valorActual: 0,
           rendimientoAcumulado: 0,
-          cantidad: 0
+          cantidad: 0,
         };
       }
       acc[moneda].totalInvertido += parseFloat(inv.montoInvertido);
@@ -559,8 +678,8 @@ const obtenerResumenRendimientos = async (empresaId) => {
 
     return Object.values(resumen);
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -578,5 +697,5 @@ export default {
   listarVigentes,
   listarPorTipo,
   listarMovimientos,
-  obtenerResumenRendimientos
+  obtenerResumenRendimientos,
 };

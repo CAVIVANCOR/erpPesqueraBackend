@@ -129,9 +129,9 @@ const obtenerPorId = async (id) => {
         moduloOrigen: true,
       },
     });
-    
+
     if (!mov) throw new NotFoundError("DetMovsEntregaRendir no encontrado");
-    
+
     return mov;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -853,7 +853,7 @@ const obtenerSaldoInicialAsignacion = async (
   fechaMovimiento,
 ) => {
   try {
-      // Buscar la última asignación liquidada del mismo responsable
+    // Buscar la última asignación liquidada del mismo responsable
     // SIN filtrar por documentoOrigenId para arrastrar saldo entre temporadas
     const ultimaAsignacionLiquidada =
       await prisma.detMovsEntregaRendir.findFirst({
@@ -895,6 +895,7 @@ const obtenerSaldoInicialAsignacion = async (
 
 /**
  * Calcular el saldo final de una asignación al liquidarla
+ * Fórmula: Saldo Final = Saldo Inicial + Asignación - Gastos + Devoluciones
  */
 const calcularSaldoFinalAsignacion = async (asignacionId) => {
   try {
@@ -908,6 +909,7 @@ const calcularSaldoFinalAsignacion = async (asignacionId) => {
           },
           select: {
             monto: true,
+            tipoMovimientoId: true, // Necesario para identificar devoluciones
           },
         },
       },
@@ -924,15 +926,27 @@ const calcularSaldoFinalAsignacion = async (asignacionId) => {
       );
     }
 
-    // Calcular total gastado
-    const totalGastado = asignacion.gastosAsociados.reduce((sum, gasto) => {
-      return sum + Number(gasto.monto);
-    }, 0);
+    // Separar gastos y devoluciones
+    let totalGastos = 0;
+    let totalDevoluciones = 0;
+
+    asignacion.gastosAsociados.forEach((movimiento) => {
+      const monto = Number(movimiento.monto);
+
+      // tipoMovimientoId = 28 es "Devolución a Rendir"
+      if (Number(movimiento.tipoMovimientoId) === 28) {
+        totalDevoluciones += monto;
+      } else {
+        totalGastos += monto;
+      }
+    });
 
     // Calcular saldo final
+    // Fórmula: Saldo Final = Saldo Inicial + Asignación - Gastos + Devoluciones
     const saldoInicial = Number(asignacion.saldoInicialAsignacion || 0);
-    const montoEntregado = Number(asignacion.monto);
-    const saldoFinal = saldoInicial + montoEntregado - totalGastado;
+    const montoAsignacion = Number(asignacion.monto);
+    const saldoFinal =
+      saldoInicial + montoAsignacion - totalGastos + totalDevoluciones;
 
     return saldoFinal;
   } catch (err) {
@@ -947,7 +961,12 @@ const calcularSaldoFinalAsignacion = async (asignacionId) => {
 /**
  * Liquidar una asignación (marcarla como liquidada y calcular saldo final)
  */
-const liquidarAsignacion = async (asignacionId, usuarioId = null) => {
+const liquidarAsignacion = async (
+  asignacionId,
+  usuarioId = null,
+  permitirRegeneracion = false,
+  urlLiquidacionPdf = null,
+) => {
   try {
     // Validar que la asignación existe y es principal
     const asignacion = await prisma.detMovsEntregaRendir.findUnique({
@@ -976,23 +995,141 @@ const liquidarAsignacion = async (asignacionId, usuarioId = null) => {
       );
     }
 
+    // ========================================
+    // ✅ VALIDAR REGENERACIÓN SI YA ESTÁ LIQUIDADA
+    // ========================================
     if (asignacion.entregaARendirLiquidada) {
-      throw new ValidationError("La asignación ya está liquidada");
+      if (!permitirRegeneracion) {
+        throw new ValidationError("La asignación ya está liquidada");
+      }
+
+      // ========================================
+      // ✅ VERIFICAR PERMISO puedeReactivarDocs
+      // ========================================
+      if (!usuarioId) {
+        throw new ValidationError(
+          "Usuario no autenticado para regenerar liquidaciones",
+        );
+      }
+
+      // Buscar el submódulo de rendicionGastos
+      const submodulo = await prisma.submoduloSistema.findFirst({
+        where: {
+          ruta: "rendicionGastos",
+          activo: true,
+        },
+        select: { id: true, nombre: true },
+      });
+
+      if (!submodulo) {
+        throw new ValidationError(
+          "Submódulo de Rendición de Gastos no encontrado",
+        );
+      }
+
+      // Verificar si el usuario es superusuario
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: usuarioId },
+        select: { esSuperUsuario: true },
+      });
+
+      let tienePermiso = false;
+
+      if (usuario?.esSuperUsuario) {
+        tienePermiso = true;
+      } else {
+        // Buscar acceso del usuario al submódulo
+        const acceso = await prisma.accesosUsuario.findFirst({
+          where: {
+            usuarioId,
+            submoduloId: submodulo.id,
+            activo: true,
+          },
+          select: {
+            puedeReactivarDocs: true,
+          },
+        });
+
+        if (!acceso) {
+          throw new ValidationError(
+            `No tiene acceso al módulo '${submodulo.nombre}'`,
+          );
+        }
+
+        tienePermiso = acceso.puedeReactivarDocs;
+      }
+
+      if (!tienePermiso) {
+        throw new ValidationError(
+          'No tiene permiso para regenerar liquidaciones. Se requiere el permiso "Reactivar Documentos".',
+        );
+      }
     }
 
-    // Calcular saldo final
+    // ========================================
+    // ✅ OBTENER DATOS DE LA ASIGNACIÓN ACTUAL
+    // ========================================
+    const asignacionActual = await prisma.detMovsEntregaRendir.findUnique({
+      where: { id: BigInt(asignacionId) },
+      select: {
+        empresaId: true,
+        moduloOrigenId: true,
+        documentoOrigenId: true,
+        responsableId: true,
+        fechaMovimiento: true,
+      },
+    });
+
+    if (!asignacionActual) {
+      throw new NotFoundError("Asignación no encontrada para obtener datos");
+    }
+
+    // ========================================
+    // ✅ RECALCULAR SALDO INICIAL (SIEMPRE)
+    // ========================================
+    // Esto garantiza que si se liquidó otra asignación anterior después,
+    // el saldo inicial se actualice correctamente
+    const saldoInicialRecalculado = await obtenerSaldoInicialAsignacion(
+      asignacionActual.empresaId,
+      asignacionActual.moduloOrigenId,
+      asignacionActual.documentoOrigenId,
+      asignacionActual.responsableId,
+      asignacionActual.fechaMovimiento,
+    );
+
+    // ========================================
+    // ✅ ACTUALIZAR SALDO INICIAL EN BD PRIMERO
+    // ========================================
+    // Esto es crítico para que calcularSaldoFinalAsignacion use el valor correcto
+    await prisma.detMovsEntregaRendir.update({
+      where: { id: BigInt(asignacionId) },
+      data: {
+        saldoInicialAsignacion: saldoInicialRecalculado,
+      },
+    });
+
+    // ========================================
+    // ✅ CALCULAR SALDO FINAL (DESPUÉS DE ACTUALIZAR SALDO INICIAL)
+    // ========================================
     const saldoFinal = await calcularSaldoFinalAsignacion(asignacionId);
 
-    // Actualizar la asignación
+    // ========================================
+    // ✅ ACTUALIZAR LA ASIGNACIÓN CON TODOS LOS CAMPOS
+    // ========================================
     const dataActualizacion = {
       entregaARendirLiquidada: true,
       fechaLiquidacionEntregaARendir: new Date(),
+      saldoInicialAsignacion: saldoInicialRecalculado,
       saldoFinalAsignacion: saldoFinal,
       actualizadoEn: new Date(),
     };
 
     if (usuarioId) {
       dataActualizacion.actualizadoPorId = usuarioId;
+    }
+
+    if (urlLiquidacionPdf) {
+      dataActualizacion.urlLiquidacionEntregaARendir = urlLiquidacionPdf;
     }
 
     const asignacionActualizada = await prisma.detMovsEntregaRendir.update({

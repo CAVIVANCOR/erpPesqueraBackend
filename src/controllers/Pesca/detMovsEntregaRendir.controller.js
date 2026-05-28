@@ -114,11 +114,46 @@ export async function liquidarAsignacion(req, res, next) {
   try {
     const id = Number(req.params.id);
     const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
+    const { permitirRegeneracion, urlLiquidacionPdf } = req.body;
+    
     const asignacionLiquidada = await detMovsEntregaRendirService.liquidarAsignacion(
       id,
-      usuarioId
+      usuarioId,
+      permitirRegeneracion,
+      urlLiquidacionPdf
     );
-    res.json(toJSONBigInt(asignacionLiquidada));
+
+    // Obtener datos completos para el response con detalles del cálculo
+    const asignacionConDetalles = await detMovsEntregaRendirService.obtenerConGastosAsociados(id);
+
+    // Calcular totales para el response
+    let totalGastos = 0;
+    let totalDevoluciones = 0;
+
+    if (asignacionConDetalles.gastosAsociados) {
+      asignacionConDetalles.gastosAsociados.forEach((movimiento) => {
+        const monto = Number(movimiento.monto);
+        if (Number(movimiento.tipoMovimientoId) === 28) {
+          totalDevoluciones += monto;
+        } else {
+          totalGastos += monto;
+        }
+      });
+    }
+
+    // Response con información detallada para el Toast
+    const response = {
+      ...toJSONBigInt(asignacionLiquidada),
+      detallesCalculo: {
+        saldoInicial: Number(asignacionLiquidada.saldoInicialAsignacion || 0),
+        montoAsignado: Number(asignacionLiquidada.monto || 0),
+        totalGastos,
+        totalDevoluciones,
+        saldoFinal: Number(asignacionLiquidada.saldoFinalAsignacion || 0),
+      },
+    };
+
+    res.json(response);
   } catch (err) {
     next(err);
   }

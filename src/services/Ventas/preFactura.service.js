@@ -1444,8 +1444,6 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           observaciones: esSaldoInicial
             ? `Saldo Inicial CxC - ${preFactura.cliente.razonSocial}`
             : `CxC Blanca generada desde PreFactura ${preFactura.codigo}`,
-          // INTEGRACIÓN CONTABLE
-          asientoContableId: null,
         },
       });
 
@@ -1677,8 +1675,6 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
           observaciones: esSaldoInicial
             ? `Saldo Inicial CxC Gerencial - ${preFactura.cliente.razonSocial}`
             : `CxC Negra generada desde PreFactura ${preFactura.codigo}`,
-          // INTEGRACIÓN CONTABLE
-          asientoContableId: null,
         },
       });
 

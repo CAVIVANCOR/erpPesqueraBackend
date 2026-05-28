@@ -47,19 +47,7 @@ export async function crear(req, res, next) {
 export async function actualizar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    console.log('📅 BACKEND - Datos recibidos:', {
-      id,
-      cesado: req.body.cesado,
-      fechaCese: req.body.fechaCese,
-      fechaIngreso: req.body.fechaIngreso
-    });
     const actualizado = await personalService.actualizar(id, req.body);
-    console.log('📅 BACKEND - Datos guardados:', {
-      id: actualizado.id,
-      cesado: actualizado.cesado,
-      fechaCese: actualizado.fechaCese,
-      fechaIngreso: actualizado.fechaIngreso
-    });
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
     next(err);

@@ -23,13 +23,6 @@ async function validarCuentaPorPagar(data) {
     if (!orden) throw new ValidationError('La orden de compra referenciada no existe.');
   }
 
-  if (data.asientoContableId) {
-    const asiento = await prisma.asientoContable.findUnique({ 
-      where: { id: data.asientoContableId } 
-    });
-    if (!asiento) throw new ValidationError('El asiento contable referenciado no existe.');
-  }
-
   if (data.monedaId) {
     const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
     if (!moneda) throw new ValidationError('La moneda referenciada no existe.');

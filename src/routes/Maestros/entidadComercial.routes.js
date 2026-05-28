@@ -48,10 +48,10 @@ router.post(
 );
 
 router.post(
-  '/:id/clonar-a-empresas',
+  '/clonar-a-empresas',
   autenticarJWT,
   checkPermission('entidadComercial', 'crear'),
-  entidadComercialController.clonarAEmpresas
+  entidadComercialController.clonarAEmpresasSeleccionadas
 );
 
 router.put(

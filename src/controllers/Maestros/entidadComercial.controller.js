@@ -78,13 +78,40 @@ export async function obtenerProveedoresGps(req, res, next) {
 }
 
 /**
- * Clona una EntidadComercial y sus tablas relacionadas a todas las demás empresas del grupo
+ * Clona una EntidadComercial y sus tablas relacionadas a empresas seleccionadas
+ * @route POST /api/entidades-comerciales/clonar-a-empresas
+ * @body { entidadComercialId: number, empresasDestino: number[] }
  */
-export async function clonarAEmpresas(req, res, next) {
+export async function clonarAEmpresasSeleccionadas(req, res, next) {
   try {
-    const id = Number(req.params.id);
-    const resumen = await entidadComercialService.clonarAEmpresas(id);
-    res.json(toJSONBigInt(resumen));
+    const { entidadComercialId, empresasDestino } = req.body;
+
+    // Validaciones
+    if (!entidadComercialId) {
+      return res.status(400).json({
+        success: false,
+        message: 'El ID de la entidad comercial es requerido'
+      });
+    }
+
+    if (!empresasDestino || !Array.isArray(empresasDestino) || empresasDestino.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debe seleccionar al menos una empresa destino'
+      });
+    }
+
+    // Ejecutar clonación
+    const resumen = await entidadComercialService.clonarAEmpresasSeleccionadas(
+      Number(entidadComercialId),
+      empresasDestino.map(id => Number(id))
+    );
+
+    res.json(toJSONBigInt({
+      success: true,
+      message: 'Entidad clonada exitosamente',
+      ...resumen
+    }));
   } catch (err) {
     next(err);
   }

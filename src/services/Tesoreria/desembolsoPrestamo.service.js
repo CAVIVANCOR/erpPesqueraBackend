@@ -1,5 +1,10 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio CRUD para DesembolsoPrestamo
@@ -14,37 +19,29 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 async function validarDesembolsoPrestamo(data) {
   // Validar préstamo
   if (data.prestamoBancarioId) {
-    const prestamo = await prisma.prestamoBancario.findUnique({ 
-      where: { id: data.prestamoBancarioId } 
+    const prestamo = await prisma.prestamoBancario.findUnique({
+      where: { id: data.prestamoBancarioId },
     });
     if (!prestamo) {
-      throw new ValidationError('El préstamo bancario referenciado no existe.');
+      throw new ValidationError("El préstamo bancario referenciado no existe.");
     }
   }
 
   // Validar movimiento de caja
   if (data.movimientoCajaId) {
-    const movimiento = await prisma.movimientoCaja.findUnique({ 
-      where: { id: data.movimientoCajaId } 
+    const movimiento = await prisma.movimientoCaja.findUnique({
+      where: { id: data.movimientoCajaId },
     });
     if (!movimiento) {
-      throw new ValidationError('El movimiento de caja referenciado no existe.');
-    }
-  }
-
-  // Validar asiento contable si existe
-  if (data.asientoContableId) {
-    const asiento = await prisma.asientoContable.findUnique({ 
-      where: { id: data.asientoContableId } 
-    });
-    if (!asiento) {
-      throw new ValidationError('El asiento contable referenciado no existe.');
+      throw new ValidationError(
+        "El movimiento de caja referenciado no existe.",
+      );
     }
   }
 
   // Validar que el monto sea positivo
   if (data.monto && data.monto <= 0) {
-    throw new ValidationError('El monto del desembolso debe ser mayor a cero.');
+    throw new ValidationError("El monto del desembolso debe ser mayor a cero.");
   }
 }
 
@@ -54,17 +51,17 @@ async function validarDesembolsoPrestamo(data) {
  */
 async function actualizarMontoDesembolsado(prestamoBancarioId) {
   const desembolsos = await prisma.desembolsoPrestamo.findMany({
-    where: { prestamoBancarioId }
+    where: { prestamoBancarioId },
   });
 
   const totalDesembolsado = desembolsos.reduce(
-    (sum, d) => sum + parseFloat(d.monto), 
-    0
+    (sum, d) => sum + parseFloat(d.monto),
+    0,
   );
 
   await prisma.prestamoBancario.update({
     where: { id: prestamoBancarioId },
-    data: { montoDesembolsado: totalDesembolsado }
+    data: { montoDesembolsado: totalDesembolsado },
   });
 }
 
@@ -79,18 +76,29 @@ const listar = async () => {
           include: {
             empresa: true,
             banco: true,
-            moneda: true
-          }
+            moneda: true,
+          },
         },
         movimientoCaja: true,
-        asientoContable: true,
-        personalCreador: true
+        asientosContables: {
+          // ✅ AGREGAR
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
+        personalCreador: true,
       },
-      orderBy: { fechaDesembolso: 'desc' }
+      orderBy: { fechaDesembolso: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -108,20 +116,32 @@ const obtenerPorId = async (id) => {
           include: {
             empresa: true,
             banco: true,
-            moneda: true
-          }
+            moneda: true,
+          },
         },
         movimientoCaja: true,
-        asientoContable: true,
-        personalCreador: true
-      }
+        asientosContables: {
+          // ✅ AGREGAR
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
+        personalCreador: true,
+      },
     });
-    if (!desembolso) throw new NotFoundError('Desembolso de préstamo no encontrado');
+    if (!desembolso)
+      throw new NotFoundError("Desembolso de préstamo no encontrado");
     return desembolso;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -133,10 +153,17 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     // Validar campos obligatorios
-    if (!data.prestamoBancarioId || !data.numeroDesembolso || 
-        !data.fechaDesembolso || data.monto === null || 
-        data.monto === undefined || !data.movimientoCajaId) {
-      throw new ValidationError('Faltan campos obligatorios para crear el desembolso.');
+    if (
+      !data.prestamoBancarioId ||
+      !data.numeroDesembolso ||
+      !data.fechaDesembolso ||
+      data.monto === null ||
+      data.monto === undefined ||
+      !data.movimientoCajaId
+    ) {
+      throw new ValidationError(
+        "Faltan campos obligatorios para crear el desembolso.",
+      );
     }
 
     await validarDesembolsoPrestamo(data);
@@ -145,50 +172,57 @@ const crear = async (data) => {
     const existente = await prisma.desembolsoPrestamo.findFirst({
       where: {
         prestamoBancarioId: data.prestamoBancarioId,
-        numeroDesembolso: data.numeroDesembolso
-      }
+        numeroDesembolso: data.numeroDesembolso,
+      },
     });
 
     if (existente) {
-      throw new ConflictError('Ya existe un desembolso con este número para el préstamo.');
+      throw new ConflictError(
+        "Ya existe un desembolso con este número para el préstamo.",
+      );
     }
 
     // Validar que el monto no exceda el monto aprobado
     const prestamo = await prisma.prestamoBancario.findUnique({
-      where: { id: data.prestamoBancarioId }
+      where: { id: data.prestamoBancarioId },
     });
 
     const desembolsosExistentes = await prisma.desembolsoPrestamo.findMany({
-      where: { prestamoBancarioId: data.prestamoBancarioId }
+      where: { prestamoBancarioId: data.prestamoBancarioId },
     });
 
     const totalDesembolsado = desembolsosExistentes.reduce(
-      (sum, d) => sum + parseFloat(d.monto), 
-      0
+      (sum, d) => sum + parseFloat(d.monto),
+      0,
     );
 
-    if (totalDesembolsado + parseFloat(data.monto) > parseFloat(prestamo.montoAprobado)) {
-      throw new ValidationError('El monto total desembolsado excedería el monto aprobado del préstamo.');
+    if (
+      totalDesembolsado + parseFloat(data.monto) >
+      parseFloat(prestamo.montoAprobado)
+    ) {
+      throw new ValidationError(
+        "El monto total desembolsado excedería el monto aprobado del préstamo.",
+      );
     }
 
     // Crear desembolso en una transacción
     const desembolso = await prisma.$transaction(async (tx) => {
-      const nuevo = await tx.desembolsoPrestamo.create({ 
+      const nuevo = await tx.desembolsoPrestamo.create({
         data,
         include: {
           prestamo: true,
           movimientoCaja: true,
-          personalCreador: true
-        }
+          personalCreador: true,
+        },
       });
 
       // Actualizar monto desembolsado del préstamo
       await tx.prestamoBancario.update({
         where: { id: data.prestamoBancarioId },
-        data: { 
+        data: {
           montoDesembolsado: totalDesembolsado + parseFloat(data.monto),
-          saldoCapital: totalDesembolsado + parseFloat(data.monto)
-        }
+          saldoCapital: totalDesembolsado + parseFloat(data.monto),
+        },
       });
 
       return nuevo;
@@ -196,9 +230,10 @@ const crear = async (data) => {
 
     return desembolso;
   } catch (err) {
-    if (err instanceof ValidationError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof ValidationError || err instanceof ConflictError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -209,31 +244,39 @@ const crear = async (data) => {
  */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.desembolsoPrestamo.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Desembolso de préstamo no encontrado');
+    const existente = await prisma.desembolsoPrestamo.findUnique({
+      where: { id },
+    });
+    if (!existente)
+      throw new NotFoundError("Desembolso de préstamo no encontrado");
 
     await validarDesembolsoPrestamo({ ...data, id });
 
     // Si se cambia el monto, validar que no exceda el monto aprobado
     if (data.monto && data.monto !== existente.monto) {
       const prestamo = await prisma.prestamoBancario.findUnique({
-        where: { id: existente.prestamoBancarioId }
+        where: { id: existente.prestamoBancarioId },
       });
 
       const desembolsosExistentes = await prisma.desembolsoPrestamo.findMany({
-        where: { 
+        where: {
           prestamoBancarioId: existente.prestamoBancarioId,
-          id: { not: id }
-        }
+          id: { not: id },
+        },
       });
 
       const totalDesembolsado = desembolsosExistentes.reduce(
-        (sum, d) => sum + parseFloat(d.monto), 
-        0
+        (sum, d) => sum + parseFloat(d.monto),
+        0,
       );
 
-      if (totalDesembolsado + parseFloat(data.monto) > parseFloat(prestamo.montoAprobado)) {
-        throw new ValidationError('El monto total desembolsado excedería el monto aprobado del préstamo.');
+      if (
+        totalDesembolsado + parseFloat(data.monto) >
+        parseFloat(prestamo.montoAprobado)
+      ) {
+        throw new ValidationError(
+          "El monto total desembolsado excedería el monto aprobado del préstamo.",
+        );
       }
     }
 
@@ -245,9 +288,20 @@ const actualizar = async (id, data) => {
         include: {
           prestamo: true,
           movimientoCaja: true,
-          asientoContable: true,
-          personalCreador: true
-        }
+          asientosContables: {
+            // ✅ AGREGAR
+            include: {
+              detalles: {
+                include: {
+                  planCuenta: true,
+                },
+                orderBy: { numeroLinea: "asc" },
+              },
+            },
+            orderBy: { fechaAsiento: "desc" },
+          },
+          personalCreador: true,
+        },
       });
 
       // Recalcular monto desembolsado del préstamo
@@ -258,9 +312,10 @@ const actualizar = async (id, data) => {
 
     return desembolso;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -271,25 +326,28 @@ const actualizar = async (id, data) => {
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.desembolsoPrestamo.findUnique({ 
+    const existente = await prisma.desembolsoPrestamo.findUnique({
       where: { id },
-      include: { prestamo: true }
+      include: { prestamo: true },
     });
 
-    if (!existente) throw new NotFoundError('Desembolso de préstamo no encontrado');
+    if (!existente)
+      throw new NotFoundError("Desembolso de préstamo no encontrado");
 
     // Validar que no sea el único desembolso si el préstamo tiene cuotas
     const cuotas = await prisma.cuotaPrestamo.count({
-      where: { prestamoBancarioId: existente.prestamoBancarioId }
+      where: { prestamoBancarioId: existente.prestamoBancarioId },
     });
 
     if (cuotas > 0) {
       const desembolsos = await prisma.desembolsoPrestamo.count({
-        where: { prestamoBancarioId: existente.prestamoBancarioId }
+        where: { prestamoBancarioId: existente.prestamoBancarioId },
       });
 
       if (desembolsos === 1) {
-        throw new ConflictError('No se puede eliminar el único desembolso de un préstamo con cuotas generadas.');
+        throw new ConflictError(
+          "No se puede eliminar el único desembolso de un préstamo con cuotas generadas.",
+        );
       }
     }
 
@@ -304,8 +362,8 @@ const eliminar = async (id) => {
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -320,14 +378,25 @@ const listarPorPrestamo = async (prestamoBancarioId) => {
       where: { prestamoBancarioId },
       include: {
         movimientoCaja: true,
-        asientoContable: true,
-        personalCreador: true
+        asientosContables: {
+          // ✅ AGREGAR
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
+        personalCreador: true,
       },
-      orderBy: { numeroDesembolso: 'asc' }
+      orderBy: { numeroDesembolso: "asc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -339,18 +408,15 @@ const listarPorPrestamo = async (prestamoBancarioId) => {
 const obtenerTotalDesembolsado = async (prestamoBancarioId) => {
   try {
     const desembolsos = await prisma.desembolsoPrestamo.findMany({
-      where: { prestamoBancarioId }
+      where: { prestamoBancarioId },
     });
 
-    const total = desembolsos.reduce(
-      (sum, d) => sum + parseFloat(d.monto), 
-      0
-    );
+    const total = desembolsos.reduce((sum, d) => sum + parseFloat(d.monto), 0);
 
     return { total, cantidad: desembolsos.length };
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -363,5 +429,5 @@ export default {
   actualizar,
   eliminar,
   listarPorPrestamo,
-  obtenerTotalDesembolsado
+  obtenerTotalDesembolsado,
 };
