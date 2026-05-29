@@ -1,5 +1,10 @@
-import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import prisma from "../../config/prismaClient.js";
+import {
+  NotFoundError,
+  DatabaseError,
+  ValidationError,
+  ConflictError,
+} from "../../utils/errors.js";
 
 /**
  * Servicio CRUD para CuentaPorCobrar
@@ -9,62 +14,112 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 async function validarCuentaPorCobrar(data) {
   if (data.empresaId) {
-    const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
-    if (!empresa) throw new ValidationError('La empresa referenciada no existe.');
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: data.empresaId },
+    });
+    if (!empresa)
+      throw new ValidationError("La empresa referenciada no existe.");
   }
 
   if (data.clienteId) {
-    const cliente = await prisma.entidadComercial.findUnique({ where: { id: data.clienteId } });
-    if (!cliente) throw new ValidationError('El cliente referenciado no existe.');
+    const cliente = await prisma.entidadComercial.findUnique({
+      where: { id: data.clienteId },
+    });
+    if (!cliente)
+      throw new ValidationError("El cliente referenciado no existe.");
   }
 
   if (data.comprobanteElectronicoId) {
-    const comprobante = await prisma.comprobanteElectronico.findUnique({ 
-      where: { id: data.comprobanteElectronicoId } 
+    const comprobante = await prisma.comprobanteElectronico.findUnique({
+      where: { id: data.comprobanteElectronicoId },
     });
-    if (!comprobante) throw new ValidationError('El comprobante electrónico referenciado no existe.');
+    if (!comprobante)
+      throw new ValidationError(
+        "El comprobante electrónico referenciado no existe.",
+      );
   }
 
   if (data.monedaId) {
-    const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
-    if (!moneda) throw new ValidationError('La moneda referenciada no existe.');
+    const moneda = await prisma.moneda.findUnique({
+      where: { id: data.monedaId },
+    });
+    if (!moneda) throw new ValidationError("La moneda referenciada no existe.");
   }
 
   if (data.estadoId) {
-    const estado = await prisma.estadoMultiFuncion.findUnique({ where: { id: data.estadoId } });
-    if (!estado) throw new ValidationError('El estado referenciado no existe.');
+    const estado = await prisma.estadoMultiFuncion.findUnique({
+      where: { id: data.estadoId },
+    });
+    if (!estado) throw new ValidationError("El estado referenciado no existe.");
   }
 
   if (data.montoTotal !== undefined && data.montoTotal < 0) {
-    throw new ValidationError('El monto total no puede ser negativo.');
+    throw new ValidationError("El monto total no puede ser negativo.");
   }
 
   if (data.montoPagado !== undefined && data.montoPagado < 0) {
-    throw new ValidationError('El monto pagado no puede ser negativo.');
+    throw new ValidationError("El monto pagado no puede ser negativo.");
   }
 
-  if (data.montoPagado !== undefined && data.montoTotal !== undefined && data.montoPagado > data.montoTotal) {
-    throw new ValidationError('El monto pagado no puede ser mayor al monto total.');
+  if (
+    data.montoPagado !== undefined &&
+    data.montoTotal !== undefined &&
+    data.montoPagado > data.montoTotal
+  ) {
+    throw new ValidationError(
+      "El monto pagado no puede ser mayor al monto total.",
+    );
   }
 
-  if (data.montoDetraccion !== undefined && data.montoDetraccion < 0) {
-    throw new ValidationError('El monto de detracción no puede ser negativo.');
+  if (
+    data.montoDetraccionTotal !== undefined &&
+    data.montoDetraccionTotal < 0
+  ) {
+    throw new ValidationError(
+      "El monto total de detracción no puede ser negativo.",
+    );
   }
 
-  if (data.montoRetencion !== undefined && data.montoRetencion < 0) {
-    throw new ValidationError('El monto de retención no puede ser negativo.');
+  if (data.montoRetencionTotal !== undefined && data.montoRetencionTotal < 0) {
+    throw new ValidationError(
+      "El monto total de retención no puede ser negativo.",
+    );
   }
 
-  if (data.montoPercepcion !== undefined && data.montoPercepcion < 0) {
-    throw new ValidationError('El monto de percepción no puede ser negativo.');
+  if (
+    data.montoPercepcionTotal !== undefined &&
+    data.montoPercepcionTotal < 0
+  ) {
+    throw new ValidationError(
+      "El monto total de percepción no puede ser negativo.",
+    );
   }
 
-  if (data.porcentajeDetraccion !== undefined && (data.porcentajeDetraccion < 0 || data.porcentajeDetraccion > 100)) {
-    throw new ValidationError('El porcentaje de detracción debe estar entre 0 y 100.');
+  if (
+    data.porcentajeDetraccion !== undefined &&
+    (data.porcentajeDetraccion < 0 || data.porcentajeDetraccion > 100)
+  ) {
+    throw new ValidationError(
+      "El porcentaje de detracción debe estar entre 0 y 100.",
+    );
   }
 
-  if (data.porcentajePercepcion !== undefined && (data.porcentajePercepcion < 0 || data.porcentajePercepcion > 100)) {
-    throw new ValidationError('El porcentaje de percepción debe estar entre 0 y 100.');
+  if (
+    data.porcentajePercepcion !== undefined &&
+    (data.porcentajePercepcion < 0 || data.porcentajePercepcion > 100)
+  ) {
+    throw new ValidationError(
+      "El porcentaje de percepción debe estar entre 0 y 100.",
+    );
+  }
+
+  if (
+    data.porcentajeRetencion !== undefined &&
+    (data.porcentajeRetencion < 0 || data.porcentajeRetencion > 100)
+  ) {
+    throw new ValidationError(
+      "El porcentaje de retención debe estar entre 0 y 100.",
+    );
   }
 }
 
@@ -73,9 +128,18 @@ async function validarCuentaPorCobrar(data) {
  * Estados automáticos: 100, 101, 102, 103
  * Estados manuales (se respetan): 104 (ANULADO), 105 (CANJEADO)
  */
-const calcularEstadoCxC = (montoTotal, montoPagado, saldoPendiente, fechaVencimiento, estadoActual = null) => {
+const calcularEstadoCxC = (
+  montoTotal,
+  montoPagado,
+  saldoPendiente,
+  fechaVencimiento,
+  estadoActual = null,
+) => {
   // Si el estado actual es ANULADO (104) o CANJEADO (105), NO recalcular
-  if (estadoActual && (Number(estadoActual) === 104 || Number(estadoActual) === 105)) {
+  if (
+    estadoActual &&
+    (Number(estadoActual) === 104 || Number(estadoActual) === 105)
+  ) {
     return estadoActual;
   }
 
@@ -113,13 +177,13 @@ const listar = async () => {
         comprobanteElectronico: true,
         moneda: true,
         estado: true,
-        pagos: true
+        pagos: true,
       },
-      orderBy: { fechaEmision: 'desc' }
+      orderBy: { fechaEmision: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -137,18 +201,18 @@ const obtenerPorId = async (id) => {
         estado: true,
         pagos: {
           include: {
-            medioPago: true
+            medioPago: true,
           },
-          orderBy: { fechaPago: 'desc' }
-        }
-      }
+          orderBy: { fechaPago: "desc" },
+        },
+      },
     });
-    if (!cuenta) throw new NotFoundError('Cuenta por cobrar no encontrada');
+    if (!cuenta) throw new NotFoundError("Cuenta por cobrar no encontrada");
     return cuenta;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -156,8 +220,14 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    if (!data.empresaId || !data.clienteId || !data.fechaEmision || !data.montoTotal || !data.monedaId) {
-      throw new ValidationError('Faltan campos obligatorios.');
+    if (
+      !data.empresaId ||
+      !data.clienteId ||
+      !data.fechaEmision ||
+      !data.montoTotal ||
+      !data.monedaId
+    ) {
+      throw new ValidationError("Faltan campos obligatorios.");
     }
 
     await validarCuentaPorCobrar(data);
@@ -171,7 +241,7 @@ const crear = async (data) => {
       montoPagado,
       saldoPendiente,
       data.fechaVencimiento,
-      data.estadoId
+      data.estadoId,
     );
 
     const cuentaData = {
@@ -180,19 +250,24 @@ const crear = async (data) => {
       saldoPendiente,
       estadoId: estadoCalculado,
       tieneDetraccion: data.tieneDetraccion || false,
-      montoDetraccion: data.montoDetraccion || 0,
+      montoDetraccionTotal: data.montoDetraccionTotal || 0,
       tieneRetencion: data.tieneRetencion || false,
-      montoRetencion: data.montoRetencion || 0,
+      montoRetencionTotal: data.montoRetencionTotal || 0,
+      porcentajeRetencion: data.porcentajeRetencion || null,
       tienePercepcion: data.tienePercepcion || false,
-      montoPercepcion: data.montoPercepcion || 0,
-      fechaActualizacion: new Date()
+      montoPercepcionTotal: data.montoPercepcionTotal || 0,
+      fechaContable: data.fechaContable || new Date(),
+      periodoContableId: data.periodoContableId || null,
+      creadoPor: data.creadoPor || null,
+      fechaCreacion: new Date(),
+      fechaActualizacion: new Date(),
     };
 
     return await prisma.cuentaPorCobrar.create({ data: cuentaData });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -200,42 +275,52 @@ const crear = async (data) => {
 
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.cuentaPorCobrar.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Cuenta por cobrar no encontrada');
+    const existente = await prisma.cuentaPorCobrar.findUnique({
+      where: { id },
+    });
+    if (!existente) throw new NotFoundError("Cuenta por cobrar no encontrada");
 
     await validarCuentaPorCobrar({ ...data, id });
 
     // Calcular saldo pendiente
-    const montoTotal = data.montoTotal !== undefined ? data.montoTotal : existente.montoTotal;
-    const montoPagado = data.montoPagado !== undefined ? data.montoPagado : existente.montoPagado;
+    const montoTotal =
+      data.montoTotal !== undefined ? data.montoTotal : existente.montoTotal;
+    const montoPagado =
+      data.montoPagado !== undefined ? data.montoPagado : existente.montoPagado;
     const saldoPendiente = Number(montoTotal) - Number(montoPagado);
-    const fechaVencimiento = data.fechaVencimiento !== undefined ? data.fechaVencimiento : existente.fechaVencimiento;
+    const fechaVencimiento =
+      data.fechaVencimiento !== undefined
+        ? data.fechaVencimiento
+        : existente.fechaVencimiento;
 
     // Calcular estado automáticamente (respetando ANULADO y CANJEADO)
-    const estadoActual = data.estadoId !== undefined ? data.estadoId : existente.estadoId;
+    const estadoActual =
+      data.estadoId !== undefined ? data.estadoId : existente.estadoId;
     const estadoCalculado = calcularEstadoCxC(
       montoTotal,
       montoPagado,
       saldoPendiente,
       fechaVencimiento,
-      estadoActual
+      estadoActual,
     );
 
     const cuentaData = {
       ...data,
       saldoPendiente,
       estadoId: estadoCalculado,
-      fechaActualizacion: new Date()
+      actualizadoPor: data.actualizadoPor || null,
+      fechaActualizacion: new Date(),
     };
 
     return await prisma.cuentaPorCobrar.update({
       where: { id },
-      data: cuentaData
+      data: cuentaData,
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -245,21 +330,23 @@ const eliminar = async (id) => {
   try {
     const existente = await prisma.cuentaPorCobrar.findUnique({
       where: { id },
-      include: { pagos: true }
+      include: { pagos: true },
     });
 
-    if (!existente) throw new NotFoundError('Cuenta por cobrar no encontrada');
+    if (!existente) throw new NotFoundError("Cuenta por cobrar no encontrada");
 
     if (existente.pagos && existente.pagos.length > 0) {
-      throw new ConflictError('No se puede eliminar la cuenta porque tiene pagos asociados.');
+      throw new ConflictError(
+        "No se puede eliminar la cuenta porque tiene pagos asociados.",
+      );
     }
 
     await prisma.cuentaPorCobrar.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -273,13 +360,13 @@ const listarPorEmpresa = async (empresaId) => {
         cliente: true,
         moneda: true,
         estado: true,
-        pagos: true
+        pagos: true,
       },
-      orderBy: { fechaEmision: 'desc' }
+      orderBy: { fechaEmision: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -293,13 +380,13 @@ const listarPorCliente = async (clienteId) => {
         empresa: true,
         moneda: true,
         estado: true,
-        pagos: true
+        pagos: true,
       },
-      orderBy: { fechaEmision: 'desc' }
+      orderBy: { fechaEmision: "desc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -310,18 +397,18 @@ const listarPendientes = async (empresaId) => {
     return await prisma.cuentaPorCobrar.findMany({
       where: {
         empresaId,
-        saldoPendiente: { gt: 0 }
+        saldoPendiente: { gt: 0 },
       },
       include: {
         cliente: true,
         moneda: true,
-        estado: true
+        estado: true,
       },
-      orderBy: { fechaVencimiento: 'asc' }
+      orderBy: { fechaVencimiento: "asc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -334,18 +421,18 @@ const listarVencidas = async (empresaId) => {
       where: {
         empresaId,
         fechaVencimiento: { lt: hoy },
-        saldoPendiente: { gt: 0 }
+        saldoPendiente: { gt: 0 },
       },
       include: {
         cliente: true,
         moneda: true,
-        estado: true
+        estado: true,
       },
-      orderBy: { fechaVencimiento: 'asc' }
+      orderBy: { fechaVencimiento: "asc" },
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
     }
     throw err;
   }
@@ -360,5 +447,5 @@ export default {
   listarPorEmpresa,
   listarPorCliente,
   listarPendientes,
-  listarVencidas
+  listarVencidas,
 };

@@ -20,9 +20,13 @@ const listar = async () => {
           }
         },
         medioPago: true,
-        moneda: true,
+        monedaPago: true,
+        monedaDeuda: true,
         banco: true,
-        cuentaBancaria: true
+        cuentaBancaria: true,
+        empresa: true,
+        periodoContable: true,
+        movimientoCaja: true
       },
       orderBy: { fechaPago: 'desc' }
     });
@@ -38,10 +42,14 @@ const listar = async () => {
           }
         },
         medioPago: true,
-        moneda: true,
+        monedaPago: true,
+        monedaDeuda: true,
         banco: true,
         cuentaBancaria: true,
-        prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+        empresa: true,
+        periodoContable: true,
+        movimientoCaja: true,
+        prestamoBancario: {
           include: {
             banco: true,
             tipoPrestamo: true
@@ -82,9 +90,7 @@ const listarPorEmpresa = async (empresaId) => {
     // Obtener pagos de cuentas por cobrar de la empresa
     const pagosCobrar = await prisma.pagoCuentaPorCobrar.findMany({
       where: {
-        cuentaPorCobrar: {
-          empresaId: Number(empresaId)
-        }
+        empresaId: Number(empresaId)
       },
       include: {
         cuentaPorCobrar: {
@@ -95,9 +101,13 @@ const listarPorEmpresa = async (empresaId) => {
           }
         },
         medioPago: true,
-        moneda: true,
+        monedaPago: true,
+        monedaDeuda: true,
         banco: true,
-        cuentaBancaria: true
+        cuentaBancaria: true,
+        empresa: true,
+        periodoContable: true,
+        movimientoCaja: true
       },
       orderBy: { fechaPago: 'desc' }
     });
@@ -105,9 +115,7 @@ const listarPorEmpresa = async (empresaId) => {
     // Obtener pagos de cuentas por pagar de la empresa
     const pagosPagar = await prisma.pagoCuentaPorPagar.findMany({
       where: {
-        cuentaPorPagar: {
-          empresaId: Number(empresaId)
-        }
+        empresaId: Number(empresaId)
       },
       include: {
         cuentaPorPagar: {
@@ -118,10 +126,14 @@ const listarPorEmpresa = async (empresaId) => {
           }
         },
         medioPago: true,
-        moneda: true,
+        monedaPago: true,
+        monedaDeuda: true,
         banco: true,
         cuentaBancaria: true,
-        prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+        empresa: true,
+        periodoContable: true,
+        movimientoCaja: true,
+        prestamoBancario: {
           include: {
             banco: true,
             tipoPrestamo: true
@@ -164,13 +176,18 @@ const listarPorCuentaCobrar = async (cuentaPorCobrarId) => {
         cuentaPorCobrar: {
           include: { 
             cliente: true,
-            empresa: true
+            empresa: true,
+            moneda: true
           }
         },
         medioPago: true,
-        moneda: true,
+        monedaPago: true,
+        monedaDeuda: true,
         banco: true,
-        cuentaBancaria: true
+        cuentaBancaria: true,
+        empresa: true,
+        periodoContable: true,
+        movimientoCaja: true
       },
       orderBy: { fechaPago: 'desc' }
     });
@@ -196,14 +213,19 @@ const listarPorCuentaPagar = async (cuentaPorPagarId) => {
         cuentaPorPagar: {
           include: { 
             proveedor: true,
-            empresa: true
+            empresa: true,
+            moneda: true
           }
         },
         medioPago: true,
-        moneda: true,
+        monedaPago: true,
+        monedaDeuda: true,
         banco: true,
         cuentaBancaria: true,
-        prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+        empresa: true,
+        periodoContable: true,
+        movimientoCaja: true,
+        prestamoBancario: {
           include: {
             banco: true,
             tipoPrestamo: true
@@ -243,13 +265,18 @@ const obtenerPorId = async (id, tipoPago) => {
           cuentaPorCobrar: {
             include: { 
               cliente: true,
-              empresa: true
+              empresa: true,
+              moneda: true
             }
           },
           medioPago: true,
-          moneda: true,
+          monedaPago: true,
+          monedaDeuda: true,
           banco: true,
-          cuentaBancaria: true
+          cuentaBancaria: true,
+          empresa: true,
+          periodoContable: true,
+          movimientoCaja: true
         }
       });
       
@@ -269,14 +296,19 @@ const obtenerPorId = async (id, tipoPago) => {
           cuentaPorPagar: {
             include: { 
               proveedor: true,
-              empresa: true
+              empresa: true,
+              moneda: true
             }
           },
           medioPago: true,
-          moneda: true,
+          monedaPago: true,
+          monedaDeuda: true,
           banco: true,
           cuentaBancaria: true,
-          prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+          empresa: true,
+          periodoContable: true,
+          movimientoCaja: true,
+          prestamoBancario: {
             include: {
               banco: true,
               tipoPrestamo: true
@@ -325,9 +357,13 @@ const listarPorMovimiento = async (movimientoCajaId) => {
           }
         },
         medioPago: true,
-        moneda: true,
+        monedaPago: true,
+        monedaDeuda: true,
         banco: true,
-        cuentaBancaria: true
+        cuentaBancaria: true,
+        empresa: true,
+        periodoContable: true,
+        movimientoCaja: true
       },
       orderBy: { fechaPago: 'desc' }
     });
@@ -346,10 +382,14 @@ const listarPorMovimiento = async (movimientoCajaId) => {
           }
         },
         medioPago: true,
-        moneda: true,
+        monedaPago: true,
+        monedaDeuda: true,
         banco: true,
         cuentaBancaria: true,
-        prestamoBancario: { // ⭐ AGREGADO: Incluir relación con préstamo bancario
+        empresa: true,
+        periodoContable: true,
+        movimientoCaja: true,
+        prestamoBancario: {
           include: {
             banco: true,
             tipoPrestamo: true
