@@ -1142,6 +1142,8 @@ model PreFactura {
   fechaVencimiento            DateTime?                                    // Fecha de vencimiento del pago
   nroLiquidacionFacturacion   String?     @db.VarChar(40)
   fechaContable               DateTime    @default(now())
+  periodoContableId           BigInt?                                      // ✅ AGREGADO: Período contable (para control de cierre)
+
   // Nuevo campo para Saldos Iniciales
   pagosPreviosSI              Decimal?  @db.Decimal(18, 2)
   // ========================================
@@ -1256,7 +1258,8 @@ model PreFactura {
   cotizacionVenta             CotizacionVentas?       @relation(fields: [cotizacionVentaId], references: [id])
   contratoServicio            ContratoServicio?       @relation("PreFacturaContrato", fields: [contratoServicioId], references: [id])
   movSalidaAlmacen            MovimientoAlmacen?      @relation("MovimientoAlmacenToPreFactura", fields: [movSalidaAlmacenId], references: [id])
-  unidadNegocio     UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+  unidadNegocio               UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
+  periodoContable             PeriodoContable?        @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
 
   
   // ========================================
@@ -5477,7 +5480,9 @@ model PeriodoContable {
   pagosCuentaPorCobrar  PagoCuentaPorCobrar[]
   cuentasPorPagar       CuentaPorPagar[]
   pagosCuentaPorPagar   PagoCuentaPorPagar[]
-
+  preFacturas           PreFactura[]            // ✅ AGREGADO: Relación inversa
+  ordenesCompra         OrdenCompra[]           // ✅ AGREGADO: Relación inversa
+  
   @@unique([empresaId, anio, mes])
   @@index([empresaId])
   @@index([anio, mes])
@@ -6541,6 +6546,7 @@ model OrdenCompra {
   numeroDocumento      String?
   fechaDocumento       DateTime    @default(now())
   fechaContable        DateTime    @default(now())
+  periodoContableId           BigInt?                                      // ✅ AGREGADO: Período contable (para control de cierre)
   requerimientoCompraId BigInt?
   proveedorId          BigInt
   formaPagoId          BigInt?
@@ -6620,6 +6626,7 @@ model OrdenCompra {
   detalles             DetalleOrdenCompra[]
   repuestosContratistasOT       DetRepuestosContratistaOT[]
   asientosContables  AsientoContable[]  // Relación inversa - Asientos generados
+  periodoContable           PeriodoContable?        @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
 
   
   // ========================================
