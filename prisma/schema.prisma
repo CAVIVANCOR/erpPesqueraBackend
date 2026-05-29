@@ -3942,8 +3942,6 @@ model Personal {
   ubicacionesLetraResponsable     UbicacionLetra[]
   endososRegistrados              EndosoLetraCambio[]
   pagosLetraRegistrados           PagoLetraCambio[]
-  pagosCobrarRegistrados          PagoCuentaPorCobrar[]
-  pagosPagarRegistrados           PagoCuentaPorPagar[]
   presupuestosAprobados           PresupuestoAnual[]
   preFacturasRespVentas           PreFactura[]            @relation("RespVentas")
   preFacturasAutoriza             PreFactura[]            @relation("AutorizaVenta")
@@ -6105,9 +6103,11 @@ model CuentaPorCobrar {
   // ========================================
   // AUDITORÍA
   // ========================================
-  creadoEn                  DateTime    @default(now())                  // Fecha de creación del registro
-  actualizadoEn             DateTime    @updatedAt                       // Fecha de última actualización
-  
+  fechaCreacion         DateTime    @default(now())                  // Fecha de creación del registro
+  fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
+  creadoPor             BigInt?                                      // Usuario que creó el registro
+  actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
+
   // ========================================
   // RELACIONES
   // ========================================
@@ -6228,10 +6228,11 @@ model PagoCuentaPorCobrar {
   // ========================================
   // AUDITORÍA
   // ========================================
-  registradoPor         BigInt?                                      // Usuario que registró el pago
-  creadoEn              DateTime    @default(now())                  // Fecha de creación del registro
-  actualizadoEn         DateTime    @updatedAt                       // ✅ AGREGADO: Fecha de última actualización
-  
+  fechaCreacion         DateTime    @default(now())                  // Fecha de creación del registro
+  fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
+  creadoPor             BigInt?                                      // Usuario que creó el registro
+  actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
+
   // ========================================
   // RELACIONES
   // ========================================
@@ -6244,7 +6245,6 @@ model PagoCuentaPorCobrar {
   cuentaBancaria        CuentaCorriente?    @relation(fields: [cuentaBancariaId], references: [id])
   movimientoCaja        MovimientoCaja?     @relation(fields: [movimientoCajaId], references: [id])
   periodoContable       PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
-  registrador           Personal?           @relation(fields: [registradoPor], references: [id])
   asientosContables     AsientoContable[]  // Relación inversa
 
   // ========================================
@@ -6343,9 +6343,11 @@ model CuentaPorPagar {
   // ========================================
   // AUDITORÍA
   // ========================================
-  creadoEn                  DateTime    @default(now())
-  actualizadoEn             DateTime    @updatedAt
-  
+  fechaCreacion         DateTime    @default(now())                  // Fecha de creación del registro
+  fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
+  creadoPor             BigInt?                                      // Usuario que creó el registro
+  actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
+
   // ========================================
   // RELACIONES
   // ========================================
@@ -6454,7 +6456,6 @@ model PagoCuentaPorPagar {
   // VINCULACIÓN CON CAJA
   // ========================================
   movimientoCajaId      BigInt?                                      // Movimiento de caja asociado
-  
   observaciones         String?     @db.Text                         // Observaciones del pago
   
   // ========================================
@@ -6467,9 +6468,10 @@ model PagoCuentaPorPagar {
   // ========================================
   // AUDITORÍA
   // ========================================
-  registradoPor         BigInt?                                      // Usuario que registró el pago
-  creadoEn              DateTime    @default(now())                  // Fecha de creación del registro
-  actualizadoEn         DateTime    @updatedAt                       // ✅ AGREGADO: Fecha de última actualización
+  fechaCreacion         DateTime    @default(now())                  // Fecha de creación del registro
+  fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
+  creadoPor             BigInt?                                      // Usuario que creó el registro
+  actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
   
   // ========================================
   // RELACIONES
@@ -6483,7 +6485,6 @@ model PagoCuentaPorPagar {
   cuentaBancaria        CuentaCorriente?    @relation(fields: [cuentaBancariaId], references: [id])
   movimientoCaja        MovimientoCaja?     @relation(fields: [movimientoCajaId], references: [id])
   periodoContable       PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
-  registrador           Personal?           @relation(fields: [registradoPor], references: [id])
   prestamoBancario      PrestamoBancario?   @relation(fields: [prestamoBancarioId], references: [id])
   asientosContables     AsientoContable[]  // Relación inversa
 
