@@ -65,6 +65,7 @@ const listar = async () => {
         formaPago: true,
         moneda: true,
         unidadNegocio: true,
+        periodoContable: true, // ✅ AGREGADO
         detalles: {
           include: {
             producto: true,
@@ -111,6 +112,7 @@ const obtenerPorId = async (id) => {
         formaPago: true,
         moneda: true,
         unidadNegocio: true,
+        periodoContable: true, // ✅ AGREGADO
         estado: true,
         detalles: {
           include: {

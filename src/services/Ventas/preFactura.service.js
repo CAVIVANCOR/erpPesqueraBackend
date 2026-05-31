@@ -170,6 +170,7 @@ const listar = async () => {
         formaPago: true,
         incoterm: true,
         tipoContenedor: true,
+        periodoContable: true, // ✅ AGREGADO
         detalles: {
           include: {
             producto: true,
@@ -198,6 +199,7 @@ const obtenerPorId = async (id) => {
         formaPago: true,
         incoterm: true,
         tipoContenedor: true,
+        periodoContable: true, // ✅ AGREGADO
         movSalidaAlmacen: true,
         contratoServicio: true,
         tipoDocumentoFinal: true,
@@ -238,6 +240,7 @@ const obtenerPorCliente = async (clienteId) => {
         tipoDocumento: true,
         moneda: true,
         incoterm: true,
+        periodoContable: true, // ✅ AGREGADO
       },
       orderBy: { fechaDocumento: "desc" },
     });
@@ -258,6 +261,7 @@ const obtenerPorCotizacion = async (cotizacionVentaId) => {
         tipoDocumento: true,
         moneda: true,
         incoterm: true,
+        periodoContable: true, // ✅ AGREGADO
         detalles: {
           include: {
             producto: true,
@@ -1215,6 +1219,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           empresa: true,
           serieDoc: true,
           tipoDocumento: true,
+          periodoContable: true, // ✅ AGREGADO: Necesario para heredar periodo
         },
       });
 
@@ -1394,58 +1399,89 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         montoPercepcion = montoFinal * (porcentajePercepcion / 100);
       }
 
-      // 6. Crear CuentaPorCobrar BLANCA (con comprobante SUNAT)
-      const cuentaPorCobrar = await tx.cuentaPorCobrar.create({
-        data: {
-          // ORIGEN DEL DOCUMENTO
-          preFacturaId: preFactura.id,
-          empresaId: preFactura.empresaId,
-          clienteId: preFactura.clienteId,
-
-          // DOCUMENTO
-          numeroPreFactura: preFactura.codigo,
-          fechaEmision: new Date(),
-          fechaVencimiento: preFactura.fechaVencimiento || new Date(),
-
-          // MONTOS ALMACENADOS
-          montoTotal: montoFinal,
-          montoPagado: 0,
-          saldoPendiente: montoFinal,
-
-          // DETRACCIÓN SPOT (SUNAT PERÚ) - CALCULADO
-          tieneDetraccion,
-          montoDetraccion,
-          porcentajeDetraccion,
-          numeroConstanciaDetraccion: null,
-          fechaDetraccion: null,
-
-          // RETENCIÓN (SUNAT PERÚ) - CALCULADO
-          tieneRetencion,
-          montoRetencion,
-          numeroComprobanteRetencion: null,
-          fechaRetencion: null,
-
-          // PERCEPCIÓN (SUNAT PERÚ) - CALCULADO
-          tienePercepcion,
-          montoPercepcion,
-          porcentajePercepcion,
-          numeroComprobantePercepcion: null,
-          fechaPercepcion: null,
-
-          // FLAGS ESPECIALES
-          esSaldoInicial: esSaldoInicial, // ⭐ NUEVO: TRUE si tipo es SI-CXC
-          esGerencial: false, // BLANCA (Formal/SUNAT)
-          comprobanteElectronicoId: comprobanteElectronico.id, // Tiene comprobante SUNAT
-
-          // MONEDA Y TIPO DE VENTA
-          monedaId: preFactura.monedaId,
-          esContado: preFactura.esContado || false,
-          estadoId: estadoPendiente.id,
-          observaciones: esSaldoInicial
-            ? `Saldo Inicial CxC - ${preFactura.cliente.razonSocial}`
-            : `CxC Blanca generada desde PreFactura ${preFactura.codigo}`,
-        },
+      // 6. Crear o Actualizar CuentaPorCobrar BLANCA (con comprobante SUNAT)
+      // Verificar si ya existe CxC para esta PreFactura (regeneración)
+      const cxcExistente = await tx.cuentaPorCobrar.findUnique({
+        where: { preFacturaId: preFactura.id },
+        include: { pagos: true },
       });
+
+      // Calcular montos considerando pagos existentes
+      let montoPagado = 0;
+      let saldoPendiente = montoFinal;
+
+      if (cxcExistente && cxcExistente.pagos && cxcExistente.pagos.length > 0) {
+        // Recalcular monto pagado desde los pagos registrados
+        montoPagado = cxcExistente.pagos.reduce(
+          (sum, pago) => sum + Number(pago.montoPagado),
+          0,
+        );
+        saldoPendiente = montoFinal - montoPagado;
+      }
+
+      // Preparar datos de la CxC
+      const dataCxC = {
+        // ORIGEN DEL DOCUMENTO
+        preFacturaId: preFactura.id,
+        empresaId: preFactura.empresaId,
+        clienteId: preFactura.clienteId,
+
+        // DOCUMENTO
+        numeroPreFactura: preFactura.numeroDocumento,
+        fechaEmision: preFactura.fechaDocumento || new Date(),
+        fechaVencimiento: preFactura.fechaVencimiento || new Date(),
+
+        // MONTOS ALMACENADOS (recalculados si hay pagos)
+        montoTotal: montoFinal,
+        montoPagado: montoPagado,
+        saldoPendiente: saldoPendiente,
+
+        // DETRACCIÓN SPOT (SUNAT PERÚ) - TOTALES
+        tieneDetraccion,
+        montoDetraccionTotal: montoDetraccion,
+        porcentajeDetraccion,
+
+        // RETENCIÓN (SUNAT PERÚ) - TOTALES
+        tieneRetencion,
+        montoRetencionTotal: montoRetencion,
+        porcentajeRetencion: tieneRetencion ? 3 : null,
+
+        // PERCEPCIÓN (SUNAT PERÚ) - TOTALES
+        tienePercepcion,
+        montoPercepcionTotal: montoPercepcion,
+        porcentajePercepcion,
+
+        // FLAGS ESPECIALES
+        esSaldoInicial: esSaldoInicial,
+        esGerencial: false, // BLANCA (Formal/SUNAT)
+        comprobanteElectronicoId: comprobanteElectronico.id,
+
+        // MONEDA Y TIPO DE VENTA
+        monedaId: preFactura.monedaId,
+        esContado: preFactura.esContado || false,
+        estadoId: estadoPendiente.id,
+        observaciones: esSaldoInicial
+          ? `Saldo Inicial CxC - ${preFactura.cliente.razonSocial}`
+          : `CxC Blanca generada desde PreFactura ${preFactura.codigo}`,
+
+        // ✅ INTEGRACIÓN CONTABLE - HEREDADO DE PREFACTURA
+        fechaContable: preFactura.fechaContable,
+        periodoContableId: preFactura.periodoContableId,
+      };
+
+      let cuentaPorCobrar;
+      if (cxcExistente) {
+        // REGENERAR: Actualizar CxC existente preservando pagos
+        cuentaPorCobrar = await tx.cuentaPorCobrar.update({
+          where: { id: cxcExistente.id },
+          data: dataCxC,
+        });
+      } else {
+        // CREAR: Nueva CxC
+        cuentaPorCobrar = await tx.cuentaPorCobrar.create({
+          data: dataCxC,
+        });
+      }
 
       // 7. Actualizar PreFactura a EMITIDA (estado 96)
       await tx.preFactura.update({
@@ -1495,6 +1531,8 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
             },
           },
           empresa: true,
+          periodoContable: true, // ✅ AGREGADO: Necesario para heredar periodo
+          tipoDocumento: true, // ✅ AGREGADO: Necesario para detectar SI-CXC
         },
       });
 
@@ -1625,58 +1663,89 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         montoPercepcion = montoFinal * (porcentajePercepcion / 100);
       }
 
-      // 4. Crear CuentaPorCobrar NEGRA (Gerencial)
-      const cuentaPorCobrar = await tx.cuentaPorCobrar.create({
-        data: {
-          // ORIGEN DEL DOCUMENTO
-          preFacturaId: preFactura.id,
-          empresaId: preFactura.empresaId,
-          clienteId: preFactura.clienteId,
-
-          // DOCUMENTO
-          numeroPreFactura: preFactura.codigo,
-          fechaEmision: new Date(),
-          fechaVencimiento: preFactura.fechaVencimiento || new Date(),
-
-          // MONTOS ALMACENADOS
-          montoTotal: montoFinal,
-          montoPagado: 0,
-          saldoPendiente: montoFinal,
-
-          // DETRACCIÓN SPOT (SUNAT PERÚ) - CALCULADO
-          tieneDetraccion,
-          montoDetraccion,
-          porcentajeDetraccion,
-          numeroConstanciaDetraccion: null,
-          fechaDetraccion: null,
-
-          // RETENCIÓN (SUNAT PERÚ) - CALCULADO
-          tieneRetencion,
-          montoRetencion,
-          numeroComprobanteRetencion: null,
-          fechaRetencion: null,
-
-          // PERCEPCIÓN (SUNAT PERÚ) - CALCULADO
-          tienePercepcion,
-          montoPercepcion,
-          porcentajePercepcion,
-          numeroComprobantePercepcion: null,
-          fechaPercepcion: null,
-
-          // FLAGS ESPECIALES
-          esSaldoInicial: esSaldoInicial, // ⭐ NUEVO: TRUE si tipo es SI-CXC
-          esGerencial: true, // NEGRA (Gerencial/No SUNAT)
-          comprobanteElectronicoId: null, // No tiene comprobante electrónico
-
-          // MONEDA Y TIPO DE VENTA
-          monedaId: preFactura.monedaId,
-          esContado: preFactura.esContado || false,
-          estadoId: estadoPendiente.id,
-          observaciones: esSaldoInicial
-            ? `Saldo Inicial CxC Gerencial - ${preFactura.cliente.razonSocial}`
-            : `CxC Negra generada desde PreFactura ${preFactura.codigo}`,
-        },
+      // 4. Crear o Actualizar CuentaPorCobrar NEGRA (Gerencial)
+      // Verificar si ya existe CxC para esta PreFactura (regeneración)
+      const cxcExistente = await tx.cuentaPorCobrar.findUnique({
+        where: { preFacturaId: preFactura.id },
+        include: { pagos: true },
       });
+
+      // Calcular montos considerando pagos existentes
+      let montoPagado = 0;
+      let saldoPendiente = montoFinal;
+
+      if (cxcExistente && cxcExistente.pagos && cxcExistente.pagos.length > 0) {
+        // Recalcular monto pagado desde los pagos registrados
+        montoPagado = cxcExistente.pagos.reduce(
+          (sum, pago) => sum + Number(pago.montoPagado),
+          0,
+        );
+        saldoPendiente = montoFinal - montoPagado;
+      }
+
+      // Preparar datos de la CxC
+      const dataCxC = {
+        // ORIGEN DEL DOCUMENTO
+        preFacturaId: preFactura.id,
+        empresaId: preFactura.empresaId,
+        clienteId: preFactura.clienteId,
+
+        // DOCUMENTO
+        numeroPreFactura: preFactura.numeroDocumento,
+        fechaEmision: preFactura.fechaDocumento || new Date(),
+        fechaVencimiento: preFactura.fechaVencimiento || new Date(),
+
+        // MONTOS ALMACENADOS (recalculados si hay pagos)
+        montoTotal: montoFinal,
+        montoPagado: montoPagado,
+        saldoPendiente: saldoPendiente,
+
+        // DETRACCIÓN SPOT (SUNAT PERÚ) - TOTALES
+        tieneDetraccion,
+        montoDetraccionTotal: montoDetraccion,
+        porcentajeDetraccion,
+
+        // RETENCIÓN (SUNAT PERÚ) - TOTALES
+        tieneRetencion,
+        montoRetencionTotal: montoRetencion,
+        porcentajeRetencion: tieneRetencion ? 3 : null,
+
+        // PERCEPCIÓN (SUNAT PERÚ) - TOTALES
+        tienePercepcion,
+        montoPercepcionTotal: montoPercepcion,
+        porcentajePercepcion,
+
+        // FLAGS ESPECIALES
+        esSaldoInicial: esSaldoInicial,
+        esGerencial: true, // NEGRA (Gerencial/No SUNAT)
+        comprobanteElectronicoId: null,
+
+        // MONEDA Y TIPO DE VENTA
+        monedaId: preFactura.monedaId,
+        esContado: preFactura.esContado || false,
+        estadoId: estadoPendiente.id,
+        observaciones: esSaldoInicial
+          ? `Saldo Inicial CxC Gerencial - ${preFactura.cliente.razonSocial}`
+          : `CxC Negra generada desde PreFactura ${preFactura.codigo}`,
+
+        // ✅ INTEGRACIÓN CONTABLE - HEREDADO DE PREFACTURA
+        fechaContable: preFactura.fechaContable,
+        periodoContableId: preFactura.periodoContableId,
+      };
+
+      let cuentaPorCobrar;
+      if (cxcExistente) {
+        // REGENERAR: Actualizar CxC existente preservando pagos
+        cuentaPorCobrar = await tx.cuentaPorCobrar.update({
+          where: { id: cxcExistente.id },
+          data: dataCxC,
+        });
+      } else {
+        // CREAR: Nueva CxC
+        cuentaPorCobrar = await tx.cuentaPorCobrar.create({
+          data: dataCxC,
+        });
+      }
 
       // 5. Actualizar PreFactura a FACTURADA (estado 95)
       await tx.preFactura.update({

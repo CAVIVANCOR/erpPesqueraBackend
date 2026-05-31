@@ -178,6 +178,7 @@ const listar = async () => {
         moneda: true,
         estado: true,
         pagos: true,
+        periodoContable: true, // ✅ AGREGADO
       },
       orderBy: { fechaEmision: "desc" },
     });
@@ -199,6 +200,7 @@ const obtenerPorId = async (id) => {
         comprobanteElectronico: true,
         moneda: true,
         estado: true,
+        periodoContable: true, // ✅ AGREGADO
         pagos: {
           include: {
             medioPago: true,
@@ -361,6 +363,7 @@ const listarPorEmpresa = async (empresaId) => {
         moneda: true,
         estado: true,
         pagos: true,
+        periodoContable: true, // ✅ AGREGADO
       },
       orderBy: { fechaEmision: "desc" },
     });
@@ -381,6 +384,7 @@ const listarPorCliente = async (clienteId) => {
         moneda: true,
         estado: true,
         pagos: true,
+        periodoContable: true, // ✅ AGREGADO
       },
       orderBy: { fechaEmision: "desc" },
     });
@@ -403,6 +407,7 @@ const listarPendientes = async (empresaId) => {
         cliente: true,
         moneda: true,
         estado: true,
+        periodoContable: true, // ✅ AGREGADO
       },
       orderBy: { fechaVencimiento: "asc" },
     });
@@ -427,6 +432,7 @@ const listarVencidas = async (empresaId) => {
         cliente: true,
         moneda: true,
         estado: true,
+        periodoContable: true, // ✅ AGREGADO
       },
       orderBy: { fechaVencimiento: "asc" },
     });
