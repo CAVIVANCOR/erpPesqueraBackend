@@ -382,6 +382,7 @@ const crear = async (data) => {
         fechaDocumento: data.fechaDocumento,
         fechaVencimiento,
         fechaContable: data.fechaContable,
+        periodoContableId: data.periodoContableId, // ✅ AGREGADO - Campo obligatorio para contabilidad
         tipoDocumentoFinalId: data.tipoDocumentoFinalId,
         serieDocFinalId: data.serieDocFinalId,
         numeroDocumentoFinal: data.numeroDocumentoFinal,
@@ -464,6 +465,7 @@ const crear = async (data) => {
           moneda: true,
           formaPago: true,
           incoterm: true,
+          periodoContable: true, // ✅ AGREGADO - Consistencia con obtenerPorId
         },
       });
 

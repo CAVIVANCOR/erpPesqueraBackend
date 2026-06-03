@@ -10,7 +10,14 @@ router.get('/empresa/:empresaId', pagoController.listarPorEmpresa);
 router.get('/cuenta-cobrar/:cuentaPorCobrarId', pagoController.listarPorCuentaCobrar);
 router.get('/cuenta-pagar/:cuentaPorPagarId', pagoController.listarPorCuentaPagar);
 router.get('/por-movimiento/:movimientoCajaId', pagoController.listarPorMovimiento);
-// NOTA: No hay rutas POST, PUT o DELETE
-// Los pagos se crean/editan/eliminan desde los tabs de CuentaPorCobrar y CuentaPorPagar
+// Rutas CRUD para PagoCuentaPorCobrar
+router.post('/cuenta-por-cobrar', pagoController.crearPagoCobrar);
+router.put('/cuenta-por-cobrar/:id', pagoController.actualizarPagoCobrar);
+router.delete('/cuenta-por-cobrar/:id', pagoController.eliminarPagoCobrar);
+
+// Rutas CRUD para PagoCuentaPorPagar
+router.post('/cuenta-por-pagar', pagoController.crearPagoPagar);
+router.put('/cuenta-por-pagar/:id', pagoController.actualizarPagoPagar);
+router.delete('/cuenta-por-pagar/:id', pagoController.eliminarPagoPagar);
 
 export default router;

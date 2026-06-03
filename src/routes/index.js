@@ -21,6 +21,7 @@ import flujoCajaRoutes from './Tesoreria/flujoCaja.routes.js';
 import conciliacionBancariaRoutes from './Tesoreria/conciliacionBancaria.routes.js';
 import prestamoBancarioRoutes from './Tesoreria/prestamoBancario.routes.js';
 import inversionFinancieraRoutes from './Tesoreria/inversionFinanciera.routes.js';
+import pendientesRoutes from './Tesoreria/pendientes.routes.js';
 import letraCambioRoutes from './LetrasCambio/letraCambio.routes.js';
 import retencionRoutes from './RetencionesPercepciones/retencion.routes.js';
 import percepcionRoutes from './RetencionesPercepciones/percepcion.routes.js';
@@ -247,6 +248,9 @@ import categoriaTipoMovEntregaRendirRoutes from './Pesca/categoriaTipoMovEntrega
 import detPlataformaRecepcionPescaRoutes from './Pesca/detPlataformaRecepcionPesca.routes.js';
 import motivoSinFaenaRoutes from './Maestros/motivoSinFaena.routes.js';
 import detalleDiaSinFaenaRoutes from './Pesca/detalleDiaSinFaena.routes.js';
+import saldosCuentasRoutes from './Tesoreria/saldosCuentas.routes.js';
+import registrarMovimientoPagoRoutes from './Tesoreria/registrarMovimientoPago.routes.js';
+
 const router = express.Router();
 
 // Rutas públicas de autenticación
@@ -474,6 +478,8 @@ router.use('/requerimiento-compra', requerimientoCompraImpresionRoutes);
 router.use('/orden-compra', ordenCompraImpresionRoutes);
 // Rutas para CotizacionProveedor
 router.use('/cotizaciones-proveedor', cotizacionProveedorRoutes);
+router.use('/tesoreria/saldos-cuentas', saldosCuentasRoutes);
+router.use('/tesoreria/registrar-pago', registrarMovimientoPagoRoutes);
 
 // Rutas para OrdenCompra
 router.use('/ordenes-compra', ordenCompraRoutes);
@@ -659,6 +665,7 @@ router.use('/cuentas-por-cobrar-pagar/cuenta-por-pagar', cuentaPorPagarRoutes);
 // Ruta para consulta consolidada de pagos (combina PagoCuentaPorCobrar y PagoCuentaPorPagar)
 router.use('/cuentas-por-cobrar-pagar/pago', pagoRoutes);
 // Rutas para Tesorería
+router.use('/tesoreria/pendientes', pendientesRoutes);
 router.use('/tesoreria/flujo-caja', flujoCajaRoutes);
 router.use('/tesoreria/conciliacion-bancaria', conciliacionBancariaRoutes);
 router.use('/tesoreria/prestamos-bancarios', prestamoBancarioRoutes);

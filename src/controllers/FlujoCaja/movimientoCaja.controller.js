@@ -379,6 +379,31 @@ const revertir = async (req, res, next) => {
   }
 };
 
+/**
+ * Listar movimientos con filtros avanzados
+ * Query params:
+ * - empresaId, origen, cuentaCorrienteId, fechaDesde, fechaHasta, estadoId, limite, pagina
+ */
+const listarConFiltrosAvanzados = async (req, res, next) => {
+  try {
+    const filtros = {
+      empresaId: req.query.empresaId ? Number(req.query.empresaId) : null,
+      origen: req.query.origen || null,
+      cuentaCorrienteId: req.query.cuentaCorrienteId ? Number(req.query.cuentaCorrienteId) : null,
+      fechaDesde: req.query.fechaDesde || null,
+      fechaHasta: req.query.fechaHasta || null,
+      estadoId: req.query.estadoId ? Number(req.query.estadoId) : null,
+      limite: req.query.limite ? Number(req.query.limite) : 100,
+      pagina: req.query.pagina ? Number(req.query.pagina) : 1,
+    };
+
+    const resultado = await movimientoCajaService.listarConFiltrosAvanzados(filtros);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -392,5 +417,6 @@ export default {
   subirComprobante,
   subirDocumento,
   servirArchivoComprobante,
-  servirArchivoDocumento
+  servirArchivoDocumento,
+  listarConFiltrosAvanzados
 };

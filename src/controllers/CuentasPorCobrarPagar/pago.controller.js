@@ -71,5 +71,60 @@ export async function listarPorMovimiento(req, res, next) {
   }
 }
 
-// NOTA: No hay funciones crear, actualizar o eliminar
-// Los pagos se gestionan desde los tabs de CuentaPorCobrar y CuentaPorPagar
+export async function crearPagoCobrar(req, res, next) {
+  try {
+    const nuevo = await pagoService.crearPagoCobrar(req.body);
+    res.status(201).json(toJSONBigInt(nuevo));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function actualizarPagoCobrar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const actualizado = await pagoService.actualizarPagoCobrar(id, req.body);
+    res.json(toJSONBigInt(actualizado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function eliminarPagoCobrar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    await pagoService.eliminarPagoCobrar(id);
+    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function crearPagoPagar(req, res, next) {
+  try {
+    const nuevo = await pagoService.crearPagoPagar(req.body);
+    res.status(201).json(toJSONBigInt(nuevo));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function actualizarPagoPagar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const actualizado = await pagoService.actualizarPagoPagar(id, req.body);
+    res.json(toJSONBigInt(actualizado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function eliminarPagoPagar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    await pagoService.eliminarPagoPagar(id);
+    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}

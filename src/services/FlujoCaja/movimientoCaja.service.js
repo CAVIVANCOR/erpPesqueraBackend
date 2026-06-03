@@ -984,6 +984,120 @@ const revertir = async (id, motivoReversion, usuarioId) => {
   }
 };
 
+/**
+ * Listar movimientos con filtros avanzados para vista de Tesorería
+ * @param {Object} filtros - Filtros opcionales
+ * @param {BigInt} filtros.empresaId - ID de empresa
+ * @param {String} filtros.origen - 'CXC' | 'CXP' | 'TRANSFERENCIA' | 'OTRO'
+ * @param {BigInt} filtros.cuentaCorrienteId - ID de cuenta corriente (origen o destino)
+ * @param {Date} filtros.fechaDesde - Fecha desde
+ * @param {Date} filtros.fechaHasta - Fecha hasta
+ * @param {BigInt} filtros.estadoId - ID de estado
+ * @param {Number} filtros.limite - Cantidad de registros (default: 100)
+ * @param {Number} filtros.pagina - Página actual (default: 1)
+ * @returns {Object} Movimientos paginados con metadata
+ */
+const listarConFiltrosAvanzados = async (filtros = {}) => {
+  try {
+    const {
+      empresaId,
+      origen,
+      cuentaCorrienteId,
+      fechaDesde,
+      fechaHasta,
+      estadoId,
+      limite = 100,
+      pagina = 1,
+    } = filtros;
+
+    // ========================================
+    // CONSTRUIR WHERE
+    // ========================================
+    const where = {};
+
+    if (empresaId) {
+      where.OR = [
+        { empresaOrigenId: Number(empresaId) },
+        { empresaDestinoId: Number(empresaId) },
+      ];
+    }
+
+    if (cuentaCorrienteId) {
+      where.OR = [
+        { cuentaCorrienteOrigenId: Number(cuentaCorrienteId) },
+        { cuentaCorrienteDestinoId: Number(cuentaCorrienteId) },
+      ];
+    }
+
+    if (estadoId) {
+      where.estadoId = Number(estadoId);
+    }
+
+    // Filtro por fecha
+    if (fechaDesde || fechaHasta) {
+      where.fechaOperacionMovCaja = {};
+      if (fechaDesde) {
+        where.fechaOperacionMovCaja.gte = new Date(fechaDesde);
+      }
+      if (fechaHasta) {
+        where.fechaOperacionMovCaja.lte = new Date(fechaHasta);
+      }
+    }
+
+    // Filtro por origen (basado en relaciones)
+    if (origen === "CXC") {
+      where.pagosCuentaPorCobrar = {
+        some: {},
+      };
+    } else if (origen === "CXP") {
+      where.pagosCuentaPorPagar = {
+        some: {},
+      };
+    } else if (origen === "TRANSFERENCIA") {
+      where.tipoMovimiento = {
+        esTransferencia: true,
+      };
+    }
+
+    // ========================================
+    // PAGINACIÓN
+    // ========================================
+    const skip = (pagina - 1) * limite;
+
+    // Contar total
+    const total = await prisma.movimientoCaja.count({ where });
+
+    // Consultar movimientos
+    const movimientos = await prisma.movimientoCaja.findMany({
+      where,
+      include: incluirRelaciones,
+      orderBy: {
+        fechaOperacionMovCaja: "desc",
+      },
+      skip,
+      take: limite,
+    });
+
+    return {
+      data: movimientos,
+      metadata: {
+        total,
+        pagina,
+        limite,
+        totalPaginas: Math.ceil(total / limite),
+      },
+    };
+  } catch (err) {
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError(
+        "Error de base de datos al listar movimientos con filtros avanzados",
+        err.message,
+      );
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -994,4 +1108,5 @@ export default {
   aprobar,
   rechazar,
   revertir,
+  listarConFiltrosAvanzados, // ✅ AGREGAR ESTA LÍNEA
 };
