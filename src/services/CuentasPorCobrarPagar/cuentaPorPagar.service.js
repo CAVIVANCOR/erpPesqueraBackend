@@ -76,10 +76,15 @@ const listar = async () => {
       include: {
         empresa: true,
         proveedor: true,
-        ordenCompra: true,
+        ordenCompra: {
+          include: {
+            tipoDocumento: true,
+          },
+        },
         moneda: true,
         estado: true,
-        pagos: true
+        pagos: true,
+        periodoContable: true,
       },
       orderBy: { fechaEmision: 'desc' }
     });

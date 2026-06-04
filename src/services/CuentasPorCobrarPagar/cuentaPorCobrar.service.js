@@ -178,7 +178,12 @@ const listar = async () => {
         moneda: true,
         estado: true,
         pagos: true,
-        periodoContable: true, // ✅ AGREGADO
+        periodoContable: true,
+        preFactura: {
+          include: {
+            tipoDocumento: true,
+          },
+        },
       },
       orderBy: { fechaEmision: "desc" },
     });
@@ -200,7 +205,12 @@ const obtenerPorId = async (id) => {
         comprobanteElectronico: true,
         moneda: true,
         estado: true,
-        periodoContable: true, // ✅ AGREGADO
+        periodoContable: true,
+        preFactura: {
+          include: {
+            tipoDocumento: true,
+          },
+        },
         pagos: {
           include: {
             medioPago: true,
