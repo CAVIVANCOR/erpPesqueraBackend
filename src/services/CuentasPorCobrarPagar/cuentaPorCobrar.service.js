@@ -284,11 +284,23 @@ const actualizar = async (id, data) => {
 
     await validarCuentaPorCobrar({ ...data, id });
 
+    // ✅ RECALCULAR montoPagado desde los pagos reales
+    const pagos = await prisma.pagoCuentaPorCobrar.findMany({
+      where: { cuentaPorCobrarId: id },
+    });
+
+    const montoPagadoRecalculado = pagos.reduce(
+      (sum, pago) => sum + Number(pago.montoAplicadoDeuda || 0),
+      0
+    );
+
     // Calcular saldo pendiente
     const montoTotal =
       data.montoTotal !== undefined ? data.montoTotal : existente.montoTotal;
-    const montoPagado =
-      data.montoPagado !== undefined ? data.montoPagado : existente.montoPagado;
+
+    // ✅ USAR montoPagado recalculado, NO el que viene en data
+    const montoPagado = montoPagadoRecalculado;
+
     const saldoPendiente = Number(montoTotal) - Number(montoPagado);
     const fechaVencimiento =
       data.fechaVencimiento !== undefined
@@ -308,6 +320,7 @@ const actualizar = async (id, data) => {
 
     const cuentaData = {
       ...data,
+      montoPagado, // ✅ Forzar el montoPagado recalculado
       saldoPendiente,
       estadoId: estadoCalculado,
       actualizadoPor: data.actualizadoPor || null,

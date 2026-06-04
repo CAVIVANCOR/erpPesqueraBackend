@@ -166,11 +166,29 @@ const actualizar = async (id, data) => {
 
     await validarCuentaPorPagar({ ...data, id });
 
+    // ✅ RECALCULAR montoPagado desde los pagos reales
+    const pagos = await prisma.pagoCuentaPorPagar.findMany({
+      where: { cuentaPorPagarId: id },
+    });
+
+    const montoPagadoRecalculado = pagos.reduce(
+      (sum, pago) => sum + Number(pago.montoAplicadoDeuda || 0),
+      0
+    );
+
+    // Calcular saldo pendiente
+    const montoTotal =
+      data.montoTotal !== undefined ? data.montoTotal : existente.montoTotal;
+
+    // ✅ USAR montoPagado recalculado, NO el que viene en data
+    const montoPagado = montoPagadoRecalculado;
+
+    const saldoPendiente = Number(montoTotal) - Number(montoPagado);
+
     const cuentaData = {
       ...data,
-      saldoPendiente: data.montoTotal !== undefined && data.montoPagado !== undefined 
-        ? data.montoTotal - data.montoPagado 
-        : undefined,
+      montoPagado, // ✅ Forzar el montoPagado recalculado
+      saldoPendiente,
       esGerencial: data.esGerencial,
       actualizadoPor: data.actualizadoPor || null,
       fechaActualizacion: new Date()

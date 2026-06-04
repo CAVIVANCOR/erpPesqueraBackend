@@ -130,6 +130,107 @@ const incluirRelaciones = {
   },
 };
 
+// ============================================
+// CONFIGURACIÓN DE ORÍGENES PARA TESORERÍA
+// IDs verificados desde SubmoduloSistema
+// ============================================
+const ORIGENES_MOVIMIENTO_TESORERIA = {
+  PAGO_CXC: {
+    tipo: 'INGRESO',
+    submoduloOrigenId: Number(116),  // Pagos Cuentas Por Cobrar
+    descripcionTemplate: (data) => `Cobro ${data.numeroDocumento || 'Cliente'}`,
+  },
+  PAGO_CXP: {
+    tipo: 'EGRESO',
+    submoduloOrigenId: Number(115),  // Pagos Cuentas por Pagar
+    descripcionTemplate: (data) => `Pago ${data.numeroDocumento || 'Proveedor'}`,
+  },
+};
+
+/**
+ * Crea un MovimientoCaja desde Tesorería (CxC, CxP, etc.)
+ * Patrón centralizado para garantizar trazabilidad
+ * @param {Object} tx - Transacción Prisma activa
+ * @param {Object} params - Parámetros del movimiento
+ * @returns {Promise<MovimientoCaja>}
+ */
+async function crearMovimientoCajaDesdeTesoreria(tx, params) {
+  const {
+    origen,                 // 'PAGO_CXC', 'PAGO_CXP'
+    tipoMovimientoId,
+    empresaId,
+    entidadComercialId,
+    monto,
+    monedaId,
+    medioPagoId,
+    cuentaCorrienteId,
+    fechaOperacion,
+    centroCostoId,
+    numeroOperacion,
+    observaciones,
+    datosOrigen,
+    estadoId,
+    usuarioId,
+  } = params;
+
+  // Validar origen
+  const config = ORIGENES_MOVIMIENTO_TESORERIA[origen];
+  if (!config) {
+    throw new ValidationError(`Origen de movimiento no válido: ${origen}`);
+  }
+
+  // Determinar campos según tipo
+  const esIngreso = config.tipo === 'INGRESO';
+  const empresaCampo = esIngreso ? 'empresaDestinoId' : 'empresaOrigenId';
+  const cuentaCampo = esIngreso ? 'cuentaCorrienteDestinoId' : 'cuentaCorrienteOrigenId';
+
+  // Construir datos del movimiento
+  const datosMovimiento = {
+    [empresaCampo]: empresaId,
+    [cuentaCampo]: cuentaCorrienteId,
+    tipoMovimientoId,
+    entidadComercialId,
+    monto,
+    monedaId,
+    descripcion: config.descripcionTemplate(datosOrigen || {}),
+    referenciaExtId: numeroOperacion,
+    medioPagoId,
+    usuarioId,
+    estadoId: estadoId || Number(102), // Default: APROBADO
+    fechaOperacionMovCaja: fechaOperacion,
+    centroCostoId,
+
+    // Trazabilidad
+    moduloOrigenMotivoOperacionId: config.submoduloOrigenId,
+    origenMotivoOperacionId: null, // Se actualiza después
+    fechaMotivoOperacion: fechaOperacion,
+    usuarioMotivoOperacionId: usuarioId,
+
+    // Configuración contable
+    generarAsientoContable: true,
+    asientosGenerados: false,
+    incluirEnReporteFiscal: true,
+    operacionSinFactura: false,
+
+    // Auditoría
+    fechaCreacion: new Date(),
+    fechaActualizacion: new Date(),
+  };
+
+  // Agregar observaciones si existen
+  if (observaciones) {
+    datosMovimiento.descripcion += ` - ${observaciones}`;
+  }
+
+  // Crear el movimiento
+  const movimiento = await tx.movimientoCaja.create({
+    data: datosMovimiento,
+  });
+
+  return movimiento;
+}
+
+
 async function copiarPdfAMovimientoCaja(rutaOrigen, movimientoCajaId) {
   try {
     if (!rutaOrigen || !movimientoCajaId) return null;
@@ -464,7 +565,7 @@ const crear = async (data) => {
     await validarReferenciasMovimientoCaja(data);
 
     if (!data.estadoId) {
-      data.estadoId = BigInt(20);
+      data.estadoId = Number(20);
     }
 
     const moduloOrigen = data.moduloOrigenMotivoOperacionId
@@ -476,7 +577,7 @@ const crear = async (data) => {
 
     if (moduloOrigen === 2 && origenId) {
       const detMov = await prisma.detMovsEntregaRendir.findUnique({
-        where: { id: BigInt(origenId) },
+        where: { id: Number(origenId) },
         select: {
           urlComprobanteMovimiento: true,
           productoId: true,
@@ -506,7 +607,7 @@ const crear = async (data) => {
     } else if (moduloOrigen === 3 && origenId) {
       const detMovConsumo =
         await prisma.detMovsEntRendirPescaConsumo.findUnique({
-          where: { id: BigInt(origenId) },
+          where: { id: Number(origenId) },
           select: { urlComprobanteMovimiento: true },
         });
 
@@ -701,7 +802,7 @@ const validarMovimiento = async (id, usuarioId) => {
     const movimientoActualizado = await prisma.movimientoCaja.update({
       where: { id },
       data: {
-        estadoId: BigInt(21),
+        estadoId: Number(21),
         fechaActualizacion: fechaActual,
       },
     });
@@ -987,12 +1088,12 @@ const revertir = async (id, motivoReversion, usuarioId) => {
 /**
  * Listar movimientos con filtros avanzados para vista de Tesorería
  * @param {Object} filtros - Filtros opcionales
- * @param {BigInt} filtros.empresaId - ID de empresa
+ * @param {Number} filtros.empresaId - ID de empresa
  * @param {String} filtros.origen - 'CXC' | 'CXP' | 'TRANSFERENCIA' | 'OTRO'
- * @param {BigInt} filtros.cuentaCorrienteId - ID de cuenta corriente (origen o destino)
+ * @param {Number} filtros.cuentaCorrienteId - ID de cuenta corriente (origen o destino)
  * @param {Date} filtros.fechaDesde - Fecha desde
  * @param {Date} filtros.fechaHasta - Fecha hasta
- * @param {BigInt} filtros.estadoId - ID de estado
+ * @param {Number} filtros.estadoId - ID de estado
  * @param {Number} filtros.limite - Cantidad de registros (default: 100)
  * @param {Number} filtros.pagina - Página actual (default: 1)
  * @returns {Object} Movimientos paginados con metadata
@@ -1109,4 +1210,7 @@ export default {
   rechazar,
   revertir,
   listarConFiltrosAvanzados, // ✅ AGREGAR ESTA LÍNEA
+  crearMovimientoCajaDesdeTesoreria,  // ✅ NUEVA FUNCIÓN
+  actualizarSaldosCuentasCorrientes,  // ✅ EXPORTAR EXISTENTE
+  ORIGENES_MOVIMIENTO_TESORERIA,  // ✅ EXPORTAR CONSTANTES
 };

@@ -17,6 +17,7 @@ const incluirRelaciones = {
       moneda: true,
       empresa: true,
       cuentaContable: true,
+      tipoCuentaCorriente:true
     },
   },
   empresa: true,

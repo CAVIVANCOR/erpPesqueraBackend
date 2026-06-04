@@ -4,6 +4,7 @@ import {
   DatabaseError,
   ValidationError,
 } from "../../utils/errors.js";
+import movimientoCajaService from "../FlujoCaja/movimientoCaja.service.js";
 
 /**
  * Servicio para consulta consolidada de Pagos
@@ -475,62 +476,128 @@ const crearPagoCobrar = async (data) => {
   await validarPagoCuentaPorCobrar(data);
 
   try {
-    const nuevoPago = await prisma.pagoCuentaPorCobrar.create({
-      data: {
-        cuentaPorCobrarId: data.cuentaPorCobrarId,
+    return await prisma.$transaction(async (tx) => {
+      // 1. Crear MovimientoCaja
+      const movimientoCaja = await movimientoCajaService.crearMovimientoCajaDesdeTesoreria(tx, {
+        origen: 'PAGO_CXC',
+        tipoMovimientoId: data.tipoMovimientoId || Number(100), // Ajustar según catálogo
         empresaId: data.empresaId,
-        fechaPago: data.fechaPago,
-        montoPagado: data.montoPagado,
-        monedaPagoId: data.monedaPagoId,
-        tipoCambio: data.tipoCambio,
-        montoAplicadoDeuda: data.montoAplicadoDeuda,
-        monedaDeudaId: data.monedaDeudaId,
-        tieneDetraccion: data.tieneDetraccion || false,
-        montoDetraccion: data.montoDetraccion || 0,
-        porcentajeDetraccion: data.porcentajeDetraccion || null,
-        numeroConstanciaDetraccion: data.numeroConstanciaDetraccion || null,
-        fechaDetraccion: data.fechaDetraccion || null,
-        tieneRetencion: data.tieneRetencion || false,
-        montoRetencion: data.montoRetencion || 0,
-        porcentajeRetencion: data.porcentajeRetencion || null,
-        numeroComprobanteRetencion: data.numeroComprobanteRetencion || null,
-        fechaRetencion: data.fechaRetencion || null,
-        tienePercepcion: data.tienePercepcion || false,
-        montoPercepcion: data.montoPercepcion || 0,
-        porcentajePercepcion: data.porcentajePercepcion || null,
-        numeroComprobantePercepcion: data.numeroComprobantePercepcion || null,
-        fechaPercepcion: data.fechaPercepcion || null,
+        entidadComercialId: data.clienteId,
+        monto: data.montoPagado,
+        monedaId: data.monedaPagoId,
         medioPagoId: data.medioPagoId,
-        numeroOperacion: data.numeroOperacion || null,
-        bancoId: data.bancoId || null,
-        cuentaBancariaId: data.cuentaBancariaId || null,
-        movimientoCajaId: data.movimientoCajaId || null,
-        observaciones: data.observaciones || null,
-        fechaContable: data.fechaContable || new Date(),
-        periodoContableId: data.periodoContableId || null,
-        creadoPor: data.creadoPor || null,
-      },
-      include: {
-        cuentaPorCobrar: {
-          include: {
-            cliente: true,
-            empresa: true,
-            moneda: true,
-          },
+        cuentaCorrienteId: data.cuentaBancariaId,
+        fechaOperacion: data.fechaPago,
+        centroCostoId: data.centroCostoId,
+        numeroOperacion: data.numeroOperacion,
+        observaciones: data.observaciones,
+        datosOrigen: {
+          numeroDocumento: data.numeroDocumento || 'Cliente',
         },
-        empresa: true,
-        monedaPago: true,
-        monedaDeuda: true,
-        medioPago: true,
-        banco: true,
-        cuentaBancaria: true,
-        periodoContable: true,
-      },
+        estadoId: Number(102), // APROBADO
+        usuarioId: data.creadoPor,
+      });
+
+      // 2. Crear PagoCuentaPorCobrar
+      const nuevoPago = await tx.pagoCuentaPorCobrar.create({
+        data: {
+          cuentaPorCobrarId: data.cuentaPorCobrarId,
+          empresaId: data.empresaId,
+          fechaPago: data.fechaPago,
+          montoPagado: data.montoPagado,
+          monedaPagoId: data.monedaPagoId,
+          tipoCambio: data.tipoCambio,
+          montoAplicadoDeuda: data.montoAplicadoDeuda,
+          monedaDeudaId: data.monedaDeudaId,
+          tieneDetraccion: data.tieneDetraccion || false,
+          montoDetraccion: data.montoDetraccion || 0,
+          porcentajeDetraccion: data.porcentajeDetraccion || null,
+          numeroConstanciaDetraccion: data.numeroConstanciaDetraccion || null,
+          fechaDetraccion: data.fechaDetraccion || null,
+          tieneRetencion: data.tieneRetencion || false,
+          montoRetencion: data.montoRetencion || 0,
+          porcentajeRetencion: data.porcentajeRetencion || null,
+          numeroComprobanteRetencion: data.numeroComprobanteRetencion || null,
+          fechaRetencion: data.fechaRetencion || null,
+          tienePercepcion: data.tienePercepcion || false,
+          montoPercepcion: data.montoPercepcion || 0,
+          porcentajePercepcion: data.porcentajePercepcion || null,
+          numeroComprobantePercepcion: data.numeroComprobantePercepcion || null,
+          fechaPercepcion: data.fechaPercepcion || null,
+          medioPagoId: data.medioPagoId,
+          numeroOperacion: data.numeroOperacion || null,
+          bancoId: data.bancoId || null,
+          cuentaBancariaId: data.cuentaBancariaId || null,
+          movimientoCajaId: movimientoCaja.id,  // ✅ VINCULACIÓN
+          observaciones: data.observaciones || null,
+          fechaContable: data.fechaContable || new Date(),
+          periodoContableId: data.periodoContableId || null,
+          creadoPor: data.creadoPor || null,
+        },
+        include: {
+          cuentaPorCobrar: {
+            include: {
+              cliente: true,
+              empresa: true,
+              moneda: true,
+            },
+          },
+          empresa: true,
+          monedaPago: true,
+          monedaDeuda: true,
+          medioPago: true,
+          banco: true,
+          cuentaBancaria: true,
+          periodoContable: true,
+        },
+      });
+
+      // 3. Actualizar trazabilidad en MovimientoCaja
+      await tx.movimientoCaja.update({
+        where: { id: movimientoCaja.id },
+        data: {
+          origenMotivoOperacionId: nuevoPago.id,
+        },
+      });
+
+      // 4. Actualizar saldos de cuenta corriente
+      await movimientoCajaService.actualizarSaldosCuentasCorrientes(movimientoCaja);
+
+      // 5. Actualizar saldo de CuentaPorCobrar
+      const pagos = await tx.pagoCuentaPorCobrar.findMany({
+        where: { cuentaPorCobrarId: data.cuentaPorCobrarId },
+      });
+
+      const montoPagado = pagos.reduce(
+        (sum, pago) => sum + Number(pago.montoAplicadoDeuda || 0),
+        0,
+      ) + Number(data.montoAplicadoDeuda || 0);
+
+      const cuenta = await tx.cuentaPorCobrar.findUnique({
+        where: { id: data.cuentaPorCobrarId },
+      });
+
+      const saldoPendiente = Number(cuenta.montoTotal || 0) - montoPagado;
+
+      const estadoId = calcularEstadoCxC(
+        cuenta.montoTotal,
+        montoPagado,
+        saldoPendiente,
+        cuenta.fechaVencimiento,
+        cuenta.estadoId,
+      );
+
+      await tx.cuentaPorCobrar.update({
+        where: { id: data.cuentaPorCobrarId },
+        data: {
+          montoPagado,
+          saldoPendiente,
+          estadoId,
+        },
+      });
+
+      return nuevoPago;
     });
-
-    await actualizarCuentaPorCobrar(data.cuentaPorCobrarId);
-
-    return nuevoPago;
   } catch (err) {
     if (err.code && err.code.startsWith("P")) {
       throw new DatabaseError("Error de base de datos", err.message);
@@ -731,18 +798,18 @@ const calcularEstadoCxC = (
   const vencimiento = fechaVencimiento ? new Date(fechaVencimiento) : null;
 
   if (vencimiento && vencimiento < hoy && saldo > 0) {
-    return BigInt(103);
+    return Number(103);
   }
 
   if (saldo === 0 && pagado >= total) {
-    return BigInt(102);
+    return Number(102);
   }
 
   if (pagado > 0 && saldo > 0) {
-    return BigInt(101);
+    return Number(101);
   }
 
-  return BigInt(100);
+  return Number(100);
 };
 
 // ============================================
@@ -779,69 +846,135 @@ const crearPagoPagar = async (data) => {
   await validarPagoCuentaPorPagar(data);
 
   try {
-    const nuevoPago = await prisma.pagoCuentaPorPagar.create({
-      data: {
-        cuentaPorPagarId: data.cuentaPorPagarId,
+    return await prisma.$transaction(async (tx) => {
+      // 1. Crear MovimientoCaja
+      const movimientoCaja = await movimientoCajaService.crearMovimientoCajaDesdeTesoreria(tx, {
+        origen: 'PAGO_CXP',
+        tipoMovimientoId: data.tipoMovimientoId || Number(101), // Ajustar según catálogo
         empresaId: data.empresaId,
-        fechaPago: data.fechaPago,
-        montoPagado: data.montoPagado,
-        monedaPagoId: data.monedaPagoId,
-        tipoCambio: data.tipoCambio,
-        montoAplicadoDeuda: data.montoAplicadoDeuda,
-        monedaDeudaId: data.monedaDeudaId,
-        tieneDetraccion: data.tieneDetraccion || false,
-        montoDetraccion: data.montoDetraccion || 0,
-        porcentajeDetraccion: data.porcentajeDetraccion || null,
-        numeroConstanciaDetraccion: data.numeroConstanciaDetraccion || null,
-        fechaDetraccion: data.fechaDetraccion || null,
-        tieneRetencion: data.tieneRetencion || false,
-        montoRetencion: data.montoRetencion || 0,
-        porcentajeRetencion: data.porcentajeRetencion || null,
-        numeroComprobanteRetencion: data.numeroComprobanteRetencion || null,
-        fechaRetencion: data.fechaRetencion || null,
-        tienePercepcion: data.tienePercepcion || false,
-        montoPercepcion: data.montoPercepcion || 0,
-        porcentajePercepcion: data.porcentajePercepcion || null,
-        numeroComprobantePercepcion: data.numeroComprobantePercepcion || null,
-        fechaPercepcion: data.fechaPercepcion || null,
+        entidadComercialId: data.proveedorId,
+        monto: data.montoPagado,
+        monedaId: data.monedaPagoId,
         medioPagoId: data.medioPagoId,
-        numeroOperacion: data.numeroOperacion || null,
-        bancoId: data.bancoId || null,
-        cuentaBancariaId: data.cuentaBancariaId || null,
-        prestamoBancarioId: data.prestamoBancarioId || null,
-        movimientoCajaId: data.movimientoCajaId || null,
-        observaciones: data.observaciones || null,
-        fechaContable: data.fechaContable || new Date(),
-        periodoContableId: data.periodoContableId || null,
-        creadoPor: data.creadoPor || null,
-      },
-      include: {
-        cuentaPorPagar: {
-          include: {
-            proveedor: true,
-            empresa: true,
-            moneda: true,
-          },
+        cuentaCorrienteId: data.cuentaBancariaId,
+        fechaOperacion: data.fechaPago,
+        centroCostoId: data.centroCostoId,
+        numeroOperacion: data.numeroOperacion,
+        observaciones: data.observaciones,
+        datosOrigen: {
+          numeroDocumento: data.numeroDocumento || 'Proveedor',
         },
-        empresa: true,
-        monedaPago: true,
-        monedaDeuda: true,
-        medioPago: true,
-        banco: true,
-        cuentaBancaria: true,
-        prestamoBancario: {
-          include: {
-            banco: true,
-            tipoPrestamo: true,
-          },
+        estadoId: Number(102), // APROBADO
+        usuarioId: data.creadoPor,
+      });
+
+      // 2. Crear PagoCuentaPorPagar
+      const nuevoPago = await tx.pagoCuentaPorPagar.create({
+        data: {
+          cuentaPorPagarId: data.cuentaPorPagarId,
+          empresaId: data.empresaId,
+          fechaPago: data.fechaPago,
+          montoPagado: data.montoPagado,
+          monedaPagoId: data.monedaPagoId,
+          tipoCambio: data.tipoCambio,
+          montoAplicadoDeuda: data.montoAplicadoDeuda,
+          monedaDeudaId: data.monedaDeudaId,
+          tieneDetraccion: data.tieneDetraccion || false,
+          montoDetraccion: data.montoDetraccion || 0,
+          porcentajeDetraccion: data.porcentajeDetraccion || null,
+          numeroConstanciaDetraccion: data.numeroConstanciaDetraccion || null,
+          fechaDetraccion: data.fechaDetraccion || null,
+          tieneRetencion: data.tieneRetencion || false,
+          montoRetencion: data.montoRetencion || 0,
+          porcentajeRetencion: data.porcentajeRetencion || null,
+          numeroComprobanteRetencion: data.numeroComprobanteRetencion || null,
+          fechaRetencion: data.fechaRetencion || null,
+          tienePercepcion: data.tienePercepcion || false,
+          montoPercepcion: data.montoPercepcion || 0,
+          porcentajePercepcion: data.porcentajePercepcion || null,
+          numeroComprobantePercepcion: data.numeroComprobantePercepcion || null,
+          fechaPercepcion: data.fechaPercepcion || null,
+          medioPagoId: data.medioPagoId,
+          numeroOperacion: data.numeroOperacion || null,
+          bancoId: data.bancoId || null,
+          cuentaBancariaId: data.cuentaBancariaId || null,
+          prestamoBancarioId: data.prestamoBancarioId || null,
+          movimientoCajaId: movimientoCaja.id,  // ✅ VINCULACIÓN
+          observaciones: data.observaciones || null,
+          fechaContable: data.fechaContable || new Date(),
+          periodoContableId: data.periodoContableId || null,
+          creadoPor: data.creadoPor || null,
         },
-        periodoContable: true,
-      },
+        include: {
+          cuentaPorPagar: {
+            include: {
+              proveedor: true,
+              empresa: true,
+              moneda: true,
+            },
+          },
+          empresa: true,
+          monedaPago: true,
+          monedaDeuda: true,
+          medioPago: true,
+          banco: true,
+          cuentaBancaria: true,
+          prestamoBancario: {
+            include: {
+              banco: true,
+              tipoPrestamo: true,
+            },
+          },
+          periodoContable: true,
+        },
+      });
+
+      // 3. Actualizar trazabilidad en MovimientoCaja
+      await tx.movimientoCaja.update({
+        where: { id: movimientoCaja.id },
+        data: {
+          origenMotivoOperacionId: nuevoPago.id,
+        },
+      });
+
+      // 4. Actualizar saldos de cuenta corriente
+      await movimientoCajaService.actualizarSaldosCuentasCorrientes(movimientoCaja);
+
+      // 5. Actualizar saldo de CuentaPorPagar
+      const pagos = await tx.pagoCuentaPorPagar.findMany({
+        where: { cuentaPorPagarId: data.cuentaPorPagarId },
+      });
+
+      const montoPagado = pagos.reduce(
+        (sum, pago) => sum + Number(pago.montoAplicadoDeuda || 0),
+        0,
+      ) + Number(data.montoAplicadoDeuda || 0);
+
+      const cuenta = await tx.cuentaPorPagar.findUnique({
+        where: { id: data.cuentaPorPagarId },
+      });
+
+      const saldoPendiente = Number(cuenta.montoTotal || 0) - montoPagado;
+
+      const estadoId = calcularEstadoCxP(
+        cuenta.montoTotal,
+        montoPagado,
+        saldoPendiente,
+        cuenta.fechaVencimiento,
+        cuenta.estadoId,
+      );
+
+      await tx.cuentaPorPagar.update({
+        where: { id: data.cuentaPorPagarId },
+        data: {
+          montoPagado,
+          saldoPendiente,
+          estadoId,
+        },
+      });
+
+      return nuevoPago;
     });
-
-    await actualizarCuentaPorPagar(data.cuentaPorPagarId);
-
-    return nuevoPago;
   } catch (err) {
     if (err.code && err.code.startsWith("P")) {
       throw new DatabaseError("Error de base de datos", err.message);
@@ -1049,18 +1182,18 @@ const calcularEstadoCxP = (
   const vencimiento = fechaVencimiento ? new Date(fechaVencimiento) : null;
 
   if (vencimiento && vencimiento < hoy && saldo > 0) {
-    return BigInt(103);
+    return Number(103);
   }
 
   if (saldo === 0 && pagado >= total) {
-    return BigInt(102);
+    return Number(102);
   }
 
   if (pagado > 0 && saldo > 0) {
-    return BigInt(101);
+    return Number(101);
   }
 
-  return BigInt(100);
+  return Number(100);
 };
 
 export default {

@@ -108,7 +108,7 @@ const registrarPagoCuentaPorCobrar = async (datos) => {
 
     // Obtener estado CONFIRMADO
     const estadoConfirmado = await prisma.estadoMultiFuncion.findFirst({
-      where: { 
+      where: {
         descripcion: 'CONFIRMADO',
         // Puedes agregar filtro por módulo si es necesario
       },
@@ -138,6 +138,12 @@ const registrarPagoCuentaPorCobrar = async (datos) => {
           fechaOperacionMovCaja: new Date(fechaPago),
           generarAsientoContable: true,
           asientosGenerados: false,
+
+          // ✅ TRAZABILIDAD AGREGADA
+          moduloOrigenMotivoOperacionId: BigInt(116), // Submódulo: Pagos Cuentas Por Cobrar
+          origenMotivoOperacionId: null, // Se actualiza después con el ID del pago
+          fechaMotivoOperacion: new Date(fechaPago),
+          usuarioMotivoOperacionId: usuarioId ? BigInt(usuarioId) : null,
         },
       });
 
@@ -188,6 +194,14 @@ const registrarPagoCuentaPorCobrar = async (datos) => {
         },
       });
 
+      // ✅ 2.1️⃣ ACTUALIZAR TRAZABILIDAD EN MOVIMIENTO CAJA
+      await tx.movimientoCaja.update({
+        where: { id: movimientoCaja.id },
+        data: {
+          origenMotivoOperacionId: pagoCuentaPorCobrar.id,
+        },
+      });
+
       // 3️⃣ ACTUALIZAR CUENTA POR COBRAR
       const nuevoMontoPagado = Number(cuentaPorCobrar.montoPagado) + Number(montoAplicadoDeuda);
       const nuevoSaldoPendiente = Number(cuentaPorCobrar.montoTotal) - nuevoMontoPagado;
@@ -223,12 +237,28 @@ const registrarPagoCuentaPorCobrar = async (datos) => {
       });
 
       // 4️⃣ CREAR SALDO DE CUENTA CORRIENTE
+      // Obtener último saldo de la cuenta
+      const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
+        where: { cuentaCorrienteId: Number(cuentaBancariaId) },
+        orderBy: { fecha: 'desc' },
+      });
+
+      const saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
+      const montoIngreso = Number(montoPagado);
+      const nuevoSaldoActual = saldoAnterior + montoIngreso;
+
       await tx.saldoCuentaCorriente.create({
         data: {
           cuentaCorrienteId: Number(cuentaBancariaId),
+          empresaId: Number(empresaId),
+          fecha: new Date(fechaPago),
+          saldoAnterior,
+          ingresos: montoIngreso,
+          egresos: 0,
+          saldoActual: nuevoSaldoActual,
           movimientoCajaId: movimientoCaja.id,
-          saldo: Number(montoPagado), // Incrementa el saldo (INGRESO)
-          fechaMovimiento: new Date(fechaPago),
+          centroCostoId: null,
+          conciliado: false,
         },
       });
 
@@ -390,6 +420,12 @@ const registrarPagoCuentaPorPagar = async (datos) => {
           fechaOperacionMovCaja: new Date(fechaPago),
           generarAsientoContable: true,
           asientosGenerados: false,
+
+          // ✅ TRAZABILIDAD AGREGADA
+          moduloOrigenMotivoOperacionId: BigInt(115), // Submódulo: Pagos Cuentas Por Pagar
+          origenMotivoOperacionId: null, // Se actualiza después con el ID del pago
+          fechaMotivoOperacion: new Date(fechaPago),
+          usuarioMotivoOperacionId: usuarioId ? BigInt(usuarioId) : null,
         },
       });
 
@@ -439,7 +475,13 @@ const registrarPagoCuentaPorPagar = async (datos) => {
           creadoPor: Number(usuarioId),
         },
       });
-
+      // ✅ 2.1️⃣ ACTUALIZAR TRAZABILIDAD EN MOVIMIENTO CAJA
+      await tx.movimientoCaja.update({
+        where: { id: movimientoCaja.id },
+        data: {
+          origenMotivoOperacionId: pagoCuentaPorPagar.id,
+        },
+      });
       // 3️⃣ ACTUALIZAR CUENTA POR PAGAR
       const nuevoMontoPagado = Number(cuentaPorPagar.montoPagado) + Number(montoAplicadoDeuda);
       const nuevoSaldoPendiente = Number(cuentaPorPagar.montoTotal) - nuevoMontoPagado;
@@ -472,13 +514,29 @@ const registrarPagoCuentaPorPagar = async (datos) => {
         },
       });
 
-      // 4️⃣ CREAR SALDO DE CUENTA CORRIENTE (NEGATIVO porque es EGRESO)
+      // 4️⃣ CREAR SALDO DE CUENTA CORRIENTE (EGRESO)
+      // Obtener último saldo de la cuenta
+      const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
+        where: { cuentaCorrienteId: Number(cuentaBancariaId) },
+        orderBy: { fecha: 'desc' },
+      });
+
+      const saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
+      const montoEgreso = Number(montoPagado);
+      const nuevoSaldoActual = saldoAnterior - montoEgreso;
+
       await tx.saldoCuentaCorriente.create({
         data: {
           cuentaCorrienteId: Number(cuentaBancariaId),
+          empresaId: Number(empresaId),
+          fecha: new Date(fechaPago),
+          saldoAnterior,
+          ingresos: 0,
+          egresos: montoEgreso,
+          saldoActual: nuevoSaldoActual,
           movimientoCajaId: movimientoCaja.id,
-          saldo: -Number(montoPagado), // Decrementa el saldo (EGRESO)
-          fechaMovimiento: new Date(fechaPago),
+          centroCostoId: null,
+          conciliado: false,
         },
       });
 
