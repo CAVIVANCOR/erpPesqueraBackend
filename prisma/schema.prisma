@@ -3472,6 +3472,7 @@ model Moneda {
   codigoSunat   String          @unique
   nombreLargo   String?
   simbolo       String?
+  colorFondo    String?
   activo        Boolean         @default(true)
 
   precios                           PrecioEntidad[]
