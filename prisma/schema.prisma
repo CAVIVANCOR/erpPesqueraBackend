@@ -3356,8 +3356,11 @@ model FaenaPescaConsumo {
 }
 
 model FamiliaProducto {
-  id       BigInt     @id @default(autoincrement())
-  nombre   String     @db.VarChar(120)
+  id              BigInt     @id @default(autoincrement())
+  nombre          String     @db.VarChar(120)
+  esParaIngresos  Boolean    @default(false)
+  esParaEgresos   Boolean    @default(false)
+
   productos             Producto[]
 }
 
