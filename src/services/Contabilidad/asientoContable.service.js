@@ -495,7 +495,7 @@ const actualizar = async (id, data) => {
         },
       });
 
-      if (data.detalles && data.detalles.length > 0) {
+if (data.detalles) {
         // Obtener IDs de detalles existentes
         const detallesExistentes = await tx.detalleAsientoContable.findMany({
           where: { asientoContableId: id },

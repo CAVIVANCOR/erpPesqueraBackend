@@ -13,5 +13,6 @@ router.get('/empresa/:empresaId', cuentaPorCobrarController.listarPorEmpresa);
 router.get('/empresa/:empresaId/pendientes', cuentaPorCobrarController.listarPendientes);
 router.get('/empresa/:empresaId/vencidas', cuentaPorCobrarController.listarVencidas);
 router.get('/cliente/:clienteId', cuentaPorCobrarController.listarPorCliente);
+router.get('/prefactura/:preFacturaId', cuentaPorCobrarController.obtenerPorPreFacturaId);
 
 export default router;

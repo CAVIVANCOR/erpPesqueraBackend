@@ -280,6 +280,7 @@ const crear = async (data) => {
         numeroDocumento,
         fechaDocumento: data.fechaDocumento || new Date(),
         fechaContable: data.fechaContable,
+        periodoContableId: data.periodoContableId,
         requerimientoCompraId: data.requerimientoCompraId,
         proveedorId: data.proveedorId,
         formaPagoId: data.formaPagoId,
@@ -287,6 +288,7 @@ const crear = async (data) => {
         tipoCambio: tipoCambioFinal, // ✅ Usar valor validado
         fechaEntrega: data.fechaEntrega,
         fechaRecepcion: data.fechaRecepcion,
+        fechaVencimiento: data.fechaVencimiento,
         solicitanteId: data.solicitanteId,
         aprobadoPorId: data.aprobadoPorId,
         estadoId: estadoInicial.id,
@@ -364,7 +366,7 @@ const actualizar = async (id, data) => {
 
     const actualizado = await prisma.$transaction(async (tx) => {
       // Objeto para edición (CON relaciones para validación)
-      const dataParaEdicion = {
+            const dataParaEdicion = {
         empresaId: data.empresaId,
         tipoDocumentoId: data.tipoDocumentoId,
         serieDocId: data.serieDocId,
@@ -373,6 +375,8 @@ const actualizar = async (id, data) => {
         numeroDocumento: data.numeroDocumento,
         fechaDocumento: data.fechaDocumento,
         fechaContable: data.fechaContable,
+        periodoContableId: data.periodoContableId,
+        fechaVencimiento: data.fechaVencimiento,
         requerimientoCompraId: data.requerimientoCompraId,
         proveedorId: data.proveedorId,
         formaPagoId: data.formaPagoId,
@@ -407,7 +411,7 @@ const actualizar = async (id, data) => {
       };
 
       // Objeto para grabación (SIN relaciones, solo IDs)
-      const dataParaGrabacion = {
+            const dataParaGrabacion = {
         empresaId: data.empresaId,
         tipoDocumentoId: data.tipoDocumentoId,
         serieDocId: data.serieDocId,
@@ -416,6 +420,8 @@ const actualizar = async (id, data) => {
         numeroDocumento: data.numeroDocumento,
         fechaDocumento: data.fechaDocumento,
         fechaContable: data.fechaContable,
+        periodoContableId: data.periodoContableId,
+        fechaVencimiento: data.fechaVencimiento,
         requerimientoCompraId: data.requerimientoCompraId,
         proveedorId: data.proveedorId,
         formaPagoId: data.formaPagoId,
@@ -1238,8 +1244,7 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
         for (const detalle of requerimiento.detalles) {
           if (!detalle.proveedorId) {
             throw new ValidationError(
-              `El detalle del producto ${
-                detalle.producto?.nombre || detalle.productoId
+              `El detalle del producto ${detalle.producto?.nombre || detalle.productoId
               } no tiene proveedor asignado`,
             );
           }
@@ -1283,9 +1288,8 @@ const generarDesdeRequerimiento = async (requerimientoCompraId) => {
 
         for (const cotizacion of cotizaciones) {
           if (cotizacion.detalles.length > 0) {
-            const key = `${cotizacion.proveedorId}-${
-              cotizacion.monedaId || "null"
-            }`;
+            const key = `${cotizacion.proveedorId}-${cotizacion.monedaId || "null"
+              }`;
 
             if (!itemsPorProveedorMoneda.has(key)) {
               itemsPorProveedorMoneda.set(key, {
@@ -1357,7 +1361,7 @@ async function crearOrdenCompraDirecta(
   if (!serieOrden) {
     throw new ValidationError(
       `No se encontró una serie activa para Orden de Compra con los criterios: ` +
-        `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`,
+      `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`,
     );
   }
 
@@ -1441,7 +1445,7 @@ async function crearOrdenCompraConCotizacion(
   if (!serieOrden) {
     throw new ValidationError(
       `No se encontró una serie activa para Orden de Compra con los criterios: ` +
-        `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`,
+      `empresaId=${requerimiento.empresaId}, tipoAlmacenId=${requerimiento.serieDoc.tipoAlmacenId}, serie=${requerimiento.serieDoc.serie}`,
     );
   }
 

@@ -88,3 +88,13 @@ export async function listarVencidas(req, res, next) {
     next(err);
   }
 }
+
+export async function obtenerPorPreFacturaId(req, res, next) {
+  try {
+    const preFacturaId = Number(req.params.preFacturaId);
+    const cuenta = await cuentaPorCobrarService.obtenerPorPreFacturaId(preFacturaId);
+    res.json(toJSONBigInt(cuenta));
+  } catch (err) {
+    next(err);
+  }
+}

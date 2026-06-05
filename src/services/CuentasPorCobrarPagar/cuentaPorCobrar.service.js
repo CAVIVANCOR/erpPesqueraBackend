@@ -467,6 +467,48 @@ const listarVencidas = async (empresaId) => {
   }
 };
 
+const obtenerPorPreFacturaId = async (preFacturaId) => {
+  try {
+    const cuenta = await prisma.cuentaPorCobrar.findUnique({
+      where: { preFacturaId },
+      include: {
+        empresa: true,
+        cliente: true,
+        comprobanteElectronico: true,
+        moneda: true,
+        estado: true,
+        periodoContable: true,
+        preFactura: {
+          include: {
+            tipoDocumento: true,
+          },
+        },
+        pagos: {
+          include: {
+            medioPago: true,
+          },
+          orderBy: { fechaPago: "desc" },
+        },
+      },
+    });
+
+    if (!cuenta) {
+      throw new NotFoundError(
+        `No se encontró una Cuenta por Cobrar asociada a la PreFactura con ID ${preFacturaId}`,
+      );
+    }
+
+    return cuenta;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
+
 export default {
   listar,
   obtenerPorId,
@@ -477,4 +519,5 @@ export default {
   listarPorCliente,
   listarPendientes,
   listarVencidas,
+  obtenerPorPreFacturaId,
 };

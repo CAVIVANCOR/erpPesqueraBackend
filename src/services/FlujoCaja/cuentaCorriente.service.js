@@ -1,5 +1,6 @@
 // Importa la instancia de Prisma Client para acceder a la base de datos
 import prisma from "../../config/prismaClient.js";
+import { Prisma } from "@prisma/client";  // ✅ AGREGAR ESTA LÍNEA
 // Importa los errores personalizados para manejo consistente de errores
 import {
   NotFoundError,
@@ -80,7 +81,7 @@ async function validarDuplicado(
 ) {
   // Normalizar descripción: trim y convertir a mayúsculas
   const descripcionNormalizada = descripcion ? descripcion.trim().toUpperCase() : null;
-  
+
   try {
     // Buscar todas las cuentas con el mismo número, banco y empresa
     const cuentasExistentes = await prisma.cuentaCorriente.findMany({
@@ -91,13 +92,13 @@ async function validarDuplicado(
         ...(excluirId && { id: { not: excluirId } }),
       },
     });
-    
+
     // Verificar si alguna tiene la misma descripción normalizada
     const duplicado = cuentasExistentes.find(cuenta => {
       const descripcionExistente = cuenta.descripcion ? cuenta.descripcion.trim().toUpperCase() : null;
       return descripcionExistente === descripcionNormalizada;
     });
-    
+
     if (duplicado) {
       throw new ConflictError(
         "Ya existe una cuenta corriente con ese número, banco, empresa y descripción"
@@ -109,32 +110,82 @@ async function validarDuplicado(
   }
 }
 
-/**
- * Obtiene todas las cuentas corrientes, incluyendo relaciones principales.
- * @returns {Promise<Array>} - Lista de cuentas corrientes
- */
-const listar = async () => {
+const obtenerPorId = async (id) => {
   try {
-    return await prisma.cuentaCorriente.findMany({
+    // 1. Obtener la cuenta corriente con sus relaciones
+    const cuenta = await prisma.cuentaCorriente.findUnique({
+      where: { id },
       include: incluirRelaciones,
     });
+
+    if (!cuenta) throw new NotFoundError("Cuenta corriente no encontrada");
+
+    // 2. ✅ CALCULAR saldoActual desde el último SaldoCuentaCorriente
+    const ultimoSaldo = await prisma.saldoCuentaCorriente.findFirst({
+      where: { cuentaCorrienteId: cuenta.id },
+      orderBy: { fecha: 'desc' },
+      select: { saldoActual: true, fecha: true },
+    });
+
+    // 3. Agregar el saldoActual calculado a la cuenta
+    return {
+      ...cuenta,
+      saldoActual: ultimoSaldo?.saldoActual || 0,
+      ultimaActualizacionSaldo: ultimoSaldo?.fecha || null,
+    };
   } catch (err) {
-    // Maneja errores de base de datos
+    if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
 };
 
-const obtenerPorId = async (id) => {
+/**
+ * Obtiene todas las cuentas corrientes, incluyendo relaciones principales.
+ * @returns {Promise<Array>} - Lista de cuentas corrientes
+ */
+const listar = async () => {
   try {
-    const cuenta = await prisma.cuentaCorriente.findUnique({
-      where: { id },
+    // 1. Obtener todas las cuentas corrientes con sus relaciones
+    const cuentas = await prisma.cuentaCorriente.findMany({
       include: incluirRelaciones,
     });
-    if (!cuenta) throw new NotFoundError("Cuenta corriente no encontrada");
-    return cuenta;
+
+    // ✅ Si no hay cuentas, retornar array vacío
+    if (cuentas.length === 0) {
+      return [];
+    }
+
+    // 2. Obtener IDs de todas las cuentas
+    const cuentaIds = cuentas.map(c => c.id);
+
+    // 3. ✅ OPTIMIZADO: Una sola query para obtener todos los últimos saldos
+    const ultimosSaldos = await prisma.$queryRaw`
+      SELECT DISTINCT ON ("cuentaCorrienteId") 
+        "cuentaCorrienteId", 
+        "saldoActual", 
+        "fecha"
+      FROM "SaldoCuentaCorriente"
+      WHERE "cuentaCorrienteId" IN (${Prisma.join(cuentaIds)})
+      ORDER BY "cuentaCorrienteId", "fecha" DESC
+    `;
+
+    // 4. Mapear saldos a un objeto para búsqueda rápida
+    const saldosMap = Object.fromEntries(
+      ultimosSaldos.map(s => [Number(s.cuentaCorrienteId), s])
+    );
+
+    // 5. Agregar saldoActual a cada cuenta
+    const cuentasConSaldo = cuentas.map(cuenta => ({
+      ...cuenta,
+      saldoActual: saldosMap[cuenta.id]?.saldoActual || 0,
+      ultimaActualizacionSaldo: saldosMap[cuenta.id]?.fecha || null,
+    }));
+
+    return cuentasConSaldo;
   } catch (err) {
+    console.error("Error en listar cuentas corrientes:", err);
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
     throw err;
@@ -174,21 +225,21 @@ const crear = async (data) => {
 
     await validarReferencias(data);
     await validarDuplicado(data);
-    
+
     // Preparar datos con auditoría automática
     const datosConAuditoria = {
       ...data,
       creadoEn: new Date(),
       actualizadoEn: new Date(),
     };
-    
+
     const resultado = await prisma.cuentaCorriente.create({ data: datosConAuditoria });
     return resultado;
   } catch (err) {
     // Manejar error de restricción única específicamente
     if (err.code === "P2002") {
-      if (err.meta?.target?.includes("unique_cuenta_banco_empresa_descripcion") || 
-          err.meta?.target?.includes("unique_cuenta_banco_empresa")) {
+      if (err.meta?.target?.includes("unique_cuenta_banco_empresa_descripcion") ||
+        err.meta?.target?.includes("unique_cuenta_banco_empresa")) {
         throw new ConflictError(
           "Ya existe una cuenta corriente con ese número, banco, empresa y descripción"
         );
