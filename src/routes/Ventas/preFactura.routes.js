@@ -16,6 +16,14 @@ router.post('/:id/facturar-negra', preFacturaController.facturarPreFacturaNegra)
 router.post('/:id/facturar-blanca', preFacturaController.facturarPreFacturaBlanca);
 router.put('/:id/aprobar', preFacturaController.aprobar);
 
+// ========================================
+// RUTAS DE ASIENTOS CONTABLES
+// ========================================
+router.get('/:id/borrador-asiento', preFacturaController.generarBorradorAsiento);
+router.post('/:id/guardar-asiento', preFacturaController.guardarAsientoContable);
+router.put('/:id/guardar-asiento', preFacturaController.guardarAsientoContable);
+router.delete('/:id/asiento/:asientoId', preFacturaController.eliminarAsientoContable);
+
 // Rutas CRUD para PreFactura
 router.get('/', preFacturaController.listar);
 router.get('/:id', preFacturaController.obtenerPorId);

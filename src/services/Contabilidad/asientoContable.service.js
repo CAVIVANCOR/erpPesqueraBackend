@@ -224,7 +224,11 @@ const listar = async () => {
     return await prisma.asientoContable.findMany({
       include: {
         empresa: true,
-        periodoContable: true,
+        periodoContable: {
+          include: {
+            estado: true, // ✅ INCLUIR ESTADO DEL PERÍODO
+          },
+        },
         estado: true,
         moneda: true,
         personalAprobador: true,
@@ -247,14 +251,17 @@ const listar = async () => {
     manejarErrorPrisma(err, "listar asientos contables");
   }
 };
-
 const obtenerPorId = async (id) => {
   try {
     const asiento = await prisma.asientoContable.findUnique({
       where: { id },
       include: {
         empresa: true,
-        periodoContable: true,
+        periodoContable: {
+          include: {
+            estado: true, // ✅ INCLUIR ESTADO DEL PERÍODO
+          },
+        },
         estado: true,
         moneda: true,
         personalAprobador: true,
@@ -419,30 +426,36 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.asientoContable.findUnique({
       where: { id },
-      include: { periodoContable: true },
+      include: {
+        periodoContable: {
+          include: { estado: true }
+        }
+      },
     });
     if (!existente) throw new NotFoundError("Asiento contable no encontrado");
 
-    // Solo se pueden modificar asientos en estado PENDIENTE (76)
-    if (Number(existente.estadoId) !== 76) {
-      throw new ConflictError(
-        "Solo se pueden modificar asientos en estado PENDIENTE (76).",
-      );
-    }
-
-    const estadoPeriodoAbierto = await prisma.estadoMultiFuncion.findFirst({
-      where: { tipoProvieneDeId: 19, descripcion: "ABIERTO" },
-    });
-    if (
-      !estadoPeriodoAbierto ||
-      Number(existente.periodoContable.estadoId) !==
-        Number(estadoPeriodoAbierto.id)
-    ) {
+    // Validar que el período esté ABIERTO
+    if (existente.periodoContable?.estado?.descripcion !== "ABIERTO") {
       throw new ConflictError(
         "No se puede modificar un asiento de un período que no está ABIERTO.",
       );
     }
 
+    // Solo se pueden modificar asientos PENDIENTE (76) o APROBADO (77)
+    // Los ANULADOS (78) NO se pueden modificar
+    const estadoId = Number(existente.estadoId);
+    if (estadoId !== 76 && estadoId !== 77) {
+      throw new ConflictError(
+        "Solo se pueden modificar asientos en estado PENDIENTE o APROBADO.",
+      );
+    }
+    // Si el asiento está APROBADO, volverlo a PENDIENTE al editar
+    const estadoPendiente = await prisma.estadoMultiFuncion.findUnique({
+      where: { id: 76 },
+    });
+    if (!estadoPendiente) {
+      throw new ValidationError("Estado PENDIENTE no encontrado en el sistema.");
+    }
     await validarAsientoContable({ ...data, id });
 
     if (data.detalles && data.detalles.length > 0) {
@@ -473,7 +486,7 @@ const actualizar = async (id, data) => {
         ).getFullYear();
         nuevoNumeroAsiento = `ASI-${anioAsiento}-${String(nuevoCorrelativo).padStart(6, "0")}`;
       }
-      await tx.asientoContable.update({
+            await tx.asientoContable.update({
         where: { id },
         data: {
           periodoContableId: data.periodoContableId,
@@ -491,11 +504,12 @@ const actualizar = async (id, data) => {
           totalHaber: data.totalHaber,
           diferencia: data.diferencia,
           estaCuadrado: data.estaCuadrado,
+          estadoId: 76, // ✅ Siempre volver a PENDIENTE al editar
           actualizadoPor: data.actualizadoPor,
         },
       });
 
-if (data.detalles) {
+      if (data.detalles) {
         // Obtener IDs de detalles existentes
         const detallesExistentes = await tx.detalleAsientoContable.findMany({
           where: { asientoContableId: id },
@@ -630,7 +644,7 @@ const eliminar = async (id) => {
     if (
       !estadoPeriodoAbierto ||
       Number(existente.periodoContable.estadoId) !==
-        Number(estadoPeriodoAbierto.id)
+      Number(estadoPeriodoAbierto.id)
     ) {
       throw new ConflictError(
         "No se puede eliminar un asiento de un período que no está ABIERTO.",
@@ -746,7 +760,7 @@ const aprobarAsiento = async (id, aprobadoPorId) => {
     if (
       !estadoPeriodoAbierto ||
       Number(asiento.periodoContable.estadoId) !==
-        Number(estadoPeriodoAbierto.id)
+      Number(estadoPeriodoAbierto.id)
     ) {
       throw new ConflictError(
         "No se puede aprobar un asiento de un período que no está ABIERTO.",
@@ -821,7 +835,7 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
     if (
       estadoPeriodoBloqueado &&
       Number(asiento.periodoContable.estadoId) ===
-        Number(estadoPeriodoBloqueado.id)
+      Number(estadoPeriodoBloqueado.id)
     ) {
       throw new ConflictError(
         "No se puede anular un asiento de un período BLOQUEADO.",
@@ -1049,7 +1063,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
     if (
       !estadoPeriodoAbierto ||
       Number(asientos[0].periodoContable.estadoId) !==
-        Number(estadoPeriodoAbierto.id)
+      Number(estadoPeriodoAbierto.id)
     ) {
       throw new ConflictError(
         "No se pueden unir asientos de un período que no está ABIERTO.",

@@ -105,6 +105,35 @@ export async function obtenerPrecioVigente(req, res, next) {
 };
 
 
+
+/**
+ * Obtiene el precio de venta vigente para un producto en PreFactura
+ * Query params: productoId, clienteId (opcional), empresaEntidadComercialId, fechaDocumento
+ */
+export async function obtenerPrecioVentaVigente(req, res, next) {
+  try {
+    const { productoId, clienteId, empresaEntidadComercialId, fechaDocumento } = req.query;
+
+    if (!productoId || !empresaEntidadComercialId || !fechaDocumento) {
+      return res.status(400).json({
+        error: 'productoId, empresaEntidadComercialId y fechaDocumento son obligatorios',
+      });
+    }
+
+    const resultado = await precioEntidadService.obtenerPrecioVentaVigente(
+      Number(productoId),
+      clienteId ? Number(clienteId) : null,
+      Number(empresaEntidadComercialId),
+      fechaDocumento,
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (error) {
+    next(error);
+  }
+}
+
+
 /**
  * Obtiene precio de combustible vigente
  * @route GET /api/precios-entidad/combustible

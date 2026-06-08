@@ -51,7 +51,12 @@ router.post(
   checkPermission('movActivoFijo', 'crear'),
   movimientoActivoFijoController.guardarAsientoContable
 );
-
+router.put(
+  '/:id/guardar-asiento',
+  autenticarJWT,
+  checkPermission('movActivoFijo', 'editar'),
+  movimientoActivoFijoController.guardarAsientoContable
+);
 router.put(
   '/:id', 
   autenticarJWT, 
@@ -68,7 +73,7 @@ router.delete(
 
 // Eliminar asiento contable de un movimiento
 router.delete(
-  "/:id/asiento-contable",
+  "/:id/asiento-contable/:asientoId",
   autenticarJWT,
   checkPermission('movActivoFijo', 'eliminar'),
   movimientoActivoFijoController.eliminarAsientoContable

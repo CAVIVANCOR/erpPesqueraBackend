@@ -443,7 +443,7 @@ const generarBorradorAsiento = async (movimientoId) => {
     if (!tipoActivo.cuentaActivoId || !tipoActivo.cuentaActivo) {
       throw new ValidationError(
         "El tipo de activo no tiene configurada la cuenta contable de activo. " +
-          "Configure las cuentas contables en el tipo de activo antes de generar el asiento.",
+        "Configure las cuentas contables en el tipo de activo antes de generar el asiento.",
       );
     }
 
@@ -522,7 +522,7 @@ const generarBorradorAsiento = async (movimientoId) => {
       ) {
         throw new ValidationError(
           "El tipo de activo no tiene configuradas las cuentas de depreciación. " +
-            "Configure las cuentas contables en el tipo de activo antes de generar el asiento.",
+          "Configure las cuentas contables en el tipo de activo antes de generar el asiento.",
         );
       }
 
@@ -556,7 +556,7 @@ const generarBorradorAsiento = async (movimientoId) => {
       if (!tipoActivo.cuentaDepreciacionAcumuladaId) {
         throw new ValidationError(
           "El tipo de activo no tiene configurada la cuenta de depreciación acumulada. " +
-            "Configure las cuentas contables en el tipo de activo antes de generar el asiento.",
+          "Configure las cuentas contables en el tipo de activo antes de generar el asiento.",
         );
       }
 
@@ -646,13 +646,16 @@ const generarBorradorAsiento = async (movimientoId) => {
 
 /**
  * Guarda el asiento contable editado por el usuario y lo vincula al movimiento.
- * @param {BigInt} movimientoId - ID del movimiento
+ * Si asientoData tiene ID, actualiza el existente. Si no, crea uno nuevo.
+ * @param {Number} movimientoId - ID del movimiento
  * @param {Object} asientoData - Datos del asiento editado por el usuario
- * @param {BigInt} creadoPor - ID del usuario que crea el asiento
- * @returns {Promise<Object>} - Asiento contable creado
+ * @param {Number} creadoPor - ID del usuario que crea/actualiza el asiento
+ * @returns {Promise<Object>} - Asiento contable creado o actualizado
  */
 const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
   try {
+    // ✅ DETECTAR SI ES EDICIÓN O CREACIÓN
+    const esEdicion = asientoData.id !== undefined && asientoData.id !== null;
     // ✅ BUSCAR SUBMÓDULO DINÁMICAMENTE
     const submodulo = await prisma.submoduloSistema.findFirst({
       where: {
@@ -660,13 +663,11 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
         activo: true,
       },
     });
-
     if (!submodulo) {
       throw new ValidationError(
         'Submódulo "MovimientoActivoFijo" no encontrado en el sistema.',
       );
     }
-
     const movimiento = await prisma.movimientoActivoFijo.findUnique({
       where: { id: movimientoId },
       include: {
@@ -727,43 +728,76 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
     const fechaAsiento = asientoData.fechaAsiento || movimiento.fechaMovimiento;
 
     return await prisma.$transaction(async (tx) => {
-      // Obtener correlativo
-      const ultimoAsiento = await tx.asientoContable.findFirst({
-        where: {
-          empresaId: asientoData.empresaId,
-          periodoContableId: periodoContableId,
-        },
-        orderBy: { correlativo: "desc" },
-      });
-      const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
-      const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, "0")}`;
+      let asiento;
 
-      // Crear nuevo asiento vinculado al movimiento mediante procesoOrigenId
-      const asiento = await tx.asientoContable.create({
-        data: {
-          empresaId: asientoData.empresaId,
-          periodoContableId: periodoContableId,
-          numeroAsiento,
-          correlativo,
-          fechaAsiento: fechaAsiento,
-          glosa: asientoData.glosa,
-          tipoLibro: asientoData.tipoLibro || "FISCAL",
-          origenAsiento: asientoData.origenAsiento || "AUTOMATICO",
-          submoduloOrigenId: submodulo.id,
-          procesoOrigenId: movimientoId,
-          estadoId: estadoPendiente.id,
-          totalDebe: totalDebe,
-          totalHaber: totalHaber,
-          diferencia: diferencia,
-          estaCuadrado: true,
-          monedaId: asientoData.monedaId,
-          tipoCambio: tipoCambio,
-          creadoPor,
-          actualizadoPor: creadoPor,
-        },
-      });
+      if (esEdicion) {
+        // ✅ EDITAR: Actualizar asiento existente
+        // Eliminar detalles antiguos
+        await tx.detalleAsientoContable.deleteMany({
+          where: { asientoContableId: Number(asientoData.id) },
+        });
 
-      // Crear detalles
+        // Actualizar asiento (siempre vuelve a PENDIENTE al editar)
+        asiento = await tx.asientoContable.update({
+          where: { id: Number(asientoData.id) },
+          data: {
+            fechaAsiento: fechaAsiento,
+            glosa: asientoData.glosa,
+            tipoLibro: asientoData.tipoLibro || "FISCAL",
+            estadoId: estadoPendiente.id, // ✅ Siempre vuelve a PENDIENTE al editar
+            totalDebe: totalDebe,
+            totalHaber: totalHaber,
+            diferencia: diferencia,
+            estaCuadrado: true,
+            monedaId: asientoData.monedaId,
+            tipoCambio: tipoCambio,
+            actualizadoPor: creadoPor,
+            actualizadoEn: new Date(),
+          },
+        });
+      } else {
+        // ✅ CREAR: Nuevo asiento
+        // Obtener correlativo
+        const ultimoAsiento = await tx.asientoContable.findFirst({
+          where: {
+            empresaId: asientoData.empresaId,
+            periodoContableId: periodoContableId,
+          },
+          orderBy: { correlativo: "desc" },
+        });
+        const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
+        const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, "0")}`;
+
+        // Crear nuevo asiento vinculado al movimiento
+        asiento = await tx.asientoContable.create({
+          data: {
+            empresaId: asientoData.empresaId,
+            periodoContableId: periodoContableId,
+            numeroAsiento,
+            correlativo,
+            fechaAsiento: fechaAsiento,
+            glosa: asientoData.glosa,
+            tipoLibro: asientoData.tipoLibro || "FISCAL",
+            origenAsiento: asientoData.origenAsiento || "AUTOMATICO",
+            submoduloOrigenId: submodulo.id,
+            procesoOrigenId: movimientoId,
+            estadoId: estadoPendiente.id,
+            totalDebe: totalDebe,
+            totalHaber: totalHaber,
+            diferencia: diferencia,
+            estaCuadrado: true,
+            monedaId: asientoData.monedaId,
+            tipoCambio: tipoCambio,
+            creadoPor,
+            actualizadoPor: creadoPor,
+            movimientosActivoFijo: {
+              connect: { id: movimientoId }
+            }
+          },
+        });
+      }
+
+      // Crear detalles (para ambos casos: edición y creación)
       await Promise.all(
         asientoData.detalles.map((detalle, index) =>
           tx.detalleAsientoContable.create({
@@ -831,7 +865,7 @@ const eliminarAsientoContable = async (movimientoId, asientoId) => {
 
     // Verificar que el asiento pertenece al movimiento
     const asientoExiste = movimiento.asientosContables.find(
-      (a) => a.id === asientoId,
+      (a) => Number(a.id) === Number(asientoId),
     );
 
     if (!asientoExiste) {

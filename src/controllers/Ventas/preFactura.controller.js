@@ -208,3 +208,56 @@ export async function facturarPreFacturaBlanca(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Genera un borrador de asiento contable para una PreFactura
+ * GET /api/pre-facturas/:id/borrador-asiento
+ */
+export async function generarBorradorAsiento(req, res, next) {
+  try {
+    const preFacturaId = BigInt(req.params.id);
+    const borrador = await preFacturaService.generarBorradorAsiento(preFacturaId);
+    res.json(toJSONBigInt(borrador));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Guarda el asiento contable editado por el usuario
+ * POST /api/pre-facturas/:id/guardar-asiento
+ */
+export async function guardarAsientoContable(req, res, next) {
+  try {
+    const preFacturaId = BigInt(req.params.id);
+    const { asientoData } = req.body;
+    const creadoPor = req.user?.id || null;
+    
+    const asiento = await preFacturaService.guardarAsientoContable(
+      preFacturaId,
+      asientoData,
+      creadoPor,
+    );
+    
+    res.status(201).json(toJSONBigInt(asiento));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Elimina un asiento contable específico
+ * DELETE /api/pre-facturas/:id/asiento/:asientoId
+ */
+export async function eliminarAsientoContable(req, res, next) {
+  try {
+    const asientoId = BigInt(req.params.asientoId);
+    await preFacturaService.eliminarAsientoContable(asientoId);
+    res.status(200).json({
+      success: true,
+      message: "Asiento contable eliminado correctamente",
+    });
+  } catch (err) {
+    next(err);
+  }
+}

@@ -26,6 +26,7 @@ const listar = async () => {
         producto: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }
@@ -40,13 +41,14 @@ const listar = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const det = await prisma.detallePreFactura.findUnique({ 
+    const det = await prisma.detallePreFactura.findUnique({
       where: { id },
       include: {
         preFactura: true,
         producto: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }
@@ -68,6 +70,7 @@ const obtenerPorPreFactura = async (preFacturaId) => {
         producto: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }
@@ -86,21 +89,22 @@ const crear = async (data) => {
       throw new ValidationError('preFacturaId, productoId y cantidad son obligatorios.');
     }
     await validarClavesForaneas(data);
-    
+
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
       fechaCreacion: data.fechaCreacion || new Date(),
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
-    
-    return await prisma.detallePreFactura.create({ 
+
+    return await prisma.detallePreFactura.create({
       data: datosConAuditoria,
       include: {
         preFactura: true,
         producto: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }
@@ -118,11 +122,11 @@ const actualizar = async (id, data) => {
     const existente = await prisma.detallePreFactura.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('DetallePreFactura no encontrado');
     // Validar claves foráneas si cambian
-    const claves = ['preFacturaId','productoId','centroCostoId'];
+    const claves = ['preFacturaId', 'productoId', 'centroCostoId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
       await validarClavesForaneas({ ...existente, ...data });
     }
-    
+
     // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
@@ -130,15 +134,16 @@ const actualizar = async (id, data) => {
       creadoPor: data.creadoPor || existente.creadoPor || null,
       fechaActualizacion: data.fechaActualizacion || new Date(),
     };
-    
-    return await prisma.detallePreFactura.update({ 
-      where: { id }, 
+
+    return await prisma.detallePreFactura.update({
+      where: { id },
       data: datosConAuditoria,
       include: {
         preFactura: true,
         producto: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }

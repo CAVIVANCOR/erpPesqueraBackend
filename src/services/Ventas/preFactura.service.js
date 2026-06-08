@@ -65,18 +65,18 @@ async function validarClavesForaneas(data) {
       : Promise.resolve(true),
     data.cotizacionVentaId
       ? prisma.cotizacionVentas.findUnique({
-          where: { id: data.cotizacionVentaId },
-        })
+        where: { id: data.cotizacionVentaId },
+      })
       : Promise.resolve(true),
     data.movSalidaAlmacenId
       ? prisma.movimientoAlmacen.findUnique({
-          where: { id: data.movSalidaAlmacenId },
-        })
+        where: { id: data.movSalidaAlmacenId },
+      })
       : Promise.resolve(true),
     data.contratoServicioId
       ? prisma.contratoServicio.findUnique({
-          where: { id: data.contratoServicioId },
-        })
+        where: { id: data.contratoServicioId },
+      })
       : Promise.resolve(true),
     data.paisDestinoId
       ? prisma.pais.findUnique({ where: { id: data.paisDestinoId } })
@@ -92,8 +92,8 @@ async function validarClavesForaneas(data) {
       : Promise.resolve(true),
     data.agenteAduanaId
       ? prisma.entidadComercial.findUnique({
-          where: { id: data.agenteAduanaId },
-        })
+        where: { id: data.agenteAduanaId },
+      })
       : Promise.resolve(true),
     data.bancoId
       ? prisma.banco.findUnique({ where: { id: data.bancoId } })
@@ -204,6 +204,17 @@ const obtenerPorId = async (id) => {
         contratoServicio: true,
         tipoDocumentoFinal: true,
         serieDocFinal: true,
+        asientosContables: {
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
         comprobantesElectronicos: {
           include: {
             tipoComprobante: true,
@@ -333,7 +344,7 @@ const crear = async (data) => {
 
       // 5. Obtener la serie seleccionada
       const serie = await tx.serieDoc.findUnique({
-        where: { id: BigInt(data.serieDocId) },
+        where: { id: Number(data.serieDocId) },
       });
 
       if (!serie) {
@@ -356,8 +367,8 @@ const crear = async (data) => {
 
       // 8. Actualizar el correlativo en SerieDoc
       await tx.serieDoc.update({
-        where: { id: BigInt(data.serieDocId) },
-        data: { correlativo: BigInt(nuevoCorrelativo) },
+        where: { id: Number(data.serieDocId) },
+        data: { correlativo: Number(nuevoCorrelativo) },
       });
 
       // 9. Calcular fechaVencimiento si no viene (30 días después de fechaDocumento)
@@ -640,15 +651,15 @@ const generarFacturaDesdePreFactura = async (
     // 3. Obtener serie para facturas
     const serieFactura = datosFactura.serieDocId
       ? await prisma.serieDoc.findUnique({
-          where: { id: BigInt(datosFactura.serieDocId) },
-        })
+        where: { id: Number(datosFactura.serieDocId) },
+      })
       : await prisma.serieDoc.findFirst({
-          where: {
-            empresaId: preFactura.empresaId,
-            tipoDocumentoId: tipoFactura.id,
-            activo: true,
-          },
-        });
+        where: {
+          empresaId: preFactura.empresaId,
+          tipoDocumentoId: tipoFactura.id,
+          activo: true,
+        },
+      });
 
     if (!serieFactura) {
       throw new ValidationError(
@@ -702,7 +713,7 @@ const generarFacturaDesdePreFactura = async (
       // 6.2. Actualizar correlativo
       await tx.serieDoc.update({
         where: { id: serieFactura.id },
-        data: { correlativo: BigInt(nuevoCorrelativo) },
+        data: { correlativo: Number(nuevoCorrelativo) },
       });
 
       // 6.3. Crear comprobante electrónico
@@ -850,15 +861,15 @@ const generarBoletaDesdePreFactura = async (preFacturaId, datosBoleta = {}) => {
     // 3. Obtener serie para boletas
     const serieBoleta = datosBoleta.serieDocId
       ? await prisma.serieDoc.findUnique({
-          where: { id: BigInt(datosBoleta.serieDocId) },
-        })
+        where: { id: Number(datosBoleta.serieDocId) },
+      })
       : await prisma.serieDoc.findFirst({
-          where: {
-            empresaId: preFactura.empresaId,
-            tipoDocumentoId: tipoBoleta.id,
-            activo: true,
-          },
-        });
+        where: {
+          empresaId: preFactura.empresaId,
+          tipoDocumentoId: tipoBoleta.id,
+          activo: true,
+        },
+      });
 
     if (!serieBoleta) {
       throw new ValidationError("No se encontró una serie activa para Boletas");
@@ -910,7 +921,7 @@ const generarBoletaDesdePreFactura = async (preFacturaId, datosBoleta = {}) => {
       // 6.2. Actualizar correlativo
       await tx.serieDoc.update({
         where: { id: serieBoleta.id },
-        data: { correlativo: BigInt(nuevoCorrelativo) },
+        data: { correlativo: Number(nuevoCorrelativo) },
       });
 
       // 6.3. Crear comprobante electrónico
@@ -1045,7 +1056,7 @@ const partirPreFactura = async (id) => {
       await prisma.preFactura.update({
         where: { id },
         data: {
-          estadoId: BigInt(48),
+          estadoId: Number(48),
           esParticionada: true,
         },
       });
@@ -1107,7 +1118,7 @@ const partirPreFactura = async (id) => {
       // Actualizar correlativo en SerieDoc
       await prisma.serieDoc.update({
         where: { id: preFacturaOriginal.serieDocId },
-        data: { correlativo: BigInt(nuevoCorrelativoCopia1) },
+        data: { correlativo: Number(nuevoCorrelativoCopia1) },
       });
 
       const dataCopia1 = {
@@ -1116,7 +1127,7 @@ const partirPreFactura = async (id) => {
         numeroDocumento: numeroDocumentoCopia1,
         numSerieDoc: numSerieCopia1,
         numCorreDoc: numCorreCopia1,
-        estadoId: BigInt(45),
+        estadoId: Number(45),
         esParticionada: false,
         preFacturaOrigenId: preFacturaOriginal.id,
       };
@@ -1146,7 +1157,7 @@ const partirPreFactura = async (id) => {
       // Actualizar correlativo en SerieDoc
       await prisma.serieDoc.update({
         where: { id: preFacturaOriginal.serieDocId },
-        data: { correlativo: BigInt(nuevoCorrelativoCopia2) },
+        data: { correlativo: Number(nuevoCorrelativoCopia2) },
       });
 
       const copia2 = await prisma.preFactura.create({
@@ -1156,7 +1167,7 @@ const partirPreFactura = async (id) => {
           numeroDocumento: numeroDocumentoCopia2,
           numSerieDoc: numSerieCopia2,
           numCorreDoc: numCorreCopia2,
-          estadoId: BigInt(45),
+          estadoId: Number(45),
           esParticionada: false,
           preFacturaOrigenId: preFacturaOriginal.id,
         },
@@ -1247,7 +1258,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
       // 2. Buscar estado PENDIENTE DE PAGO para CxC (ID 100)
       const estadoPendiente = await tx.estadoMultiFuncion.findFirst({
         where: {
-          tipoProvieneDeId: BigInt(24), // Tipo Proviene: CUENTAS POR COBRAR
+          tipoProvieneDeId: Number(24), // Tipo Proviene: CUENTAS POR COBRAR
           descripcion: { contains: "PENDIENTE", mode: "insensitive" },
         },
       });
@@ -1294,7 +1305,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           preFacturaId: preFactura.id,
           // Empresa y sede
           empresaId: preFactura.empresaId,
-          sedeId: preFactura.empresa.sedeId || BigInt(1), // Usar sede de empresa o default
+          sedeId: preFactura.empresa.sedeId || Number(1), // Usar sede de empresa o default
           // Tipo y serie SUNAT
           tipoComprobanteId: preFactura.tipoDocumentoId,
           serieDocId: preFactura.serieDocId,
@@ -1310,7 +1321,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           // Cliente
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoClienteId:
-            preFactura.cliente.tipoDocumentoId || BigInt(6), // Default RUC
+            preFactura.cliente.tipoDocumentoId || Number(6), // Default RUC
           numeroDocumentoCliente: preFactura.cliente.numeroDocumento || "",
           razonSocialCliente: preFactura.cliente.razonSocial || "",
           direccionCliente: preFactura.cliente.direccion || "Sin dirección",
@@ -1319,11 +1330,11 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           monedaId: preFactura.monedaId,
           tipoCambio: preFactura.tipoCambio || 1.0,
           // Condiciones de pago
-          formaPagoId: preFactura.formaPagoId || BigInt(1), // Default contado
+          formaPagoId: preFactura.formaPagoId || Number(1), // Default contado
           montoPendientePago: montoFinal,
           // Estados
-          estadoOSEId: BigInt(50), // PENDIENTE
-          estadoSUNATId: BigInt(60), // ACTIVO
+          estadoOSEId: Number(50), // PENDIENTE
+          estadoSUNATId: Number(60), // ACTIVO
 
           // Observaciones
           observaciones: `Comprobante generado desde PreFactura ${preFactura.codigo}`,
@@ -1491,7 +1502,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         data: {
           facturado: true,
           fechaFacturacion: new Date(),
-          estadoId: BigInt(96), // Estado EMITIDA
+          estadoId: Number(96), // Estado EMITIDA
         },
       });
 
@@ -1560,7 +1571,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
       // 2. Buscar estado PENDIENTE DE PAGO para CxC (ID 100)
       const estadoPendiente = await tx.estadoMultiFuncion.findFirst({
         where: {
-          tipoProvieneDeId: BigInt(24), // Tipo Proviene: CUENTAS POR COBRAR
+          tipoProvieneDeId: Number(24), // Tipo Proviene: CUENTAS POR COBRAR
           descripcion: { contains: "PENDIENTE", mode: "insensitive" },
         },
       });
@@ -1755,7 +1766,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         data: {
           facturado: true,
           fechaFacturacion: new Date(),
-          estadoId: BigInt(95), // Estado FACTURADA
+          estadoId: Number(95), // Estado FACTURADA
         },
       });
 
@@ -1811,7 +1822,7 @@ const anular = async (id) => {
       const anulada = await tx.preFactura.update({
         where: { id },
         data: {
-          estadoId: BigInt(40), // ANULADO
+          estadoId: Number(40), // ANULADO
           movSalidaAlmacenId: null,
           fechaActualizacion: new Date(),
         },
@@ -1881,7 +1892,7 @@ const aprobar = async (id) => {
       // Asumiendo que el primer estado > 45 es APROBADO
       // Buscar el estado APROBADO (id = 46)
       const estadoAprobado = await prisma.estadoMultiFuncion.findUnique({
-        where: { id: 46n }, // BigInt literal
+        where: { id: Number(46) }, // BigInt literal
       });
 
       if (!estadoAprobado) {
@@ -1894,7 +1905,7 @@ const aprobar = async (id) => {
       const aprobada = await prisma.preFactura.update({
         where: { id },
         data: {
-          estadoId: BigInt(46),
+          estadoId: Number(46),
           fechaAprobacion: new Date(),
           fechaActualizacion: new Date(),
         },
@@ -1922,6 +1933,450 @@ const aprobar = async (id) => {
   });
 };
 
+/**
+ * Genera un borrador de asiento contable para una PreFactura
+ * NO lo guarda en BD, solo retorna la estructura para edición
+ * Patrón: Igual a MovimientoActivoFijo.generarBorradorAsiento
+ * 
+ * @param {BigInt} preFacturaId - ID de la PreFactura
+ * @returns {Promise<Object>} - Borrador del asiento contable
+ */
+const generarBorradorAsiento = async (preFacturaId) => {
+  try {
+    const preFactura = await prisma.preFactura.findUnique({
+      where: { id: preFacturaId },
+      include: {
+        empresa: true,
+        cliente: true,
+        moneda: true,
+        periodoContable: true,
+        tipoDocumento: true,
+      },
+    });
+
+    if (!preFactura) {
+      throw new NotFoundError("PreFactura no encontrada");
+    }
+
+    if (!preFactura.periodoContable) {
+      throw new ValidationError(
+        "La PreFactura no tiene un período contable asignado.",
+      );
+    }
+
+    // Validar que el período esté ABIERTO (estadoId = 73)
+    if (Number(preFactura.periodoContable.estadoId) !== 73) {
+      throw new ValidationError(
+        "El período contable debe estar ABIERTO para generar asientos.",
+      );
+    }
+
+    // Buscar cuentas contables necesarias
+    const cuentaCxC = await prisma.planCuentasContable.findFirst({
+      where: {
+        codigoCuenta: { startsWith: "121" },
+        activo: true,
+      },
+    });
+
+    const cuentaVentas = await prisma.planCuentasContable.findFirst({
+      where: {
+        codigoCuenta: { startsWith: "70" },
+        activo: true,
+      },
+    });
+
+    if (!cuentaCxC || !cuentaVentas) {
+      throw new ValidationError(
+        "No se encontraron las cuentas contables necesarias (12.1 Cuentas por Cobrar o 70 Ventas). " +
+        "Configure el plan de cuentas antes de generar el asiento.",
+      );
+    }
+
+    const subtotal = Number(preFactura.subtotal);
+    const totalIGV = Number(preFactura.totalIGV);
+    const total = Number(preFactura.total);
+
+    // Determinar tipo de libro según esGerencial
+    const tipoLibro = preFactura.esGerencial ? "GERENCIAL" : "FISCAL";
+
+    const borrador = {
+      empresaId: preFactura.empresaId,
+      periodoContableId: preFactura.periodoContableId,
+      fechaAsiento: preFactura.fechaContable,
+      glosa: `Venta según PreFactura ${preFactura.codigo}`,
+      tipoLibro: tipoLibro,
+      origenAsiento: "AUTOMATICO",
+      monedaId: preFactura.monedaId,
+      tipoCambio: preFactura.tipoCambio,
+      detalles: [],
+    };
+
+    // CASO 1: GERENCIAL (sin IGV)
+    if (preFactura.esGerencial) {
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: cuentaCxC.id,
+          glosa: `Venta según PreFactura ${preFactura.codigo}`,
+          debe: total,
+          haber: 0,
+          entidadComercialId: preFactura.clienteId,
+          tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+          numeroDocumentoOrigen: preFactura.numeroDocumento,
+          fechaDocumentoOrigen: preFactura.fechaDocumento,
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaVentas.id,
+          glosa: `Venta según PreFactura ${preFactura.codigo}`,
+          debe: 0,
+          haber: total,
+          centroCostoId: preFactura.centroCostoId,
+        },
+      ];
+    }
+    // CASO 2: FISCAL EXONERADA (sin IGV)
+    else if (preFactura.exoneradoIgv) {
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: cuentaCxC.id,
+          glosa: `Venta exonerada según PreFactura ${preFactura.codigo}`,
+          debe: total,
+          haber: 0,
+          entidadComercialId: preFactura.clienteId,
+          tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+          numeroDocumentoOrigen: preFactura.numeroDocumento,
+          fechaDocumentoOrigen: preFactura.fechaDocumento,
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaVentas.id,
+          glosa: `Venta exonerada según PreFactura ${preFactura.codigo}`,
+          debe: 0,
+          haber: total,
+          centroCostoId: preFactura.centroCostoId,
+        },
+      ];
+    }
+    // CASO 3: FISCAL CON IGV
+    else {
+      const cuentaIGV = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: { startsWith: "401" },
+          activo: true,
+        },
+      });
+
+      if (!cuentaIGV) {
+        throw new ValidationError(
+          "No se encontró la cuenta de IGV (40.1). Configure el plan de cuentas antes de generar el asiento.",
+        );
+      }
+
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: cuentaCxC.id,
+          glosa: `Venta según PreFactura ${preFactura.codigo}`,
+          debe: total, // Con IGV
+          haber: 0,
+          entidadComercialId: preFactura.clienteId,
+          tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+          numeroDocumentoOrigen: preFactura.numeroDocumento,
+          fechaDocumentoOrigen: preFactura.fechaDocumento,
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaVentas.id,
+          glosa: `Venta según PreFactura ${preFactura.codigo}`,
+          debe: 0,
+          haber: subtotal, // Sin IGV
+          centroCostoId: preFactura.centroCostoId,
+        },
+        {
+          numeroLinea: 3,
+          planCuentaId: cuentaIGV.id,
+          glosa: `IGV 18% según PreFactura ${preFactura.codigo}`,
+          debe: 0,
+          haber: totalIGV,
+        },
+      ];
+    }
+
+    return borrador;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Guarda el asiento contable editado por el usuario y lo vincula a la PreFactura
+ * Patrón: Igual a MovimientoActivoFijo.guardarAsientoContable
+ * 
+ * @param {BigInt} preFacturaId - ID de la PreFactura
+ * @param {Object} asientoData - Datos del asiento editado por el usuario
+ * @param {BigInt} creadoPor - ID del usuario que crea el asiento
+ * @returns {Promise<Object>} - Asiento contable creado
+ */
+const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
+  try {
+    // ✅ DETECTAR SI ES EDICIÓN O CREACIÓN
+    const esEdicion = asientoData.id !== undefined && asientoData.id !== null;
+
+    // Buscar submódulo "PreFactura" dinámicamente
+    const submodulo = await prisma.submoduloSistema.findFirst({
+      where: {
+        nombreModeloOrigen: "PreFactura",
+        activo: true,
+      },
+    });
+
+    if (!submodulo) {
+      throw new ValidationError(
+        'No se encontró el submódulo "PreFactura" en el sistema.',
+      );
+    }
+
+    // Calcular totales
+    const totalDebe = asientoData.detalles.reduce(
+      (sum, d) => sum + Number(d.debe),
+      0,
+    );
+    const totalHaber = asientoData.detalles.reduce(
+      (sum, d) => sum + Number(d.haber),
+      0,
+    );
+    const diferencia = totalDebe - totalHaber;
+
+    // Validar que esté cuadrado
+    if (Math.abs(diferencia) > 0.01) {
+      throw new ValidationError(
+        `El asiento no está cuadrado. Diferencia: ${diferencia}`,
+      );
+    }
+
+    // Buscar estado "PENDIENTE" para Asientos Contables (ID 76)
+    const estadoPendiente = await prisma.estadoMultiFuncion.findFirst({
+      where: { id: BigInt(76) },
+    });
+
+    if (!estadoPendiente) {
+      throw new ValidationError(
+        "No se encontró el estado 'PENDIENTE' para asientos contables.",
+      );
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      let asiento;
+
+      if (esEdicion) {
+        // ✅ EDITAR: Actualizar asiento existente SIN eliminar registros
+        // Primero, obtener IDs de detalles existentes
+        const detallesExistentes = await tx.detalleAsientoContable.findMany({
+          where: { asientoContableId: BigInt(asientoData.id) },
+          select: { id: true },
+        });
+
+        // Actualizar asiento (siempre vuelve a PENDIENTE al editar)
+        asiento = await tx.asientoContable.update({
+          where: { id: BigInt(asientoData.id) },
+          data: {
+            fechaAsiento: asientoData.fechaAsiento,
+            glosa: asientoData.glosa,
+            tipoLibro: asientoData.tipoLibro,
+            estadoId: estadoPendiente.id,
+            totalDebe: totalDebe,
+            totalHaber: totalHaber,
+            diferencia: diferencia,
+            estaCuadrado: Math.abs(diferencia) < 0.01,
+            monedaId: asientoData.monedaId,
+            tipoCambio: asientoData.tipoCambio,
+          },
+        });
+
+        // Actualizar detalles uno por uno (UPDATE, no DELETE+CREATE)
+        for (let i = 0; i < asientoData.detalles.length; i++) {
+          const detalle = asientoData.detalles[i];
+          const detalleExistente = detallesExistentes[i];
+
+          if (detalleExistente) {
+            // Actualizar detalle existente
+            await tx.detalleAsientoContable.update({
+              where: { id: detalleExistente.id },
+              data: {
+                numeroLinea: detalle.numeroLinea,
+                planCuentaId: detalle.planCuentaId,
+                glosa: detalle.glosa,
+                debe: detalle.debe,
+                haber: detalle.haber,
+                monedaId: asientoData.monedaId,
+                tipoCambio: asientoData.tipoCambio,
+                centroCostoId: detalle.centroCostoId || null,
+                entidadComercialId: detalle.entidadComercialId || null,
+                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
+                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
+                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+              },
+            });
+          } else {
+            // Crear nuevo detalle si hay más detalles que antes
+            await tx.detalleAsientoContable.create({
+              data: {
+                asientoContableId: BigInt(asientoData.id),
+                numeroLinea: detalle.numeroLinea,
+                planCuentaId: detalle.planCuentaId,
+                glosa: detalle.glosa,
+                debe: detalle.debe,
+                haber: detalle.haber,
+                monedaId: asientoData.monedaId,
+                tipoCambio: asientoData.tipoCambio,
+                centroCostoId: detalle.centroCostoId || null,
+                entidadComercialId: detalle.entidadComercialId || null,
+                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
+                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
+                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                submoduloOrigenLineaId: submodulo.id,
+                procesoOrigenLineaId: preFacturaId,
+                creadoPor: creadoPor,
+              },
+            });
+          }
+        }
+
+        // Si había más detalles antes, marcarlos como inactivos (NO eliminar)
+        if (detallesExistentes.length > asientoData.detalles.length) {
+          const idsAMantener = detallesExistentes
+            .slice(0, asientoData.detalles.length)
+            .map(d => d.id);
+
+          // Aquí podrías agregar un campo 'activo' en el schema
+          // Por ahora, los dejamos (no se eliminan)
+        }
+      } else {
+        // ✅ CREAR: Nuevo asiento
+        // Obtener último asiento del período para calcular correlativo
+        const ultimoAsiento = await tx.asientoContable.findFirst({
+          where: {
+            empresaId: asientoData.empresaId,
+            periodoContableId: asientoData.periodoContableId,
+          },
+          orderBy: { correlativo: "desc" },
+        });
+
+        const nuevoCorrelativo = ultimoAsiento ? ultimoAsiento.correlativo + 1 : 1;
+        const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(nuevoCorrelativo).padStart(5, "0")}`;
+
+        asiento = await tx.asientoContable.create({
+          data: {
+            empresaId: asientoData.empresaId,
+            periodoContableId: asientoData.periodoContableId,
+            numeroAsiento: numeroAsiento,
+            correlativo: nuevoCorrelativo,
+            fechaAsiento: asientoData.fechaAsiento,
+            glosa: asientoData.glosa,
+            tipoLibro: asientoData.tipoLibro,
+            origenAsiento: "AUTOMATICO",
+            submoduloOrigenId: submodulo.id,
+            procesoOrigenId: preFacturaId,
+            estadoId: estadoPendiente.id,
+            totalDebe: totalDebe,
+            totalHaber: totalHaber,
+            diferencia: diferencia,
+            estaCuadrado: Math.abs(diferencia) < 0.01,
+            monedaId: asientoData.monedaId,
+            tipoCambio: asientoData.tipoCambio,
+            creadoPor: creadoPor,
+            preFacturas: {
+              connect: { id: preFacturaId }
+            },
+            detalles: {
+              create: asientoData.detalles.map((detalle) => ({
+                numeroLinea: detalle.numeroLinea,
+                planCuentaId: detalle.planCuentaId,
+                glosa: detalle.glosa,
+                debe: detalle.debe,
+                haber: detalle.haber,
+                monedaId: asientoData.monedaId,
+                tipoCambio: asientoData.tipoCambio,
+                centroCostoId: detalle.centroCostoId || null,
+                entidadComercialId: detalle.entidadComercialId || null,
+                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
+                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
+                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                submoduloOrigenLineaId: submodulo.id,
+                procesoOrigenLineaId: preFacturaId,
+                creadoPor: creadoPor,
+              })),
+            },
+          },
+        });
+      }
+      // Retornar asiento con detalles y planCuenta incluidos
+      return await tx.asientoContable.findUnique({
+        where: { id: asiento.id },
+        include: {
+          detalles: {
+            include: {
+              planCuenta: true,
+            },
+            orderBy: { numeroLinea: "asc" },
+          },
+        },
+      });
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Elimina un asiento contable específico
+ * Patrón: Igual a MovimientoActivoFijo.eliminarAsientoContable
+ * 
+ * @param {BigInt} asientoId - ID del asiento a eliminar
+ * @returns {Promise<boolean>} - true si se eliminó correctamente
+ */
+const eliminarAsientoContable = async (asientoId) => {
+  try {
+    const asiento = await prisma.asientoContable.findUnique({
+      where: { id: asientoId },
+    });
+
+    if (!asiento) {
+      throw new NotFoundError("Asiento contable no encontrado");
+    }
+
+    // Validar que NO esté aprobado (estadoId != 75)
+    if (Number(asiento.estadoId) === 75) {
+      throw new ValidationError(
+        "No se puede eliminar un asiento contable aprobado. Debe desaprobarlo primero.",
+      );
+    }
+
+    await prisma.asientoContable.delete({ where: { id: asientoId } });
+    return true;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -1937,4 +2392,7 @@ export default {
   facturarPreFacturaBlanca,
   anular,
   aprobar,
+  generarBorradorAsiento,
+  guardarAsientoContable,
+  eliminarAsientoContable,
 };

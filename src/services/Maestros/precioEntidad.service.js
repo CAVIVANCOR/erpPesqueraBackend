@@ -330,6 +330,78 @@ export async function obtenerPrecioVigente(
 }
 
 /**
+ * Obtiene el precio de venta vigente para un producto en PreFactura
+ * Busca primero precio especial del cliente, luego precio estándar de la empresa
+ * @param {BigInt} productoId - ID del producto
+ * @param {BigInt|null} clienteId - ID del cliente (null para buscar solo precio estándar)
+ * @param {BigInt} empresaEntidadComercialId - ID de la entidad comercial de la empresa vendedora
+ * @param {Date} fechaDocumento - Fecha del documento para validar vigencia
+ * @returns {Promise<Object|null>} Precio encontrado o null
+ */
+export async function obtenerPrecioVentaVigente(
+  productoId,
+  clienteId,
+  empresaEntidadComercialId,
+  fechaDocumento,
+) {
+  try {
+    // 1. Si hay clienteId, buscar precio especial para el cliente
+    if (clienteId) {
+      const precioEspecial = await prisma.precioEntidad.findFirst({
+        where: {
+          entidadComercialId: BigInt(clienteId),
+          productoId: BigInt(productoId),
+          activo: true,
+          vigenteDesde: { lte: new Date(fechaDocumento) },
+          OR: [
+            { vigenteHasta: { gte: new Date(fechaDocumento) } },
+            { vigenteHasta: null },
+          ],
+        },
+        include: {
+          producto: true,
+          moneda: true,
+        },
+        orderBy: {
+          vigenteDesde: "desc", // Más reciente primero
+        },
+      });
+
+      if (precioEspecial) {
+        return precioEspecial;
+      }
+    }
+
+    // 2. Buscar precio estándar de la empresa vendedora
+    const precioEstandar = await prisma.precioEntidad.findFirst({
+      where: {
+        entidadComercialId: BigInt(empresaEntidadComercialId),
+        productoId: BigInt(productoId),
+        activo: true,
+        vigenteDesde: { lte: new Date(fechaDocumento) },
+        OR: [
+          { vigenteHasta: { gte: new Date(fechaDocumento) } },
+          { vigenteHasta: null },
+        ],
+      },
+      include: {
+        producto: true,
+        moneda: true,
+      },
+      orderBy: {
+        vigenteDesde: "desc", // Más reciente primero
+      },
+    });
+
+    return precioEstandar;
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+}
+
+/**
  * Obtiene el precio de combustible vigente para una empresa y fecha
  * @param {BigInt} entidadComercialId - ID de la entidad comercial
  * @param {Date} fechaReferencia - Fecha de referencia para validar vigencia
@@ -384,5 +456,6 @@ export default {
   actualizar,
   eliminar,
   obtenerPrecioVigente,
+  obtenerPrecioVentaVigente,
   obtenerPrecioCombustibleVigente,
 };

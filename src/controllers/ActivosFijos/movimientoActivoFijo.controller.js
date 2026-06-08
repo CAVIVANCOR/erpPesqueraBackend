@@ -94,8 +94,9 @@ export async function guardarAsientoContable(req, res, next) {
  */
 export async function eliminarAsientoContable(req, res, next) {
   try {
-    const movimientoId = BigInt(req.params.id);
-    await movimientoActivoFijoService.eliminarAsientoContable(movimientoId);
+    const movimientoId = Number(req.params.id);
+    const asientoId = Number(req.params.asientoId);
+    await movimientoActivoFijoService.eliminarAsientoContable(movimientoId, asientoId);
     res.status(200).json({
       success: true,
       message: "Asiento contable eliminado correctamente",
