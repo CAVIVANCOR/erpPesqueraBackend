@@ -261,3 +261,53 @@ export async function eliminarAsientoContable(req, res, next) {
     next(err);
   }
 }
+
+
+
+/**
+ * Genera un MovimientoAlmacen desde una PreFactura aprobada
+ */
+export async function generarMovimiento(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const usuarioId = req.user?.id;
+    const datosKardex = req.body;
+    
+    if (!usuarioId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
+    
+    const resultado = await preFacturaService.generarKardex(
+      id,
+      datosKardex,
+      BigInt(usuarioId)
+    );
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Regenera el kardex de una PreFactura
+ * Elimina el movimiento existente y crea uno nuevo
+ */
+export const regenerarKardex = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const usuarioId = req.user?.id;
+
+    if (!usuarioId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
+
+    const resultado = await preFacturaService.regenerarKardex(
+      BigInt(id),
+      BigInt(usuarioId)
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (error) {
+    next(error);
+  }
+};

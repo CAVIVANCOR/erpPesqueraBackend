@@ -33,7 +33,7 @@ const PDF_MODULES_CONFIG = {
   },
 
 
-    "faena-pesca-consumo": {
+  "faena-pesca-consumo": {
     uploadPath: "uploads/pdf-system/faena-pesca-consumo",
     oldPaths: [],
     apiEndpoint: "/api/pdf/faena-pesca-consumo",
@@ -573,7 +573,7 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
-   "movimiento-caja-operacion": {
+  "movimiento-caja-operacion": {
     uploadPath: "uploads/pdf-system/movimiento-caja-operacion",
     oldPaths: [],
     apiEndpoint: "/api/pdf/movimiento-caja-operacion",
@@ -586,7 +586,7 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
-   "descarga-faena-pesca-comprobante-wincha": {
+  "descarga-faena-pesca-comprobante-wincha": {
     uploadPath: "uploads/pdf-system/descarga-faena-pesca-comprobante-wincha",
     oldPaths: [],
     apiEndpoint: "/api/pdf/descarga-faena-pesca-comprobante-wincha",
@@ -609,6 +609,32 @@ const PDF_MODULES_CONFIG = {
     database: {
       table: "DescargaFaenaConsumo",
       field: "urlComprobanteWincha",
+    },
+  },
+
+  "contrato-servicio": {
+    uploadPath: "uploads/pdf-system/contrato-servicio",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/contrato-servicio",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "ContratoServicio",
+      field: "urlContratoPdf",
+    },
+  },
+
+  "contrato-servicio-movimiento": {
+    uploadPath: "uploads/pdf-system/contrato-servicio-movimiento",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/contrato-servicio-movimiento",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "DetMovsEntregaRendirContratoServicios",
+      field: "urlComprobanteMovimiento",
     },
   },
 };

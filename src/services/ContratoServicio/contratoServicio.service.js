@@ -407,6 +407,7 @@ const actualizar = async (id, data) => {
 
     // Extraer y remover campos que no deben actualizarse
     const {
+      id: idExcluido,
       detalles,
       empresaId,
       clienteId,

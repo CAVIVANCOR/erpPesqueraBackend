@@ -7,18 +7,19 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
  * Documentado en español.
  */
 
-async function validarClavesForaneas(data) {
-  const [contrato, producto] = await Promise.all([
-    prisma.contratoServicio.findUnique({ where: { id: data.contratoServicioId } }),
-    prisma.producto.findUnique({ where: { id: data.productoServicioId } })
-  ]);
+/**
+ * Valida claves foráneas
+ */
+const validarClavesForaneas = async (data) => {
+  const contratoServicio = await prisma.contratoServicio.findUnique({ where: { id: data.contratoServicioId } });
+  if (!contratoServicio) throw new NotFoundError('ContratoServicio no encontrado');
   
-  if (!contrato) throw new ValidationError('El contratoServicioId no existe.');
-  if (!producto) throw new ValidationError('El productoServicioId no existe.');
-}
+  const productoServicio = await prisma.producto.findUnique({ where: { id: data.productoServicioId } });
+  if (!productoServicio) throw new NotFoundError('Producto/Servicio no encontrado');
+};
 
 /**
- * Lista todos los detalles de servicios
+ * Lista todos los detalles de servicios con relaciones
  */
 const listar = async () => {
   try {
@@ -27,12 +28,14 @@ const listar = async () => {
         contratoServicio: {
           include: {
             cliente: true,
-            empresa: true
+            empresa: true,
+            moneda: true
           }
         },
         productoServicio: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }
@@ -63,6 +66,7 @@ const obtenerPorId = async (id) => {
         productoServicio: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }
@@ -87,6 +91,7 @@ const obtenerPorContrato = async (contratoServicioId) => {
         productoServicio: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }
@@ -104,37 +109,23 @@ const obtenerPorContrato = async (contratoServicioId) => {
  */
 const crear = async (data) => {
   try {
-    // Validar campos obligatorios
-    if (!data.contratoServicioId || !data.productoServicioId || !data.cantidad || !data.precioUnitario) {
+    // Validar campos obligatorios según schema
+    if (!data.contratoServicioId || !data.productoServicioId || !data.cantidad || !data.valorVentaUnitario) {
       throw new ValidationError(
-        'Los campos obligatorios no pueden estar vacíos: contratoServicioId, productoServicioId, cantidad, precioUnitario'
+        'Los campos obligatorios no pueden estar vacíos: contratoServicioId, productoServicioId, cantidad, valorVentaUnitario'
       );
     }
     
     await validarClavesForaneas(data);
     
-    // Calcular valores automáticamente
-    const cantidad = Number(data.cantidad) || 0;
-    const precioUnitario = Number(data.precioUnitario) || 0;
-    const valorTotal = cantidad * precioUnitario;
-    
-    // Para servicios de luz
-    const cantidadKwh = Number(data.cantidadKwh) || 0;
-    const precioKwh = Number(data.precioKwh) || 0;
-    const recargoKwh = Number(data.recargoKwh) || 0;
-    const precioKwhConRecargo = precioKwh + recargoKwh;
-    const valorTotalLuz = cantidadKwh * precioKwhConRecargo;
-    
+    // Preparar datos según schema
     const datosConAuditoria = {
-      ...data,
-      cantidad,
-      precioUnitario,
-      valorTotal,
-      cantidadKwh,
-      precioKwh,
-      recargoKwh,
-      precioKwhConRecargo,
-      valorTotalLuz,
+      contratoServicioId: BigInt(data.contratoServicioId),
+      productoServicioId: BigInt(data.productoServicioId),
+      cantidad: Number(data.cantidad),
+      valorVentaUnitario: Number(data.valorVentaUnitario),
+      incluyeLuz: Boolean(data.incluyeLuz || false),
+      creadoPor: data.creadoPor ? BigInt(data.creadoPor) : null,
       creadoEn: new Date(),
       actualizadoEn: new Date()
     };
@@ -152,13 +143,14 @@ const crear = async (data) => {
         productoServicio: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }
       }
     });
   } catch (err) {
-    if (err instanceof ValidationError) throw err;
+    if (err instanceof ValidationError || err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -174,34 +166,22 @@ const actualizar = async (id, data) => {
     
     const claves = ['contratoServicioId', 'productoServicioId'];
     if (claves.some(k => data[k] && data[k] !== existente[k])) {
-      await validarClavesForaneas({ ...existente, ...data });
+      await validarClavesForaneas(data);
     }
     
-    // Recalcular valores si cambian los campos relevantes
-    const cantidad = data.cantidad !== undefined ? Number(data.cantidad) : Number(existente.cantidad);
-    const precioUnitario = data.precioUnitario !== undefined ? Number(data.precioUnitario) : Number(existente.precioUnitario);
-    const valorTotal = cantidad * precioUnitario;
-    
-    const cantidadKwh = data.cantidadKwh !== undefined ? Number(data.cantidadKwh) : Number(existente.cantidadKwh);
-    const precioKwh = data.precioKwh !== undefined ? Number(data.precioKwh) : Number(existente.precioKwh);
-    const recargoKwh = data.recargoKwh !== undefined ? Number(data.recargoKwh) : Number(existente.recargoKwh);
-    const precioKwhConRecargo = precioKwh + recargoKwh;
-    const valorTotalLuz = cantidadKwh * precioKwhConRecargo;
-    
+    // Preparar datos según schema
     const datosConAuditoria = {
-      ...data,
-      cantidad,
-      precioUnitario,
-      valorTotal,
-      cantidadKwh,
-      precioKwh,
-      recargoKwh,
-      precioKwhConRecargo,
-      valorTotalLuz,
-      creadoEn: existente.creadoEn,
-      creadoPor: existente.creadoPor,
+      cantidad: data.cantidad !== undefined ? Number(data.cantidad) : undefined,
+      valorVentaUnitario: data.valorVentaUnitario !== undefined ? Number(data.valorVentaUnitario) : undefined,
+      incluyeLuz: data.incluyeLuz !== undefined ? Boolean(data.incluyeLuz) : undefined,
+      actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : null,
       actualizadoEn: new Date()
     };
+    
+    // Remover campos undefined
+    Object.keys(datosConAuditoria).forEach(key => 
+      datosConAuditoria[key] === undefined && delete datosConAuditoria[key]
+    );
     
     return await prisma.detServicioContrato.update({ 
       where: { id }, 
@@ -217,13 +197,14 @@ const actualizar = async (id, data) => {
         productoServicio: {
           include: {
             familia: true,
+            subfamilia: true,
             unidadMedida: true
           }
         }
       }
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -246,29 +227,21 @@ const eliminar = async (id) => {
 };
 
 /**
- * Calcula el total del contrato sumando todos sus detalles
+ * Calcula totales de un contrato
  */
 const calcularTotalContrato = async (contratoServicioId) => {
   try {
     const detalles = await prisma.detServicioContrato.findMany({
       where: { contratoServicioId }
     });
-
-    const totalServicios = detalles.reduce((sum, det) => {
-      return sum + Number(det.valorTotal || 0);
+    
+    const total = detalles.reduce((sum, det) => {
+      return sum + (Number(det.cantidad) * Number(det.valorVentaUnitario));
     }, 0);
-
-    const totalLuz = detalles.reduce((sum, det) => {
-      return sum + Number(det.valorTotalLuz || 0);
-    }, 0);
-
-    const totalGeneral = totalServicios + totalLuz;
-
+    
     return {
-      totalServicios,
-      totalLuz,
-      totalGeneral,
-      cantidadDetalles: detalles.length
+      cantidadDetalles: detalles.length,
+      totalContrato: total
     };
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

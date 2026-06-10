@@ -8,6 +8,10 @@ const router = Router();
 /**
  * Rutas para OrdenCompra
  * Ruta del submódulo: 'ordenCompra'
+ * 
+ * REGLA DE PERMISOS:
+ * - Operaciones PROPIAS del modelo: permisos específicos (crear, editar, eliminar, ver)
+ * - Operaciones que GENERAN recursos derivados (kardex, asientos, CxP): solo requieren 'ver'
  */
 
 // Rutas específicas (DEBEN IR ANTES de las rutas con parámetros)
@@ -18,7 +22,10 @@ router.post(
   ordenCompraController.generarDesdeRequerimiento
 );
 
-// Rutas CRUD para OrdenCompra
+// ========================================
+// RUTAS CRUD PARA ORDENCOMPRA
+// (Operaciones propias del modelo)
+// ========================================
 router.get(
   '/', 
   autenticarJWT, 
@@ -54,7 +61,10 @@ router.delete(
   ordenCompraController.eliminar
 );
 
-// Rutas para operaciones especiales
+// ========================================
+// RUTAS PARA OPERACIONES ESPECIALES
+// (Operaciones propias del modelo)
+// ========================================
 router.post(
   '/:id/aprobar', 
   autenticarJWT, 
@@ -69,25 +79,80 @@ router.post(
   ordenCompraController.anular
 );
 
+// ========================================
+// RUTAS DE KARDEX
+// (Generan recursos derivados - solo requieren 'ver')
+// ========================================
 router.post(
   '/:id/generar-movimiento', 
   autenticarJWT, 
-  checkPermission('ordenCompra', 'crear'),
+  checkPermission('ordenCompra', 'ver'),
   ordenCompraController.generarMovimiento
 );
 
 router.post(
   '/:id/generar-kardex', 
   autenticarJWT, 
-  checkPermission('ordenCompra', 'crear'),
+  checkPermission('ordenCompra', 'ver'),
   ordenCompraController.generarKardex
 );
 
 router.post(
   '/:id/regenerar-kardex', 
   autenticarJWT, 
-  checkPermission('ordenCompra', 'editar'),
+  checkPermission('ordenCompra', 'ver'),
   ordenCompraController.regenerarKardex
+);
+
+// ========================================
+// RUTA DE PARTICIÓN
+// (Operación propia del modelo)
+// ========================================
+router.put(
+  '/:id/partir', 
+  autenticarJWT, 
+  checkPermission('ordenCompra', 'editar'),
+  ordenCompraController.partirOrdenCompra
+);
+
+// ========================================
+// RUTA DE GENERACIÓN DE CXP
+// (Genera recurso derivado - solo requiere 'ver')
+// ========================================
+router.post(
+  '/:id/generar-cxp', 
+  autenticarJWT, 
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.generarCuentaPorPagar
+);
+
+// ========================================
+// RUTAS DE ASIENTOS CONTABLES
+// (Generan recursos derivados - solo requieren 'ver')
+// ========================================
+router.get(
+  '/:id/borrador-asiento',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.generarBorradorAsiento
+);
+
+router.post(
+  '/:id/guardar-asiento',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.guardarAsientoContable
+);
+
+// ========================================
+// RUTA DE ELIMINAR ASIENTO
+// (Elimina recurso derivado - solo requiere 'ver')
+// ========================================
+router.delete(
+  '/asiento/:asientoId',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.eliminarAsientoContable
 );
 
 export default router;

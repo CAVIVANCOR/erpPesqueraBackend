@@ -87,12 +87,17 @@ export async function generarMovimiento(req, res, next) {
   try {
     const id = Number(req.params.id);
     const usuarioId = req.user?.id;
+    const datosKardex = req.body;
     
     if (!usuarioId) {
       return res.status(401).json({ error: 'Usuario no autenticado' });
     }
     
-    const resultado = await ordenCompraService.generarKardex(id, BigInt(usuarioId));
+    const resultado = await ordenCompraService.generarKardex(
+      id,
+      datosKardex,
+      BigInt(usuarioId)
+    );
     res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
@@ -150,3 +155,103 @@ export const regenerarKardex = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Particionar OrdenCompra: Clona en DOS copias idénticas con estado PENDIENTE
+ * PUT /api/ordenes-compra/:id/partir
+ */
+export async function partirOrdenCompra(req, res, next) {
+  try {
+    const id = BigInt(req.params.id);
+    const resultado = await ordenCompraService.partirOrdenCompra(id);
+    
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: resultado.mensaje,
+      data: resultado
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Generar CuentaPorPagar desde OrdenCompra
+ * POST /api/ordenes-compra/:id/generar-cxp
+ */
+export async function generarCuentaPorPagar(req, res, next) {
+  try {
+    const id = BigInt(req.params.id);
+    const resultado = await ordenCompraService.generarCuentaPorPagar(id);
+    
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: resultado.mensaje,
+      data: resultado
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Generar borrador de asiento contable para OrdenCompra
+ * GET /api/ordenes-compra/:id/borrador-asiento
+ */
+export async function generarBorradorAsiento(req, res, next) {
+  try {
+    const id = BigInt(req.params.id);
+    const borrador = await ordenCompraService.generarBorradorAsiento(id);
+    
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      data: borrador
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Guardar asiento contable editado para OrdenCompra
+ * POST /api/ordenes-compra/:id/guardar-asiento
+ */
+export async function guardarAsientoContable(req, res, next) {
+  try {
+    const id = BigInt(req.params.id);
+    const asientoData = req.body;
+    const creadoPor = req.usuario?.id ? BigInt(req.usuario.id) : null;
+    
+    const asiento = await ordenCompraService.guardarAsientoContable(
+      id,
+      asientoData,
+      creadoPor
+    );
+    
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "Asiento contable guardado exitosamente",
+      data: asiento
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Eliminar asiento contable de OrdenCompra
+ * DELETE /api/ordenes-compra/asiento/:asientoId
+ */
+export async function eliminarAsientoContable(req, res, next) {
+  try {
+    const asientoId = BigInt(req.params.asientoId);
+    await ordenCompraService.eliminarAsientoContable(asientoId);
+    
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "Asiento contable eliminado exitosamente"
+    }));
+  } catch (err) {
+    next(err);
+  }
+}

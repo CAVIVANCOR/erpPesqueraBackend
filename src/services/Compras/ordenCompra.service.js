@@ -366,7 +366,7 @@ const actualizar = async (id, data) => {
 
     const actualizado = await prisma.$transaction(async (tx) => {
       // Objeto para edición (CON relaciones para validación)
-            const dataParaEdicion = {
+      const dataParaEdicion = {
         empresaId: data.empresaId,
         tipoDocumentoId: data.tipoDocumentoId,
         serieDocId: data.serieDocId,
@@ -411,7 +411,7 @@ const actualizar = async (id, data) => {
       };
 
       // Objeto para grabación (SIN relaciones, solo IDs)
-            const dataParaGrabacion = {
+      const dataParaGrabacion = {
         empresaId: data.empresaId,
         tipoDocumentoId: data.tipoDocumentoId,
         serieDocId: data.serieDocId,
@@ -766,7 +766,7 @@ const obtenerDireccionProveedor = async (proveedorId, tx) => {
   return direcciones[0].id;
 };
 
-const generarKardex = async (id, usuarioId) => {
+const generarKardex = async (id, datosKardex, usuarioId) => {
   try {
     return await prisma.$transaction(async (tx) => {
       // ========================================
@@ -793,7 +793,7 @@ const generarKardex = async (id, usuarioId) => {
 
       if (Number(orden.estadoId) !== 39) {
         throw new ValidationError(
-          "Solo se puede generar kardex para órdenes aprobadas",
+          "Solo se puede generar movimiento para órdenes aprobadas",
         );
       }
 
@@ -805,40 +805,65 @@ const generarKardex = async (id, usuarioId) => {
 
       if (!orden.detalles || orden.detalles.length === 0) {
         throw new ValidationError(
-          "La orden no tiene detalles para generar el kardex",
-        );
-      }
-
-      // ⭐ VALIDAR que tenga dirección de recepción
-      if (!orden.direccionRecepcionAlmacenId) {
-        throw new ValidationError(
-          "La orden no tiene dirección de recepción configurada",
+          "La orden no tiene detalles para generar el movimiento",
         );
       }
 
       // ========================================
-      // PASO 2: OBTENER DIRECCIÓN Y CONCEPTO DE ALMACÉN
+      // PASO 2: VALIDAR DATOS DEL DIÁLOGO
       // ========================================
-      const direccion = await tx.direccionEntidad.findUnique({
-        where: { id: orden.direccionRecepcionAlmacenId },
+      if (!datosKardex.almacenId) {
+        throw new ValidationError("Debe seleccionar un almacén");
+      }
+
+      if (!datosKardex.conceptoMovAlmacenId) {
+        throw new ValidationError("Debe seleccionar un concepto de movimiento");
+      }
+
+      if (!datosKardex.dirOrigenId) {
+        throw new ValidationError("Debe seleccionar una dirección de origen");
+      }
+
+      if (!datosKardex.dirDestinoId) {
+        throw new ValidationError("Debe seleccionar una dirección de destino");
+      }
+
+      if (!datosKardex.fechaIngreso) {
+        throw new ValidationError("Debe especificar la fecha de ingreso");
+      }
+
+      if (!datosKardex.estadoId) {
+        throw new ValidationError("Debe seleccionar un estado de mercadería");
+      }
+
+      if (!datosKardex.estadoCalidadId) {
+        throw new ValidationError("Debe seleccionar un estado de calidad");
+      }
+
+      // ========================================
+      // PASO 3: OBTENER CONCEPTO Y TIPO DE DOCUMENTO
+      // ========================================
+      const concepto = await tx.conceptoMovAlmacen.findUnique({
+        where: { id: datosKardex.conceptoMovAlmacenId },
       });
 
-      if (!direccion) {
-        throw new ValidationError("La dirección de recepción no existe");
+      if (!concepto) {
+        throw new ValidationError("El concepto de movimiento no existe");
       }
 
-      if (!direccion.conceptoAlmacenCompraId) {
+      if (!concepto.tipoDocumentoId) {
         throw new ValidationError(
-          "La dirección de recepción no tiene concepto de almacén de compra configurado",
+          "El concepto no tiene tipo de documento configurado",
         );
       }
 
       // ========================================
-      // PASO 3: OBTENER RESPONSABLE DE ALMACÉN
+      // PASO 4: OBTENER RESPONSABLE DE ALMACÉN
       // ========================================
       const parametroAprobador = await tx.parametroAprobador.findFirst({
         where: {
           empresaId: orden.empresaId,
+          tipoAprobadorId: BigInt(2), // Responsable de Almacén
           cesado: false,
         },
       });
@@ -850,7 +875,7 @@ const generarKardex = async (id, usuarioId) => {
       }
 
       // ========================================
-      // PASO 4: OBTENER SERIE DE DOCUMENTO
+      // PASO 5: OBTENER SERIE DE DOCUMENTO (MISMA SERIE QUE LA ORDEN)
       // ========================================
       if (!orden.serieDoc || !orden.serieDoc.serie) {
         throw new ValidationError(
@@ -861,64 +886,53 @@ const generarKardex = async (id, usuarioId) => {
       const serieMovAlmacen = await tx.serieDoc.findFirst({
         where: {
           empresaId: orden.empresaId,
-          tipoDocumentoId: BigInt(13), // Nota de Ingreso
-          serie: orden.serieDoc.serie,
+          tipoDocumentoId: concepto.tipoDocumentoId,
+          serie: orden.serieDoc.serie, // ⭐ MISMA SERIE QUE LA ORDEN
           activo: true,
         },
       });
 
       if (!serieMovAlmacen) {
         throw new ValidationError(
-          `No se encontró una serie de Nota de Ingreso activa para la empresa ${orden.empresaId} con la serie "${orden.serieDoc.serie}"`,
+          `No se encontró una serie activa para el tipo de documento ${concepto.tipoDocumentoId} con la serie "${orden.serieDoc.serie}"`,
         );
       }
 
       // ========================================
-      // PASO 4.5: OBTENER DIRECCIÓN ORIGEN (PROVEEDOR)
-      // ========================================
-      const direccionOrigenId = await obtenerDireccionProveedor(
-        orden.proveedorId,
-        tx,
-      );
-
-      // ========================================
-      // PASO 5: PREPARAR CABECERA DEL MOVIMIENTO
+      // PASO 6: PREPARAR CABECERA DEL MOVIMIENTO
       // ========================================
       const cabecera = {
         empresaId: orden.empresaId,
-        tipoDocumentoId: BigInt(13), // Nota de Ingreso
-        conceptoMovAlmacenId: direccion.conceptoAlmacenCompraId,
+        almacenId: datosKardex.almacenId,
+        tipoDocumentoId: concepto.tipoDocumentoId,
+        conceptoMovAlmacenId: datosKardex.conceptoMovAlmacenId,
         serieDocId: serieMovAlmacen.id,
-        fechaDocumento: new Date(),
+        fechaDocumento: datosKardex.fechaDocumento || new Date(),
         entidadComercialId: orden.proveedorId,
         estadoDocAlmacenId: BigInt(30), // PENDIENTE
         esCustodia: false,
         personalRespAlmacen: parametroAprobador.personalRespId,
         ordenCompraId: orden.id,
-        dirOrigenId: direccionOrigenId,
-        dirDestinoId: orden.direccionRecepcionAlmacenId,
-        observaciones: `Ingreso por Orden de Compra ${orden.numeroDocumento}`,
+        dirOrigenId: datosKardex.dirOrigenId,
+        dirDestinoId: datosKardex.dirDestinoId,
+        observaciones: datosKardex.observaciones || `Ingreso por Orden de Compra ${orden.numeroDocumento}`,
       };
 
       // ========================================
-      // PASO 6: PREPARAR DETALLES DEL MOVIMIENTO
+      // PASO 7: PREPARAR DETALLES DEL MOVIMIENTO
       // ========================================
-      const fechaActual = new Date();
-      const fechaVencimiento = new Date(fechaActual);
-      fechaVencimiento.setDate(fechaVencimiento.getDate() + 30); // +30 días
-
       const detalles = orden.detalles.map((det) => ({
         productoId: det.productoId,
         cantidad: det.cantidad,
         peso: calcularPesoDetalle(det),
-        lote: "",
-        fechaProduccion: fechaActual,
-        fechaVencimiento: fechaVencimiento,
-        fechaIngreso: fechaActual,
+        lote: datosKardex.lote || "",
+        fechaProduccion: null, // ⭐ NULL para compras
+        fechaVencimiento: datosKardex.fechaVencimiento || null,
+        fechaIngreso: datosKardex.fechaIngreso,
         nroSerie: "",
         nroContenedor: "",
-        estadoMercaderiaId: BigInt(6), // Estado por defecto
-        estadoCalidadId: BigInt(10), // Calidad por defecto
+        estadoMercaderiaId: BigInt(datosKardex.estadoId),
+        estadoCalidadId: BigInt(datosKardex.estadoCalidadId),
         entidadComercialId: orden.proveedorId,
         esCustodia: false,
         empresaId: orden.empresaId,
@@ -928,7 +942,7 @@ const generarKardex = async (id, usuarioId) => {
       }));
 
       // ========================================
-      // PASO 7: CREAR MOVIMIENTO DE ALMACÉN CON KARDEX
+      // PASO 8: CREAR MOVIMIENTO DE ALMACÉN (SIN KARDEX - PENDIENTE)
       // ========================================
       const resultado =
         await crearMovimientoAlmacenService.crearMovimientoAlmacenCompleto(
@@ -939,15 +953,13 @@ const generarKardex = async (id, usuarioId) => {
         );
 
       // ========================================
-      // PASO 8: ACTUALIZAR ORDEN DE COMPRA
+      // PASO 9: ACTUALIZAR ORDEN DE COMPRA
       // ========================================
       const ordenActualizada = await tx.ordenCompra.update({
         where: { id },
         data: {
-          // ✅ NO cambiar estadoId - mantener en APROBADA (39)
-          // El estado 50 (PARTICIONADA) solo se usa cuando se divide la OC en negra/blanca
           movIngresoAlmacenId: resultado.movimiento.id,
-          actualizadoEn: new Date(),
+          fechaActualizacion: new Date(),
         },
         include: {
           empresa: true,
@@ -963,8 +975,8 @@ const generarKardex = async (id, usuarioId) => {
 
       return {
         orden: ordenActualizada,
+        movimientoId: resultado.movimiento.id, // ⭐ RETORNAR ID PARA REDIRECCIÓN
         movimiento: resultado.movimiento,
-        kardex: resultado.kardex,
       };
     });
   } catch (err) {
@@ -1206,6 +1218,232 @@ const regenerarKardex = async (id, usuarioId) => {
       throw new DatabaseError("Error de base de datos", err.message);
     throw err;
   }
+};
+
+
+/**
+ * Particionar OrdenCompra: Clona una OC APROBADA en DOS copias idénticas
+ * Ambas copias tendrán estado PENDIENTE (38) para poder ser editadas
+ * Conserva todos los IDs de referencia y clona cabecera + detalles
+ * 
+ * PATRÓN IDÉNTICO A partirPreFactura
+ * 
+ * @param {BigInt} id - ID de la OrdenCompra a particionar
+ * @returns {Object} { original, copia1, copia2, mensaje }
+ */
+const partirOrdenCompra = async (id) => {
+  return await prisma.$transaction(async (prisma) => {
+    try {
+      // ========================================
+      // 1. OBTENER ORDEN DE COMPRA ORIGINAL
+      // ========================================
+      const ordenCompraOriginal = await prisma.ordenCompra.findUnique({
+        where: { id },
+        include: {
+          detalles: true,
+        },
+      });
+
+      if (!ordenCompraOriginal) {
+        throw new NotFoundError("OrdenCompra no encontrada.");
+      }
+
+      // ========================================
+      // 2. VALIDAR QUE NO HAYA SIDO PARTICIONADA
+      // ========================================
+      if (ordenCompraOriginal.esParticionada) {
+        throw new ValidationError(
+          "Esta OrdenCompra ya fue particionada anteriormente. No se puede particionar nuevamente."
+        );
+      }
+
+      // ========================================
+      // 3. VALIDAR QUE ESTÉ APROBADA (estado 39)
+      // ========================================
+      if (
+        !ordenCompraOriginal.estadoId ||
+        Number(ordenCompraOriginal.estadoId) !== 39
+      ) {
+        throw new ValidationError(
+          `Solo se pueden particionar OrdenCompra APROBADAS (estado 39). Estado actual: ${ordenCompraOriginal.estadoId}`
+        );
+      }
+
+      // ========================================
+      // 4. MARCAR LA ORIGINAL COMO PARTICIONADA (estado 112)
+      // ========================================
+      await prisma.ordenCompra.update({
+        where: { id },
+        data: {
+          estadoId: Number(112), // PARTICIONADA
+          esParticionada: true,
+        },
+      });
+
+      // ========================================
+      // 5. PREPARAR DATOS BASE PARA CLONACIÓN
+      // ========================================
+      // Excluir campos UNIQUE y autogenerados
+      const {
+        id: _,
+        detalles,
+        codigo,
+        numeroDocumento,
+        numSerieDoc,
+        numCorreDoc,
+        fechaCreacion,
+        fechaActualizacion,
+        creadoEn,
+        actualizadoEn,
+        ...datosBase
+      } = ordenCompraOriginal;
+
+      // ========================================
+      // 6. GENERAR CÓDIGOS ÚNICOS PARA AMBAS COPIAS
+      // ========================================
+      const año = new Date().getFullYear();
+      const ultimaOrdenCompra = await prisma.ordenCompra.findFirst({
+        where: {
+          empresaId: ordenCompraOriginal.empresaId,
+          codigo: {
+            startsWith: `OC-${año}-`,
+          },
+        },
+        orderBy: { id: "desc" },
+      });
+
+      let correlativoBase = 1;
+      if (ultimaOrdenCompra) {
+        const partes = ultimaOrdenCompra.codigo.split("-");
+        correlativoBase = parseInt(partes[2]) + 1;
+      }
+
+      const codigoCopia1 = `OC-${año}-${String(correlativoBase).padStart(6, "0")}`;
+      const codigoCopia2 = `OC-${año}-${String(correlativoBase + 1).padStart(6, "0")}`;
+
+      // ========================================
+      // 7. CREAR COPIA 1 - Idéntica a la original
+      // ========================================
+
+      // Obtener serie y generar nuevo correlativo para COPIA 1
+      const serieCopia1 = await prisma.serieDoc.findUnique({
+        where: { id: ordenCompraOriginal.serieDocId },
+      });
+
+      const nuevoCorrelativoCopia1 = Number(serieCopia1.correlativo) + 1;
+      const numSerieCopia1 = String(serieCopia1.serie).padStart(
+        serieCopia1.numCerosIzqSerie,
+        "0"
+      );
+      const numCorreCopia1 = String(nuevoCorrelativoCopia1).padStart(
+        serieCopia1.numCerosIzqCorre,
+        "0"
+      );
+      const numeroDocumentoCopia1 = `${numSerieCopia1}-${numCorreCopia1}`;
+
+      // Actualizar correlativo en SerieDoc
+      await prisma.serieDoc.update({
+        where: { id: ordenCompraOriginal.serieDocId },
+        data: { correlativo: Number(nuevoCorrelativoCopia1) },
+      });
+
+      const dataCopia1 = {
+        ...datosBase,
+        codigo: codigoCopia1,
+        numeroDocumento: numeroDocumentoCopia1,
+        numSerieDoc: numSerieCopia1,
+        numCorreDoc: numCorreCopia1,
+        estadoId: Number(38), // PENDIENTE (para que usuario pueda editar)
+        esParticionada: false,
+        ordenCompraOrigenId: ordenCompraOriginal.id,
+      };
+
+      const copia1 = await prisma.ordenCompra.create({
+        data: dataCopia1,
+      });
+
+      // ========================================
+      // 8. CREAR COPIA 2 - Idéntica a la original
+      // ========================================
+
+      // Obtener serie actualizada y generar nuevo correlativo para COPIA 2
+      const serieCopia2 = await prisma.serieDoc.findUnique({
+        where: { id: ordenCompraOriginal.serieDocId },
+      });
+
+      const nuevoCorrelativoCopia2 = Number(serieCopia2.correlativo) + 1;
+      const numSerieCopia2 = String(serieCopia2.serie).padStart(
+        serieCopia2.numCerosIzqSerie,
+        "0"
+      );
+      const numCorreCopia2 = String(nuevoCorrelativoCopia2).padStart(
+        serieCopia2.numCerosIzqCorre,
+        "0"
+      );
+      const numeroDocumentoCopia2 = `${numSerieCopia2}-${numCorreCopia2}`;
+
+      // Actualizar correlativo en SerieDoc
+      await prisma.serieDoc.update({
+        where: { id: ordenCompraOriginal.serieDocId },
+        data: { correlativo: Number(nuevoCorrelativoCopia2) },
+      });
+
+      const copia2 = await prisma.ordenCompra.create({
+        data: {
+          ...datosBase,
+          codigo: codigoCopia2,
+          numeroDocumento: numeroDocumentoCopia2,
+          numSerieDoc: numSerieCopia2,
+          numCorreDoc: numCorreCopia2,
+          estadoId: Number(38), // PENDIENTE (para que usuario pueda editar)
+          esParticionada: false,
+          ordenCompraOrigenId: ordenCompraOriginal.id,
+        },
+      });
+
+      // ========================================
+      // 9. CLONAR DETALLES PARA COPIA 1
+      // ========================================
+      for (const detalle of detalles) {
+        const { id: _, ordenCompraId, ...datosDetalle } = detalle;
+        await prisma.detalleOrdenCompra.create({
+          data: {
+            ...datosDetalle,
+            ordenCompraId: copia1.id,
+          },
+        });
+      }
+
+      // ========================================
+      // 10. CLONAR DETALLES PARA COPIA 2
+      // ========================================
+      for (const detalle of detalles) {
+        const { id: _, ordenCompraId, ...datosDetalle } = detalle;
+        await prisma.detalleOrdenCompra.create({
+          data: {
+            ...datosDetalle,
+            ordenCompraId: copia2.id,
+          },
+        });
+      }
+
+      // ========================================
+      // 11. RETORNAR RESULTADO
+      // ========================================
+      return {
+        original: ordenCompraOriginal,
+        copia1,
+        copia2,
+        mensaje: `OrdenCompra ${ordenCompraOriginal.codigo} particionada exitosamente. Copias creadas: ${codigoCopia1} y ${codigoCopia2} (Estado: PENDIENTE)`,
+      };
+    } catch (err) {
+      if (err instanceof NotFoundError || err instanceof ValidationError)
+        throw err;
+      if (err.code && err.code.startsWith("P"))
+        throw new DatabaseError("Error de base de datos", err.message);
+      throw err;
+    }
+  });
 };
 
 const generarDesdeRequerimiento = async (requerimientoCompraId) => {
@@ -1509,6 +1747,666 @@ async function crearOrdenCompraConCotizacion(
   return ordenCompra;
 }
 
+/**
+ * Generar CuentaPorPagar desde OrdenCompra
+ * Crea una CxP y actualiza el estado de la OC a FACTURADA (113)
+ * 
+ * PATRÓN BASADO EN facturarPreFacturaBlanca y facturarPreFacturaNegra
+ * 
+ * @param {BigInt} ordenCompraId - ID de la OrdenCompra
+ * @returns {Object} { ordenCompra, cuentaPorPagar }
+ */
+const generarCuentaPorPagar = async (ordenCompraId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // ========================================
+      // 1. OBTENER ORDEN DE COMPRA CON RELACIONES
+      // ========================================
+      const ordenCompra = await tx.ordenCompra.findUnique({
+        where: { id: ordenCompraId },
+        include: {
+          proveedor: true,
+          moneda: true,
+          empresa: true,
+          periodoContable: true,
+        },
+      });
+
+      if (!ordenCompra) {
+        throw new NotFoundError("OrdenCompra no encontrada");
+      }
+
+      // ========================================
+      // 2. VALIDACIONES DE ESTADO Y CONDICIONES
+      // ========================================
+
+      // Validar estado: debe ser KARDEX GENERADO (50)
+      const estadoActual = Number(ordenCompra.estadoId);
+      if (estadoActual !== 50) {
+        throw new ValidationError(
+          `Solo se pueden generar CxP desde OrdenCompra en estado KARDEX GENERADO (50). Estado actual: ${estadoActual}`
+        );
+      }
+
+      // Validar que NO esté ya facturada
+      if (ordenCompra.facturado) {
+        throw new ValidationError(
+          "Esta OrdenCompra ya tiene una CuentaPorPagar generada"
+        );
+      }
+
+      // Validar que tenga comprobante recibido
+      if (!ordenCompra.comprobanteRecibido) {
+        throw new ValidationError(
+          "Debe marcar como recibido el comprobante del proveedor antes de generar la CxP"
+        );
+      }
+
+      // Validar que OC Blanca tenga Kardex generado
+      if (!ordenCompra.esGerencial && !ordenCompra.movIngresoAlmacenId) {
+        throw new ValidationError(
+          "Las OrdenCompra BLANCAS deben tener Kardex generado antes de crear la CxP"
+        );
+      }
+
+      // ========================================
+      // 3. BUSCAR ESTADO PENDIENTE PARA CXP (ID 106)
+      // ========================================
+      const estadoPendiente = await tx.estadoMultiFuncion.findFirst({
+        where: {
+          id: BigInt(106), // PENDIENTE - CUENTAS POR PAGAR
+        },
+      });
+
+      if (!estadoPendiente) {
+        throw new ValidationError(
+          "No se encontró el estado PENDIENTE (ID 106) para CuentaPorPagar"
+        );
+      }
+
+      // ========================================
+      // 4. DETECTAR SI ES SALDO INICIAL
+      // ========================================
+      const esSaldoInicial = ordenCompra.tipoDocumento?.codigo === "SI-CXP";
+
+      // ========================================
+      // 5. CALCULAR MONTOS
+      // ========================================
+      const pagosPreviosSI = Number(ordenCompra.pagosPreviosSI) || 0;
+      const subtotalNeto = Number(ordenCompra.subtotal) - pagosPreviosSI;
+      const porcentajeIGV = Number(ordenCompra.porcentajeIGV) || 0;
+      const igvNeto = ordenCompra.esExoneradoAlIGV
+        ? 0
+        : subtotalNeto * (porcentajeIGV / 100);
+      const totalNeto = subtotalNeto + igvNeto;
+
+      // Usar totalNeto para Saldos Iniciales, total normal para OC regulares
+      const montoFinal = esSaldoInicial ? totalNeto : Number(ordenCompra.total);
+
+      // ========================================
+      // 6. DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN
+      // ========================================
+      // TODO: Implementar lógica de detracción/retención/percepción según proveedor
+      // Por ahora se dejan en false
+      const tieneDetraccion = false;
+      const montoDetraccion = 0;
+      const porcentajeDetraccion = null;
+
+      const tieneRetencion = false;
+      const montoRetencion = 0;
+      const porcentajeRetencion = null;
+
+      const tienePercepcion = false;
+      const montoPercepcion = 0;
+      const porcentajePercepcion = null;
+
+      // ========================================
+      // 7. CREAR CUENTA POR PAGAR
+      // ========================================
+      const cuentaPorPagar = await tx.cuentaPorPagar.create({
+        data: {
+          // ORIGEN DEL DOCUMENTO
+          ordenCompraId: ordenCompra.id,
+          empresaId: ordenCompra.empresaId,
+          proveedorId: ordenCompra.proveedorId,
+
+          // DOCUMENTO
+          numeroOrdenCompra: ordenCompra.numeroDocumento || ordenCompra.codigo,
+          fechaEmision: ordenCompra.fechaDocumento || new Date(),
+          fechaVencimiento: ordenCompra.fechaVencimiento || new Date(),
+
+          // MONTOS ALMACENADOS
+          montoTotal: montoFinal,
+          montoPagado: 0,
+          saldoPendiente: montoFinal,
+
+          // DETRACCIÓN SPOT (SUNAT PERÚ) - TOTALES
+          tieneDetraccion,
+          montoDetraccionTotal: montoDetraccion,
+          porcentajeDetraccion,
+
+          // RETENCIÓN (SUNAT PERÚ) - TOTALES
+          tieneRetencion,
+          montoRetencionTotal: montoRetencion,
+          porcentajeRetencion,
+
+          // PERCEPCIÓN (SUNAT PERÚ) - TOTALES
+          tienePercepcion,
+          montoPercepcionTotal: montoPercepcion,
+          porcentajePercepcion,
+
+          // FLAGS ESPECIALES
+          esSaldoInicial,
+          esGerencial: ordenCompra.esGerencial || false,
+
+          // MONEDA Y TIPO DE COMPRA
+          monedaId: ordenCompra.monedaId,
+          esContado: ordenCompra.formaPagoId ? false : true, // Si no tiene forma de pago, es contado
+          estadoId: estadoPendiente.id,
+          observaciones: esSaldoInicial
+            ? `Saldo Inicial CxP - ${ordenCompra.proveedor.razonSocial}`
+            : `CxP ${ordenCompra.esGerencial ? 'Negra' : 'Blanca'} generada desde OrdenCompra ${ordenCompra.codigo}`,
+
+          // INTEGRACIÓN CONTABLE - HEREDADO DE ORDENCOMPRA
+          fechaContable: ordenCompra.fechaContable,
+          periodoContableId: ordenCompra.periodoContableId,
+        },
+      });
+
+      // ========================================
+      // 8. ACTUALIZAR ORDEN DE COMPRA A FACTURADA (113)
+      // ========================================
+      const ordenCompraActualizada = await tx.ordenCompra.update({
+        where: { id: ordenCompraId },
+        data: {
+          estadoId: BigInt(113), // FACTURADA
+          facturado: true,
+          fechaFacturacion: new Date(),
+        },
+        include: {
+          proveedor: true,
+          moneda: true,
+          empresa: true,
+          cuentaPorPagar: true,
+        },
+      });
+
+      // ========================================
+      // 9. RETORNAR RESULTADO
+      // ========================================
+      return {
+        ordenCompra: ordenCompraActualizada,
+        cuentaPorPagar,
+        mensaje: `CuentaPorPagar ${ordenCompra.esGerencial ? 'NEGRA' : 'BLANCA'} generada exitosamente para OrdenCompra ${ordenCompra.codigo}. Monto: ${montoFinal.toFixed(2)}`,
+      };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Genera un borrador de asiento contable para una OrdenCompra
+ * NO lo guarda en BD, solo retorna la estructura para edición
+ * Patrón: Igual a PreFactura.generarBorradorAsiento
+ * 
+ * @param {BigInt} ordenCompraId - ID de la OrdenCompra
+ * @returns {Promise<Object>} - Borrador del asiento contable
+ */
+const generarBorradorAsiento = async (ordenCompraId) => {
+  try {
+    const ordenCompra = await prisma.ordenCompra.findUnique({
+      where: { id: ordenCompraId },
+      include: {
+        empresa: true,
+        proveedor: true,
+        moneda: true,
+        periodoContable: true,
+        tipoDocumento: true,
+      },
+    });
+
+    if (!ordenCompra) {
+      throw new NotFoundError("OrdenCompra no encontrada");
+    }
+
+    if (!ordenCompra.periodoContable) {
+      throw new ValidationError(
+        "La OrdenCompra no tiene un período contable asignado."
+      );
+    }
+
+    // Validar que el período esté ABIERTO (estadoId = 73)
+    if (Number(ordenCompra.periodoContable.estadoId) !== 73) {
+      throw new ValidationError(
+        "El período contable debe estar ABIERTO para generar asientos."
+      );
+    }
+
+    // ========================================
+    // BUSCAR CUENTAS CONTABLES NECESARIAS
+    // ========================================
+
+    // Cuenta CxP (42.1 - Cuentas por Pagar Comerciales)
+    const cuentaCxP = await prisma.planCuentasContable.findFirst({
+      where: {
+        codigoCuenta: { startsWith: "421" },
+        activo: true,
+      },
+    });
+
+    // Cuenta Compras (60 - Compras)
+    const cuentaCompras = await prisma.planCuentasContable.findFirst({
+      where: {
+        codigoCuenta: { startsWith: "60" },
+        activo: true,
+      },
+    });
+
+    if (!cuentaCxP || !cuentaCompras) {
+      throw new ValidationError(
+        "No se encontraron las cuentas contables necesarias (42.1 Cuentas por Pagar o 60 Compras). " +
+        "Configure el plan de cuentas antes de generar el asiento."
+      );
+    }
+
+    const subtotal = Number(ordenCompra.subtotal);
+    const totalIGV = Number(ordenCompra.totalIGV);
+    const total = Number(ordenCompra.total);
+
+    // Determinar tipo de libro según esGerencial
+    const tipoLibro = ordenCompra.esGerencial ? "GERENCIAL" : "FISCAL";
+
+    const borrador = {
+      empresaId: ordenCompra.empresaId,
+      periodoContableId: ordenCompra.periodoContableId,
+      fechaAsiento: ordenCompra.fechaContable,
+      glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
+      tipoLibro: tipoLibro,
+      origenAsiento: "AUTOMATICO",
+      monedaId: ordenCompra.monedaId,
+      tipoCambio: ordenCompra.tipoCambio,
+      detalles: [],
+    };
+
+    // ========================================
+    // CASO 1: GERENCIAL (sin IGV)
+    // ========================================
+    if (ordenCompra.esGerencial) {
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: cuentaCompras.id,
+          glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
+          debe: total,
+          haber: 0,
+          centroCostoId: ordenCompra.centroCostoId,
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaCxP.id,
+          glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
+          debe: 0,
+          haber: total,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+        },
+      ];
+    }
+    // ========================================
+    // CASO 2: FISCAL EXONERADA (sin IGV)
+    // ========================================
+    else if (ordenCompra.esExoneradoAlIGV) {
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: cuentaCompras.id,
+          glosa: `Compra exonerada según OrdenCompra ${ordenCompra.codigo}`,
+          debe: total,
+          haber: 0,
+          centroCostoId: ordenCompra.centroCostoId,
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaCxP.id,
+          glosa: `Compra exonerada según OrdenCompra ${ordenCompra.codigo}`,
+          debe: 0,
+          haber: total,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+        },
+      ];
+    }
+    // ========================================
+    // CASO 3: FISCAL CON IGV
+    // ========================================
+    else {
+      // Cuenta IGV (40.1 - IGV)
+      const cuentaIGV = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: { startsWith: "401" },
+          activo: true,
+        },
+      });
+
+      if (!cuentaIGV) {
+        throw new ValidationError(
+          "No se encontró la cuenta de IGV (40.1). Configure el plan de cuentas antes de generar el asiento."
+        );
+      }
+
+      borrador.detalles = [
+        {
+          numeroLinea: 1,
+          planCuentaId: cuentaCompras.id,
+          glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
+          debe: subtotal, // Sin IGV
+          haber: 0,
+          centroCostoId: ordenCompra.centroCostoId,
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaIGV.id,
+          glosa: `IGV 18% según OrdenCompra ${ordenCompra.codigo}`,
+          debe: totalIGV,
+          haber: 0,
+        },
+        {
+          numeroLinea: 3,
+          planCuentaId: cuentaCxP.id,
+          glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
+          debe: 0,
+          haber: total, // Con IGV
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+        },
+      ];
+    }
+
+    return borrador;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Guarda el asiento contable editado por el usuario y lo vincula a la OrdenCompra
+ * Patrón: Igual a PreFactura.guardarAsientoContable
+ * 
+ * @param {BigInt} ordenCompraId - ID de la OrdenCompra
+ * @param {Object} asientoData - Datos del asiento editado por el usuario
+ * @param {BigInt} creadoPor - ID del usuario que crea el asiento
+ * @returns {Promise<Object>} - Asiento contable creado
+ */
+const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => {
+  try {
+    // ✅ DETECTAR SI ES EDICIÓN O CREACIÓN
+    const esEdicion = asientoData.id !== undefined && asientoData.id !== null;
+
+    // Buscar submódulo "OrdenCompra" dinámicamente
+    const submodulo = await prisma.submoduloSistema.findFirst({
+      where: {
+        nombreModeloOrigen: "OrdenCompra",
+        activo: true,
+      },
+    });
+
+    if (!submodulo) {
+      throw new ValidationError(
+        'No se encontró el submódulo "OrdenCompra" en el sistema.'
+      );
+    }
+
+    // Calcular totales
+    const totalDebe = asientoData.detalles.reduce(
+      (sum, d) => sum + Number(d.debe),
+      0
+    );
+    const totalHaber = asientoData.detalles.reduce(
+      (sum, d) => sum + Number(d.haber),
+      0
+    );
+    const diferencia = totalDebe - totalHaber;
+
+    // Validar que esté cuadrado
+    if (Math.abs(diferencia) > 0.01) {
+      throw new ValidationError(
+        `El asiento no está cuadrado. Diferencia: ${diferencia}`
+      );
+    }
+
+    // Buscar estado "PENDIENTE" para Asientos Contables (ID 76)
+    const estadoPendiente = await prisma.estadoMultiFuncion.findFirst({
+      where: { id: BigInt(76) },
+    });
+
+    if (!estadoPendiente) {
+      throw new ValidationError(
+        "No se encontró el estado 'PENDIENTE' para asientos contables."
+      );
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      let asiento;
+
+      if (esEdicion) {
+        // ✅ EDITAR: Actualizar asiento existente SIN eliminar registros
+        // Primero, obtener IDs de detalles existentes
+        const detallesExistentes = await tx.detalleAsientoContable.findMany({
+          where: { asientoContableId: BigInt(asientoData.id) },
+          select: { id: true },
+        });
+
+        // Actualizar asiento (siempre vuelve a PENDIENTE al editar)
+        asiento = await tx.asientoContable.update({
+          where: { id: BigInt(asientoData.id) },
+          data: {
+            fechaAsiento: asientoData.fechaAsiento,
+            glosa: asientoData.glosa,
+            tipoLibro: asientoData.tipoLibro,
+            estadoId: estadoPendiente.id,
+            totalDebe: totalDebe,
+            totalHaber: totalHaber,
+            diferencia: diferencia,
+            estaCuadrado: Math.abs(diferencia) < 0.01,
+            monedaId: asientoData.monedaId,
+            tipoCambio: asientoData.tipoCambio,
+          },
+        });
+
+        // Actualizar detalles uno por uno (UPDATE, no DELETE+CREATE)
+        for (let i = 0; i < asientoData.detalles.length; i++) {
+          const detalle = asientoData.detalles[i];
+          const detalleExistente = detallesExistentes[i];
+
+          if (detalleExistente) {
+            // Actualizar detalle existente
+            await tx.detalleAsientoContable.update({
+              where: { id: detalleExistente.id },
+              data: {
+                numeroLinea: detalle.numeroLinea,
+                planCuentaId: detalle.planCuentaId,
+                glosa: detalle.glosa,
+                debe: detalle.debe,
+                haber: detalle.haber,
+                monedaId: asientoData.monedaId,
+                tipoCambio: asientoData.tipoCambio,
+                centroCostoId: detalle.centroCostoId || null,
+                entidadComercialId: detalle.entidadComercialId || null,
+                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
+                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
+                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+              },
+            });
+          } else {
+            // Crear nuevo detalle si hay más detalles que antes
+            await tx.detalleAsientoContable.create({
+              data: {
+                asientoContableId: BigInt(asientoData.id),
+                numeroLinea: detalle.numeroLinea,
+                planCuentaId: detalle.planCuentaId,
+                glosa: detalle.glosa,
+                debe: detalle.debe,
+                haber: detalle.haber,
+                monedaId: asientoData.monedaId,
+                tipoCambio: asientoData.tipoCambio,
+                centroCostoId: detalle.centroCostoId || null,
+                entidadComercialId: detalle.entidadComercialId || null,
+                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
+                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
+                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                submoduloOrigenLineaId: submodulo.id,
+                procesoOrigenLineaId: ordenCompraId,
+                creadoPor: creadoPor,
+              },
+            });
+          }
+        }
+
+        // Si había más detalles antes, marcarlos como inactivos (NO eliminar)
+        if (detallesExistentes.length > asientoData.detalles.length) {
+          const idsAMantener = detallesExistentes
+            .slice(0, asientoData.detalles.length)
+            .map((d) => d.id);
+
+          // Aquí podrías agregar un campo 'activo' en el schema
+          // Por ahora, los dejamos (no se eliminan)
+        }
+      } else {
+        // ✅ CREAR: Nuevo asiento
+        // Obtener último asiento del período para calcular correlativo
+        const ultimoAsiento = await tx.asientoContable.findFirst({
+          where: {
+            empresaId: asientoData.empresaId,
+            periodoContableId: asientoData.periodoContableId,
+          },
+          orderBy: { correlativo: "desc" },
+        });
+
+        const nuevoCorrelativo = ultimoAsiento
+          ? ultimoAsiento.correlativo + 1
+          : 1;
+        const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(nuevoCorrelativo).padStart(5, "0")}`;
+
+        asiento = await tx.asientoContable.create({
+          data: {
+            empresaId: asientoData.empresaId,
+            periodoContableId: asientoData.periodoContableId,
+            numeroAsiento: numeroAsiento,
+            correlativo: nuevoCorrelativo,
+            fechaAsiento: asientoData.fechaAsiento,
+            glosa: asientoData.glosa,
+            tipoLibro: asientoData.tipoLibro,
+            origenAsiento: "AUTOMATICO",
+            submoduloOrigenId: submodulo.id,
+            procesoOrigenId: ordenCompraId,
+            estadoId: estadoPendiente.id,
+            totalDebe: totalDebe,
+            totalHaber: totalHaber,
+            diferencia: diferencia,
+            estaCuadrado: Math.abs(diferencia) < 0.01,
+            monedaId: asientoData.monedaId,
+            tipoCambio: asientoData.tipoCambio,
+            creadoPor: creadoPor,
+            ordenesCompra: {
+              connect: { id: ordenCompraId },
+            },
+            detalles: {
+              create: asientoData.detalles.map((detalle) => ({
+                numeroLinea: detalle.numeroLinea,
+                planCuentaId: detalle.planCuentaId,
+                glosa: detalle.glosa,
+                debe: detalle.debe,
+                haber: detalle.haber,
+                monedaId: asientoData.monedaId,
+                tipoCambio: asientoData.tipoCambio,
+                centroCostoId: detalle.centroCostoId || null,
+                entidadComercialId: detalle.entidadComercialId || null,
+                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
+                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
+                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                submoduloOrigenLineaId: submodulo.id,
+                procesoOrigenLineaId: ordenCompraId,
+                creadoPor: creadoPor,
+              })),
+            },
+          },
+        });
+      }
+      // Retornar asiento con detalles y planCuenta incluidos
+      return await tx.asientoContable.findUnique({
+        where: { id: asiento.id },
+        include: {
+          detalles: {
+            include: {
+              planCuenta: true,
+            },
+            orderBy: { numeroLinea: "asc" },
+          },
+        },
+      });
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Elimina un asiento contable específico
+ * Patrón: Igual a PreFactura.eliminarAsientoContable
+ * 
+ * @param {BigInt} asientoId - ID del asiento a eliminar
+ * @returns {Promise<boolean>} - true si se eliminó correctamente
+ */
+const eliminarAsientoContable = async (asientoId) => {
+  try {
+    const asiento = await prisma.asientoContable.findUnique({
+      where: { id: asientoId },
+    });
+
+    if (!asiento) {
+      throw new NotFoundError("Asiento contable no encontrado");
+    }
+
+    // Validar que NO esté aprobado (estadoId != 77)
+    if (Number(asiento.estadoId) === 77) {
+      throw new ValidationError(
+        "No se puede eliminar un asiento contable aprobado. Debe desaprobarlo primero."
+      );
+    }
+
+    await prisma.asientoContable.delete({ where: { id: asientoId } });
+    return true;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -1518,7 +2416,12 @@ export default {
   aprobar,
   anular,
   generarKardex,
-  regenerarKardex, // ← NUEVO
+  regenerarKardex,
+  partirOrdenCompra, // ⭐ NUEVO
   generarDesdeRequerimiento,
   obtenerSeriesDoc,
+  generarCuentaPorPagar,
+  generarBorradorAsiento,
+  guardarAsientoContable, // ⭐ NUEVO
+  eliminarAsientoContable, // ⭐ NUEVO
 };

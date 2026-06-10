@@ -43,7 +43,7 @@ export async function crear(req, res, next) {
     if (!body.contratoServicioId) camposFaltantes.push('contratoServicioId');
     if (!body.productoServicioId) camposFaltantes.push('productoServicioId');
     if (!body.cantidad) camposFaltantes.push('cantidad');
-    if (!body.precioUnitario) camposFaltantes.push('precioUnitario');
+    if (!body.valorVentaUnitario) camposFaltantes.push('valorVentaUnitario');
 
     if (camposFaltantes.length > 0) {
       return res.status(400).json({

@@ -6,6 +6,7 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
+import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
 
 /**
  * Servicio CRUD para PreFactura
@@ -2377,6 +2378,336 @@ const eliminarAsientoContable = async (asientoId) => {
   }
 };
 
+
+/**
+ * Genera el movimiento de almacén desde una PreFactura aprobada
+ * Crea un MovimientoAlmacen de tipo EGRESO (Nota de Salida) en estado PENDIENTE
+ * El usuario debe cerrar el movimiento y generar kardex manualmente
+ */
+const generarKardex = async (id, datosKardex, usuarioId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // ========================================
+      // PASO 1: OBTENER Y VALIDAR PRE-FACTURA
+      // ========================================
+      const preFactura = await tx.preFactura.findUnique({
+        where: { id: BigInt(id) },
+        include: {
+          empresa: true,
+          serieDoc: true,
+          detalles: {
+            include: {
+              producto: {
+                include: {
+                  unidadMedida: true,
+                },
+              },
+            },
+          },
+          cliente: true,
+        },
+      });
+
+      if (!preFactura) {
+        throw new NotFoundError("Pre-factura no encontrada");
+      }
+
+      // Validar estados permitidos (todos excepto PENDIENTE=45 y ANULADA=47)
+      const estadosPermitidos = [46, 48, 95, 96, 97, 98, 99];
+      if (!estadosPermitidos.includes(Number(preFactura.estadoId))) {
+        throw new ValidationError(
+          "La pre-factura debe estar APROBADA para generar movimiento"
+        );
+      }
+
+      // Verificar que no tenga movimiento ya generado
+      if (preFactura.movSalidaAlmacenId) {
+        throw new ConflictError(
+          "La pre-factura ya tiene un movimiento generado. Use regenerar-kardex para recrearlo."
+        );
+      }
+
+      // Validar que tenga detalles
+      if (!preFactura.detalles || preFactura.detalles.length === 0) {
+        throw new ValidationError(
+          "La pre-factura debe tener al menos un detalle para generar movimiento"
+        );
+      }
+
+      // ========================================
+      // PASO 2: VALIDAR DATOS DEL DIÁLOGO
+      // ========================================
+      if (!datosKardex.almacenId) {
+        throw new ValidationError("Debe seleccionar un almacén");
+      }
+
+      if (!datosKardex.conceptoMovAlmacenId) {
+        throw new ValidationError("Debe seleccionar un concepto de movimiento");
+      }
+
+      if (!datosKardex.dirOrigenId) {
+        throw new ValidationError("Debe seleccionar una dirección de origen");
+      }
+
+      if (!datosKardex.dirDestinoId) {
+        throw new ValidationError("Debe seleccionar una dirección de destino");
+      }
+
+      if (!datosKardex.fechaIngreso) {
+        throw new ValidationError("Debe especificar la fecha de ingreso");
+      }
+
+      if (!datosKardex.estadoId) {
+        throw new ValidationError("Debe seleccionar un estado de mercadería");
+      }
+
+      if (!datosKardex.estadoCalidadId) {
+        throw new ValidationError("Debe seleccionar un estado de calidad");
+      }
+
+      // ========================================
+      // PASO 3: OBTENER CONCEPTO Y TIPO DE DOCUMENTO
+      // ========================================
+      const concepto = await tx.conceptoMovAlmacen.findUnique({
+        where: { id: datosKardex.conceptoMovAlmacenId },
+      });
+
+      if (!concepto) {
+        throw new ValidationError("El concepto de movimiento no existe");
+      }
+
+      if (!concepto.tipoDocumentoId) {
+        throw new ValidationError(
+          "El concepto no tiene tipo de documento configurado"
+        );
+      }
+
+      // ========================================
+      // PASO 4: OBTENER RESPONSABLE DE ALMACÉN
+      // ========================================
+      const parametroAprobador = await tx.parametroAprobador.findFirst({
+        where: {
+          empresaId: preFactura.empresaId,
+          tipoAprobadorId: BigInt(2), // Responsable de Almacén
+          cesado: false,
+        },
+      });
+
+      if (!parametroAprobador || !parametroAprobador.personalRespId) {
+        throw new ValidationError(
+          "No se encontró responsable de almacén configurado"
+        );
+      }
+
+      // ========================================
+      // PASO 5: OBTENER SERIE DE DOCUMENTO (MISMA SERIE QUE LA PRE-FACTURA)
+      // ========================================
+      if (!preFactura.serieDoc || !preFactura.serieDoc.serie) {
+        throw new ValidationError(
+          "La pre-factura no tiene serie configurada"
+        );
+      }
+
+      const serieMovAlmacen = await tx.serieDoc.findFirst({
+        where: {
+          empresaId: preFactura.empresaId,
+          tipoDocumentoId: concepto.tipoDocumentoId,
+          serie: preFactura.serieDoc.serie, // ⭐ MISMA SERIE QUE LA PRE-FACTURA
+          activo: true,
+        },
+      });
+
+      if (!serieMovAlmacen) {
+        throw new ValidationError(
+          `No se encontró una serie activa para el tipo de documento ${concepto.tipoDocumentoId} con la serie "${preFactura.serieDoc.serie}"`
+        );
+      }
+
+      // ========================================
+      // PASO 6: PREPARAR CABECERA DEL MOVIMIENTO
+      // ========================================
+      const cabecera = {
+        empresaId: preFactura.empresaId,
+        almacenId: datosKardex.almacenId,
+        tipoDocumentoId: concepto.tipoDocumentoId,
+        conceptoMovAlmacenId: datosKardex.conceptoMovAlmacenId,
+        serieDocId: serieMovAlmacen.id,
+        fechaDocumento: datosKardex.fechaDocumento || new Date(),
+        entidadComercialId: preFactura.clienteId,
+        estadoDocAlmacenId: BigInt(30), // PENDIENTE
+        esCustodia: false,
+        personalRespAlmacen: parametroAprobador.personalRespId,
+        preFacturaId: preFactura.id,
+        dirOrigenId: datosKardex.dirOrigenId,
+        dirDestinoId: datosKardex.dirDestinoId,
+        observaciones: datosKardex.observaciones || `Salida por Pre-Factura ${preFactura.numeroDocumento}`,
+      };
+
+      // ========================================
+      // PASO 7: PREPARAR DETALLES DEL MOVIMIENTO
+      // ========================================
+      const detalles = preFactura.detalles.map((det) => ({
+        productoId: det.productoId,
+        cantidad: det.cantidad,
+        peso: det.peso || 0,
+        lote: datosKardex.lote || "",
+        fechaProduccion: datosKardex.fechaIngreso, // ⭐ Para ventas, usar fecha de ingreso como producción
+        fechaVencimiento: datosKardex.fechaVencimiento || null,
+        fechaIngreso: datosKardex.fechaIngreso,
+        nroSerie: "",
+        nroContenedor: "",
+        estadoMercaderiaId: BigInt(datosKardex.estadoId),
+        estadoCalidadId: BigInt(datosKardex.estadoCalidadId),
+        entidadComercialId: preFactura.clienteId,
+        esCustodia: false,
+        empresaId: preFactura.empresaId,
+        costoUnitario: det.precioUnitario || 0,
+        observaciones: null,
+      }));
+
+      // ========================================
+      // PASO 8: CREAR MOVIMIENTO DE ALMACÉN (SIN KARDEX - PENDIENTE)
+      // ========================================
+      const resultado =
+        await crearMovimientoAlmacenService.crearMovimientoAlmacenCompleto(
+          cabecera,
+          detalles,
+          usuarioId,
+          tx, // Pasar la transacción actual
+        );
+
+      // ========================================
+      // PASO 9: ACTUALIZAR PRE-FACTURA
+      // ========================================
+      const preFacturaActualizada = await tx.preFactura.update({
+        where: { id: BigInt(id) },
+        data: {
+          movSalidaAlmacenId: resultado.movimiento.id,
+          fechaActualizacion: new Date(),
+        },
+        include: {
+          empresa: true,
+          tipoDocumento: true,
+          cliente: true,
+          detalles: {
+            include: {
+              producto: true,
+            },
+          },
+        },
+      });
+
+      return {
+        preFactura: preFacturaActualizada,
+        movimientoId: resultado.movimiento.id, // ⭐ RETORNAR ID PARA REDIRECCIÓN
+        movimiento: resultado.movimiento,
+      };
+    });
+  } catch (err) {
+    if (
+      err instanceof NotFoundError ||
+      err instanceof ValidationError ||
+      err instanceof ConflictError
+    )
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+  
+
+/**
+ * Regenera el kardex de una pre-factura
+ * Elimina el movimiento existente y crea uno nuevo
+ */
+const regenerarKardex = async (id, usuarioId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // ========================================
+      // 1. OBTENER Y VALIDAR PRE-FACTURA
+      // ========================================
+      const preFactura = await tx.preFactura.findUnique({
+        where: { id },
+        include: {
+          movSalidaAlmacen: true,
+        },
+      });
+
+      if (!preFactura) {
+        throw new NotFoundError("Pre-factura no encontrada");
+      }
+
+      // Validar estados permitidos
+      const estadosPermitidos = [46, 48, 95, 96, 97, 98, 99];
+      if (!estadosPermitidos.includes(Number(preFactura.estadoId))) {
+        throw new ValidationError(
+          "La pre-factura debe estar APROBADA para regenerar kardex"
+        );
+      }
+
+      // Verificar que tenga movimiento generado
+      if (!preFactura.movSalidaAlmacenId) {
+        throw new ValidationError(
+          "La pre-factura no tiene un kardex generado. Use generar-movimiento en su lugar."
+        );
+      }
+
+      // ========================================
+      // 2. DESVINCULAR MOVIMIENTO DE PRE-FACTURA
+      // ========================================
+      await tx.preFactura.update({
+        where: { id },
+        data: {
+          movSalidaAlmacenId: null,
+        },
+      });
+
+      // ========================================
+      // 3. ELIMINAR MOVIMIENTO EXISTENTE Y SU KARDEX
+      // ========================================
+      const movimientoId = preFactura.movSalidaAlmacenId;
+
+      // Eliminar kardex asociado
+      await tx.kardexAlmacen.deleteMany({
+        where: { movimientoAlmacenId: movimientoId },
+      });
+
+      // Eliminar detalles del movimiento
+      await tx.detalleMovimientoAlmacen.deleteMany({
+        where: { movimientoAlmacenId: movimientoId },
+      });
+
+      // Eliminar movimiento
+      await tx.movimientoAlmacen.delete({
+        where: { id: movimientoId },
+      });
+
+      // ========================================
+      // 4. GENERAR NUEVO KARDEX
+      // ========================================
+      const resultado = await generarKardex(Number(id), usuarioId);
+
+      return {
+        ...resultado,
+        mensaje: "Kardex regenerado correctamente",
+      };
+    });
+  } catch (err) {
+    if (
+      err instanceof NotFoundError ||
+      err instanceof ValidationError ||
+      err instanceof ConflictError
+    )
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -2395,4 +2726,6 @@ export default {
   generarBorradorAsiento,
   guardarAsientoContable,
   eliminarAsientoContable,
+  generarKardex,
+  regenerarKardex,
 };
