@@ -81,7 +81,7 @@ export async function anular(req, res, next) {
 export async function obtenerSeriesDoc(req, res, next) {
   try {
     const { empresaId, tipoDocumentoId } = req.query;
-    
+
     if (!empresaId || !tipoDocumentoId) {
       return res.status(400).json({
         error: 'Parámetros faltantes',
@@ -118,9 +118,9 @@ export async function generarFactura(req, res, next) {
   try {
     const preFacturaId = Number(req.params.id);
     const datosFactura = req.body;
-    
+
     const comprobante = await preFacturaService.generarFacturaDesdePreFactura(preFacturaId, datosFactura);
-    
+
     res.status(201).json(toJSONBigInt({
       success: true,
       mensaje: 'Factura generada exitosamente',
@@ -139,9 +139,9 @@ export async function generarBoleta(req, res, next) {
   try {
     const preFacturaId = Number(req.params.id);
     const datosBoleta = req.body;
-    
+
     const comprobante = await preFacturaService.generarBoletaDesdePreFactura(preFacturaId, datosBoleta);
-    
+
     res.status(201).json(toJSONBigInt({
       success: true,
       mensaje: 'Boleta generada exitosamente',
@@ -160,7 +160,7 @@ export async function partirPreFactura(req, res, next) {
   try {
     const id = BigInt(req.params.id);
     const resultado = await preFacturaService.partirPreFactura(id);
-    
+
     res.status(200).json(toJSONBigInt({
       success: true,
       mensaje: resultado.mensaje,
@@ -179,7 +179,7 @@ export async function facturarPreFacturaNegra(req, res, next) {
   try {
     const id = BigInt(req.params.id);
     const resultado = await preFacturaService.facturarPreFacturaNegra(id);
-    
+
     res.status(200).json(toJSONBigInt({
       success: true,
       mensaje: "CxC Negra (Gerencial) generada exitosamente",
@@ -198,7 +198,7 @@ export async function facturarPreFacturaBlanca(req, res, next) {
   try {
     const id = BigInt(req.params.id);
     const resultado = await preFacturaService.facturarPreFacturaBlanca(id);
-    
+
     res.status(200).json(toJSONBigInt({
       success: true,
       mensaje: "CxC Blanca y Comprobante Electrónico generados exitosamente",
@@ -219,6 +219,7 @@ export async function generarBorradorAsiento(req, res, next) {
     const borrador = await preFacturaService.generarBorradorAsiento(preFacturaId);
     res.json(toJSONBigInt(borrador));
   } catch (err) {
+    console.error("🔴 [CONTROLLER] generarBorradorAsiento - ERROR:", err);
     next(err);
   }
 }
@@ -232,13 +233,13 @@ export async function guardarAsientoContable(req, res, next) {
     const preFacturaId = BigInt(req.params.id);
     const { asientoData } = req.body;
     const creadoPor = req.user?.id || null;
-    
+
     const asiento = await preFacturaService.guardarAsientoContable(
       preFacturaId,
       asientoData,
       creadoPor,
     );
-    
+
     res.status(201).json(toJSONBigInt(asiento));
   } catch (err) {
     next(err);
@@ -272,11 +273,11 @@ export async function generarMovimiento(req, res, next) {
     const id = Number(req.params.id);
     const usuarioId = req.user?.id;
     const datosKardex = req.body;
-    
+
     if (!usuarioId) {
       return res.status(401).json({ error: 'Usuario no autenticado' });
     }
-    
+
     const resultado = await preFacturaService.generarKardex(
       id,
       datosKardex,

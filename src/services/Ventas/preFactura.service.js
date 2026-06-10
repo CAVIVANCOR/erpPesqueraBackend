@@ -1997,7 +1997,6 @@ const generarBorradorAsiento = async (preFacturaId) => {
     const subtotal = Number(preFactura.subtotal);
     const totalIGV = Number(preFactura.totalIGV);
     const total = Number(preFactura.total);
-
     // Determinar tipo de libro según esGerencial
     const tipoLibro = preFactura.esGerencial ? "GERENCIAL" : "FISCAL";
 
@@ -2616,7 +2615,7 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
     throw err;
   }
 };
-  
+
 
 /**
  * Regenera el kardex de una pre-factura
