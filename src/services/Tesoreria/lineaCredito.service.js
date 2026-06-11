@@ -71,22 +71,6 @@ async function validarLineaCredito(data) {
     }
   }
 
-  // Validar número de línea único por empresa
-  if (data.numeroLinea && data.empresaId) {
-    const existente = await prisma.lineaCredito.findFirst({
-      where: {
-        empresaId: data.empresaId,
-        numeroLinea: data.numeroLinea,
-        id: data.id ? { not: data.id } : undefined,
-      },
-    });
-    if (existente) {
-      throw new ValidationError(
-        `El número de línea "${data.numeroLinea}" ya existe para esta empresa.`,
-      );
-    }
-  }
-
   // Validar fechas
   if (data.fechaAprobacion && data.fechaVencimiento) {
     if (new Date(data.fechaVencimiento) <= new Date(data.fechaAprobacion)) {
@@ -304,7 +288,7 @@ const listar = async () => {
       orderBy: { fechaAprobacion: "desc" },
     });
 
-       // ✅ CALCULAR montoUtilizado y montoDisponible CON CONVERSIÓN DE MONEDA
+    // ✅ CALCULAR montoUtilizado y montoDisponible CON CONVERSIÓN DE MONEDA
     const lineasConSaldos = await Promise.all(
       lineas.map(async (linea) => {
         const monedaLinea = linea.moneda; // Moneda de la línea de crédito
@@ -435,7 +419,6 @@ const crear = async (data) => {
     if (
       !data.empresaId ||
       !data.bancoId ||
-      !data.numeroLinea ||
       !data.montoAprobado ||
       !data.monedaId ||
       !data.tasaInteres ||
@@ -575,10 +558,10 @@ const listarPorEmpresa = async (empresaId) => {
  */
 const listarVigentes = async () => {
   try {
-    // Estados: 80=APROBADA, 81=VIGENTE
+    // Estado: 87=VIGENTE
     return await prisma.lineaCredito.findMany({
       where: {
-        estadoId: { in: [86n, 87n] },
+        estadoId: 87n,
       },
       include: {
         empresa: true,
@@ -631,7 +614,7 @@ const obtenerReporteLineasDisponibles = async (empresaId) => {
     const lineas = await prisma.lineaCredito.findMany({
       where: {
         empresaId,
-        estadoId: { in: [86n, 87n] }, // 86=APROBADA, 87=VIGENTE
+        estadoId: 87n, // Solo VIGENTE
       },
       include: {
         banco: true,
@@ -701,10 +684,10 @@ const obtenerReporteLineasDisponibles = async (empresaId) => {
     totalesResumen.porcentajeUtilizado =
       totalesResumen.limite > 0
         ? parseFloat(
-            ((totalesResumen.utilizado / totalesResumen.limite) * 100).toFixed(
-              2,
-            ),
-          )
+          ((totalesResumen.utilizado / totalesResumen.limite) * 100).toFixed(
+            2,
+          ),
+        )
         : 0;
 
     // ========================================
@@ -744,7 +727,7 @@ const obtenerReporteLineasDisponibles = async (empresaId) => {
       });
 
       detalleBancos[bancoId].lineas.push({
-        numeroLinea: linea.numeroLinea,
+        id: linea.id.toString(),
         moneda: linea.moneda.codigoSunat,
         limite: montoAprobado,
         utilizado: montoUtilizado,

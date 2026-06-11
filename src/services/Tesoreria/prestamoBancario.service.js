@@ -79,8 +79,8 @@ async function validarPrestamoBancario(data) {
     }
 
     // Validar que la línea de crédito esté vigente
-    // Estados: 86=APROBADA, 87=VIGENTE
-    if (![86n, 87n].includes(lineaCredito.estadoId)) {
+    // Estado: 87=VIGENTE
+    if (lineaCredito.estadoId !== 87n) {
       throw new ValidationError(
         "La línea de crédito seleccionada no está vigente.",
       );
@@ -448,7 +448,7 @@ const crear = async (data) => {
           : null,
       refNroProformaVentaExportacion:
         data.refNroProformaVentaExportacion &&
-        data.refNroProformaVentaExportacion.trim() !== ""
+          data.refNroProformaVentaExportacion.trim() !== ""
           ? data.refNroProformaVentaExportacion
           : null,
     };
@@ -619,7 +619,7 @@ const actualizar = async (id, data) => {
           : null,
       refNroProformaVentaExportacion:
         data.refNroProformaVentaExportacion &&
-        data.refNroProformaVentaExportacion.trim() !== ""
+          data.refNroProformaVentaExportacion.trim() !== ""
           ? data.refNroProformaVentaExportacion
           : null,
     };
