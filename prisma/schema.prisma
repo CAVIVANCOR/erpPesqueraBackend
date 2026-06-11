@@ -4087,11 +4087,13 @@ model Producto {
   urlFichaTecnica                   String?
   urlFotoProducto                   String?
   descripcionMedidaAdicional        String?                             @db.VarChar(120)
-  especieId BigInt?
-  cesado Boolean @default(false)
+  especieId                         BigInt?
+  cesado                            Boolean @default(false)
   // 🆕 AGREGAR: Márgenes de utilidad (heredados de Empresa, editables por producto)
   margenMinimoPermitido             Decimal?                            @db.Decimal(5, 2)  // % mínimo de margen
   margenUtilidadObjetivo            Decimal?                            @db.Decimal(5, 2)  // % objetivo de margen
+  descripcionEspanolExportacion     String?
+  descripcionInglesExportacion      String?
 
 
   familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
@@ -5670,13 +5672,13 @@ model DetalleAsientoContable {
 }
 
 model FormaPago {
-  id               BigInt             @id @default(autoincrement())
-  nombre           String             @db.VarChar(50)
-  descripcion      String?
-  esCliente        Boolean            @default(false)
-  esProveedor      Boolean            @default(false)
-  activo           Boolean            @default(true)
-  
+  id                BigInt             @id @default(autoincrement())
+  nombre            String             @db.VarChar(50)
+  descripcion       String?
+  esCliente         Boolean            @default(false)
+  esProveedor       Boolean            @default(false)
+  activo            Boolean            @default(true)
+  descripcionIngles String?
   // ========================================
   // ⭐ NUEVOS CAMPOS PARA FACTURACIÓN ELECTRÓNICA
   // ========================================
@@ -7793,12 +7795,6 @@ model LineaCredito {
   // ========================================
   empresaId             BigInt
   bancoId               BigInt
-  numeroLinea           String                  @db.VarChar(50)      // Número de línea de crédito
-  
-  // ❌ ELIMINADO: tipoLinea TipoLineaCredito
-  // ❌ ELIMINADO: comisionMantenimiento
-  // ❌ ELIMINADO: comisionUtilizacion
-  
   // ========================================
   // MONTOS
   // ========================================
@@ -7851,7 +7847,7 @@ model LineaCredito {
   // ========================================
   // ÍNDICES
   // ========================================
-  @@unique([empresaId, numeroLinea])
+  // @@unique([empresaId, numeroLinea]) ELIMINADO
   @@index([empresaId])
   @@index([bancoId])
   @@index([estadoId])
