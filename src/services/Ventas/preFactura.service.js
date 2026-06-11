@@ -534,13 +534,17 @@ const actualizar = async (id, data) => {
     }
 
     // Asegurar campos de auditoría
+    // Asegurar campos de auditoría
     const datosConAuditoria = {
       ...data,
       fechaCreacion:
         data.fechaCreacion || existente.fechaCreacion || new Date(),
       creadoPor: data.creadoPor || existente.creadoPor || null,
       fechaActualizacion: data.fechaActualizacion || new Date(),
-      nroLiquidacionFacturacion: data.nroLiquidacionFacturacion?.trim() || null, // ← AGREGAR AQUÍ
+      // ⭐ PRESERVAR nroLiquidacionFacturacion si no viene en data
+      nroLiquidacionFacturacion: data.hasOwnProperty('nroLiquidacionFacturacion')
+        ? (data.nroLiquidacionFacturacion?.trim() || null)
+        : existente.nroLiquidacionFacturacion,
     };
 
     return await prisma.preFactura.update({
@@ -2164,7 +2168,7 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
 
     // Buscar estado "PENDIENTE" para Asientos Contables (ID 76)
     const estadoPendiente = await prisma.estadoMultiFuncion.findFirst({
-      where: { id: BigInt(76) },
+      where: { id: Number(76) },
     });
 
     if (!estadoPendiente) {
@@ -2180,13 +2184,13 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
         // ✅ EDITAR: Actualizar asiento existente SIN eliminar registros
         // Primero, obtener IDs de detalles existentes
         const detallesExistentes = await tx.detalleAsientoContable.findMany({
-          where: { asientoContableId: BigInt(asientoData.id) },
+          where: { asientoContableId: Number(asientoData.id) },
           select: { id: true },
         });
 
         // Actualizar asiento (siempre vuelve a PENDIENTE al editar)
         asiento = await tx.asientoContable.update({
-          where: { id: BigInt(asientoData.id) },
+          where: { id: Number(asientoData.id) },
           data: {
             fechaAsiento: asientoData.fechaAsiento,
             glosa: asientoData.glosa,
@@ -2229,7 +2233,7 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
             // Crear nuevo detalle si hay más detalles que antes
             await tx.detalleAsientoContable.create({
               data: {
-                asientoContableId: BigInt(asientoData.id),
+                asientoContableId: Number(asientoData.id),
                 numeroLinea: detalle.numeroLinea,
                 planCuentaId: detalle.planCuentaId,
                 glosa: detalle.glosa,
@@ -2383,14 +2387,14 @@ const eliminarAsientoContable = async (asientoId) => {
  * Crea un MovimientoAlmacen de tipo EGRESO (Nota de Salida) en estado PENDIENTE
  * El usuario debe cerrar el movimiento y generar kardex manualmente
  */
-const generarKardex = async (id, datosKardex, usuarioId) => {
+const generarKardex = async (id, datosKardex, usuarioId, esRegeneracion = false) => {
   try {
     return await prisma.$transaction(async (tx) => {
       // ========================================
       // PASO 1: OBTENER Y VALIDAR PRE-FACTURA
       // ========================================
       const preFactura = await tx.preFactura.findUnique({
-        where: { id: BigInt(id) },
+        where: { id: Number(id) },
         include: {
           empresa: true,
           serieDoc: true,
@@ -2419,8 +2423,8 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         );
       }
 
-      // Verificar que no tenga movimiento ya generado
-      if (preFactura.movSalidaAlmacenId) {
+      // Verificar que no tenga movimiento ya generado (solo si NO es regeneración)
+      if (!esRegeneracion && preFactura.movSalidaAlmacenId) {
         throw new ConflictError(
           "La pre-factura ya tiene un movimiento generado. Use regenerar-kardex para recrearlo."
         );
@@ -2448,10 +2452,6 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         throw new ValidationError("Debe seleccionar una dirección de origen");
       }
 
-      if (!datosKardex.dirDestinoId) {
-        throw new ValidationError("Debe seleccionar una dirección de destino");
-      }
-
       if (!datosKardex.fechaIngreso) {
         throw new ValidationError("Debe especificar la fecha de ingreso");
       }
@@ -2475,26 +2475,30 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         throw new ValidationError("El concepto de movimiento no existe");
       }
 
-      if (!concepto.tipoDocumentoId) {
+      // Validar que se haya enviado el tipo de documento desde el frontend
+      if (!datosKardex.tipoDocumentoAlmacen) {
         throw new ValidationError(
-          "El concepto no tiene tipo de documento configurado"
+          "Debe especificar el tipo de documento de almacén"
         );
       }
 
       // ========================================
       // PASO 4: OBTENER RESPONSABLE DE ALMACÉN
       // ========================================
+      // Buscar responsable de almacén (sin tipoAprobadorId porque no existe en el modelo)
       const parametroAprobador = await tx.parametroAprobador.findFirst({
         where: {
           empresaId: preFactura.empresaId,
-          tipoAprobadorId: BigInt(2), // Responsable de Almacén
           cesado: false,
         },
+        orderBy: {
+          vigenteDesde: 'desc' // Obtener el más reciente
+        }
       });
 
       if (!parametroAprobador || !parametroAprobador.personalRespId) {
         throw new ValidationError(
-          "No se encontró responsable de almacén configurado"
+          "No se encontró responsable de almacén configurado en ParametroAprobador para esta empresa"
         );
       }
 
@@ -2507,18 +2511,21 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         );
       }
 
+      // Buscar serie del movimiento de almacén con:
+      // - tipoDocumentoId = 14 (Nota de Salida, desde kardexConfig)
+      // - serie = "F001" (misma serie que la PreFactura)
       const serieMovAlmacen = await tx.serieDoc.findFirst({
         where: {
           empresaId: preFactura.empresaId,
-          tipoDocumentoId: concepto.tipoDocumentoId,
-          serie: preFactura.serieDoc.serie, // ⭐ MISMA SERIE QUE LA PRE-FACTURA
+          tipoDocumentoId: datosKardex.tipoDocumentoAlmacen, // ⭐ ID 14 (Nota de Salida)
+          serie: preFactura.numSerieDoc, // ⭐ Serie de la PreFactura (ej: "F001")
           activo: true,
         },
       });
 
       if (!serieMovAlmacen) {
         throw new ValidationError(
-          `No se encontró una serie activa para el tipo de documento ${concepto.tipoDocumentoId} con la serie "${preFactura.serieDoc.serie}"`
+          `No se encontró una serie activa para el tipo de documento ${datosKardex.tipoDocumentoAlmacen} (Nota de Salida) con la serie "${preFactura.numSerieDoc}". Debe crear una serie en SerieDoc con tipoDocumentoId=${datosKardex.tipoDocumentoAlmacen} y serie="${preFactura.numSerieDoc}"`
         );
       }
 
@@ -2528,12 +2535,12 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
       const cabecera = {
         empresaId: preFactura.empresaId,
         almacenId: datosKardex.almacenId,
-        tipoDocumentoId: concepto.tipoDocumentoId,
+        tipoDocumentoId: datosKardex.tipoDocumentoAlmacen, // ⭐ ID 14 (Nota de Salida)
         conceptoMovAlmacenId: datosKardex.conceptoMovAlmacenId,
-        serieDocId: serieMovAlmacen.id,
+        serieDocId: serieMovAlmacen.id, // ⭐ ID de la serie encontrada
         fechaDocumento: datosKardex.fechaDocumento || new Date(),
         entidadComercialId: preFactura.clienteId,
-        estadoDocAlmacenId: BigInt(30), // PENDIENTE
+        estadoDocAlmacenId: Number(30), // PENDIENTE
         esCustodia: false,
         personalRespAlmacen: parametroAprobador.personalRespId,
         preFacturaId: preFactura.id,
@@ -2555,8 +2562,8 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         fechaIngreso: datosKardex.fechaIngreso,
         nroSerie: "",
         nroContenedor: "",
-        estadoMercaderiaId: BigInt(datosKardex.estadoId),
-        estadoCalidadId: BigInt(datosKardex.estadoCalidadId),
+        estadoMercaderiaId: Number(datosKardex.estadoId),
+        estadoCalidadId: Number(datosKardex.estadoCalidadId),
         entidadComercialId: preFactura.clienteId,
         esCustodia: false,
         empresaId: preFactura.empresaId,
@@ -2579,7 +2586,7 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
       // PASO 9: ACTUALIZAR PRE-FACTURA
       // ========================================
       const preFacturaActualizada = await tx.preFactura.update({
-        where: { id: BigInt(id) },
+        where: { id: Number(id) },
         data: {
           movSalidaAlmacenId: resultado.movimiento.id,
           fechaActualizacion: new Date(),
@@ -2601,6 +2608,9 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         movimientoId: resultado.movimiento.id, // ⭐ RETORNAR ID PARA REDIRECCIÓN
         movimiento: resultado.movimiento,
       };
+    }, {
+      timeout: 120000, // ⭐ 120 segundos de timeout (2 minutos)
+      maxWait: 125000, // ⭐ 125 segundos de espera máxima
     });
   } catch (err) {
     if (
@@ -2630,7 +2640,18 @@ const regenerarKardex = async (id, usuarioId) => {
       const preFactura = await tx.preFactura.findUnique({
         where: { id },
         include: {
-          movSalidaAlmacen: true,
+          movSalidaAlmacen: {
+            include: {
+              detalles: true,
+              conceptoMovAlmacen: true,
+            },
+          },
+          serieDoc: true,
+          detalles: {
+            include: {
+              producto: true,
+            },
+          },
         },
       });
 
@@ -2654,46 +2675,73 @@ const regenerarKardex = async (id, usuarioId) => {
       }
 
       // ========================================
-      // 2. DESVINCULAR MOVIMIENTO DE PRE-FACTURA
+      // 2. OBTENER DATOS DEL MOVIMIENTO ANTERIOR
       // ========================================
-      await tx.preFactura.update({
-        where: { id },
-        data: {
-          movSalidaAlmacenId: null,
-        },
-      });
+      const movimientoAnterior = preFactura.movSalidaAlmacen;
+      const concepto = movimientoAnterior.conceptoMovAlmacen;
+      const primerDetalle = movimientoAnterior?.detalles?.[0];
 
       // ========================================
-      // 3. ELIMINAR MOVIMIENTO EXISTENTE Y SU KARDEX
+      // 3. CONSTRUIR CABECERA Y DETALLES ACTUALIZADOS
       // ========================================
-      const movimientoId = preFactura.movSalidaAlmacenId;
+      const cabecera = {
+        fechaDocumento: preFactura.fechaDocumento,
+        dirOrigenId: movimientoAnterior.dirOrigenId,
+        dirDestinoId: movimientoAnterior.dirDestinoId,
+        observaciones: `Regeneración de kardex por ${preFactura.numeroDocumento}`,
+      };
 
-      // Eliminar kardex asociado
-      await tx.kardexAlmacen.deleteMany({
-        where: { movimientoAlmacenId: movimientoId },
-      });
-
-      // Eliminar detalles del movimiento
-      await tx.detalleMovimientoAlmacen.deleteMany({
-        where: { movimientoAlmacenId: movimientoId },
-      });
-
-      // Eliminar movimiento
-      await tx.movimientoAlmacen.delete({
-        where: { id: movimientoId },
-      });
+      const detalles = preFactura.detalles.map((det) => ({
+        productoId: det.productoId,
+        cantidad: det.cantidad,
+        peso: det.peso || det.cantidad,
+        lote: primerDetalle?.lote || null,
+        fechaProduccion: primerDetalle?.fechaProduccion || preFactura.fechaDocumento,
+        fechaVencimiento: primerDetalle?.fechaVencimiento || null,
+        fechaIngreso: primerDetalle?.fechaIngreso || new Date(),
+        nroSerie: "",
+        nroContenedor: "",
+        estadoMercaderiaId: primerDetalle?.estadoMercaderiaId || BigInt(6),
+        estadoCalidadId: primerDetalle?.estadoCalidadId || BigInt(10),
+        entidadComercialId: preFactura.clienteId,
+        esCustodia: false,
+        empresaId: preFactura.empresaId,
+        costoUnitario: det.precioUnitario || 0,
+        observaciones: null,
+      }));
 
       // ========================================
-      // 4. GENERAR NUEVO KARDEX
+      // 4. ACTUALIZAR MOVIMIENTO Y REGENERAR KARDEX
       // ========================================
-      const resultado = await generarKardex(Number(id), usuarioId);
+      const { default: actualizarMovimientoService } = await import(
+        "../Almacen/actualizarMovimientoAlmacen.service.js"
+      );
+
+      const resultado = await actualizarMovimientoService.actualizarMovimientoAlmacenCompleto(
+        preFactura.movSalidaAlmacenId,
+        cabecera,
+        detalles,
+        usuarioId,
+        tx
+      );
 
       return {
-        ...resultado,
+        preFactura: preFactura,
+        movimientoId: resultado.movimiento.id,
+        movimiento: resultado.movimiento,
         mensaje: "Kardex regenerado correctamente",
       };
+    }, {
+      timeout: 120000,
+      maxWait: 125000,
     });
   } catch (err) {
+    console.error("❌ Error en regenerarKardex:", {
+      message: err.message,
+      code: err.code,
+      meta: err.meta,
+    });
+
     if (
       err instanceof NotFoundError ||
       err instanceof ValidationError ||
@@ -2701,7 +2749,7 @@ const regenerarKardex = async (id, usuarioId) => {
     )
       throw err;
     if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
+      throw new DatabaseError("Error de base de datos al regenerar kardex", err.message);
     }
     throw err;
   }

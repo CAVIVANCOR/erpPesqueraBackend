@@ -23,7 +23,7 @@ const crearMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 1: VALIDACIONES DE ENTRADA
       // ========================================
-      
+
       if (!cabecera || typeof cabecera !== 'object') {
         throw new ValidationError('La cabecera es obligatoria y debe ser un objeto');
       }
@@ -67,23 +67,10 @@ const crearMovimientoAlmacenCompleto = async (
         if (det.peso === undefined || det.peso === null) {
           throw new ValidationError(`Detalle ${index + 1}: peso es obligatorio`);
         }
-        if (det.lote === undefined || det.lote === null) {
-          throw new ValidationError(`Detalle ${index + 1}: lote es obligatorio`);
-        }
-        if (det.fechaProduccion === undefined || det.fechaProduccion === null) {
-          throw new ValidationError(`Detalle ${index + 1}: fechaProduccion es obligatorio`);
-        }
-        if (det.fechaVencimiento === undefined || det.fechaVencimiento === null) {
-          throw new ValidationError(`Detalle ${index + 1}: fechaVencimiento es obligatorio`);
-        }
+        // lote, fechaProduccion, fechaVencimiento, nroSerie, nroContenedor son OPCIONALES
+        // Solo validar fechaIngreso como obligatorio
         if (det.fechaIngreso === undefined || det.fechaIngreso === null) {
           throw new ValidationError(`Detalle ${index + 1}: fechaIngreso es obligatorio`);
-        }
-        if (det.nroSerie === undefined || det.nroSerie === null) {
-          throw new ValidationError(`Detalle ${index + 1}: nroSerie es obligatorio`);
-        }
-        if (det.nroContenedor === undefined || det.nroContenedor === null) {
-          throw new ValidationError(`Detalle ${index + 1}: nroContenedor es obligatorio`);
         }
         if (det.estadoMercaderiaId === undefined || det.estadoMercaderiaId === null) {
           throw new ValidationError(`Detalle ${index + 1}: estadoMercaderiaId es obligatorio`);
@@ -112,7 +99,7 @@ const crearMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 2: OBTENER Y VALIDAR SERIE
       // ========================================
-      
+
       const serie = await tx.serieDoc.findUnique({
         where: { id: cabecera.serieDocId }
       });
@@ -128,7 +115,7 @@ const crearMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 3: GENERAR NÚMERO DE DOCUMENTO (SI NO VIENE)
       // ========================================
-      
+
       let numSerieDoc = cabecera.numSerieDoc;
       let numCorreDoc = cabecera.numCorreDoc;
       let numeroDocumento = cabecera.numeroDocumento;
@@ -138,17 +125,17 @@ const crearMovimientoAlmacenCompleto = async (
         numSerieDoc = String(serie.serie).padStart(Number(serie.numCerosIzqSerie), '0');
         numCorreDoc = String(nuevoCorrelativo).padStart(Number(serie.numCerosIzqCorre), '0');
         numeroDocumento = `${numSerieDoc}-${numCorreDoc}`;
-        
+
         await tx.serieDoc.update({
           where: { id: cabecera.serieDocId },
-          data: { correlativo: BigInt(nuevoCorrelativo) }
+          data: { correlativo: Number(nuevoCorrelativo) }
         });
       }
 
       // ========================================
       // PASO 4: CREAR MOVIMIENTO DE ALMACÉN CON DETALLES
       // ========================================
-      
+
       const movimiento = await tx.movimientoAlmacen.create({
         data: {
           empresaId: cabecera.empresaId,
@@ -159,12 +146,12 @@ const crearMovimientoAlmacenCompleto = async (
           entidadComercialId: cabecera.entidadComercialId,
           estadoDocAlmacenId: cabecera.estadoDocAlmacenId,
           esCustodia: cabecera.esCustodia,
-          
+
           creadoEn: new Date(),
           actualizadoEn: new Date(),
           creadoPor: usuarioId,
           actualizadoPor: usuarioId,
-          
+
           numSerieDoc: numSerieDoc || null,
           numCorreDoc: numCorreDoc || null,
           numeroDocumento: numeroDocumento || null,
@@ -184,7 +171,7 @@ const crearMovimientoAlmacenCompleto = async (
           pedidoVentaId: cabecera.pedidoVentaId || null,
           unidadNegocioId: cabecera.unidadNegocioId || null,
           observaciones: cabecera.observaciones || null,
-          
+
           detalles: {
             create: detalles.map(det => ({
               productoId: det.productoId,
@@ -202,12 +189,12 @@ const crearMovimientoAlmacenCompleto = async (
               esCustodia: det.esCustodia,
               empresaId: det.empresaId,
               costoUnitario: det.costoUnitario,
-              
+
               creadoPor: usuarioId,
               actualizadoPor: usuarioId,
               creadoEn: new Date(),
               actualizadoEn: new Date(),
-              
+
               observaciones: det.observaciones || null,
               detalleReqCompraId: det.detalleReqCompraId || null,
             }))
@@ -222,11 +209,11 @@ const crearMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 5: CAMBIAR ESTADO A CERRADO (31)
       // ========================================
-      
+
       await tx.movimientoAlmacen.update({
         where: { id: movimiento.id },
-        data: { 
-          estadoDocAlmacenId: BigInt(31),
+        data: {
+          estadoDocAlmacenId: Number(31),
           actualizadoEn: new Date()
         }
       });
@@ -234,7 +221,7 @@ const crearMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 6: GENERAR KARDEX
       // ========================================
-      
+
       const kardex = await generarKardexService.generarKardexMovimiento(
         movimiento.id,
         tx
@@ -243,11 +230,11 @@ const crearMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 7: CAMBIAR ESTADO A KARDEX GENERADO (33)
       // ========================================
-      
+
       await tx.movimientoAlmacen.update({
         where: { id: movimiento.id },
-        data: { 
-          estadoDocAlmacenId: BigInt(33),
+        data: {
+          estadoDocAlmacenId: Number(33),
           actualizadoEn: new Date()
         }
       });
@@ -255,7 +242,7 @@ const crearMovimientoAlmacenCompleto = async (
       // ========================================
       // PASO 8: RETORNAR RESULTADO
       // ========================================
-      
+
       return {
         success: true,
         movimiento: {
@@ -272,7 +259,10 @@ const crearMovimientoAlmacenCompleto = async (
     if (transaccion) {
       return await ejecutarEnTransaccion(transaccion);
     } else {
-      return await prisma.$transaction(ejecutarEnTransaccion);
+      return await prisma.$transaction(ejecutarEnTransaccion, {
+        timeout: 60000, // ⭐ 60 segundos de timeout
+        maxWait: 65000, // ⭐ 65 segundos de espera máxima
+      });
     }
 
   } catch (error) {
