@@ -13,7 +13,16 @@ import {
 const incluirRelaciones = {
   banco: true,
   tipoCuentaCorriente: true,
-  moneda: true,
+  moneda: {
+    select: {
+      id: true,
+      codigoSunat: true,
+      nombreLargo: true,
+      simbolo: true,
+      colorFondo: true, // ← AGREGAR ESTE CAMPO
+      activo: true,
+    },
+  },
   empresa: true,
   movimientosOrigen: true,
   movimientosDestino: true,

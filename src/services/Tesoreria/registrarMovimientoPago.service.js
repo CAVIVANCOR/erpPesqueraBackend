@@ -6,6 +6,32 @@ import {
 } from "../../utils/errors.js";
 
 /**
+ * ========================================
+ * CONSTANTES DE ESTADOS - EstadoMultiFuncion
+ * ========================================
+ * IDs de estados utilizados en el proceso de registro de pagos
+ * Estos IDs corresponden a registros en la tabla EstadoMultiFuncion
+ */
+
+// 🔵 ESTADOS DE MOVIMIENTOS CAJA
+const ESTADO_MOVIMIENTO_CAJA = {
+  PENDIENTE: 20,          // Estado inicial del movimiento
+  VALIDADO: 21,           // Movimiento validado y confirmado ✅ USAR ESTE
+  ASIENTO_GENERADO: 22,   // Asiento contable ya generado
+};
+
+// 🟢 ESTADOS DE CUENTAS POR COBRAR
+const ESTADO_CUENTA_POR_COBRAR = {
+  PENDIENTE_PAGO: 100,    // CxC sin pagos
+  PAGO_PARCIAL: 101,      // CxC con pago parcial ✅ USAR ESTE
+  PAGADO: 102,            // CxC totalmente pagada ✅ USAR ESTE
+  VENCIDO: 103,           // CxC vencida sin pago
+  ANULADO: 104,           // CxC anulada
+  CANJEADO: 105,          // CxC canjeada por otro documento
+};
+
+
+/**
  * Servicio para registrar MovimientoCaja + Pago en una transacción atómica
  * Para vista de Tesorería - Pendientes
  * Documentado en español.
@@ -106,16 +132,15 @@ const registrarPagoCuentaPorCobrar = async (datos) => {
       throw new NotFoundError('Tipo de Movimiento INGRESO no encontrado en la base de datos');
     }
 
-    // Obtener estado CONFIRMADO
-    const estadoConfirmado = await prisma.estadoMultiFuncion.findFirst({
-      where: {
-        descripcion: 'CONFIRMADO',
-        // Puedes agregar filtro por módulo si es necesario
-      },
+    // ✅ Validar que existe el estado VALIDADO para MovimientoCaja
+    const estadoValidado = await prisma.estadoMultiFuncion.findUnique({
+      where: { id: ESTADO_MOVIMIENTO_CAJA.VALIDADO },
     });
 
-    if (!estadoConfirmado) {
-      throw new NotFoundError('Estado CONFIRMADO no encontrado en la base de datos');
+    if (!estadoValidado) {
+      throw new NotFoundError(
+        `Estado VALIDADO (ID: ${ESTADO_MOVIMIENTO_CAJA.VALIDADO}) no encontrado en EstadoMultiFuncion`
+      );
     }
 
     // ========================================
@@ -133,7 +158,7 @@ const registrarPagoCuentaPorCobrar = async (datos) => {
           descripcion: `Cobro de ${cuentaPorCobrar.numeroPreFactura} - ${cuentaPorCobrar.cliente.razonSocial}`,
           medioPagoId: Number(medioPagoId),
           usuarioId: Number(usuarioId),
-          estadoId: estadoConfirmado.id,
+          estadoId: ESTADO_MOVIMIENTO_CAJA.VALIDADO, // Estado VALIDADO (ID: 21)
           cuentaCorrienteDestinoId: Number(cuentaBancariaId),
           fechaOperacionMovCaja: new Date(fechaPago),
           generarAsientoContable: true,
@@ -210,18 +235,21 @@ const registrarPagoCuentaPorCobrar = async (datos) => {
       let nuevoEstadoId = cuentaPorCobrar.estadoId;
       if (nuevoSaldoPendiente <= 0) {
         // Buscar estado PAGADO
-        const estadoPagado = await tx.estadoMultiFuncion.findFirst({
-          where: { descripcion: 'PAGADO' },
+        // ✅ CxC totalmente pagada → Estado PAGADO
+        const estadoPagado = await tx.estadoMultiFuncion.findUnique({
+          where: { id: ESTADO_CUENTA_POR_COBRAR.PAGADO },
         });
         if (estadoPagado) {
-          nuevoEstadoId = estadoPagado.id;
+          nuevoEstadoId = ESTADO_CUENTA_POR_COBRAR.PAGADO; // ID: 102
         }
       } else if (nuevoMontoPagado > 0 && nuevoSaldoPendiente > 0) {
         // Buscar estado PARCIAL
-        const estadoParcial = await tx.estadoMultiFuncion.findFirst({
-          where: { descripcion: 'PARCIAL' },
+        // ✅ CxC con pago parcial → Estado PAGO PARCIAL
+        const estadoParcial = await tx.estadoMultiFuncion.findUnique({
+          where: { id: ESTADO_CUENTA_POR_COBRAR.PAGO_PARCIAL },
         });
         if (estadoParcial) {
+          nuevoEstadoId = ESTADO_CUENTA_POR_COBRAR.PAGO_PARCIAL; // ID: 101
           nuevoEstadoId = estadoParcial.id;
         }
       }

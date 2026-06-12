@@ -52,6 +52,7 @@ const listarSaldosCuentas = async (filtros = {}) => {
             id: true,
             simbolo: true,
             codigoSunat: true,
+            colorFondo:true,
           },
         },
         empresa: {

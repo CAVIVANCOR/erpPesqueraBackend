@@ -20,6 +20,7 @@ import pagoRoutes from './CuentasPorCobrarPagar/pago.routes.js';
 import flujoCajaRoutes from './Tesoreria/flujoCaja.routes.js';
 import conciliacionBancariaRoutes from './Tesoreria/conciliacionBancaria.routes.js';
 import prestamoBancarioRoutes from './Tesoreria/prestamoBancario.routes.js';
+import atenderAsignacionRoutes from "./Tesoreria/atenderAsignacion.routes.js";
 import inversionFinancieraRoutes from './Tesoreria/inversionFinanciera.routes.js';
 import pendientesRoutes from './Tesoreria/pendientes.routes.js';
 import letraCambioRoutes from './LetrasCambio/letraCambio.routes.js';
@@ -442,6 +443,7 @@ router.use('/generar-kardex', generarKardexRoutes);
 // Rutas para UbicacionFisica
 router.use('/ubicaciones-fisicas', ubicacionFisicaRoutes);
 // Rutas para EntregaARendirMovAlmacen
+router.use("/tesoreria/atender-asignacion", atenderAsignacionRoutes);
 router.use('/entregas-rendir-mov-almacen', entregaARendirMovAlmacenImpresionRoutes);
 router.use('/entregas-rendir-mov-almacen', entregaARendirMovAlmacenRoutes);
 // Rutas para DetMovsEntregaRendirMovAlmacen
