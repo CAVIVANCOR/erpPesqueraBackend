@@ -1998,6 +1998,30 @@ const generarBorradorAsiento = async (preFacturaId) => {
       );
     }
 
+    // ⭐ DETECTAR SI ES SALDO INICIAL (SI-CXC)
+    const esSaldoInicial = preFactura.tipoDocumento?.codigo === "SI-CXC";
+
+    // ⭐ Si es Saldo Inicial, usar cuenta 59 (Resultados Acumulados) en lugar de 70 (Ventas)
+    let cuentaHaber = cuentaVentas; // Por defecto: 70 (Ventas)
+    
+    if (esSaldoInicial) {
+      const cuentaResultadosAcumulados = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: { startsWith: "59" },
+          activo: true,
+        },
+      });
+
+      if (!cuentaResultadosAcumulados) {
+        throw new ValidationError(
+          "No se encontró la cuenta 59 (Resultados Acumulados). " +
+          "Configure el plan de cuentas antes de generar el asiento para Saldos Iniciales.",
+        );
+      }
+
+      cuentaHaber = cuentaResultadosAcumulados;
+    }
+
     const subtotal = Number(preFactura.subtotal);
     const totalIGV = Number(preFactura.totalIGV);
     const total = Number(preFactura.total);
@@ -2008,7 +2032,9 @@ const generarBorradorAsiento = async (preFacturaId) => {
       empresaId: preFactura.empresaId,
       periodoContableId: preFactura.periodoContableId,
       fechaAsiento: preFactura.fechaContable,
-      glosa: `Venta según PreFactura ${preFactura.codigo}`,
+      glosa: esSaldoInicial 
+        ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
+        : `Venta según PreFactura ${preFactura.codigo}`,
       tipoLibro: tipoLibro,
       origenAsiento: "AUTOMATICO",
       monedaId: preFactura.monedaId,
@@ -2022,7 +2048,9 @@ const generarBorradorAsiento = async (preFacturaId) => {
         {
           numeroLinea: 1,
           planCuentaId: cuentaCxC.id,
-          glosa: `Venta según PreFactura ${preFactura.codigo}`,
+          glosa: esSaldoInicial 
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+            : `Venta según PreFactura ${preFactura.codigo}`,
           debe: total,
           haber: 0,
           entidadComercialId: preFactura.clienteId,
@@ -2032,11 +2060,13 @@ const generarBorradorAsiento = async (preFacturaId) => {
         },
         {
           numeroLinea: 2,
-          planCuentaId: cuentaVentas.id,
-          glosa: `Venta según PreFactura ${preFactura.codigo}`,
+          planCuentaId: cuentaHaber.id,
+          glosa: esSaldoInicial 
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+            : `Venta según PreFactura ${preFactura.codigo}`,
           debe: 0,
           haber: total,
-          centroCostoId: preFactura.centroCostoId,
+          centroCostoId: esSaldoInicial ? null : preFactura.centroCostoId,
         },
       ];
     }
@@ -2046,7 +2076,9 @@ const generarBorradorAsiento = async (preFacturaId) => {
         {
           numeroLinea: 1,
           planCuentaId: cuentaCxC.id,
-          glosa: `Venta exonerada según PreFactura ${preFactura.codigo}`,
+          glosa: esSaldoInicial 
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+            : `Venta exonerada según PreFactura ${preFactura.codigo}`,
           debe: total,
           haber: 0,
           entidadComercialId: preFactura.clienteId,
@@ -2056,11 +2088,13 @@ const generarBorradorAsiento = async (preFacturaId) => {
         },
         {
           numeroLinea: 2,
-          planCuentaId: cuentaVentas.id,
-          glosa: `Venta exonerada según PreFactura ${preFactura.codigo}`,
+          planCuentaId: cuentaHaber.id,
+          glosa: esSaldoInicial 
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+            : `Venta exonerada según PreFactura ${preFactura.codigo}`,
           debe: 0,
           haber: total,
-          centroCostoId: preFactura.centroCostoId,
+          centroCostoId: esSaldoInicial ? null : preFactura.centroCostoId,
         },
       ];
     }
@@ -2083,7 +2117,9 @@ const generarBorradorAsiento = async (preFacturaId) => {
         {
           numeroLinea: 1,
           planCuentaId: cuentaCxC.id,
-          glosa: `Venta según PreFactura ${preFactura.codigo}`,
+          glosa: esSaldoInicial 
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+            : `Venta según PreFactura ${preFactura.codigo}`,
           debe: total, // Con IGV
           haber: 0,
           entidadComercialId: preFactura.clienteId,
@@ -2093,11 +2129,13 @@ const generarBorradorAsiento = async (preFacturaId) => {
         },
         {
           numeroLinea: 2,
-          planCuentaId: cuentaVentas.id,
-          glosa: `Venta según PreFactura ${preFactura.codigo}`,
+          planCuentaId: cuentaHaber.id,
+          glosa: esSaldoInicial 
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+            : `Venta según PreFactura ${preFactura.codigo}`,
           debe: 0,
           haber: subtotal, // Sin IGV
-          centroCostoId: preFactura.centroCostoId,
+          centroCostoId: esSaldoInicial ? null : preFactura.centroCostoId,
         },
         {
           numeroLinea: 3,

@@ -322,6 +322,40 @@ const listarVencidas = async (empresaId) => {
   }
 };
 
+const obtenerPorOrdenCompraId = async (ordenCompraId) => {
+  try {
+    const cuenta = await prisma.cuentaPorPagar.findUnique({
+      where: { ordenCompraId },
+      include: {
+        empresa: true,
+        proveedor: true,
+        moneda: true,
+        estado: true,
+        periodoContable: true,
+        ordenCompra: {
+          include: {
+            tipoDocumento: true,
+          },
+        },
+        pagos: {
+          include: {
+            medioPago: true,
+          },
+          orderBy: { fechaPago: "desc" },
+        },
+      },
+    });
+
+    return cuenta;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -331,5 +365,7 @@ export default {
   listarPorEmpresa,
   listarPorProveedor,
   listarPendientes,
-  listarVencidas
+  listarVencidas,
+  obtenerPorOrdenCompraId
+
 };

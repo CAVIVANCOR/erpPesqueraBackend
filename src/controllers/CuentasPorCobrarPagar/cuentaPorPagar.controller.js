@@ -88,3 +88,13 @@ export async function listarVencidas(req, res, next) {
     next(err);
   }
 }
+
+export async function obtenerPorOrdenCompraId(req, res, next) {
+  try {
+    const ordenCompraId = Number(req.params.ordenCompraId);
+    const cuenta = await cuentaPorPagarService.obtenerPorOrdenCompraId(ordenCompraId);
+    res.json(toJSONBigInt(cuenta));
+  } catch (err) {
+    next(err);
+  }
+}

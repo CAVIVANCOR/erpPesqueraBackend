@@ -13,5 +13,6 @@ router.get('/empresa/:empresaId', cuentaPorPagarController.listarPorEmpresa);
 router.get('/empresa/:empresaId/pendientes', cuentaPorPagarController.listarPendientes);
 router.get('/empresa/:empresaId/vencidas', cuentaPorPagarController.listarVencidas);
 router.get('/proveedor/:proveedorId', cuentaPorPagarController.listarPorProveedor);
+router.get('/ordencompra/:ordenCompraId', cuentaPorPagarController.obtenerPorOrdenCompraId);
 
 export default router;
