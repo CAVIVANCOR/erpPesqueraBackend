@@ -17,7 +17,7 @@ const incluirRelaciones = {
       moneda: true,
       empresa: true,
       cuentaContable: true,
-      tipoCuentaCorriente:true
+      tipoCuentaCorriente: true
     },
   },
   empresa: true,
@@ -147,7 +147,7 @@ const generarBorradorAsiento = async (saldoId) => {
         if (!cualquierPeriodo) {
           throw new ValidationError(
             "No hay períodos contables configurados para esta empresa. " +
-              "Por favor, cree un período contable antes de generar asientos.",
+            "Por favor, cree un período contable antes de generar asientos.",
           );
         }
         periodoContable = cualquierPeriodo;
@@ -679,7 +679,8 @@ const crear = async (data) => {
     // Validar que los campos requeridos no sean null
     if (
       !data.cuentaCorrienteId ||
-      !data.empresaId ||
+      data.empresaId === undefined ||
+      data.empresaId === null ||
       data.saldoAnterior === undefined ||
       data.ingresos === undefined ||
       data.egresos === undefined ||
