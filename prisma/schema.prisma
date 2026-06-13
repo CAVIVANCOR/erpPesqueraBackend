@@ -166,7 +166,6 @@ model MovimientoActivoFijo {
   valorNeto             Decimal?  @db.Decimal(18, 2)
   
   observaciones         String?
-  // ❌ ELIMINADO: asientoContableId     BigInt?   @unique
   centroCostoId         BigInt?
   
   createdAt             DateTime  @default(now())
@@ -1428,7 +1427,6 @@ model SaldoCuentaCorriente {
   diferencia            Decimal?        @db.Decimal(18, 2)
   conciliado            Boolean?        @default(false)
   fechaConciliacion     DateTime?
-  // ❌ ELIMINADO: asientoContableId     BigInt?         // 🆕 NUEVO: Asiento contable generado
   
   // ========================================
   // CENTRO DE COSTO
@@ -2517,7 +2515,8 @@ model Empresa {
   inversiones              InversionFinanciera[]
   movimientosActivoFijo    MovimientoActivoFijo[]  // 🆕 Relación
   deudasConPersonal        DeudaConPersonal[]      // 🆕 AGREGAR ESTA LÍNEA
-  detMovsEntregaRendir  DetMovsEntregaRendir[]
+  detMovsEntregaRendir     DetMovsEntregaRendir[]
+  deudasTributarias        DeudaTributaria[]       // 🆕 AGREGAR ESTA LÍNEA
 
 @@index([monedaCalculosLiqId])
 
@@ -2682,7 +2681,9 @@ model EntidadComercial {
   detallesComisionFidelizacion  DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
   plataformasRecepcionPesca     DetPlataformaRecepcionPesca[]
   contratistasOT                DetContratistasOT[] @relation("ContratistaOT")
-  accesosInstalacion          AccesoInstalacion[]  @relation("AccesoEntidadComercial")
+  accesosInstalacion            AccesoInstalacion[]  @relation("AccesoEntidadComercial")
+  tiposDeudaTributaria          TipoDeudaTributaria[]     // 🆕 AGREGAR
+
 }
 
 model DetPlataformaRecepcionPesca {
@@ -3224,6 +3225,7 @@ model EstadoMultiFuncion {
   inversiones           InversionFinanciera[]
   contratistasOT        DetContratistasOT[] @relation("EstadoContratistaOT")
   deudasConPersonal     DeudaConPersonal[]  // 🆕 AGREGAR ESTA LÍNEA
+  deudasTributarias     DeudaTributaria[]   // 🆕 AGREGAR ESTA LÍNEA
 }
 
 model FaenaPesca {
@@ -3536,6 +3538,7 @@ model Moneda {
   activos                   Activo[]  // 🆕 Relación inversa con Activo
   movimientosActivoFijo     MovimientoActivoFijo[]   // 🆕 Nueva relación
   deudasConPersonal         DeudaConPersonal[]       // 🆕 AGREGAR ESTA LÍNEA
+  deudasTributarias         DeudaTributaria[]        // 🆕 AGREGAR ESTA LÍNEA
 }
 
 model MotivoAcceso {
@@ -3693,6 +3696,8 @@ model MovimientoCaja {
   movimientoOriginal        MovimientoCaja?           @relation("MovimientoReversion", fields: [movimientoRevertidoId], references: [id])
   reversiones               MovimientoCaja[]          @relation("MovimientoReversion")
   saldos                    SaldoCuentaCorriente[]
+  pagosDeudaPersonal        PagoDeudaPersonal[]  // 🆕 AGREGAR ESTA LÍNEA
+  pagosDeudaTributaria      PagoDeudaTributaria[]  // 🆕 AGREGAR ESTA LÍNEA
 
   // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
@@ -3981,65 +3986,302 @@ model Personal {
   detMovsEntregaRendirActualizados DetMovsEntregaRendir[] @relation("ActualizadoPorDetMovsEntregaRendir")
 }
 
+// ════════════════════════════════════════════════════════════
+// CATÁLOGO: TIPOS DE DEUDA PERSONAL
+// Ejemplos: Sueldos, Gratificaciones, CTS, Comisiones Pesca
+// ════════════════════════════════════════════════════════════
+
 model TipoDeudaPersonal {
   id                    BigInt                  @id @default(autoincrement())
-  nombre                String                  @db.VarChar(100)
-  descripcion           String?
-  activo                Boolean                 @default(true)
+  nombre                String                  @db.VarChar(100)              // Nombre del tipo de deuda (ej: "Sueldos", "Comisiones Pesca")
+  descripcion           String?                 @db.Text                      // Descripción detallada del tipo de deuda
+  activo                Boolean                 @default(true)                // Estado del tipo de deuda (true = activo, false = inactivo)
   
-  deudas                DeudaConPersonal[]
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())               // Fecha de creación del registro
+  creadoPor             BigInt?                                               // Usuario que creó el registro
+  actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
+  actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
+  
+  // ========================================
+  // RELACIONES INVERSAS
+  // ========================================
+  deudas                DeudaConPersonal[]                                    // Deudas asociadas a este tipo
 }
+
+// ════════════════════════════════════════════════════════════
+// DEUDAS CON PERSONAL
+// Registro de deudas con trabajadores (sueldos, comisiones, etc.)
+// Puede originarse de Planilla, Pesca u otros módulos
+// Soporta pagos en negro (esGerencial = true)
+// ════════════════════════════════════════════════════════════
 
 model DeudaConPersonal {
   id                    BigInt                  @id @default(autoincrement())
-  empresaId             BigInt
-  personalId            BigInt
-  tipoDeudaId           BigInt
-  fecha                 DateTime                // Fecha de generación de la deuda
-  fechaContable         DateTime?               // Fecha contable (para saldos iniciales: 31/12/2025)
-  numeroDocumento       String?                 @db.VarChar(40)
-  montoOriginal         Decimal                 @db.Decimal(18, 2)  // Monto original de la deuda
-  montoPagado           Decimal                 @db.Decimal(18, 2)  @default(0)  // Monto pagado
-  saldo                 Decimal                 @db.Decimal(18, 2)  // Saldo pendiente
-  monedaId              BigInt
-  estadoId              BigInt                  // PENDIENTE, PAGADA, PARCIAL
-  observaciones         String?                 @db.Text
-   // ❌ ELIMINADO: asientoContableId     BigInt?                 // Asiento contable generado
-  creadoEn              DateTime                @default(now())
-  creadoPor             BigInt?
-  actualizadoEn         DateTime                @updatedAt
-  actualizadoPor        BigInt?
+  empresaId             BigInt                                                // Empresa que tiene la deuda
+  personalId            BigInt                                                // Trabajador acreedor
+  tipoDeudaId           BigInt                                                // Tipo de deuda (FK a TipoDeudaPersonal)
   
+  // ========================================
+  // ORIGEN DEL REGISTRO (PATRÓN MEGUI)
+  // ========================================
+  moduloOrigenId        BigInt?                                               // ID del módulo origen (Planilla, Pesca, etc.)
+  origenId              BigInt?                                               // ID del registro origen (PlanillaId, ComisionPescaId, etc.)
+  
+  fecha                 DateTime                                              // Fecha de generación de la deuda
+  fechaVencimiento      DateTime                                              // Fecha límite de pago
+  numeroDocumento       String?                 @db.VarChar(40)               // Número de documento o código de referencia
+  montoOriginal         Decimal                 @db.Decimal(18, 2)            // Monto original de la deuda
+  montoPagado           Decimal                 @db.Decimal(18, 2)  @default(0)  // Monto pagado acumulado (se actualiza con cada pago)
+  saldoPendiente        Decimal                 @db.Decimal(18, 2)            // Saldo pendiente (montoOriginal - montoPagado)
+  monedaId              BigInt                                                // Moneda de la deuda (PEN, USD, EUR)
+  estadoId              BigInt                                                // Estado (PENDIENTE, PAGADA, PARCIAL)
+  esGerencial           Boolean                 @default(false)               // true = Pago en negro (sin declarar a SUNAT), false = Pago formal
+  
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  fechaContable         DateTime?                                             // Fecha del asiento contable (para saldos iniciales: 31/12/2025)
+  periodoContableId     BigInt?                                               // Período contable (para control de cierre)
+  observaciones         String?                 @db.Text                      // Observaciones generales
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())               // Fecha de creación del registro
+  creadoPor             BigInt?                                               // Usuario que creó el registro
+  actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
+  actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
   empresa               Empresa                 @relation(fields: [empresaId], references: [id])
   personal              Personal                @relation(fields: [personalId], references: [id])
   tipoDeuda             TipoDeudaPersonal       @relation(fields: [tipoDeudaId], references: [id])
   moneda                Moneda                  @relation(fields: [monedaId], references: [id])
   estado                EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
-  pagos                 PagoDeudaPersonal[]
-  asientosContables     AsientoContable[]  // Relación inversa - Asientos generados
+  periodoContable       PeriodoContable?        @relation(fields: [periodoContableId], references: [id])
+  
+  // ========================================
+  // RELACIONES INVERSAS
+  // ========================================
+  pagos                 PagoDeudaPersonal[]                                   // Pagos realizados a esta deuda
+  asientosContables     AsientoContable[]                                     // Asientos contables generados por esta deuda
 
-  @@index([empresaId, personalId, estadoId])
+  // ========================================
+  // ÍNDICES PROFESIONALES
+  // ========================================
+  @@index([empresaId, fechaVencimiento])                                      // Búsqueda de deudas por vencimiento
+  @@index([empresaId, personalId, estadoId])                                  // Búsqueda de deudas por empresa y trabajador
+  @@index([personalId, estadoId])                                             // Deudas por trabajador
+  @@index([fechaVencimiento, estadoId])                                       // Deudas vencidas
+  @@index([estadoId])                                                         // Filtro por estado
+  @@index([saldoPendiente])                                                   // Filtro por saldo pendiente
+  @@index([periodoContableId])                                                // Control de cierre contable
+  @@index([esGerencial])                                                      // Filtro deudas negras/blancas
+  @@index([moduloOrigenId, origenId])                                         // Trazabilidad al origen
 }
+
+// ════════════════════════════════════════════════════════════
+// PAGOS DE DEUDAS AL PERSONAL
+// Registro de pagos realizados a trabajadores
+// Genera MovimientoCaja (EGRESO) y actualiza saldo de deuda
+// ════════════════════════════════════════════════════════════
 
 model PagoDeudaPersonal {
   id                    BigInt                  @id @default(autoincrement())
-  deudaConPersonalId    BigInt
-  fechaPago             DateTime
-  montoPago             Decimal                 @db.Decimal(18, 2)
-  medioPagoId           BigInt?
-  numeroOperacion       String?                 @db.VarChar(40)
-  observaciones         String?                 @db.Text
-    // ❌ ELIMINADO: asientoContableId     BigInt?
-  creadoEn              DateTime                @default(now())
-  creadoPor             BigInt?
+  deudaConPersonalId    BigInt                                                // Deuda que se está pagando (FK a DeudaConPersonal)
+  fechaPago             DateTime                                              // Fecha en que se realiza el pago
+  montoPago             Decimal                 @db.Decimal(18, 2)            // Monto pagado en esta transacción
+  medioPagoId           BigInt?                                               // Medio de pago (Efectivo, Transferencia, Cheque, etc.)
+  numeroOperacion       String?                 @db.VarChar(40)               // Número de operación bancaria
+  movimientoCajaId      BigInt?                                               // Movimiento de caja asociado (EGRESO)
+  observaciones         String?                 @db.Text                      // Observaciones del pago
   
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())               // Fecha de creación del registro
+  creadoPor             BigInt?                                               // Usuario que creó el registro
+  actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
+  actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
   deudaConPersonal      DeudaConPersonal        @relation(fields: [deudaConPersonalId], references: [id])
-  medioPago             MedioPago?              @relation(fields: [medioPagoId], references: [id])  // 🆕 RELACIÓN
-  asientosContables     AsientoContable[]  // Relación inversa - Asientos generados
+  medioPago             MedioPago?              @relation(fields: [medioPagoId], references: [id])
+  movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
+  
+  // ========================================
+  // RELACIONES INVERSAS
+  // ========================================
+  asientosContables     AsientoContable[]                                     // Asientos contables generados por este pago
 
-  @@index([deudaConPersonalId])
-  @@index([medioPagoId])  // 🆕 ÍNDICE
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([deudaConPersonalId])                                               // Búsqueda de pagos por deuda
+  @@index([medioPagoId])                                                      // Filtro por medio de pago
+  @@index([movimientoCajaId])                                                 // Vinculación con caja
+  @@index([fechaPago])                                                        // Ordenar por fecha de pago
 }
+
+
+// ════════════════════════════════════════════════════════════
+// CATÁLOGO: TIPOS DE DEUDA TRIBUTARIA
+// Ejemplos: IGV, Renta 3ra, ESSALUD, ONP, SENATI
+// ════════════════════════════════════════════════════════════
+
+model TipoDeudaTributaria {
+  id                    BigInt                  @id @default(autoincrement())
+  nombre                String                  @db.VarChar(100)              // Nombre del impuesto (ej: "IGV por Pagar")
+  descripcion           String?                 @db.Text                      // Descripción detallada del impuesto
+  entidadRecaudadoraId  BigInt?                                               // Entidad recaudadora (FK a EntidadComercial: SUNAT, ESSALUD, ONP, Municipalidad)
+  periodicidad          FrecuenciaPago                                        // Periodicidad del pago (MENSUAL, TRIMESTRAL, ANUAL, etc.)
+  cuentaContableId      BigInt?                                               // Cuenta contable asociada (FK a PlanContable: 40.1.1, 40.2.1, etc.)
+  activo                Boolean                 @default(true)                // Estado del tipo de deuda (true = activo, false = inactivo)
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())               // Fecha de creación del registro
+  creadoPor             BigInt?                                               // Usuario que creó el registro
+  actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
+  actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  entidadRecaudadora    EntidadComercial?       @relation(fields: [entidadRecaudadoraId], references: [id])
+  cuentaContable        PlanCuentasContable?    @relation(fields: [cuentaContableId], references: [id])
+
+  // ========================================
+  // RELACIONES INVERSAS
+  // ========================================
+  deudas                DeudaTributaria[]                                     // Deudas asociadas a este tipo
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([entidadRecaudadoraId])                                             // Búsqueda por entidad recaudadora
+  @@index([cuentaContableId])                                                 // Búsqueda por cuenta contable
+  @@index([periodicidad])                                                     // Filtro por periodicidad
+}
+
+// ════════════════════════════════════════════════════════════
+// DEUDAS TRIBUTARIAS
+// Registro de deudas con SUNAT, ESSALUD, ONP y otros entes
+// Puede originarse de Cierre Mensual, Planilla o Registro Manual
+// Siempre son formales (no aplica esGerencial)
+// ════════════════════════════════════════════════════════════
+
+model DeudaTributaria {
+  id                    BigInt                  @id @default(autoincrement())
+  empresaId             BigInt                                                // Empresa que tiene la deuda
+  tipoDeudaId           BigInt                                                // Tipo de deuda tributaria (FK a TipoDeudaTributaria)
+  moduloOrigenId        BigInt?                                               // ID del módulo origen (Cierre Mensual, Planilla, etc.)
+  origenId              BigInt?                                               // ID del registro origen (CierreMensualId, PlanillaId, etc.)
+  periodo               String                  @db.VarChar(20)               // Período tributario (2025-12, 2026-01, 2025-Q4, 2026)
+  fechaGeneracion       DateTime                                              // Fecha de generación de la deuda
+  fechaVencimiento      DateTime                                              // Fecha límite de pago
+  numeroDeclaracion     String?                 @db.VarChar(40)               // Número de PDT, formulario o declaración
+  montoOriginal         Decimal                 @db.Decimal(18, 2)            // Monto original de la deuda
+  montoPagado           Decimal                 @db.Decimal(18, 2)  @default(0)  // Monto pagado acumulado (se actualiza con cada pago)
+  saldoPendiente        Decimal                 @db.Decimal(18, 2)            // Saldo pendiente (montoOriginal - montoPagado)
+  monedaId              BigInt                                                // Moneda de la deuda (PEN, USD, EUR)
+  estadoId              BigInt                                                // Estado (PENDIENTE, PAGADA, PARCIAL, VENCIDA)
+  esSaldoInicial        Boolean                 @default(false)               // true = Saldo inicial de migración (sin origen), false = Deuda generada
+  fechaContable         DateTime?                                             // Fecha del asiento contable (para saldos iniciales: 31/12/2025)
+  periodoContableId     BigInt?                                               // Período contable (para control de cierre)
+  observaciones         String?                 @db.Text                      // Observaciones generales
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())               // Fecha de creación del registro
+  creadoPor             BigInt?                                               // Usuario que creó el registro
+  actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
+  actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
+  tipoDeuda             TipoDeudaTributaria     @relation(fields: [tipoDeudaId], references: [id])
+  moneda                Moneda                  @relation(fields: [monedaId], references: [id])
+  estado                EstadoMultiFuncion      @relation(fields: [estadoId], references: [id])
+  periodoContable       PeriodoContable?        @relation(fields: [periodoContableId], references: [id])
+  
+  // ========================================
+  // RELACIONES INVERSAS
+  // ========================================
+  pagos                 PagoDeudaTributaria[]                                 // Pagos realizados a esta deuda
+  asientosContables     AsientoContable[]                                     // Asientos contables generados por esta deuda
+
+  // ========================================
+  // ÍNDICES PROFESIONALES
+  // ========================================
+  @@index([empresaId, fechaVencimiento])                                      // Búsqueda de deudas por vencimiento
+  @@index([empresaId, periodo, estadoId])                                     // Búsqueda de deudas por período
+  @@index([tipoDeudaId, periodo])                                             // Deudas por tipo e impuesto
+  @@index([fechaVencimiento, estadoId])                                       // Deudas vencidas
+  @@index([estadoId])                                                         // Filtro por estado
+  @@index([saldoPendiente])                                                   // Filtro por saldo pendiente
+  @@index([esSaldoInicial])                                                   // Filtro saldos iniciales
+  @@index([periodoContableId])                                                // Control de cierre contable
+  @@index([moduloOrigenId, origenId])                                         // Trazabilidad al origen
+}
+
+// ════════════════════════════════════════════════════════════
+// PAGOS DE DEUDAS TRIBUTARIAS
+// Registro de pagos realizados a SUNAT, ESSALUD, ONP, etc.
+// Genera MovimientoCaja (EGRESO) y actualiza saldo de deuda
+// ════════════════════════════════════════════════════════════
+
+model PagoDeudaTributaria {
+  id                    BigInt                  @id @default(autoincrement())
+  deudaTributariaId     BigInt                                                // Deuda que se está pagando (FK a DeudaTributaria)
+  fechaPago             DateTime                                              // Fecha en que se realiza el pago
+  montoPago             Decimal                 @db.Decimal(18, 2)            // Monto pagado en esta transacción
+  medioPagoId           BigInt?                                               // Medio de pago (Efectivo, Transferencia, Cheque, etc.)
+  numeroOperacion       String?                 @db.VarChar(40)               // Número de operación bancaria
+  numeroConstancia      String?                 @db.VarChar(40)               // Número de constancia SUNAT o comprobante de pago
+  movimientoCajaId      BigInt?                                               // Movimiento de caja asociado (EGRESO)
+  observaciones         String?                 @db.Text                      // Observaciones del pago
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())               // Fecha de creación del registro
+  creadoPor             BigInt?                                               // Usuario que creó el registro
+  actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
+  actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  deudaTributaria       DeudaTributaria         @relation(fields: [deudaTributariaId], references: [id])
+  medioPago             MedioPago?              @relation(fields: [medioPagoId], references: [id])
+  movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
+  
+  // ========================================
+  // RELACIONES INVERSAS
+  // ========================================
+  asientosContables     AsientoContable[]                                     // Asientos contables generados por este pago
+
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([deudaTributariaId])                                                // Búsqueda de pagos por deuda
+  @@index([movimientoCajaId])                                                 // Vinculación con caja
+  @@index([fechaPago])                                                        // Ordenar por fecha de pago
+  @@index([medioPagoId])                                                      // Filtro por medio de pago
+}
+
 
 
 model Producto {
@@ -5382,16 +5624,18 @@ model PlanCuentasContable {
   cuentaPadre           PlanCuentasContable?    @relation("JerarquiaCuentas", fields: [cuentaPadreId], references: [id])
   subcuentas            PlanCuentasContable[]   @relation("JerarquiaCuentas")
   
-  detallesAsientos      DetalleAsientoContable[]
-  lineasPresupuesto     LineaPresupuesto[]
-  ejecucionesPresupuestales EjecucionPresupuestal[]
+  detallesAsientos              DetalleAsientoContable[]
+  lineasPresupuesto             LineaPresupuesto[]
+  ejecucionesPresupuestales     EjecucionPresupuestal[]
   configuracionesDebe           ConfiguracionCuentaContable[]  @relation("CuentaDebe")
   configuracionesHaber          ConfiguracionCuentaContable[]  @relation("CuentaHaber")
-  cuentasCorrientes     CuentaCorriente[]       @relation("CuentaCorrientePlanContable")
+  cuentasCorrientes             CuentaCorriente[]       @relation("CuentaCorrientePlanContable")
   // 🆕 RELACIONES CON TIPO ACTIVO
   tiposActivoActivo               TipoActivo[]  @relation("TipoActivoCuentaActivo")
   tiposActivoDepreciacion         TipoActivo[]  @relation("TipoActivoCuentaDepreciacion")
   tiposActivoDepreciacionAcum     TipoActivo[]  @relation("TipoActivoCuentaDepAcum")
+  tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR ESTA LÍNEA
+
   // ========================================
   // ÍNDICES
   // ========================================
@@ -5442,14 +5686,6 @@ model PeriodoContable {
   nombrePeriodo         String                  @db.VarChar(50)      // "Enero 2025"
   fechaInicio           DateTime                                     // 2025-01-01 00:00:00
   fechaFin              DateTime                                     // 2025-01-31 23:59:59
-  
-  // ========================================
-  // ESTADO (EstadoMultiFuncion)
-  // Valores posibles:
-  // 50 = ABIERTO (permite registrar asientos)
-  // 51 = CERRADO (no permite modificaciones, puede reabrirse con autorización)
-  // 52 = BLOQUEADO (definitivo, no puede reabrirse, PDT presentado a SUNAT)
-  // ========================================
   estadoId              BigInt
   fechaCierre           DateTime?
   cerradoPor            BigInt?
@@ -5488,6 +5724,8 @@ model PeriodoContable {
   pagosCuentaPorPagar   PagoCuentaPorPagar[]
   preFacturas           PreFactura[]            // ✅ AGREGADO: Relación inversa
   ordenesCompra         OrdenCompra[]           // ✅ AGREGADO: Relación inversa
+  deudasConPersonal     DeudaConPersonal[]        // 🆕 AGREGAR
+  deudasTributarias     DeudaTributaria[]         // 🆕 AGREGAR
   
   @@unique([empresaId, anio, mes])
   @@index([empresaId])
@@ -5558,6 +5796,8 @@ model AsientoContable {
   movimientosActivoFijo MovimientoActivoFijo[]  // 🆕 Relación
   deudasConPersonal     DeudaConPersonal[]      // 🆕 AGREGAR ESTA LÍNEA
   pagosDeudaPersonal    PagoDeudaPersonal[]     // 🆕 AGREGAR ESTA LÍNEA
+  deudasTributarias     DeudaTributaria[]       // 🆕 AGREGAR ESTA LÍNEA
+  pagosDeudaTributaria  PagoDeudaTributaria[]   // 🆕 AGREGAR ESTA LÍNEA
     // 🟢 AGREGAR ESTAS (7):
   preFacturas           PreFactura[]
   ordenesCompra         OrdenCompra[]
@@ -6068,8 +6308,6 @@ model CuentaPorCobrar {
   tieneDetraccion           Boolean     @default(false)                  // Aplica si producto está sujeto a detracción
   montoDetraccionTotal      Decimal     @default(0) @db.Decimal(18, 2)  // 🔄 RENOMBRADO: Total acumulado de detracciones
   porcentajeDetraccion      Decimal?    @db.Decimal(5, 2)                // % de detracción (4%, 10%, 12%, etc.)
-  // ❌ ELIMINADO: numeroConstanciaDetraccion (movido a PagoCuentaPorCobrar)
-  // ❌ ELIMINADO: fechaDetraccion (movido a PagoCuentaPorCobrar)
   
   // ========================================
   // RETENCIÓN (SUNAT PERÚ) - TOTALES
@@ -6077,8 +6315,6 @@ model CuentaPorCobrar {
   tieneRetencion            Boolean     @default(false)                  // Aplica si cliente es agente de retención
   montoRetencionTotal       Decimal     @default(0) @db.Decimal(18, 2)  // 🔄 RENOMBRADO: Total acumulado de retenciones
   porcentajeRetencion       Decimal?    @db.Decimal(5, 2)                // ✅ AGREGADO: % de retención (generalmente 3%)
-  // ❌ ELIMINADO: numeroComprobanteRetencion (movido a PagoCuentaPorCobrar)
-  // ❌ ELIMINADO: fechaRetencion (movido a PagoCuentaPorCobrar)
   
   // ========================================
   // PERCEPCIÓN (SUNAT PERÚ) - TOTALES
@@ -6086,8 +6322,6 @@ model CuentaPorCobrar {
   tienePercepcion           Boolean     @default(false)                  // Aplica si empresa es agente de percepción
   montoPercepcionTotal      Decimal     @default(0) @db.Decimal(18, 2)  // 🔄 RENOMBRADO: Total acumulado de percepciones
   porcentajePercepcion      Decimal?    @db.Decimal(5, 2)                // % de percepción
-  // ❌ ELIMINADO: numeroComprobantePercepcion (movido a PagoCuentaPorCobrar)
-  // ❌ ELIMINADO: fechaPercepcion (movido a PagoCuentaPorCobrar)
   
   // ========================================
   // FLAGS ESPECIALES
@@ -6109,7 +6343,6 @@ model CuentaPorCobrar {
   // ========================================
   fechaContable             DateTime    @default(now())                  // ✅ AGREGADO: Fecha del período contable
   periodoContableId         BigInt?                                      // ✅ AGREGADO: Período contable (para control de cierre)
-  // ❌ ELIMINADO:asientoContableId         BigInt?
   
   // ========================================
   // AUDITORÍA
@@ -6234,7 +6467,6 @@ model PagoCuentaPorCobrar {
   // ========================================
   fechaContable         DateTime    @default(now())                  // ✅ AGREGADO: Fecha del período contable
   periodoContableId     BigInt?                                      // ✅ AGREGADO: Período contable (para control de cierre)
-  // ❌ ELIMINADO: asientoContableId     BigInt?
   
   // ========================================
   // AUDITORÍA
@@ -6309,8 +6541,6 @@ model CuentaPorPagar {
   tieneDetraccion           Boolean     @default(false)              // Aplica si producto/servicio está sujeto a detracción
   montoDetraccionTotal      Decimal     @default(0) @db.Decimal(18, 2)  // 🔄 RENOMBRADO: Total acumulado que TÚ detraes al proveedor
   porcentajeDetraccion      Decimal?    @db.Decimal(5, 2)            // % de detracción (4%, 10%, 12%, etc.)
-  // ❌ ELIMINADO: numeroConstanciaDetraccion (movido a PagoCuentaPorPagar)
-  // ❌ ELIMINADO: fechaDetraccion (movido a PagoCuentaPorPagar)
   
   // ========================================
   // RETENCIÓN (SUNAT PERÚ) - TOTALES
@@ -6318,8 +6548,6 @@ model CuentaPorPagar {
   tieneRetencion            Boolean     @default(false)              // Aplica si TÚ eres agente de retención
   montoRetencionTotal       Decimal     @default(0) @db.Decimal(18, 2)  // 🔄 RENOMBRADO: Total acumulado que TÚ retienes al proveedor
   porcentajeRetencion       Decimal?    @db.Decimal(5, 2)            // ✅ AGREGADO: % de retención (generalmente 3%)
-  // ❌ ELIMINADO: numeroComprobanteRetencion (movido a PagoCuentaPorPagar)
-  // ❌ ELIMINADO: fechaRetencion (movido a PagoCuentaPorPagar)
   
   // ========================================
   // PERCEPCIÓN (SUNAT PERÚ) - TOTALES
@@ -6327,8 +6555,6 @@ model CuentaPorPagar {
   tienePercepcion           Boolean     @default(false)              // Aplica si proveedor es agente de percepción
   montoPercepcionTotal      Decimal     @default(0) @db.Decimal(18, 2)  // 🔄 RENOMBRADO: Total acumulado que TÚ pagas adicional
   porcentajePercepcion      Decimal?    @db.Decimal(5, 2)            // % de percepción
-  // ❌ ELIMINADO: numeroComprobantePercepcion (movido a PagoCuentaPorPagar)
-  // ❌ ELIMINADO: fechaPercepcion (movido a PagoCuentaPorPagar)
   
   // ========================================
   // FLAGS ESPECIALES
@@ -6349,7 +6575,6 @@ model CuentaPorPagar {
   // ========================================
   fechaContable             DateTime    @default(now())              // ✅ AGREGADO: Fecha del período contable
   periodoContableId         BigInt?                                  // ✅ AGREGADO: Período contable (para control de cierre)
-    // ❌ ELIMINADO: asientoContableId         BigInt?  
   
   // ========================================
   // AUDITORÍA
@@ -6474,7 +6699,6 @@ model PagoCuentaPorPagar {
   // ========================================
   fechaContable         DateTime    @default(now())                  // ✅ AGREGADO: Fecha del período contable
   periodoContableId     BigInt?                                      // ✅ AGREGADO: Período contable (para control de cierre)
-   // ❌ ELIMINADO: asientoContableId     BigInt?
   
   // ========================================
   // AUDITORÍA
@@ -6537,7 +6761,8 @@ model MedioPago {
   configuracionesCuentaContable  ConfiguracionCuentaContable[]
   asientosContables     AsientoContableInterfaz[]
   pagosDeudaPersonal    PagoDeudaPersonal[]  // 🆕 AGREGAR ESTA LÍNEA
-  
+  pagosDeudaTributaria  PagoDeudaTributaria[]  // 🆕 AGREGAR ESTA LÍNEA
+
   @@index([activo])
 }
 
@@ -7456,7 +7681,6 @@ model PrestamoBancario {
   // INTEGRACIÓN FINANCIERA (migrado de UtilizacionLineaCredito)
   // ========================================
   movimientoCajaDesembolsoId  BigInt?           // Movimiento de caja del desembolso
-   // ❌ ELIMINADO: asientoContableId           BigInt?           // Asiento contable del préstamo
   
     // ========================================
   // CAMPOS ESPECÍFICOS PARA GARANTÍAS/CARTAS (NUEVOS)
@@ -7643,7 +7867,6 @@ model CuotaPrestamo {
   montoPagado           Decimal?                @db.Decimal(18, 2)   // Monto realmente pagado
   montoMora             Decimal?                @db.Decimal(18, 2)   // Monto de mora por atraso
   movimientoCajaId      BigInt?                                      // Relación con MovimientoCaja
-  // ❌ ELIMINADO: asientoContableId     BigInt?                                      // Asiento contable generado
   
   // ========================================
   // ESTADO DE PAGO
@@ -7691,7 +7914,6 @@ model DesembolsoPrestamo {
   fechaDesembolso       DateTime                                     // Fecha real del desembolso
   monto                 Decimal                 @db.Decimal(18, 2)   // Monto desembolsado
   movimientoCajaId      BigInt                                       // Movimiento de ingreso a caja/banco
-  // ❌ ELIMINADO: asientoContableId     BigInt?                                      // Asiento contable generado
   observaciones         String?                 @db.Text
   creadoEn              DateTime                @default(now())
   creadoPor             BigInt?
@@ -7847,7 +8069,6 @@ model LineaCredito {
   // ========================================
   // ÍNDICES
   // ========================================
-  // @@unique([empresaId, numeroLinea]) ELIMINADO
   @@index([empresaId])
   @@index([bancoId])
   @@index([estadoId])
@@ -7958,20 +8179,10 @@ model InversionFinanciera {
   tasaRendimiento       Decimal?                @db.Decimal(7, 4)    // Tasa de rendimiento anual
   valorActual           Decimal                 @db.Decimal(18, 2)   // Valor actual de la inversión
   rendimientoAcumulado  Decimal                 @default(0.00) @db.Decimal(18, 2)  // Rendimiento acumulado
-  
-  // ========================================
-  // ESTADO (EstadoMultiFuncion)
-  // Valores posibles:
-  // 90 = VIGENTE (inversión activa)
-  // 91 = VENCIDA (plazo cumplido, pendiente de cobro)
-  // 92 = LIQUIDADA (cobrada/vendida)
-  // 93 = CANCELADA (cancelada antes de vencimiento)
-  // ========================================
   estadoId              BigInt
   fechaLiquidacion      DateTime?                                    // Fecha de liquidación
   montoLiquidado        Decimal?                @db.Decimal(18, 2)   // Monto total liquidado
   movimientoCajaId      BigInt?                                      // Movimiento de liquidación
-  // ❌ ELIMINADO: asientoContableId     BigInt?                                      // Asiento de liquidación
   observaciones         String?                 @db.Text
   urlDocumentoPDF       String?                 @db.VarChar(500)    // URL del documento adicional
   creadoEn              DateTime                @default(now())
@@ -8014,7 +8225,6 @@ model MovimientoInversion {
   monto                 Decimal                 @db.Decimal(18, 2)   // Monto del movimiento
   descripcion           String                  @db.Text             // Descripción del movimiento
   movimientoCajaId      BigInt?                                      // Movimiento de caja asociado
-  // ❌ ELIMINADO: asientoContableId     BigInt?                                      // Asiento contable generado
   creadoEn              DateTime                @default(now())
   creadoPor             BigInt?
   urlDocumentoPDF       String?                 @db.VarChar(500)    // URL del documento adicional
