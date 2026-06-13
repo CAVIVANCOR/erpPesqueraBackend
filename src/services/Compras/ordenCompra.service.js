@@ -572,30 +572,6 @@ const aprobar = async (id) => {
       );
     }
 
-    // ⭐ VALIDACIÓN OBLIGATORIA: Dirección de Recepción de Mercadería
-    if (!orden.direccionRecepcionAlmacenId) {
-      throw new ValidationError(
-        "Debe seleccionar una dirección de recepción de mercadería antes de aprobar la orden de compra",
-      );
-    }
-
-    // Validar que la dirección tenga concepto de almacén configurado
-    const direccion = await prisma.direccionEntidad.findUnique({
-      where: { id: orden.direccionRecepcionAlmacenId },
-    });
-
-    if (!direccion) {
-      throw new ValidationError(
-        "La dirección de recepción seleccionada no existe",
-      );
-    }
-
-    if (!direccion.conceptoAlmacenCompraId) {
-      throw new ValidationError(
-        "La dirección de recepción no tiene un concepto de almacén de compra configurado. Por favor, configure el concepto de almacén en la dirección.",
-      );
-    }
-
     const parametroAprobador = await prisma.parametroAprobador.findFirst({
       where: {
         empresaId: orden.empresaId,
