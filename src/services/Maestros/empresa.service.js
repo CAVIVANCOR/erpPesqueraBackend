@@ -125,13 +125,13 @@ async function validarEmpresa(data) {
 }
 
 /**
- * Lista todas las empresas ordenadas por ID descendente (más recientes primero).
+ * Lista todas las empresas ordenadas por ID ascendente.
  */
 const listar = async () => {
   try {
     return await prisma.empresa.findMany({ 
       include: { sedes: true, centrosCosto: true },
-      orderBy: { id: 'desc' }
+      orderBy: { id: 'asc' }
     });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

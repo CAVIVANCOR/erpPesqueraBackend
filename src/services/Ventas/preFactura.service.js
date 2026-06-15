@@ -571,25 +571,263 @@ const actualizar = async (id, data) => {
   }
 };
 
-const eliminar = async (id) => {
+/**
+ * ============================================================================
+ * ELIMINAR PRE-FACTURA COMPLETO (SOLO SUPERUSUARIO)
+ * ============================================================================
+ * 
+ * Elimina una PreFactura y TODOS sus registros relacionados en cascada:
+ * - Pagos de Cuenta por Cobrar
+ * - Cuenta por Cobrar
+ * - Movimiento de Almacén (con kardex y regeneración de saldos)
+ * - Detalles de PreFactura
+ * - PreFactura
+ * 
+ * PATRÓN: Basado en eliminarMovimientoAlmacen.service.js y anular()
+ * 
+ * @param {BigInt} id - ID de la PreFactura a eliminar
+ * @param {BigInt} usuarioId - ID del usuario que ejecuta
+ * @param {PrismaTransaction} transaccion - Transacción opcional (para uso interno)
+ * @returns {Promise<Object>} Resultado con contadores detallados
+ */
+const eliminar = async (id, usuarioId, transaccion = null) => {
+  console.log("🔵 [SERVICE] eliminar - INICIO", { id, usuarioId, transaccion: !!transaccion });
+
   try {
-    const existente = await prisma.preFactura.findUnique({
-      where: { id },
-      include: { detalles: true },
-    });
-    if (!existente) throw new NotFoundError("PreFactura no encontrada");
-    if (existente.detalles && existente.detalles.length > 0) {
-      throw new ConflictError(
-        "No se puede eliminar porque tiene detalles asociados.",
-      );
+    const ejecutarEnTransaccion = async (tx) => {
+      console.log("🔵 [SERVICE] Dentro de transacción");
+
+      // ========================================
+      // PASO 1: VALIDACIONES PREVIAS
+      // ========================================
+
+      if (!id) {
+        console.log("🔵 [SERVICE] ERROR: ID vacío");
+        throw new ValidationError("El ID de la PreFactura es obligatorio");
+      }
+
+      if (!usuarioId) {
+        console.log("🔵 [SERVICE] ERROR: usuarioId vacío");
+        throw new ValidationError("El ID del usuario es obligatorio");
+      }
+
+      console.log("🔵 [SERVICE] Buscando usuario...", { usuarioId });
+      // Validar que el usuario es SuperUsuario
+      const usuario = await tx.usuario.findUnique({
+        where: { id: usuarioId },
+        select: { esSuperUsuario: true },
+      });
+
+      console.log("🔵 [SERVICE] Usuario encontrado:", usuario);
+
+      if (!usuario?.esSuperUsuario) {
+        console.log("🔵 [SERVICE] ERROR: Usuario no es SuperUsuario");
+        throw new ValidationError(
+          "Solo SuperUsuarios pueden eliminar PreFacturas completas"
+        );
+      }
+
+      console.log("🔵 [SERVICE] Buscando PreFactura...", { id });
+      // Validar que la PreFactura existe
+      const preFactura = await tx.preFactura.findUnique({
+        where: { id },
+        include: {
+          detalles: true,
+        },
+      });
+
+      console.log("🔵 [SERVICE] PreFactura encontrada:", preFactura ? `ID: ${preFactura.id}` : "NO ENCONTRADA");
+
+      if (!preFactura) {
+        console.log("🔵 [SERVICE] ERROR: PreFactura no encontrada");
+        throw new NotFoundError("PreFactura no encontrada");
+      }
+      // Inicializar contadores
+      const resultados = {
+        preFacturas: 0,
+        detallesPreFactura: 0,
+        cuentasPorCobrar: 0,
+        pagos: 0,
+        movimientosAlmacen: 0,
+        detallesMovAlmacen: 0,
+        kardexEliminados: 0,
+        saldosDetRegenerados: 0,
+        saldosGenRegenerados: 0,
+        comprobantesElectronicos: 0,
+        contratistasOT: 0,
+        preFacturasHijas: 0,
+      };
+
+      console.log("🔵 [SERVICE] Contadores inicializados");
+
+      // ========================================
+      // PASO 1.5: ELIMINAR PREFACTURAS HIJAS (AUTO-REFERENCIA)
+      // ========================================
+
+      console.log("🔵 [SERVICE] PASO 1.5: Buscando PreFacturas hijas (particionadas)...");
+
+      const preFacturasHijas = await tx.preFactura.findMany({
+        where: { preFacturaOrigenId: id },
+        select: { id: true },
+      });
+
+      console.log("🔵 [SERVICE] PreFacturas hijas encontradas:", preFacturasHijas.length);
+
+      if (preFacturasHijas.length > 0) {
+        // Eliminar recursivamente cada PreFactura hija
+        for (const hija of preFacturasHijas) {
+          console.log("🔵 [SERVICE] Eliminando PreFactura hija ID:", hija.id);
+          // Llamar recursivamente con la transacción actual
+          const resultadoHija = await eliminar(hija.id, usuarioId, tx);
+          resultados.preFacturasHijas += resultadoHija.resultados.preFacturas;
+        }
+      }
+
+      // ========================================
+      // PASO 2: ELIMINAR COMPROBANTES ELECTRÓNICOS
+      // ========================================
+
+      console.log("🔵 [SERVICE] PASO 2: Eliminando Comprobantes Electrónicos...");
+
+      const comprobantesResult = await tx.comprobanteElectronico.deleteMany({
+        where: { preFacturaId: id },
+      });
+      resultados.comprobantesElectronicos = Number(comprobantesResult.count);
+      console.log("🔵 [SERVICE] Comprobantes Electrónicos eliminados:", resultados.comprobantesElectronicos);
+
+      // ========================================
+      // PASO 3: ELIMINAR CONTRATISTAS OT
+      // ========================================
+
+      console.log("🔵 [SERVICE] PASO 3: Desvinculando Contratistas OT...");
+
+      const contratistasResult = await tx.detContratistasOT.updateMany({
+        where: { preFacturaId: id },
+        data: { preFacturaId: null },
+      });
+      resultados.contratistasOT = Number(contratistasResult.count);
+      console.log("🔵 [SERVICE] Contratistas OT desvinculados:", resultados.contratistasOT);
+
+      // ========================================
+      // PASO 4: ELIMINAR CUENTA POR COBRAR Y PAGOS
+      // ========================================
+
+      console.log("🔵 [SERVICE] PASO 4: Buscando CuentaPorCobrar...");
+
+      const cuentaPorCobrar = await tx.cuentaPorCobrar.findFirst({
+        where: { preFacturaId: id },
+        include: { pagos: true },
+      });
+
+      console.log("🔵 [SERVICE] CuentaPorCobrar encontrada:", cuentaPorCobrar ? `ID: ${cuentaPorCobrar.id}, Pagos: ${cuentaPorCobrar.pagos?.length || 0}` : "NO");
+
+      if (cuentaPorCobrar) {
+        // Eliminar pagos primero (patrón: deleteMany)
+        if (cuentaPorCobrar.pagos?.length > 0) {
+          const pagosResult = await tx.pagoCuentaPorCobrar.deleteMany({
+            where: { cuentaPorCobrarId: cuentaPorCobrar.id },
+          });
+          resultados.pagos = Number(pagosResult.count);
+        }
+
+        // Eliminar cuenta por cobrar
+        await tx.cuentaPorCobrar.delete({
+          where: { id: cuentaPorCobrar.id },
+        });
+        resultados.cuentasPorCobrar = 1;
+      }
+
+      // ========================================
+      // PASO 5: ELIMINAR MOVIMIENTO DE ALMACÉN
+      // ========================================
+
+      console.log("🔵 [SERVICE] PASO 5: MovimientoAlmacen ID:", preFactura.movSalidaAlmacenId);
+
+      if (preFactura.movSalidaAlmacenId) {
+        console.log("🔵 [SERVICE] Importando servicio eliminarMovimientoAlmacen...");
+        // Usar servicio especializado (patrón existente en anular())
+        const { default: eliminarMovimientoAlmacenService } =
+          await import("../Almacen/eliminarMovimientoAlmacen.service.js");
+
+        const resultadoMov = await eliminarMovimientoAlmacenService
+          .eliminarMovimientoAlmacenCompleto(
+            preFactura.movSalidaAlmacenId,
+            tx  // Pasar la transacción para mantener atomicidad
+          );
+
+        // Acumular contadores del servicio especializado
+        resultados.movimientosAlmacen = 1;
+        resultados.detallesMovAlmacen = resultadoMov.resultados.detallesEliminados;
+        resultados.kardexEliminados = resultadoMov.resultados.kardexEliminados;
+        resultados.saldosDetRegenerados = resultadoMov.resultados.saldosDetRegenerados;
+        resultados.saldosGenRegenerados = resultadoMov.resultados.saldosGenRegenerados;
+        console.log("🔵 [SERVICE] MovimientoAlmacen eliminado, resultados:", resultadoMov.resultados);
+      }
+
+      // ========================================
+      // PASO 6: ELIMINAR DETALLES DE PRE-FACTURA
+      // ========================================
+
+      console.log("🔵 [SERVICE] PASO 6: Eliminando detalles PreFactura...");
+
+      const detallesResult = await tx.detallePreFactura.deleteMany({
+        where: { preFacturaId: id },
+      });
+      resultados.detallesPreFactura = Number(detallesResult.count);
+
+      // ========================================
+      // PASO 7: ELIMINAR PRE-FACTURA
+      // ========================================
+
+      console.log("🔵 [SERVICE] PASO 7: Eliminando PreFactura...");
+
+      await tx.preFactura.delete({
+        where: { id },
+      });
+      resultados.preFacturas = 1;
+
+      // ========================================
+      // PASO 6: RETORNAR RESULTADOsss
+      // ========================================
+
+      console.log("🔵 [SERVICE] PASO 6: Eliminación completada, resultados finales:", resultados);
+
+      return {
+        success: true,
+        mensaje: "PreFactura eliminada exitosamente con todos sus registros relacionados",
+        resultados: resultados,
+      };
+    };
+
+    console.log("🔵 [SERVICE] Ejecutando transacción...");
+
+    // Ejecutar en transacción (patrón: permitir transacción externa)
+    let resultado;
+    if (transaccion) {
+      resultado = await ejecutarEnTransaccion(transaccion);
+    } else {
+      resultado = await prisma.$transaction(ejecutarEnTransaccion);
     }
-    await prisma.preFactura.delete({ where: { id } });
-    return true;
-  } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith("P"))
-      throw new DatabaseError("Error de base de datos", err.message);
-    throw err;
+
+    console.log("🔵 [SERVICE] Transacción completada exitosamente:", resultado);
+    return resultado;
+
+  } catch (error) {
+    console.error("🔵 [SERVICE] ERROR en eliminar:", error);
+    console.error("🔵 [SERVICE] error.message:", error.message);
+    console.error("🔵 [SERVICE] error.stack:", error.stack);
+
+    if (
+      error instanceof ValidationError ||
+      error instanceof NotFoundError ||
+      error instanceof ConflictError
+    ) {
+      throw error;
+    }
+    console.error("Error al eliminar PreFactura completa:", error);
+    throw new DatabaseError(
+      "Error al eliminar PreFactura: " + error.message
+    );
   }
 };
 
@@ -2003,7 +2241,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
 
     // ⭐ Si es Saldo Inicial, usar cuenta 59 (Resultados Acumulados) en lugar de 70 (Ventas)
     let cuentaHaber = cuentaVentas; // Por defecto: 70 (Ventas)
-    
+
     if (esSaldoInicial) {
       const cuentaResultadosAcumulados = await prisma.planCuentasContable.findFirst({
         where: {
@@ -2032,7 +2270,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
       empresaId: preFactura.empresaId,
       periodoContableId: preFactura.periodoContableId,
       fechaAsiento: preFactura.fechaContable,
-      glosa: esSaldoInicial 
+      glosa: esSaldoInicial
         ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
         : `Venta según PreFactura ${preFactura.codigo}`,
       tipoLibro: tipoLibro,
@@ -2048,8 +2286,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
         {
           numeroLinea: 1,
           planCuentaId: cuentaCxC.id,
-          glosa: esSaldoInicial 
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+          glosa: esSaldoInicial
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta según PreFactura ${preFactura.codigo}`,
           debe: total,
           haber: 0,
@@ -2061,8 +2299,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
         {
           numeroLinea: 2,
           planCuentaId: cuentaHaber.id,
-          glosa: esSaldoInicial 
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+          glosa: esSaldoInicial
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta según PreFactura ${preFactura.codigo}`,
           debe: 0,
           haber: total,
@@ -2076,8 +2314,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
         {
           numeroLinea: 1,
           planCuentaId: cuentaCxC.id,
-          glosa: esSaldoInicial 
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+          glosa: esSaldoInicial
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta exonerada según PreFactura ${preFactura.codigo}`,
           debe: total,
           haber: 0,
@@ -2089,8 +2327,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
         {
           numeroLinea: 2,
           planCuentaId: cuentaHaber.id,
-          glosa: esSaldoInicial 
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+          glosa: esSaldoInicial
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta exonerada según PreFactura ${preFactura.codigo}`,
           debe: 0,
           haber: total,
@@ -2117,8 +2355,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
         {
           numeroLinea: 1,
           planCuentaId: cuentaCxC.id,
-          glosa: esSaldoInicial 
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+          glosa: esSaldoInicial
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta según PreFactura ${preFactura.codigo}`,
           debe: total, // Con IGV
           haber: 0,
@@ -2130,8 +2368,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
         {
           numeroLinea: 2,
           planCuentaId: cuentaHaber.id,
-          glosa: esSaldoInicial 
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}` 
+          glosa: esSaldoInicial
+            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta según PreFactura ${preFactura.codigo}`,
           debe: 0,
           haber: subtotal, // Sin IGV

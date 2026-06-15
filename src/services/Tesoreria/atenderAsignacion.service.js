@@ -24,8 +24,6 @@ const ESTADO_MOVIMIENTO_CAJA = {
  * @returns {Object} Movimiento de caja creado
  */
 const atenderAsignacion = async (datos) => {
-  console.log("🟢 [SERVICE] Inicio atenderAsignacion");
-  console.log("🟢 [SERVICE] Datos recibidos:", JSON.stringify(datos, null, 2));
 
   const {
     detMovsEntregaRendirId,
@@ -38,20 +36,12 @@ const atenderAsignacion = async (datos) => {
     usuarioId,
   } = datos;
 
-  console.log("🟢 [SERVICE] Parámetros extraídos:");
-  console.log("  - detMovsEntregaRendirId:", detMovsEntregaRendirId);
-  console.log("  - cuentaCorrienteOrigenId:", cuentaCorrienteOrigenId);
-  console.log("  - medioPagoId:", medioPagoId);
-  console.log("  - monto:", monto);
-  console.log("  - usuarioId:", usuarioId);
-
   try {
     // ========================================
     // VALIDACIONES PREVIAS
     // ========================================
 
     // Validar que exista el DetMovsEntregaRendir
-    console.log("🟢 [SERVICE] Buscando DetMovsEntregaRendir con ID:", detMovsEntregaRendirId);
 
     const detMov = await prisma.detMovsEntregaRendir.findUnique({
       where: { id: BigInt(detMovsEntregaRendirId) },
@@ -116,31 +106,21 @@ const atenderAsignacion = async (datos) => {
       console.error("❌ [SERVICE] Asignación no encontrada con ID:", detMovsEntregaRendirId);
       throw new NotFoundError("Asignación no encontrada");
     }
-
-    console.log("✅ [SERVICE] Asignación encontrada:", detMov.id);
-
     // Validar que no esté ya validada
     if (detMov.validadoTesoreria) {
       throw new ValidationError("Esta asignación ya fue atendida");
     }
 
     // Validar monto
-    console.log("🟢 [SERVICE] Validando monto:", monto, "tipo:", typeof monto);
-
     if (!monto || Number(monto) <= 0) {
-      console.error("❌ [SERVICE] Monto inválido:", monto);
       throw new ValidationError("El monto debe ser mayor a cero");
     }
 
     if (Number(monto) > Number(detMov.monto)) {
-      console.error("❌ [SERVICE] Monto excede el solicitado. Monto:", monto, "Solicitado:", detMov.monto);
       throw new ValidationError(
         `El monto a entregar (${detMov.moneda.simbolo} ${monto}) no puede ser mayor al monto solicitado (${detMov.moneda.simbolo} ${detMov.monto})`
       );
     }
-
-    console.log("✅ [SERVICE] Monto válido:", monto);
-
     // Validar que sea una asignación (no gasto directo)
     if (
       detMov.formaParteCalculoEntregaARendir !== true ||
@@ -171,16 +151,12 @@ const atenderAsignacion = async (datos) => {
 
     // Validar saldo suficiente
     const saldoActual = cuentaCorriente.saldos[0]?.saldo || 0;
-    console.log("🟢 [SERVICE] Validando saldo. Saldo actual:", saldoActual, "Monto:", monto);
 
     if (Number(saldoActual) < Number(monto)) {
-      console.error("❌ [SERVICE] Saldo insuficiente. Saldo:", saldoActual, "Monto:", monto);
       throw new ValidationError(
         `Saldo insuficiente. Saldo actual: ${detMov.moneda.simbolo} ${saldoActual}, Monto a entregar: ${detMov.moneda.simbolo} ${monto}`
       );
     }
-
-    console.log("✅ [SERVICE] Saldo suficiente");
 
     // Obtener tipo de movimiento para EGRESO
     const tipoMovimientoEgreso = await prisma.tipoMovEntregaRendir.findFirst({
@@ -213,11 +189,9 @@ const atenderAsignacion = async (datos) => {
     // ========================================
     // TRANSACCIÓN ATÓMICA
     // ========================================
-    console.log("🟢 [SERVICE] Iniciando transacción...");
 
     const resultado = await prisma.$transaction(async (tx) => {
       // 1️⃣ CREAR MOVIMIENTO DE CAJA (EGRESO)
-      console.log("🟢 [SERVICE] Creando MovimientoCaja...");
 
       const movimientoCaja = await tx.movimientoCaja.create({
         data: {
@@ -246,10 +220,8 @@ const atenderAsignacion = async (datos) => {
         },
       });
 
-      console.log("✅ [SERVICE] MovimientoCaja creado con ID:", movimientoCaja.id);
 
       // 2️⃣ ACTUALIZAR DetMovsEntregaRendir
-      console.log("🟢 [SERVICE] Actualizando DetMovsEntregaRendir...");
       await tx.detMovsEntregaRendir.update({
         where: { id: BigInt(detMovsEntregaRendirId) },
         data: {
@@ -263,10 +235,8 @@ const atenderAsignacion = async (datos) => {
         },
       });
 
-      console.log("✅ [SERVICE] DetMovsEntregaRendir actualizado");
 
       // 3️⃣ ACTUALIZAR SALDO DE CUENTA CORRIENTE
-      console.log("🟢 [SERVICE] Actualizando saldo cuenta corriente...");
       const nuevoSaldo = Number(saldoActual) - Number(montoEntregado);
       await tx.saldoCuentaCorriente.create({
         data: {
@@ -277,25 +247,14 @@ const atenderAsignacion = async (datos) => {
         },
       });
 
-      console.log("✅ [SERVICE] Saldo actualizado");
-      console.log("✅ [SERVICE] Transacción completada exitosamente");
-
       return movimientoCaja;
     });
-
-    console.log("✅ [SERVICE] Operación completada exitosamente");
-
     return {
       success: true,
       message: `Fondos entregados exitosamente a ${nombreResponsable}`,
       data: resultado,
     };
   } catch (err) {
-    console.error("❌ [SERVICE] Error capturado en atenderAsignacion:");
-    console.error("❌ [SERVICE] Error name:", err.name);
-    console.error("❌ [SERVICE] Error message:", err.message);
-    console.error("❌ [SERVICE] Error stack:", err.stack);
-    console.error("❌ [SERVICE] Error code:", err.code);
     if (err.code && err.code.startsWith("P")) {
       throw new DatabaseError(
         "Error de base de datos al atender asignación",

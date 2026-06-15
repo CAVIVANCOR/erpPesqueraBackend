@@ -6,21 +6,12 @@ import toJSONBigInt from "../../utils/toJSONBigInt.js";
  */
 export async function atenderAsignacion(req, res, next) {
   try {
-    console.log("🔵 [CONTROLLER] Inicio atenderAsignacion");
-    console.log("🔵 [CONTROLLER] req.body:", JSON.stringify(req.body, null, 2));
-    console.log("🔵 [CONTROLLER] req.user:", req.user);
-
     const datos = {
       ...req.body,
       usuarioId: req.user?.id || null,
     };
 
-    console.log("🔵 [CONTROLLER] Datos a enviar al service:", JSON.stringify(datos, null, 2));
-
-    const resultado = await atenderAsignacionService.atenderAsignacion(datos);
-    
-    console.log("✅ [CONTROLLER] Resultado exitoso:", resultado);
-    
+    const resultado = await atenderAsignacionService.atenderAsignacion(datos);    
     res.status(201).json(toJSONBigInt(resultado));
   } catch (error) {
     console.error("❌ [CONTROLLER] Error capturado:", error);

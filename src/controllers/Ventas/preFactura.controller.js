@@ -45,11 +45,40 @@ export async function actualizar(req, res, next) {
 }
 
 export async function eliminar(req, res, next) {
+  console.log("🟢 [CONTROLLER] eliminar - INICIO");
+  console.log("🟢 [CONTROLLER] req.params:", req.params);
+  console.log("🟢 [CONTROLLER] req.user:", req.user);
+  
   try {
-    const id = Number(req.params.id);
-    await preFacturaService.eliminar(id);
-    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+    const id = BigInt(req.params.id);
+    const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
+    
+    console.log("🟢 [CONTROLLER] id convertido:", id, typeof id);
+    console.log("🟢 [CONTROLLER] usuarioId convertido:", usuarioId, typeof usuarioId);
+
+    if (!usuarioId) {
+      console.log("🟢 [CONTROLLER] ERROR: Usuario no autenticado");
+      return res.status(401).json({
+        error: "Usuario no autenticado"
+      });
+    }
+
+    console.log("🟢 [CONTROLLER] Llamando a preFacturaService.eliminar...");
+    const resultado = await preFacturaService.eliminar(id, usuarioId);
+    console.log("🟢 [CONTROLLER] Resultado del servicio:", resultado);
+
+    const response = toJSONBigInt({
+      success: resultado.success,
+      mensaje: resultado.mensaje,
+      resultados: resultado.resultados
+    });
+    
+    console.log("🟢 [CONTROLLER] Enviando respuesta:", response);
+    res.status(200).json(response);
   } catch (err) {
+    console.error("🟢 [CONTROLLER] ERROR en eliminar:", err);
+    console.error("🟢 [CONTROLLER] err.message:", err.message);
+    console.error("🟢 [CONTROLLER] err.stack:", err.stack);
     next(err);
   }
 }
@@ -91,8 +120,8 @@ export async function obtenerSeriesDoc(req, res, next) {
 
     const series = await prisma.serieDoc.findMany({
       where: {
-        empresaId: BigInt(empresaId),
-        tipoDocumentoId: BigInt(tipoDocumentoId),
+        empresaId: Number(empresaId),
+        tipoDocumentoId: Number(tipoDocumentoId),
         activo: true
       },
       orderBy: { serie: 'asc' }
@@ -158,7 +187,7 @@ export async function generarBoleta(req, res, next) {
  */
 export async function partirPreFactura(req, res, next) {
   try {
-    const id = BigInt(req.params.id);
+    const id = Number(req.params.id);
     const resultado = await preFacturaService.partirPreFactura(id);
 
     res.status(200).json(toJSONBigInt({
@@ -177,7 +206,7 @@ export async function partirPreFactura(req, res, next) {
  */
 export async function facturarPreFacturaNegra(req, res, next) {
   try {
-    const id = BigInt(req.params.id);
+    const id = Number(req.params.id);
     const resultado = await preFacturaService.facturarPreFacturaNegra(id);
 
     res.status(200).json(toJSONBigInt({
@@ -196,7 +225,7 @@ export async function facturarPreFacturaNegra(req, res, next) {
  */
 export async function facturarPreFacturaBlanca(req, res, next) {
   try {
-    const id = BigInt(req.params.id);
+    const id = Number(req.params.id);
     const resultado = await preFacturaService.facturarPreFacturaBlanca(id);
 
     res.status(200).json(toJSONBigInt({
@@ -215,7 +244,7 @@ export async function facturarPreFacturaBlanca(req, res, next) {
  */
 export async function generarBorradorAsiento(req, res, next) {
   try {
-    const preFacturaId = BigInt(req.params.id);
+    const preFacturaId = Number(req.params.id);
     const borrador = await preFacturaService.generarBorradorAsiento(preFacturaId);
     res.json(toJSONBigInt(borrador));
   } catch (err) {
@@ -230,7 +259,7 @@ export async function generarBorradorAsiento(req, res, next) {
  */
 export async function guardarAsientoContable(req, res, next) {
   try {
-    const preFacturaId = BigInt(req.params.id);
+    const preFacturaId = Number(req.params.id);
     const { asientoData } = req.body;
     const creadoPor = req.user?.id || null;
 
@@ -252,7 +281,7 @@ export async function guardarAsientoContable(req, res, next) {
  */
 export async function eliminarAsientoContable(req, res, next) {
   try {
-    const asientoId = BigInt(req.params.asientoId);
+    const asientoId = Number(req.params.asientoId);
     await preFacturaService.eliminarAsientoContable(asientoId);
     res.status(200).json({
       success: true,
@@ -281,7 +310,7 @@ export async function generarMovimiento(req, res, next) {
     const resultado = await preFacturaService.generarKardex(
       id,
       datosKardex,
-      BigInt(usuarioId)
+      Number(usuarioId)
     );
     res.json(toJSONBigInt(resultado));
   } catch (err) {
@@ -303,8 +332,8 @@ export const regenerarKardex = async (req, res, next) => {
     }
 
     const resultado = await preFacturaService.regenerarKardex(
-      BigInt(id),
-      BigInt(usuarioId)
+      Number(id),
+      Number(usuarioId)
     );
 
     res.json(toJSONBigInt(resultado));

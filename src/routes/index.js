@@ -251,7 +251,15 @@ import motivoSinFaenaRoutes from './Maestros/motivoSinFaena.routes.js';
 import detalleDiaSinFaenaRoutes from './Pesca/detalleDiaSinFaena.routes.js';
 import saldosCuentasRoutes from './Tesoreria/saldosCuentas.routes.js';
 import registrarMovimientoPagoRoutes from './Tesoreria/registrarMovimientoPago.routes.js';
-
+// ========================================
+// 🆕 IMPORTS - DEUDAS PERSONAL Y TRIBUTARIAS
+// ========================================
+import tipoDeudaPersonalRoutes from './Tesoreria/tipoDeudaPersonal.routes.js';
+import deudaConPersonalRoutes from './Tesoreria/deudaConPersonal.routes.js';
+import pagoDeudaPersonalRoutes from './Tesoreria/pagoDeudaPersonal.routes.js';
+import tipoDeudaTributariaRoutes from './Tesoreria/tipoDeudaTributaria.routes.js';
+import deudaTributariaRoutes from './Tesoreria/deudaTributaria.routes.js';
+import pagoDeudaTributariaRoutes from './Tesoreria/pagoDeudaTributaria.routes.js';
 const router = express.Router();
 
 // Rutas públicas de autenticación
@@ -684,6 +692,19 @@ router.use('/tesoreria/enums', enumsTesoreriaRoutes);
 router.use('/tesoreria/flujo-caja-proyectado', flujoCajaProyectadoRoutes);
 router.use('/tesoreria/ubicaciones-letra', ubicacionLetraRoutes);
 router.use('/tesoreria/letras-cambio', letraCambioTesoreriaRoutes);
+// ========================================
+// 🆕 RUTAS - DEUDAS CON PERSONAL
+// ========================================
+router.use('/tesoreria/tipos-deuda-personal', tipoDeudaPersonalRoutes);
+router.use('/tesoreria/deudas-con-personal', deudaConPersonalRoutes);
+router.use('/tesoreria/pagos-deuda-personal', pagoDeudaPersonalRoutes);
+
+// ========================================
+// 🆕 RUTAS - DEUDAS TRIBUTARIAS
+// ========================================
+router.use('/tesoreria/tipos-deuda-tributaria', tipoDeudaTributariaRoutes);
+router.use('/tesoreria/deudas-tributarias', deudaTributariaRoutes);
+router.use('/tesoreria/pagos-deuda-tributaria', pagoDeudaTributariaRoutes);
 router.use('/tesoreria/pagos-letra-cambio', pagoLetraCambioRoutes);
 router.use('/tesoreria/endosos-letra-cambio', endosoLetraCambioRoutes);
 router.use('/tesoreria/tipos-retencion-percepcion', tipoRetencionPercepcionRoutes);
