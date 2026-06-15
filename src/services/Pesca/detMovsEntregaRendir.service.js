@@ -277,9 +277,15 @@ const actualizar = async (id, data, usuarioId = null) => {
         : existente.asignacionOrigenId;
 
     // Validación: Si NO es asignación Y formaParteCalculo=true
+    // IMPORTANTE: Solo validar si se está modificando explícitamente asignacionOrigenId
+    // Si solo se actualizan saldos, NO validar
+    const estaModificandoAsignacionOrigen = data.hasOwnProperty('asignacionOrigenId') &&
+      data.asignacionOrigenId !== existente.asignacionOrigenId;
+
     if (
       !esAsignacion &&
       formaParteCalculo === true &&
+      estaModificandoAsignacionOrigen &&
       (asignacionOrigen === null || asignacionOrigen === undefined)
     ) {
       throw new ValidationError(
@@ -958,6 +964,125 @@ const calcularSaldoFinalAsignacion = async (asignacionId) => {
   }
 };
 
+
+/**
+ * Recalcular saldos de todos los movimientos de un responsable
+ * Usa la misma lógica que el frontend: Asignación → Gastos/Devoluciones (jerarquía)
+ * CRÍTICO: Esta función debe mantener exactamente la misma lógica que calcularSaldosDetallados del frontend
+ */
+const recalcularSaldosResponsable = async (responsableId) => {
+  try {
+    // ========================================
+    // PASO 1: Obtener todos los movimientos del responsable
+    // ========================================
+    const movimientos = await prisma.detMovsEntregaRendir.findMany({
+      where: {
+        responsableId: BigInt(responsableId),
+        formaParteCalculoEntregaARendir: true,
+      },
+      include: {
+        tipoMovimiento: {
+          select: {
+            categoriaId: true,
+          },
+        },
+      },
+      orderBy: [
+        { fechaMovimiento: 'asc' },
+        { id: 'asc' },
+      ],
+    });
+
+    // ========================================
+    // PASO 2: Separar asignaciones de gastos/devoluciones
+    // ========================================
+    const asignaciones = movimientos.filter(
+      (mov) =>
+        mov.asignacionOrigenId === null &&
+        mov.tipoMovimiento?.categoriaId === 17 // Categoría "GASTOS A RENDIR"
+    );
+
+    // ========================================
+    // PASO 3: Procesar cada asignación con sus movimientos
+    // ========================================
+    let SaldoInicial = 0;
+    let SaldoFinal = 0;
+
+    for (const asignacion of asignaciones) {
+      const asignacionId = Number(asignacion.id);
+
+      // ========================================
+      // PASO 3.1: Calcular saldos de la asignación
+      // ========================================
+      SaldoFinal = SaldoInicial + Number(asignacion.monto || 0);
+
+      // Actualizar asignación en BD
+      await prisma.detMovsEntregaRendir.update({
+        where: { id: BigInt(asignacionId) },
+        data: {
+          saldoInicialAsignacion: SaldoInicial,
+          saldoFinalAsignacion: SaldoFinal,
+        },
+      });
+
+      // Actualizar SaldoInicial para los movimientos de esta asignación
+      SaldoInicial = SaldoFinal;
+
+      // ========================================
+      // PASO 3.2: Obtener gastos y devoluciones de esta asignación
+      // ========================================
+      const movimientosAsignacion = movimientos.filter(
+        (mov) => Number(mov.asignacionOrigenId) === asignacionId
+      );
+
+      // Ordenar por fecha
+      movimientosAsignacion.sort((a, b) => {
+        const fechaA = new Date(a.fechaMovimiento);
+        const fechaB = new Date(b.fechaMovimiento);
+        if (fechaA.getTime() !== fechaB.getTime()) {
+          return fechaA - fechaB;
+        }
+        return Number(a.id) - Number(b.id);
+      });
+
+      // ========================================
+      // PASO 3.3: Procesar cada gasto o devolución
+      // ========================================
+      for (const movimiento of movimientosAsignacion) {
+        const movimientoId = Number(movimiento.id);
+        const esDevolucion = Number(movimiento.tipoMovimientoId) === 28;
+
+        // Calcular saldos según tipo de movimiento
+        if (esDevolucion) {
+          // DEVOLUCIÓN: SUMA al saldo
+          SaldoFinal = SaldoInicial + Number(movimiento.monto || 0);
+        } else {
+          // GASTO: RESTA del saldo
+          SaldoFinal = SaldoInicial - Number(movimiento.monto || 0);
+        }
+
+        // Actualizar movimiento en BD
+        await prisma.detMovsEntregaRendir.update({
+          where: { id: BigInt(movimientoId) },
+          data: {
+            saldoInicialAsignacion: SaldoInicial,
+            saldoFinalAsignacion: SaldoFinal,
+          },
+        });
+
+        // Actualizar SaldoInicial para el siguiente
+        SaldoInicial = SaldoFinal;
+      }
+    }
+
+    return true;
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 /**
  * Liquidar una asignación (marcarla como liquidada y calcular saldo final)
  */
@@ -1072,11 +1197,7 @@ const liquidarAsignacion = async (
     const asignacionActual = await prisma.detMovsEntregaRendir.findUnique({
       where: { id: BigInt(asignacionId) },
       select: {
-        empresaId: true,
-        moduloOrigenId: true,
-        documentoOrigenId: true,
         responsableId: true,
-        fechaMovimiento: true,
       },
     });
 
@@ -1085,33 +1206,25 @@ const liquidarAsignacion = async (
     }
 
     // ========================================
-    // ✅ RECALCULAR SALDO INICIAL (SIEMPRE)
+    // ✅ RECALCULAR TODOS LOS SALDOS DEL RESPONSABLE
     // ========================================
-    // Esto garantiza que si se liquidó otra asignación anterior después,
-    // el saldo inicial se actualice correctamente
-    const saldoInicialRecalculado = await obtenerSaldoInicialAsignacion(
-      asignacionActual.empresaId,
-      asignacionActual.moduloOrigenId,
-      asignacionActual.documentoOrigenId,
-      asignacionActual.responsableId,
-      asignacionActual.fechaMovimiento,
-    );
+    // CRÍTICO: Usar la misma lógica que el frontend (Asignación → Gastos/Devoluciones)
+    // Esto garantiza que los saldos sean exactamente iguales en frontend y backend
+    await recalcularSaldosResponsable(asignacionActual.responsableId);
 
     // ========================================
-    // ✅ ACTUALIZAR SALDO INICIAL EN BD PRIMERO
+    // ✅ OBTENER SALDOS RECALCULADOS DE LA ASIGNACIÓN
     // ========================================
-    // Esto es crítico para que calcularSaldoFinalAsignacion use el valor correcto
-    await prisma.detMovsEntregaRendir.update({
+    const asignacionRecalculada = await prisma.detMovsEntregaRendir.findUnique({
       where: { id: BigInt(asignacionId) },
-      data: {
-        saldoInicialAsignacion: saldoInicialRecalculado,
+      select: {
+        saldoInicialAsignacion: true,
+        saldoFinalAsignacion: true,
       },
     });
 
-    // ========================================
-    // ✅ CALCULAR SALDO FINAL (DESPUÉS DE ACTUALIZAR SALDO INICIAL)
-    // ========================================
-    const saldoFinal = await calcularSaldoFinalAsignacion(asignacionId);
+    const saldoInicialRecalculado = Number(asignacionRecalculada.saldoInicialAsignacion || 0);
+    const saldoFinalRecalculado = Number(asignacionRecalculada.saldoFinalAsignacion || 0);
 
     // ========================================
     // ✅ ACTUALIZAR LA ASIGNACIÓN CON TODOS LOS CAMPOS
@@ -1120,7 +1233,7 @@ const liquidarAsignacion = async (
       entregaARendirLiquidada: true,
       fechaLiquidacionEntregaARendir: new Date(),
       saldoInicialAsignacion: saldoInicialRecalculado,
-      saldoFinalAsignacion: saldoFinal,
+      saldoFinalAsignacion: saldoFinalRecalculado,
       actualizadoEn: new Date(),
     };
 
@@ -1159,5 +1272,6 @@ export default {
   obtenerValoresIniciales,
   obtenerSaldoInicialAsignacion,
   calcularSaldoFinalAsignacion,
+  recalcularSaldosResponsable,
   liquidarAsignacion,
 };

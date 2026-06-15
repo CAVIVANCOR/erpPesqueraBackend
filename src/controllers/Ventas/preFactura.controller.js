@@ -45,27 +45,18 @@ export async function actualizar(req, res, next) {
 }
 
 export async function eliminar(req, res, next) {
-  console.log("🟢 [CONTROLLER] eliminar - INICIO");
-  console.log("🟢 [CONTROLLER] req.params:", req.params);
-  console.log("🟢 [CONTROLLER] req.user:", req.user);
-  
+ 
   try {
     const id = BigInt(req.params.id);
     const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
-    
-    console.log("🟢 [CONTROLLER] id convertido:", id, typeof id);
-    console.log("🟢 [CONTROLLER] usuarioId convertido:", usuarioId, typeof usuarioId);
 
     if (!usuarioId) {
-      console.log("🟢 [CONTROLLER] ERROR: Usuario no autenticado");
       return res.status(401).json({
         error: "Usuario no autenticado"
       });
     }
 
-    console.log("🟢 [CONTROLLER] Llamando a preFacturaService.eliminar...");
     const resultado = await preFacturaService.eliminar(id, usuarioId);
-    console.log("🟢 [CONTROLLER] Resultado del servicio:", resultado);
 
     const response = toJSONBigInt({
       success: resultado.success,
@@ -73,12 +64,8 @@ export async function eliminar(req, res, next) {
       resultados: resultado.resultados
     });
     
-    console.log("🟢 [CONTROLLER] Enviando respuesta:", response);
     res.status(200).json(response);
   } catch (err) {
-    console.error("🟢 [CONTROLLER] ERROR en eliminar:", err);
-    console.error("🟢 [CONTROLLER] err.message:", err.message);
-    console.error("🟢 [CONTROLLER] err.stack:", err.stack);
     next(err);
   }
 }

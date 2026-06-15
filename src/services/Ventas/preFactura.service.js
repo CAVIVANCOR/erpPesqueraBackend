@@ -591,43 +591,35 @@ const actualizar = async (id, data) => {
  * @returns {Promise<Object>} Resultado con contadores detallados
  */
 const eliminar = async (id, usuarioId, transaccion = null) => {
-  console.log("🔵 [SERVICE] eliminar - INICIO", { id, usuarioId, transaccion: !!transaccion });
 
   try {
     const ejecutarEnTransaccion = async (tx) => {
-      console.log("🔵 [SERVICE] Dentro de transacción");
 
       // ========================================
       // PASO 1: VALIDACIONES PREVIAS
       // ========================================
 
       if (!id) {
-        console.log("🔵 [SERVICE] ERROR: ID vacío");
         throw new ValidationError("El ID de la PreFactura es obligatorio");
       }
 
       if (!usuarioId) {
-        console.log("🔵 [SERVICE] ERROR: usuarioId vacío");
         throw new ValidationError("El ID del usuario es obligatorio");
       }
 
-      console.log("🔵 [SERVICE] Buscando usuario...", { usuarioId });
       // Validar que el usuario es SuperUsuario
       const usuario = await tx.usuario.findUnique({
         where: { id: usuarioId },
         select: { esSuperUsuario: true },
       });
 
-      console.log("🔵 [SERVICE] Usuario encontrado:", usuario);
 
       if (!usuario?.esSuperUsuario) {
-        console.log("🔵 [SERVICE] ERROR: Usuario no es SuperUsuario");
         throw new ValidationError(
           "Solo SuperUsuarios pueden eliminar PreFacturas completas"
         );
       }
 
-      console.log("🔵 [SERVICE] Buscando PreFactura...", { id });
       // Validar que la PreFactura existe
       const preFactura = await tx.preFactura.findUnique({
         where: { id },
@@ -636,10 +628,8 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
         },
       });
 
-      console.log("🔵 [SERVICE] PreFactura encontrada:", preFactura ? `ID: ${preFactura.id}` : "NO ENCONTRADA");
 
       if (!preFactura) {
-        console.log("🔵 [SERVICE] ERROR: PreFactura no encontrada");
         throw new NotFoundError("PreFactura no encontrada");
       }
       // Inicializar contadores
@@ -658,25 +648,21 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
         preFacturasHijas: 0,
       };
 
-      console.log("🔵 [SERVICE] Contadores inicializados");
 
       // ========================================
       // PASO 1.5: ELIMINAR PREFACTURAS HIJAS (AUTO-REFERENCIA)
       // ========================================
 
-      console.log("🔵 [SERVICE] PASO 1.5: Buscando PreFacturas hijas (particionadas)...");
 
       const preFacturasHijas = await tx.preFactura.findMany({
         where: { preFacturaOrigenId: id },
         select: { id: true },
       });
 
-      console.log("🔵 [SERVICE] PreFacturas hijas encontradas:", preFacturasHijas.length);
 
       if (preFacturasHijas.length > 0) {
         // Eliminar recursivamente cada PreFactura hija
         for (const hija of preFacturasHijas) {
-          console.log("🔵 [SERVICE] Eliminando PreFactura hija ID:", hija.id);
           // Llamar recursivamente con la transacción actual
           const resultadoHija = await eliminar(hija.id, usuarioId, tx);
           resultados.preFacturasHijas += resultadoHija.resultados.preFacturas;
@@ -687,39 +673,31 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       // PASO 2: ELIMINAR COMPROBANTES ELECTRÓNICOS
       // ========================================
 
-      console.log("🔵 [SERVICE] PASO 2: Eliminando Comprobantes Electrónicos...");
-
       const comprobantesResult = await tx.comprobanteElectronico.deleteMany({
         where: { preFacturaId: id },
       });
       resultados.comprobantesElectronicos = Number(comprobantesResult.count);
-      console.log("🔵 [SERVICE] Comprobantes Electrónicos eliminados:", resultados.comprobantesElectronicos);
 
       // ========================================
       // PASO 3: ELIMINAR CONTRATISTAS OT
       // ========================================
-
-      console.log("🔵 [SERVICE] PASO 3: Desvinculando Contratistas OT...");
 
       const contratistasResult = await tx.detContratistasOT.updateMany({
         where: { preFacturaId: id },
         data: { preFacturaId: null },
       });
       resultados.contratistasOT = Number(contratistasResult.count);
-      console.log("🔵 [SERVICE] Contratistas OT desvinculados:", resultados.contratistasOT);
 
       // ========================================
       // PASO 4: ELIMINAR CUENTA POR COBRAR Y PAGOS
       // ========================================
 
-      console.log("🔵 [SERVICE] PASO 4: Buscando CuentaPorCobrar...");
 
       const cuentaPorCobrar = await tx.cuentaPorCobrar.findFirst({
         where: { preFacturaId: id },
         include: { pagos: true },
       });
 
-      console.log("🔵 [SERVICE] CuentaPorCobrar encontrada:", cuentaPorCobrar ? `ID: ${cuentaPorCobrar.id}, Pagos: ${cuentaPorCobrar.pagos?.length || 0}` : "NO");
 
       if (cuentaPorCobrar) {
         // Eliminar pagos primero (patrón: deleteMany)
@@ -741,10 +719,8 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       // PASO 5: ELIMINAR MOVIMIENTO DE ALMACÉN
       // ========================================
 
-      console.log("🔵 [SERVICE] PASO 5: MovimientoAlmacen ID:", preFactura.movSalidaAlmacenId);
 
       if (preFactura.movSalidaAlmacenId) {
-        console.log("🔵 [SERVICE] Importando servicio eliminarMovimientoAlmacen...");
         // Usar servicio especializado (patrón existente en anular())
         const { default: eliminarMovimientoAlmacenService } =
           await import("../Almacen/eliminarMovimientoAlmacen.service.js");
@@ -761,14 +737,12 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
         resultados.kardexEliminados = resultadoMov.resultados.kardexEliminados;
         resultados.saldosDetRegenerados = resultadoMov.resultados.saldosDetRegenerados;
         resultados.saldosGenRegenerados = resultadoMov.resultados.saldosGenRegenerados;
-        console.log("🔵 [SERVICE] MovimientoAlmacen eliminado, resultados:", resultadoMov.resultados);
       }
 
       // ========================================
       // PASO 6: ELIMINAR DETALLES DE PRE-FACTURA
       // ========================================
 
-      console.log("🔵 [SERVICE] PASO 6: Eliminando detalles PreFactura...");
 
       const detallesResult = await tx.detallePreFactura.deleteMany({
         where: { preFacturaId: id },
@@ -779,7 +753,6 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       // PASO 7: ELIMINAR PRE-FACTURA
       // ========================================
 
-      console.log("🔵 [SERVICE] PASO 7: Eliminando PreFactura...");
 
       await tx.preFactura.delete({
         where: { id },
@@ -790,7 +763,6 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       // PASO 6: RETORNAR RESULTADOsss
       // ========================================
 
-      console.log("🔵 [SERVICE] PASO 6: Eliminación completada, resultados finales:", resultados);
 
       return {
         success: true,
@@ -799,7 +771,6 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       };
     };
 
-    console.log("🔵 [SERVICE] Ejecutando transacción...");
 
     // Ejecutar en transacción (patrón: permitir transacción externa)
     let resultado;
@@ -809,13 +780,10 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       resultado = await prisma.$transaction(ejecutarEnTransaccion);
     }
 
-    console.log("🔵 [SERVICE] Transacción completada exitosamente:", resultado);
     return resultado;
 
   } catch (error) {
-    console.error("🔵 [SERVICE] ERROR en eliminar:", error);
-    console.error("🔵 [SERVICE] error.message:", error.message);
-    console.error("🔵 [SERVICE] error.stack:", error.stack);
+
 
     if (
       error instanceof ValidationError ||
