@@ -12,29 +12,34 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  * @param {Object} data - Datos del motivo
  */
 async function validarMotivoNotaCreditoDebito(data) {
-  // Validar código SUNAT único
-  if (data.codigoSunat) {
+  // Validar código SUNAT único por tipo (NC o ND)
+  // El mismo código puede existir para NC y ND, pero no duplicado dentro del mismo tipo
+  if (data.codigoSunat !== undefined && data.esNCND !== undefined) {
     const existente = await prisma.motivoNotaCreditoDebito.findFirst({
       where: {
         codigoSunat: data.codigoSunat,
+        esNCND: data.esNCND,
         id: data.id ? { not: data.id } : undefined
       }
     });
     if (existente) {
-      throw new ValidationError(`El código SUNAT "${data.codigoSunat}" ya existe.`);
+      const tipo = data.esNCND ? 'Nota de Débito' : 'Nota de Crédito';
+      throw new ValidationError(`El código SUNAT "${data.codigoSunat}" ya existe para ${tipo}.`);
     }
   }
 
-  // Validar descripción única
-  if (data.descripcion) {
+  // Validar descripción única por tipo (NC o ND)
+  if (data.descripcion && data.esNCND !== undefined) {
     const existente = await prisma.motivoNotaCreditoDebito.findFirst({
       where: {
         descripcion: data.descripcion,
+        esNCND: data.esNCND,
         id: data.id ? { not: data.id } : undefined
       }
     });
     if (existente) {
-      throw new ValidationError(`La descripción "${data.descripcion}" ya existe.`);
+      const tipo = data.esNCND ? 'Nota de Débito' : 'Nota de Crédito';
+      throw new ValidationError(`La descripción "${data.descripcion}" ya existe para ${tipo}.`);
     }
   }
 }
