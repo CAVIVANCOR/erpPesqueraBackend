@@ -43,11 +43,11 @@ async function validarUbicacionFisica(data, excluirId = null) {
 const listar = async (filtros = {}) => {
   try {
     const where = {};
-    
+
     if (filtros.almacenId) {
       where.almacenId = filtros.almacenId;
     }
-    
+
     const ubicaciones = await prisma.ubicacionFisica.findMany({
       where,
       include: {
@@ -132,17 +132,59 @@ const eliminar = async (id) => {
   try {
     const existente = await prisma.ubicacionFisica.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Ubicación física no encontrada');
-    
+
     // Validar que no esté siendo usada (ID 1 es la ubicación por defecto)
     if (id === 1n || id === 1) {
       throw new ValidationError('No se puede eliminar la ubicación física por defecto.');
     }
-    
+
+    // Verificar si está siendo usada en DetalleMovimientoAlmacen como origen
+    const detallesOrigen = await prisma.detalleMovimientoAlmacen.count({
+      where: { ubicacionFisicaOrigenId: id }
+    });
+    if (detallesOrigen > 0) {
+      throw new ConflictError(
+        `No se puede eliminar la ubicación física porque está siendo usada como origen en ${detallesOrigen} detalle(s) de movimiento de almacén`
+      );
+    }
+
+    // Verificar si está siendo usada en DetalleMovimientoAlmacen como destino
+    const detallesDestino = await prisma.detalleMovimientoAlmacen.count({
+      where: { ubicacionFisicaDestinoId: id }
+    });
+    if (detallesDestino > 0) {
+      throw new ConflictError(
+        `No se puede eliminar la ubicación física porque está siendo usada como destino en ${detallesDestino} detalle(s) de movimiento de almacén`
+      );
+    }
+
+    // Verificar si tiene registros de kardex
+    const kardex = await prisma.kardexAlmacen.count({
+      where: { ubicacionFisicaId: id }
+    });
+    if (kardex > 0) {
+      throw new ConflictError(
+        `No se puede eliminar la ubicación física porque tiene ${kardex} registro(s) de kardex asociado(s)`
+      );
+    }
+
+    // Verificar si tiene saldos de productos por cliente
+    const saldos = await prisma.saldosDetProductoCliente.count({
+      where: { ubicacionFisicaId: id }
+    });
+    if (saldos > 0) {
+      throw new ConflictError(
+        `No se puede eliminar la ubicación física porque tiene ${saldos} registro(s) de saldos de productos asociado(s)`
+      );
+    }
+
     await prisma.ubicacionFisica.delete({ where: { id } });
     return true;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al eliminar ubicación física', err.message);
+    }
     throw err;
   }
 };

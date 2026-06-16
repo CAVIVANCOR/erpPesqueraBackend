@@ -24,7 +24,7 @@ async function listar() {
 
 async function obtenerPorId(id) {
   try {
-    const almacen = await prisma.almacen.findUnique({ 
+    const almacen = await prisma.almacen.findUnique({
       where: { id },
       include: {
         centroAlmacen: true,
@@ -69,8 +69,8 @@ async function validarReferencias({ centroAlmacenId, tipoAlmacenamientoId, tipoA
 async function validarDuplicado({ nombre }, excluirId = null) {
   if (!nombre) return;
   const where = { nombre };
-  const existe = await prisma.almacen.findFirst({ 
-    where: excluirId ? { ...where, id: { not: excluirId } } : where 
+  const existe = await prisma.almacen.findFirst({
+    where: excluirId ? { ...where, id: { not: excluirId } } : where
   });
   if (existe) throw new ConflictError('Ya existe un almacén con el mismo nombre');
 }
@@ -117,11 +117,53 @@ async function eliminar(id) {
   try {
     const existente = await prisma.almacen.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Almacén no encontrado');
+
+    // Verificar si el almacén está siendo usado en ConceptoMovAlmacen (como origen o destino)
+    const conceptosOrigen = await prisma.conceptoMovAlmacen.count({ 
+      where: { almacenOrigenId: id } 
+    });
+    const conceptosDestino = await prisma.conceptoMovAlmacen.count({ 
+      where: { almacenDestinoId: id } 
+    });
+    const totalConceptos = conceptosOrigen + conceptosDestino;
+    
+    if (totalConceptos > 0) {
+      throw new ConflictError(
+        `No se puede eliminar el almacén porque está siendo usado en ${totalConceptos} concepto(s) de movimiento de almacén`
+      );
+    }
+
+    // Verificar si tiene contratos de servicio asociados
+    const contratos = await prisma.contratoServicio.count({ where: { almacenId: id } });
+    if (contratos > 0) {
+      throw new ConflictError(
+        `No se puede eliminar el almacén porque tiene ${contratos} contrato(s) de servicio asociado(s)`
+      );
+    }
+
+    // Verificar si tiene registros de kardex
+    const kardex = await prisma.kardexAlmacen.count({ where: { almacenId: id } });
+    if (kardex > 0) {
+      throw new ConflictError(
+        `No se puede eliminar el almacén porque tiene ${kardex} registro(s) de kardex asociado(s)`
+      );
+    }
+
+    // Verificar si tiene ubicaciones físicas
+    const ubicaciones = await prisma.ubicacionFisica.count({ where: { almacenId: id } });
+    if (ubicaciones > 0) {
+      throw new ConflictError(
+        `No se puede eliminar el almacén porque tiene ${ubicaciones} ubicación(es) física(s) asociada(s)`
+      );
+    }
+
     await prisma.almacen.delete({ where: { id } });
     return true;
   } catch (err) {
-    if (err instanceof NotFoundError) throw err;
-    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al eliminar almacén', err.message);
+    }
     throw err;
   }
 }

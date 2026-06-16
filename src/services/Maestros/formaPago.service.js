@@ -1,11 +1,31 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ConflictError } from '../../utils/errors.js';
+import { toUpperCaseSafe } from '../../utils/numberUtils.js';
 
 /**
  * Servicio CRUD para FormaPago
  * Aplica validaciones de unicidad, relaciones y manejo de errores personalizado.
  * Documentado en español.
  */
+
+/**
+ * Normaliza campos de texto a mayúsculas y convierte strings vacíos a null
+ * @param {Object} data - Datos de la forma de pago
+ * @returns {Object} - Datos normalizados
+ */
+function normalizarDatosFormaPago(data) {
+  const emptyToNull = (value) => {
+    if (value === '' || value === undefined) return null;
+    return value;
+  };
+
+  return {
+    ...data,
+    nombre: toUpperCaseSafe(data.nombre),
+    descripcion: emptyToNull(toUpperCaseSafe(data.descripcion)),
+    descripcionIngles: emptyToNull(toUpperCaseSafe(data.descripcionIngles)),
+  };
+}
 
 /**
  * Valida unicidad de nombre.
@@ -52,8 +72,9 @@ const obtenerPorId = async (id) => {
  */
 const crear = async (data) => {
   try {
-    await validarFormaPago(data);
-    return await prisma.formaPago.create({ data });
+    const dataNormalizada = normalizarDatosFormaPago(data);
+    await validarFormaPago(dataNormalizada);
+    return await prisma.formaPago.create({ data: dataNormalizada });
   } catch (err) {
     if (err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -68,8 +89,9 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.formaPago.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Forma de pago no encontrada');
-    await validarFormaPago(data, id);
-    return await prisma.formaPago.update({ where: { id }, data });
+    const dataNormalizada = normalizarDatosFormaPago(data);
+    await validarFormaPago(dataNormalizada, id);
+    return await prisma.formaPago.update({ where: { id }, data: dataNormalizada });
   } catch (err) {
     if (err instanceof ConflictError || err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
