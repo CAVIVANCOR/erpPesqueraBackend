@@ -149,6 +149,7 @@ import detDocsReqCotizaVentasRoutes from '../routes/Ventas/detDocsReqCotizaVenta
 import entregaARendirPVentasRoutes from '../routes/Ventas/entregaARendirPVentas.routes.js';
 import detMovsEntregaRendirPVentasRoutes from '../routes/Ventas/detMovsEntregaRendirPVentas.routes.js';
 import preFacturaRoutes from '../routes/Ventas/preFactura.routes.js';
+import motivoNotaCreditoDebitoRoutes from '../routes/Ventas/motivoNotaCreditoDebito.routes.js';
 import incotermRoutes from '../routes/Ventas/incoterm.routes.js';
 import tipoContenedorRoutes from '../routes/Ventas/tipoContenedor.routes.js';
 import detallePreFacturaRoutes from '../routes/Ventas/detallePreFactura.routes.js';
@@ -548,6 +549,8 @@ router.use('/entregas-rendir-ventas', entregaARendirPVentasImpresionRoutes);
 router.use('/det-movs-entrega-rendir-p-ventas', detMovsEntregaRendirPVentasRoutes);
 // Rutas para PreFactura
 router.use('/pre-facturas', preFacturaRoutes);
+// Rutas para MotivoNotaCreditoDebito
+router.use('/motivos-nc-nd', motivoNotaCreditoDebitoRoutes);
 // Rutas para Incoterm
 router.use('/incoterms', incotermRoutes);
 // Rutas para TipoContenedor
