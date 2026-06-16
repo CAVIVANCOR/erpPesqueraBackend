@@ -4331,6 +4331,7 @@ model Producto {
   unidadEspesorId                   BigInt?
   unidadLargoId                     BigInt?
   unidadMedidaId                    BigInt
+  unidadMedidaComercialId           BigInt?                             // ⭐ NUEVO: Unidad para ventas/compras (ej: TN cuando almacén es Saco)
   exoneradoRetencion                Boolean                             @default(false)
   sujetoDetraccion                  Boolean                             @default(false)
   empresaId                         BigInt
@@ -4362,6 +4363,7 @@ model Producto {
   familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
   subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
   unidadMedida            UnidadMedida         @relation("UnidadMedidaToProducto", fields: [unidadMedidaId], references: [id])
+  unidadMedidaComercial   UnidadMedida?        @relation("UnidadMedidaComercialToProducto", fields: [unidadMedidaComercialId], references: [id])
   tipoMaterial            TipoMaterial?        @relation(fields: [tipoMaterialId], references: [id])
   color                   Color?               @relation(fields: [colorId], references: [id])
   tipoAlmacenamiento      TipoAlmacenamiento   @relation(fields: [tipoAlmacenamientoId], references: [id])
@@ -5297,7 +5299,8 @@ model UnidadMedida {
   esMedidaMetrica  Boolean    @default(false)
   factorConversion Decimal?
 
-  productos           Producto[]      @relation("UnidadMedidaToProducto")
+  productos              Producto[]      @relation("UnidadMedidaToProducto")
+  productosComerciales   Producto[]      @relation("UnidadMedidaComercialToProducto")  // ⭐ NUEVO: Productos que usan esta unidad para ventas
   // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
