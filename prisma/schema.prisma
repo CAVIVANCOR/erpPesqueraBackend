@@ -1235,8 +1235,11 @@ model PreFactura {
   fechaActualizacion          DateTime?   @updatedAt                       // Fecha de última actualización
   creadoPor                   BigInt?                                      // Usuario que creó el registro
   actualizadoPor              BigInt?                                      // Usuario que actualizó el registro
-  unidadNegocioId   BigInt?
-
+  unidadNegocioId             BigInt?
+  motivoNotaCreditoDebitoId   BigInt?                          // Motivo de NC/ND (si aplica)
+  fechaDcmtoAfectoNCND        DateTime?                       // Fecha del Documento en PreFactura Afectado por la NC o ND
+  dcmtoAfectoNCNDId           BigInt?                         // Id del Documento en PreFactura Afectado por la NC o ND
+  numeroDcmtoAfectoNCND       String?     @db.VarChar(40)     // Numero del Documento en PreFactura Afectado por la NC o ND
   
   // Relaciones
   empresa                     Empresa                 @relation(fields: [empresaId], references: [id])
@@ -1259,8 +1262,10 @@ model PreFactura {
   movSalidaAlmacen            MovimientoAlmacen?      @relation("MovimientoAlmacenToPreFactura", fields: [movSalidaAlmacenId], references: [id])
   unidadNegocio               UnidadNegocio? @relation(fields: [unidadNegocioId], references: [id])
   periodoContable             PeriodoContable?        @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
+  motivoNotaCreditoDebito     MotivoNotaCreditoDebito? @relation("MotivoNCNDPreFactura", fields: [motivoNotaCreditoDebitoId], references: [id])
+  dcmtoAfectoNCND             PreFactura?             @relation("PreFacturaAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
+  notasCreditoDebito          PreFactura[]            @relation("PreFacturaAfectadaNCND")  // NC/ND que afectan a esta PreFactura
 
-  
   // ========================================
   // ⭐ RELACIONES NUEVAS - FACTURACIÓN ELECTRÓNICA
   // ========================================
@@ -1324,6 +1329,21 @@ model DetallePreFactura {
   
   @@index([preFacturaId])
 }
+
+model MotivoNotaCreditoDebito {
+  id            BigInt    @id @default(autoincrement())
+  codigoSunat   String    @db.VarChar(10)                    // Código SUNAT (ej: "01", "02", etc.)
+  descripcion   String    @db.VarChar(255)                   // Descripción del motivo
+  esNCND        Boolean   @default(false)                    // false = Nota de Crédito (NC), true = Nota de Débito (ND)
+  activo        Boolean   @default(true)                     // true = Activo, false = Inactivo
+  
+  // Relaciones
+  preFacturas         PreFactura[]        @relation("MotivoNCNDPreFactura")
+  ordenesCompra       OrdenCompra[]       @relation("MotivoNCNDOrdenCompra")
+  comprobantesElectronicos ComprobanteElectronico[] @relation("MotivoNCNDComprobante")
+}
+
+
 
 model CuentaCorriente {
   id                                                                      BigInt              @id @default(autoincrement())
@@ -3594,6 +3614,7 @@ model MovimientoAlmacen {
   urlMovAlmacenPdf          String?
   urlMovAlmacenConCostosPdf String?
   unidadNegocioId           BigInt?
+  esGerencial               Boolean?    @default(false)                  // ⭐ NUEVO: true = Facturación Negra (Gerencial/No SUNAT), false = Blanca (Formal/SUNAT)
 
   empresa                         Empresa @relation(fields: [empresaId], references: [id])
   tipoDocumento                   TipoDocumento         @relation(fields: [tipoDocumentoId], references: [id])
@@ -6079,7 +6100,7 @@ model ComprobanteElectronico {
   
   // NC/ND - Documentos relacionados
   tipoNotaId                BigInt?                                      // Tipo de nota (solo para NC/ND)
-  motivoNotaId              BigInt?                                      // Motivo de la nota (solo para NC/ND)
+  motivoNotaCreditoDebitoId BigInt?                                      // ⭐ NUEVO: Motivo de NC/ND (reemplaza motivoNotaId)
   comprobanteModificaId     BigInt?                                      // FK al comprobante que modifica (solo para NC/ND)
   
   // Nubefact - Credenciales
@@ -6138,6 +6159,7 @@ model ComprobanteElectronico {
   tipoDocumentoCliente      TiposDocIdentidad       @relation(fields: [tipoDocumentoClienteId], references: [id])
   moneda                    Moneda                  @relation(fields: [monedaId], references: [id])
   formaPago                 FormaPago               @relation(fields: [formaPagoId], references: [id])
+  motivoNotaCreditoDebito   MotivoNotaCreditoDebito? @relation("MotivoNCNDComprobante", fields: [motivoNotaCreditoDebitoId], references: [id])
   comprobanteModifica       ComprobanteElectronico? @relation("NotasModificacion", fields: [comprobanteModificaId], references: [id])
   
   // ========================================
@@ -6823,6 +6845,13 @@ model OrdenCompra {
   contactoProveedorId         BigInt?
   unidadNegocioId             BigInt?
   
+  motivoNotaCreditoDebitoId   BigInt?                          // Motivo de NC/ND (si aplica)
+  fechaDcmtoAfectoNCND        DateTime?                       // Fecha del Documento en OrdenCompra Afectado por la NC o ND
+  dcmtoAfectoNCNDId           BigInt?                         // Id del Documento en OrdenCompra Afectado por la NC o ND
+  numeroDcmtoAfectoNCND       String?     @db.VarChar(40)     // Numero del Documento en OrdenCompra Afectado por la NC o ND
+  dcmtoAfectoNCND             OrdenCompra?            @relation("OrdenCompraAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
+  notasCreditoDebito          OrdenCompra[]           @relation("OrdenCompraAfectadaNCND")  // NC/ND que afectan a esta OC
+
   // ========================================
   // RELACIONES EXISTENTES
   // ========================================
@@ -6834,6 +6863,7 @@ model OrdenCompra {
   empresa              Empresa @relation(fields: [empresaId], references: [id])
   moneda               Moneda? @relation(fields: [monedaId], references: [id])
   estado               EstadoMultiFuncion @relation(fields: [estadoId], references: [id])
+  motivoNotaCreditoDebito   MotivoNotaCreditoDebito? @relation("MotivoNCNDOrdenCompra", fields: [motivoNotaCreditoDebitoId], references: [id])
   
   // ========================================
   // ⭐ RELACIONES NUEVAS - COMPROBANTE DEL PROVEEDOR
