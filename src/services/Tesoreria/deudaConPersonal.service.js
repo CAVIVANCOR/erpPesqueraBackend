@@ -109,8 +109,10 @@ const crear = async (data) => {
 
     const deudaData = {
       ...data,
+      montoPagadoAnterior: data.montoPagadoAnterior || 0,
       montoPagado: data.montoPagado || 0,
-      saldoPendiente: (data.montoOriginal || 0) - (data.montoPagado || 0),
+      saldoPendiente: (data.montoOriginal || 0) - (data.montoPagadoAnterior || 0) - (data.montoPagado || 0),
+      esSaldoInicial: data.esSaldoInicial !== undefined ? data.esSaldoInicial : false,
       esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
       fechaContable: data.fechaContable || new Date(),
       periodoContableId: data.periodoContableId || null,
