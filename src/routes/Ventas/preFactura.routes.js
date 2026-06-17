@@ -22,6 +22,13 @@ router.get(
   preFacturaController.obtenerSeriesDoc
 );
 
+router.get(
+  '/por-cliente',
+  autenticarJWT,
+  checkPermission('preFactura', 'ver'),
+  preFacturaController.obtenerPreFacturasPorCliente
+);
+
 // ========================================
 // RUTAS DE GENERACIÓN DE COMPROBANTES
 // (Operaciones propias de PreFactura)

@@ -16,6 +16,7 @@ const includeRelaciones = {
   familia: true,
   subfamilia: true,
   unidadMedida: true,
+  unidadMedidaComercial: true,
   tipoAlmacenamiento: true,
   marca: true,
   tipoMaterial: true,

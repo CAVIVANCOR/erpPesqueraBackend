@@ -45,10 +45,10 @@ export async function actualizar(req, res, next) {
 }
 
 export async function eliminar(req, res, next) {
- 
+
   try {
-    const id = BigInt(req.params.id);
-    const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
+    const id = Number(req.params.id);
+    const usuarioId = req.user?.id ? Number(req.user.id) : null;
 
     if (!usuarioId) {
       return res.status(401).json({
@@ -63,7 +63,7 @@ export async function eliminar(req, res, next) {
       mensaje: resultado.mensaje,
       resultados: resultado.resultados
     });
-    
+
     res.status(200).json(response);
   } catch (err) {
     next(err);
@@ -326,5 +326,37 @@ export const regenerarKardex = async (req, res, next) => {
     res.json(toJSONBigInt(resultado));
   } catch (error) {
     next(error);
+  }
+};
+
+// Obtener PreFacturas por empresa, cliente y fecha límite
+export const obtenerPreFacturasPorCliente = async (req, res, next) => {
+  try {
+    const { empresaId, clienteId, fechaLimite } = req.query;
+
+    const where = {
+      tipoDocumentoId: {
+        notIn: [8, 9]
+      }
+    };
+
+    if (empresaId) {
+      where.empresaId = Number(empresaId);
+    }
+
+    if (clienteId) {
+      where.clienteId = Number(clienteId);
+    }
+
+    if (fechaLimite) {
+      where.fechaDocumento = {
+        lte: new Date(fechaLimite),
+      };
+    }
+
+    const preFacturas = await preFacturaService.obtenerTodos(where);
+    res.json(toJSONBigInt(preFacturas));
+  } catch (err) {
+    next(err);
   }
 };

@@ -174,7 +174,12 @@ const listar = async () => {
         periodoContable: true, // ✅ AGREGADO
         detalles: {
           include: {
-            producto: true,
+            producto: {
+              include: {
+                unidadMedida: true,
+                unidadMedidaComercial: true
+              }
+            },
           },
         },
       },
@@ -226,7 +231,9 @@ const obtenerPorId = async (id) => {
             producto: {
               include: {
                 familia: true,
+                subfamilia: true,
                 unidadMedida: true,
+                unidadMedidaComercial: true,
               },
             },
           },
@@ -236,6 +243,38 @@ const obtenerPorId = async (id) => {
     });
     if (!pf) throw new NotFoundError("PreFactura no encontrada");
     return pf;
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+// Obtener PreFacturas con filtros dinámicos (para selector de documentos afectos)
+const obtenerTodos = async (where = {}) => {
+  try {
+    return await prisma.preFactura.findMany({
+      where,
+      include: {
+        empresa: true,
+        cliente: true,
+        tipoDocumento: true,
+        moneda: true,
+        detalles: {
+          include: {
+            producto: {
+              include: {
+                familia: true,
+                subfamilia: true,
+                unidadMedida: true,
+                unidadMedidaComercial: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { fechaDocumento: "desc" },
+    });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -276,7 +315,14 @@ const obtenerPorCotizacion = async (cotizacionVentaId) => {
         periodoContable: true, // ✅ AGREGADO
         detalles: {
           include: {
-            producto: true,
+            producto: {
+              include: {
+                familia: true,
+                subfamilia: true,
+                unidadMedida: true,
+                unidadMedidaComercial: true,
+              },
+            },
           },
         },
       },
@@ -826,6 +872,7 @@ const generarFacturaDesdePreFactura = async (
             producto: {
               include: {
                 unidadMedida: true,
+                unidadMedidaComercial: true,
               },
             },
           },
@@ -1036,6 +1083,7 @@ const generarBoletaDesdePreFactura = async (preFacturaId, datosBoleta = {}) => {
             producto: {
               include: {
                 unidadMedida: true,
+                unidadMedidaComercial: true,
               },
             },
           },
@@ -2647,6 +2695,7 @@ const generarKardex = async (id, datosKardex, usuarioId, esRegeneracion = false)
               producto: {
                 include: {
                   unidadMedida: true,
+                  unidadMedidaComercial: true,
                 },
               },
             },
@@ -2945,8 +2994,8 @@ const regenerarKardex = async (id, usuarioId) => {
         fechaIngreso: primerDetalle?.fechaIngreso || new Date(),
         nroSerie: "",
         nroContenedor: "",
-        estadoMercaderiaId: primerDetalle?.estadoMercaderiaId || BigInt(6),
-        estadoCalidadId: primerDetalle?.estadoCalidadId || BigInt(10),
+        estadoMercaderiaId: primerDetalle?.estadoMercaderiaId || Number(6),
+        estadoCalidadId: primerDetalle?.estadoCalidadId || Number(10),
         entidadComercialId: preFactura.clienteId,
         esCustodia: false,
         empresaId: preFactura.empresaId,
@@ -3002,6 +3051,7 @@ const regenerarKardex = async (id, usuarioId) => {
 export default {
   listar,
   obtenerPorId,
+  obtenerTodos,
   obtenerPorCliente,
   obtenerPorCotizacion,
   crear,
