@@ -4061,13 +4061,15 @@ model DeudaConPersonal {
   fecha                 DateTime                                              // Fecha de generación de la deuda
   fechaVencimiento      DateTime                                              // Fecha límite de pago
   numeroDocumento       String?                 @db.VarChar(40)               // Número de documento o código de referencia
+  montoPagadoAnterior   Decimal                 @db.Decimal(18, 2)  @default(0)  // 🆕 Pagos anteriores al sistema (saldos iniciales)
   montoOriginal         Decimal                 @db.Decimal(18, 2)            // Monto original de la deuda
   montoPagado           Decimal                 @db.Decimal(18, 2)  @default(0)  // Monto pagado acumulado (se actualiza con cada pago)
   saldoPendiente        Decimal                 @db.Decimal(18, 2)            // Saldo pendiente (montoOriginal - montoPagado)
   monedaId              BigInt                                                // Moneda de la deuda (PEN, USD, EUR)
   estadoId              BigInt                                                // Estado (PENDIENTE, PAGADA, PARCIAL)
   esGerencial           Boolean                 @default(false)               // true = Pago en negro (sin declarar a SUNAT), false = Pago formal
-  
+  esSaldoInicial        Boolean                 @default(false)               // true = Saldo inicial de migración (sin origen), false = Deuda generada
+
   // ========================================
   // INTEGRACIÓN CONTABLE
   // ========================================
@@ -4217,6 +4219,7 @@ model DeudaTributaria {
   fechaGeneracion       DateTime                                              // Fecha de generación de la deuda
   fechaVencimiento      DateTime                                              // Fecha límite de pago
   numeroDeclaracion     String?                 @db.VarChar(40)               // Número de PDT, formulario o declaración
+  montoPagadoAnterior   Decimal                 @db.Decimal(18, 2)  @default(0)  // 🆕 Pagos anteriores al sistema (saldos iniciales)
   montoOriginal         Decimal                 @db.Decimal(18, 2)            // Monto original de la deuda
   montoPagado           Decimal                 @db.Decimal(18, 2)  @default(0)  // Monto pagado acumulado (se actualiza con cada pago)
   saldoPendiente        Decimal                 @db.Decimal(18, 2)            // Saldo pendiente (montoOriginal - montoPagado)
