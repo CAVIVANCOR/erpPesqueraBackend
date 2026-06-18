@@ -4014,6 +4014,41 @@ model Personal {
   detMovsEntregaRendirActualizados DetMovsEntregaRendir[] @relation("ActualizadoPorDetMovsEntregaRendir")
 }
 
+
+
+// ════════════════════════════════════════════════════════════
+// CATÁLOGO: CATEGORÍAS DE TIPOS DE DEUDA PERSONAL
+// Agrupa tipos de deudas con personal para mejor organización
+// Ejemplos: Remuneraciones, Beneficios Sociales, Comisiones, Préstamos
+// ════════════════════════════════════════════════════════════
+
+model CategoriaTipoDeudaPersonal {
+  id                    BigInt                  @id @default(autoincrement())
+  nombre                String                  @db.VarChar(100)              // Nombre de la categoría (ej: "Remuneraciones")
+  descripcion           String?                 @db.Text                      // Descripción detallada de la categoría
+  activo                Boolean                 @default(true)                // Estado de la categoría (true = activo, false = inactivo)
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())               // Fecha de creación del registro
+  creadoPor             BigInt?                                               // Usuario que creó el registro
+  actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
+  actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
+  
+  // ========================================
+  // RELACIONES INVERSAS
+  // ========================================
+  tiposDeuda            TipoDeudaPersonal[]                                   // Tipos de deuda asociados a esta categoría
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([activo])                                                           // Filtro por estado activo/inactivo
+}
+
+
+
 // ════════════════════════════════════════════════════════════
 // CATÁLOGO: TIPOS DE DEUDA PERSONAL
 // Ejemplos: Sueldos, Gratificaciones, CTS, Comisiones Pesca
@@ -4021,6 +4056,7 @@ model Personal {
 
 model TipoDeudaPersonal {
   id                    BigInt                  @id @default(autoincrement())
+  categoriaId           BigInt?                                               // Categoría a la que pertenece (FK a CategoriaTipoDeudaPersonal)
   nombre                String                  @db.VarChar(100)              // Nombre del tipo de deuda (ej: "Sueldos", "Comisiones Pesca")
   descripcion           String?                 @db.Text                      // Descripción detallada del tipo de deuda
   activo                Boolean                 @default(true)                // Estado del tipo de deuda (true = activo, false = inactivo)
@@ -4034,10 +4070,23 @@ model TipoDeudaPersonal {
   actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
   
   // ========================================
+  // RELACIONES
+  // ========================================
+  categoria             CategoriaTipoDeudaPersonal?  @relation(fields: [categoriaId], references: [id])
+  
+  // ========================================
   // RELACIONES INVERSAS
   // ========================================
   deudas                DeudaConPersonal[]                                    // Deudas asociadas a este tipo
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([categoriaId])                                                      // Filtro por categoría
+  @@index([activo])                                                           // Filtro por estado activo/inactivo
 }
+
+
 
 // ════════════════════════════════════════════════════════════
 // DEUDAS CON PERSONAL
@@ -4115,6 +4164,8 @@ model DeudaConPersonal {
   @@index([moduloOrigenId, origenId])                                         // Trazabilidad al origen
 }
 
+
+
 // ════════════════════════════════════════════════════════════
 // PAGOS DE DEUDAS AL PERSONAL
 // Registro de pagos realizados a trabajadores
@@ -4161,6 +4212,39 @@ model PagoDeudaPersonal {
 }
 
 
+
+// ════════════════════════════════════════════════════════════
+// CATÁLOGO: CATEGORÍAS DE TIPOS DE DEUDA TRIBUTARIA
+// Agrupa tipos de deudas tributarias para mejor organización
+// Ejemplos: Impuestos Nacionales, Contribuciones Sociales, Tributos Municipales
+// ════════════════════════════════════════════════════════════
+
+model CategoriaTipoDeudaTributaria {
+  id                    BigInt                  @id @default(autoincrement())
+  nombre                String                  @db.VarChar(100)              // Nombre de la categoría (ej: "Impuestos Nacionales")
+  descripcion           String?                 @db.Text                      // Descripción detallada de la categoría
+  activo                Boolean                 @default(true)                // Estado de la categoría (true = activo, false = inactivo)
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())               // Fecha de creación del registro
+  creadoPor             BigInt?                                               // Usuario que creó el registro
+  actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
+  actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
+  
+  // ========================================
+  // RELACIONES INVERSAS
+  // ========================================
+  tiposDeuda            TipoDeudaTributaria[]                                 // Tipos de deuda asociados a esta categoría
+  
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([activo])                                                           // Filtro por estado activo/inactivo
+}
+
+
 // ════════════════════════════════════════════════════════════
 // CATÁLOGO: TIPOS DE DEUDA TRIBUTARIA
 // Ejemplos: IGV, Renta 3ra, ESSALUD, ONP, SENATI
@@ -4168,6 +4252,7 @@ model PagoDeudaPersonal {
 
 model TipoDeudaTributaria {
   id                    BigInt                  @id @default(autoincrement())
+  categoriaId           BigInt?                                               // Categoría a la que pertenece (FK a CategoriaTipoDeudaTributaria)
   nombre                String                  @db.VarChar(100)              // Nombre del impuesto (ej: "IGV por Pagar")
   descripcion           String?                 @db.Text                      // Descripción detallada del impuesto
   entidadRecaudadoraId  BigInt?                                               // Entidad recaudadora (FK a EntidadComercial: SUNAT, ESSALUD, ONP, Municipalidad)
@@ -4186,6 +4271,7 @@ model TipoDeudaTributaria {
   // ========================================
   // RELACIONES
   // ========================================
+  categoria             CategoriaTipoDeudaTributaria?  @relation(fields: [categoriaId], references: [id])
   entidadRecaudadora    EntidadComercial?       @relation(fields: [entidadRecaudadoraId], references: [id])
   cuentaContable        PlanCuentasContable?    @relation(fields: [cuentaContableId], references: [id])
 
@@ -4197,10 +4283,14 @@ model TipoDeudaTributaria {
   // ========================================
   // ÍNDICES
   // ========================================
+  @@index([categoriaId])                                                      // Filtro por categoría
   @@index([entidadRecaudadoraId])                                             // Búsqueda por entidad recaudadora
   @@index([cuentaContableId])                                                 // Búsqueda por cuenta contable
   @@index([periodicidad])                                                     // Filtro por periodicidad
+  @@index([activo])                                                           // Filtro por estado activo/inactivo
 }
+
+
 
 // ════════════════════════════════════════════════════════════
 // DEUDAS TRIBUTARIAS
@@ -4266,6 +4356,8 @@ model DeudaTributaria {
   @@index([periodoContableId])                                                // Control de cierre contable
   @@index([moduloOrigenId, origenId])                                         // Trazabilidad al origen
 }
+
+
 
 // ════════════════════════════════════════════════════════════
 // PAGOS DE DEUDAS TRIBUTARIAS
