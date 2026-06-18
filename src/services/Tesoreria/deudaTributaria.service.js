@@ -7,6 +7,27 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  * Documentado en español.
  */
 
+/**
+ * Estados disponibles para deudas tributarias (tipoProvieneDeId = 27)
+ * Estos estados se obtienen de EstadoMultiFuncion
+ * - 120: PENDIENTE (danger) - Deuda sin pagos
+ * - 121: PAGO PARCIAL (warning) - Deuda con pagos parciales
+ * - 122: PAGADO (success) - Deuda totalmente pagada
+ * - 123: VENCIDO (danger) - Deuda vencida sin pagar completamente
+ * - 124: ANULADO (secondary) - Deuda anulada
+ * - 125: CANJEADO (contrast) - Deuda canjeada por otro documento
+ */
+const ESTADO_DEFAULT_PENDIENTE = 120;
+
+const ESTADOS_DEUDA_TRIBUTARIA = {
+  PENDIENTE: 120,
+  PAGO_PARCIAL: 121,
+  PAGADO: 122,
+  VENCIDO: 123,
+  ANULADO: 124,
+  CANJEADO: 125,
+};
+
 async function validarDeudaTributaria(data) {
   if (data.empresaId) {
     const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
@@ -111,8 +132,9 @@ const crear = async (data) => {
 
     const deudaData = {
       ...data,
+      montoPagadoAnterior: data.montoPagadoAnterior || 0,
       montoPagado: data.montoPagado || 0,
-      saldoPendiente: (data.montoOriginal || 0) - (data.montoPagado || 0),
+      saldoPendiente: (data.montoOriginal || 0) - (data.montoPagadoAnterior || 0) - (data.montoPagado || 0),
       esSaldoInicial: data.esSaldoInicial !== undefined ? data.esSaldoInicial : false,
       fechaContable: data.fechaContable || new Date(),
       periodoContableId: data.periodoContableId || null,
@@ -150,8 +172,9 @@ const actualizar = async (id, data) => {
 
     // Calcular saldo pendiente
     const montoOriginal = data.montoOriginal !== undefined ? data.montoOriginal : existente.montoOriginal;
+    const montoPagadoAnterior = data.montoPagadoAnterior !== undefined ? data.montoPagadoAnterior : (existente.montoPagadoAnterior || 0);
     const montoPagado = montoPagadoRecalculado;
-    const saldoPendiente = Number(montoOriginal) - Number(montoPagado);
+    const saldoPendiente = Number(montoOriginal) - Number(montoPagadoAnterior) - Number(montoPagado);
 
     const deudaData = {
       ...data,

@@ -1,12 +1,22 @@
 import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
-
+import { ValidationError, NotFoundError, DatabaseError } from '../../utils/errors.js';
 /**
- * Servicio CRUD para PagoDeudaTributaria
- * Gestiona los pagos realizados a SUNAT, ESSALUD, ONP, etc.
- * Actualiza automáticamente el saldo de la deuda
- * Documentado en español.
+ * Estados de deudas tributarias (tipoProvieneDeId = 27)
+ * - 120: PENDIENTE (danger)
+ * - 121: PAGO PARCIAL (warning)
+ * - 122: PAGADO (success)
+ * - 123: VENCIDO (danger)
+ * - 124: ANULADO (secondary)
+ * - 125: CANJEADO (contrast)
  */
+const ESTADOS_DEUDA_TRIBUTARIA = {
+  PENDIENTE: 120,
+  PAGO_PARCIAL: 121,
+  PAGADO: 122,
+  VENCIDO: 123,
+  ANULADO: 124,
+  CANJEADO: 125,
+};
 
 async function validarPagoDeudaTributaria(data) {
   if (data.deudaTributariaId) {
@@ -15,7 +25,7 @@ async function validarPagoDeudaTributaria(data) {
   }
 
   if (data.medioPagoId) {
-    const medioPago = await prisma.medioPago.findUnique({ where: { id: data.medioPagoId } });
+    const medioPago = await prisma.medioPago.findUnique({ where: { id: data.medioPagoId } });s
     if (!medioPago) throw new ValidationError('El medio de pago referenciado no existe.');
   }
 
