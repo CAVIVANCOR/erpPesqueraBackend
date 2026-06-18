@@ -31,6 +31,7 @@ const listar = async () => {
   try {
     return await prisma.tipoDeudaTributaria.findMany({
       include: {
+        categoria: true,
         entidadRecaudadora: true,
         cuentaContable: true
       },
@@ -49,6 +50,7 @@ const listarActivos = async () => {
     return await prisma.tipoDeudaTributaria.findMany({
       where: { activo: true },
       include: {
+        categoria: true,
         entidadRecaudadora: true,
         cuentaContable: true
       },
@@ -67,6 +69,7 @@ const obtenerPorId = async (id) => {
     const tipo = await prisma.tipoDeudaTributaria.findUnique({
       where: { id },
       include: {
+        categoria: true,
         entidadRecaudadora: true,
         cuentaContable: true,
         deudas: {
@@ -101,9 +104,10 @@ const crear = async (data) => {
     const tipoData = {
       nombre: data.nombre,
       descripcion: data.descripcion || null,
-      entidadRecaudadoraId: data.entidadRecaudadoraId || null,
+      categoriaId: data.categoriaId ? Number(data.categoriaId) : null,
+      entidadRecaudadoraId: Number(data.entidadRecaudadoraId) || null,
       periodicidad: data.periodicidad,
-      cuentaContableId: data.cuentaContableId || null,
+      cuentaContableId: Number(data.cuentaContableId) || null,
       activo: data.activo !== undefined ? data.activo : true,
       creadoPor: data.creadoPor || null
     };

@@ -2,12 +2,12 @@ import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 
 /**
- * Servicio CRUD para TipoDeudaPersonal
- * Gestiona el catálogo de tipos de deuda con personal (Sueldos, Comisiones, CTS, etc.)
+ * Servicio CRUD para CategoriaTipoDeudaPersonal
+ * Gestiona el catálogo de categorías de tipos de deuda con personal
  * Documentado en español.
  */
 
-async function validarTipoDeudaPersonal(data) {
+async function validarCategoriaTipoDeudaPersonal(data) {
   if (data.nombre && data.nombre.trim().length === 0) {
     throw new ValidationError('El nombre no puede estar vacío.');
   }
@@ -19,10 +19,7 @@ async function validarTipoDeudaPersonal(data) {
 
 const listar = async () => {
   try {
-    return await prisma.tipoDeudaPersonal.findMany({
-      include: {
-        categoria: true
-      },
+    return await prisma.categoriaTipoDeudaPersonal.findMany({
       orderBy: { nombre: 'asc' }
     });
   } catch (err) {
@@ -35,11 +32,8 @@ const listar = async () => {
 
 const listarActivos = async () => {
   try {
-    return await prisma.tipoDeudaPersonal.findMany({
+    return await prisma.categoriaTipoDeudaPersonal.findMany({
       where: { activo: true },
-      include: {
-        categoria: true
-      },
       orderBy: { nombre: 'asc' }
     });
   } catch (err) {
@@ -52,23 +46,17 @@ const listarActivos = async () => {
 
 const obtenerPorId = async (id) => {
   try {
-    const tipo = await prisma.tipoDeudaPersonal.findUnique({
+    const categoria = await prisma.categoriaTipoDeudaPersonal.findUnique({
       where: { id },
       include: {
-        categoria: true,
-        deudas: {
-          include: {
-            personal: true,
-            empresa: true,
-            estado: true
-          },
-          take: 10,
-          orderBy: { fecha: 'desc' }
+        tiposDeuda: {
+          orderBy: { nombre: 'asc' },
+          take: 20
         }
       }
     });
-    if (!tipo) throw new NotFoundError('Tipo de deuda personal no encontrado');
-    return tipo;
+    if (!categoria) throw new NotFoundError('Categoría de tipo de deuda personal no encontrada');
+    return categoria;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) {
@@ -84,16 +72,16 @@ const crear = async (data) => {
       throw new ValidationError('El nombre es obligatorio.');
     }
 
-    await validarTipoDeudaPersonal(data);
+    await validarCategoriaTipoDeudaPersonal(data);
 
-    const tipoData = {
+    const categoriaData = {
       nombre: data.nombre,
       descripcion: data.descripcion || null,
-      categoriaId: data.categoriaId ? Number(data.categoriaId) : null,
       activo: data.activo !== undefined ? data.activo : true,
       creadoPor: data.creadoPor || null
     };
-    return await prisma.tipoDeudaPersonal.create({ data: tipoData });
+
+    return await prisma.categoriaTipoDeudaPersonal.create({ data: categoriaData });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) {
@@ -105,19 +93,19 @@ const crear = async (data) => {
 
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.tipoDeudaPersonal.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Tipo de deuda personal no encontrado');
+    const existente = await prisma.categoriaTipoDeudaPersonal.findUnique({ where: { id } });
+    if (!existente) throw new NotFoundError('Categoría de tipo de deuda personal no encontrada');
 
-    await validarTipoDeudaPersonal(data);
+    await validarCategoriaTipoDeudaPersonal(data);
 
-    const tipoData = {
+    const categoriaData = {
       ...data,
       actualizadoPor: data.actualizadoPor || null
     };
 
-    return await prisma.tipoDeudaPersonal.update({
+    return await prisma.categoriaTipoDeudaPersonal.update({
       where: { id },
-      data: tipoData
+      data: categoriaData
     });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
@@ -130,18 +118,18 @@ const actualizar = async (id, data) => {
 
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.tipoDeudaPersonal.findUnique({
+    const existente = await prisma.categoriaTipoDeudaPersonal.findUnique({
       where: { id },
-      include: { deudas: true }
+      include: { tiposDeuda: true }
     });
 
-    if (!existente) throw new NotFoundError('Tipo de deuda personal no encontrado');
+    if (!existente) throw new NotFoundError('Categoría de tipo de deuda personal no encontrada');
 
-    if (existente.deudas && existente.deudas.length > 0) {
-      throw new ConflictError('No se puede eliminar el tipo porque tiene deudas asociadas.');
+    if (existente.tiposDeuda && existente.tiposDeuda.length > 0) {
+      throw new ConflictError('No se puede eliminar la categoría porque tiene tipos de deuda asociados.');
     }
 
-    await prisma.tipoDeudaPersonal.delete({ where: { id } });
+    await prisma.categoriaTipoDeudaPersonal.delete({ where: { id } });
     return true;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ConflictError) throw err;

@@ -256,9 +256,11 @@ import registrarMovimientoPagoRoutes from './Tesoreria/registrarMovimientoPago.r
 // 🆕 IMPORTS - DEUDAS PERSONAL Y TRIBUTARIAS
 // ========================================
 import tipoDeudaPersonalRoutes from './Tesoreria/tipoDeudaPersonal.routes.js';
+import categoriaTipoDeudaPersonalRoutes from './Tesoreria/categoriaTipoDeudaPersonal.routes.js';
 import deudaConPersonalRoutes from './Tesoreria/deudaConPersonal.routes.js';
 import pagoDeudaPersonalRoutes from './Tesoreria/pagoDeudaPersonal.routes.js';
 import tipoDeudaTributariaRoutes from './Tesoreria/tipoDeudaTributaria.routes.js';
+import categoriaTipoDeudaTributariaRoutes from './Tesoreria/categoriaTipoDeudaTributaria.routes.js';
 import deudaTributariaRoutes from './Tesoreria/deudaTributaria.routes.js';
 import pagoDeudaTributariaRoutes from './Tesoreria/pagoDeudaTributaria.routes.js';
 const router = express.Router();
@@ -701,10 +703,11 @@ router.use('/tesoreria/letras-cambio', letraCambioTesoreriaRoutes);
 router.use('/tesoreria/tipos-deuda-personal', tipoDeudaPersonalRoutes);
 router.use('/tesoreria/deudas-con-personal', deudaConPersonalRoutes);
 router.use('/tesoreria/pagos-deuda-personal', pagoDeudaPersonalRoutes);
-
+router.use('/tesoreria/categorias-tipo-deuda-personal', categoriaTipoDeudaPersonalRoutes);
 // ========================================
 // 🆕 RUTAS - DEUDAS TRIBUTARIAS
 // ========================================
+router.use('/tesoreria/categorias-tipo-deuda-tributaria', categoriaTipoDeudaTributariaRoutes);
 router.use('/tesoreria/tipos-deuda-tributaria', tipoDeudaTributariaRoutes);
 router.use('/tesoreria/deudas-tributarias', deudaTributariaRoutes);
 router.use('/tesoreria/pagos-deuda-tributaria', pagoDeudaTributariaRoutes);
