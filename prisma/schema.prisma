@@ -4048,7 +4048,6 @@ model CategoriaTipoDeudaPersonal {
 }
 
 
-
 // ════════════════════════════════════════════════════════════
 // CATÁLOGO: TIPOS DE DEUDA PERSONAL
 // Ejemplos: Sueldos, Gratificaciones, CTS, Comisiones Pesca
@@ -4059,6 +4058,8 @@ model TipoDeudaPersonal {
   categoriaId           BigInt?                                               // Categoría a la que pertenece (FK a CategoriaTipoDeudaPersonal)
   nombre                String                  @db.VarChar(100)              // Nombre del tipo de deuda (ej: "Sueldos", "Comisiones Pesca")
   descripcion           String?                 @db.Text                      // Descripción detallada del tipo de deuda
+  cuentaContableId      BigInt?                                               // ⭐ NUEVO: Cuenta contable asociada (FK a PlanCuentasContable: 41.1.1 Remuneraciones por Pagar, etc.)
+  periodicidad          FrecuenciaPago?                                       // ⭐ NUEVO: Periodicidad del pago (MENSUAL, QUINCENAL, SEMANAL, etc.) - OPCIONAL
   activo                Boolean                 @default(true)                // Estado del tipo de deuda (true = activo, false = inactivo)
   
   // ========================================
@@ -4073,6 +4074,7 @@ model TipoDeudaPersonal {
   // RELACIONES
   // ========================================
   categoria             CategoriaTipoDeudaPersonal?  @relation(fields: [categoriaId], references: [id])
+  cuentaContable        PlanCuentasContable?    @relation("TipoDeudaPersonalToCuentaContable", fields: [cuentaContableId], references: [id])  // ⭐ NUEVO
   
   // ========================================
   // RELACIONES INVERSAS
@@ -4083,9 +4085,10 @@ model TipoDeudaPersonal {
   // ÍNDICES
   // ========================================
   @@index([categoriaId])                                                      // Filtro por categoría
+  @@index([cuentaContableId])                                                 // ⭐ NUEVO: Búsqueda por cuenta contable
+  @@index([periodicidad])                                                     // ⭐ NUEVO: Filtro por periodicidad
   @@index([activo])                                                           // Filtro por estado activo/inactivo
 }
-
 
 
 // ════════════════════════════════════════════════════════════
@@ -5682,12 +5685,6 @@ enum TipoNotificacion {
 
 
 
-
-
-
-
-
-
 // ============================================
 // MÓDULO FINANCIERO - CONTABILIDAD GENERAL
 // MODELO 1.1: Plan de Cuentas Contable
@@ -5761,6 +5758,7 @@ model PlanCuentasContable {
   tiposActivoDepreciacion         TipoActivo[]  @relation("TipoActivoCuentaDepreciacion")
   tiposActivoDepreciacionAcum     TipoActivo[]  @relation("TipoActivoCuentaDepAcum")
   tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR ESTA LÍNEA
+  tiposDeudaPersonal    TipoDeudaPersonal[]     @relation("TipoDeudaPersonalToCuentaContable")  // ⭐ NUEVO: Tipos de deuda personal que usan esta cuenta
 
   // ========================================
   // ÍNDICES
