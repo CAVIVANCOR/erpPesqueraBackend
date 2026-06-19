@@ -15,13 +15,19 @@ async function validarTipoDeudaPersonal(data) {
   if (data.nombre && data.nombre.length > 100) {
     throw new ValidationError('El nombre no puede exceder 100 caracteres.');
   }
+
+  if (data.cuentaContableId) {
+    const cuenta = await prisma.planCuentasContable.findUnique({ where: { id: data.cuentaContableId } });
+    if (!cuenta) throw new ValidationError('La cuenta contable referenciada no existe.');
+  }
 }
 
 const listar = async () => {
   try {
     return await prisma.tipoDeudaPersonal.findMany({
       include: {
-        categoria: true
+        categoria: true,
+        cuentaContable: true
       },
       orderBy: { nombre: 'asc' }
     });
@@ -38,7 +44,8 @@ const listarActivos = async () => {
     return await prisma.tipoDeudaPersonal.findMany({
       where: { activo: true },
       include: {
-        categoria: true
+        categoria: true,
+        cuentaContable: true
       },
       orderBy: { nombre: 'asc' }
     });
@@ -56,6 +63,7 @@ const obtenerPorId = async (id) => {
       where: { id },
       include: {
         categoria: true,
+        cuentaContable: true,
         deudas: {
           include: {
             personal: true,
@@ -90,6 +98,8 @@ const crear = async (data) => {
       nombre: data.nombre,
       descripcion: data.descripcion || null,
       categoriaId: data.categoriaId ? Number(data.categoriaId) : null,
+      cuentaContableId: Number(data.cuentaContableId) || null,
+      periodicidad: data.periodicidad || null,
       activo: data.activo !== undefined ? data.activo : true,
       creadoPor: data.creadoPor || null
     };
