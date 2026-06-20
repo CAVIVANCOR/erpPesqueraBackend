@@ -1,6 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { ValidationError, DatabaseError } from '../../utils/errors.js';
-import generarKardexService from './generarKardex.service.js';
+import { regenerarKardexYSaldosCompletoSAP } from './kardexSaldosSAP.service.js';
 
 /**
  * Actualiza un MovimientoAlmacen existente con nuevos datos
@@ -30,15 +30,8 @@ const actualizarMovimientoAlmacenCompleto = async (
         throw new ValidationError('Movimiento de almacén no encontrado');
       }
 
-      // ========================================
-      // PASO 2: ELIMINAR KARDEX ANTERIOR
-      // ========================================
-      await tx.kardexAlmacen.deleteMany({
-        where: { movimientoAlmacenId: movimientoId },
-      });
-
-      // ========================================
-      // PASO 3: ACTUALIZAR CABECERA DEL MOVIMIENTO
+            // ========================================
+      // PASO 2: ACTUALIZAR CABECERA DEL MOVIMIENTO
       // ========================================
       await tx.movimientoAlmacen.update({
         where: { id: movimientoId },
@@ -54,14 +47,14 @@ const actualizarMovimientoAlmacenCompleto = async (
       });
 
       // ========================================
-      // PASO 4: ELIMINAR DETALLES ANTIGUOS
+      // PASO 3: ELIMINAR DETALLES ANTIGUOS
       // ========================================
       await tx.detalleMovimientoAlmacen.deleteMany({
         where: { movimientoAlmacenId: movimientoId },
       });
 
       // ========================================
-      // PASO 5: INSERTAR NUEVOS DETALLES
+      // PASO 4: INSERTAR NUEVOS DETALLES
       // ========================================
       await tx.detalleMovimientoAlmacen.createMany({
         data: detalles.map((det) => ({
@@ -92,7 +85,7 @@ const actualizarMovimientoAlmacenCompleto = async (
       });
 
       // ========================================
-      // PASO 6: CAMBIAR ESTADO A CERRADO (31)
+      // PASO 5: CAMBIAR ESTADO A CERRADO (31)
       // ========================================
       await tx.movimientoAlmacen.update({
         where: { id: movimientoId },
@@ -103,13 +96,13 @@ const actualizarMovimientoAlmacenCompleto = async (
       });
 
       // ========================================
-      // PASO 7: REGENERAR KARDEX
+      // PASO 6: REGENERAR KARDEX Y SALDOS (SERVICIO SAP)
       // ========================================
-      const kardex = await generarKardexService.generarKardexMovimiento(
+      const kardex = await regenerarKardexYSaldosCompletoSAP(
         movimientoId,
         tx
       );
-
+      
       // ========================================
       // PASO 8: CAMBIAR ESTADO A KARDEX GENERADO (33)
       // ========================================

@@ -43,7 +43,7 @@ import { ValidationError, DatabaseError } from "../../utils/errors.js";
  * 7. Recalcula saldos generales
  * 8. Valida consistencia
  * 
- * @param {BigInt} movimientoAlmacenId - ID del movimiento
+ * @param {Number} movimientoAlmacenId - ID del movimiento
  * @param {PrismaTransaction} tx - Transacción de Prisma (obligatorio)
  * @returns {Promise<Object>} Resultado de la regeneración
  */
@@ -58,7 +58,6 @@ const regenerarKardexYSaldosCompletoSAP = async (movimientoAlmacenId, tx) => {
             saldosGenActualizados: 0,
             errores: [],
         };
-
         // ========================================
         // FASE 1: SNAPSHOT (Captura de estado anterior)
         // ========================================
@@ -66,62 +65,49 @@ const regenerarKardexYSaldosCompletoSAP = async (movimientoAlmacenId, tx) => {
             movimientoAlmacenId,
             tx
         );
-
         // ========================================
         // FASE 2: LIMPIEZA TOTAL
         // ========================================
-
         // 2.1 Eliminar kardex anterior
         const kardexEliminados = await limpiarKardexAnteriorSAP(movimientoAlmacenId, tx);
         resultados.kardexEliminados = kardexEliminados;
-
         // 2.2 Eliminar saldos huérfanos
         const saldosEliminados = await limpiarSaldosHuerfanosSAP(
             combinacionesAnteriores,
             tx
         );
         resultados.saldosHuerfanosEliminados = saldosEliminados;
-
         // ========================================
         // FASE 3: REGENERACIÓN
         // ========================================
-
         // 3.1 Regenerar kardex
         const kardexGenerados = await regenerarKardexSAP(movimientoAlmacenId, tx);
         resultados.kardexCreados = kardexGenerados.kardexCreados;
         resultados.errores = kardexGenerados.errores;
-
         // 3.2 Calcular saldos acumulados en kardex
         await calcularSaldosAcumuladosKardexSAP(movimientoAlmacenId, tx);
-
         // ========================================
         // FASE 4: ACTUALIZACIÓN DE SALDOS
         // ========================================
-
         // 4.1 Recalcular saldos detallados
         const saldosDetActualizados = await recalcularSaldosDetalladosSAP(
             movimientoAlmacenId,
             tx
         );
         resultados.saldosDetActualizados = saldosDetActualizados;
-
         // 4.2 Recalcular saldos generales
         const saldosGenActualizados = await recalcularSaldosGeneralesSAP(
             movimientoAlmacenId,
             tx
         );
         resultados.saldosGenActualizados = saldosGenActualizados;
-
         // ========================================
         // FASE 5: VALIDACIÓN
         // ========================================
-
         // 5.1 Validar consistencia Kardex vs Saldos
         await validarConsistenciaSAP(movimientoAlmacenId, tx);
-
         // 5.2 Validar saldos no negativos
         await validarSaldosNoNegativosSAP(movimientoAlmacenId, tx);
-
         return resultados;
     } catch (error) {
         if (error instanceof ValidationError) throw error;
@@ -143,7 +129,7 @@ const regenerarKardexYSaldosCompletoSAP = async (movimientoAlmacenId, tx) => {
  * 
  * Esto permite identificar qué saldos quedarán huérfanos después del cambio
  * 
- * @param {BigInt} movimientoAlmacenId - ID del movimiento
+ * @param {Number} movimientoAlmacenId - ID del movimiento
  * @param {PrismaTransaction} tx - Transacción de Prisma
  * @returns {Promise<Object>} Objeto con combinaciones detalladas y generales
  */
@@ -215,7 +201,7 @@ const capturarCombinacionesAnterioresSAP = async (movimientoAlmacenId, tx) => {
 /**
  * Elimina todos los registros de kardex del movimiento
  * 
- * @param {BigInt} movimientoAlmacenId - ID del movimiento
+ * @param {Number} movimientoAlmacenId - ID del movimiento
  * @param {PrismaTransaction} tx - Transacción de Prisma
  * @returns {Promise<Number>} Cantidad de registros eliminados
  */
@@ -251,20 +237,20 @@ const limpiarSaldosHuerfanosSAP = async (combinacionesAnteriores, tx) => {
     for (const combinacion of combinacionesAnteriores.detalladas) {
         // Construir filtro para buscar en kardex
         const filtroKardex = {
-            empresaId: combinacion.empresaId ? BigInt(combinacion.empresaId) : null,
-            almacenId: combinacion.almacenId ? BigInt(combinacion.almacenId) : null,
-            productoId: combinacion.productoId ? BigInt(combinacion.productoId) : null,
-            clienteId: combinacion.clienteId ? BigInt(combinacion.clienteId) : null,
+            empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
+            almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
+            productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
+            clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
             esCustodia: combinacion.esCustodia,
             lote: combinacion.lote,
             fechaIngreso: combinacion.fechaIngreso ? new Date(combinacion.fechaIngreso) : null,
             fechaProduccion: combinacion.fechaProduccion ? new Date(combinacion.fechaProduccion) : null,
             fechaVencimiento: combinacion.fechaVencimiento ? new Date(combinacion.fechaVencimiento) : null,
-            estadoId: combinacion.estadoId ? BigInt(combinacion.estadoId) : null,
-            estadoCalidadId: combinacion.estadoCalidadId ? BigInt(combinacion.estadoCalidadId) : null,
+            estadoId: combinacion.estadoId ? Number(combinacion.estadoId) : null,
+            estadoCalidadId: combinacion.estadoCalidadId ? Number(combinacion.estadoCalidadId) : null,
             numContenedor: combinacion.numContenedor,
             nroSerie: combinacion.nroSerie,
-            ubicacionFisicaId: combinacion.ubicacionFisicaId ? BigInt(combinacion.ubicacionFisicaId) : null,
+            ubicacionFisicaId: combinacion.ubicacionFisicaId ? Number(combinacion.ubicacionFisicaId) : null,
         };
 
         // Verificar si existe en kardex
@@ -288,10 +274,10 @@ const limpiarSaldosHuerfanosSAP = async (combinacionesAnteriores, tx) => {
     for (const combinacion of combinacionesAnteriores.generales) {
         // Construir filtro para buscar en kardex
         const filtroKardex = {
-            empresaId: combinacion.empresaId ? BigInt(combinacion.empresaId) : null,
-            almacenId: combinacion.almacenId ? BigInt(combinacion.almacenId) : null,
-            productoId: combinacion.productoId ? BigInt(combinacion.productoId) : null,
-            clienteId: combinacion.clienteId ? BigInt(combinacion.clienteId) : null,
+            empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
+            almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
+            productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
+            clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
             esCustodia: combinacion.custodia,
         };
 
@@ -328,7 +314,7 @@ const limpiarSaldosHuerfanosSAP = async (combinacionesAnteriores, tx) => {
  * REUTILIZA la lógica existente de generarKardex.service.js
  * para mantener consistencia con el patrón actual
  * 
- * @param {BigInt} movimientoAlmacenId - ID del movimiento
+ * @param {Number} movimientoAlmacenId - ID del movimiento
  * @param {PrismaTransaction} tx - Transacción de Prisma
  * @returns {Promise<Object>} Resultado de la generación
  */
@@ -437,11 +423,17 @@ const procesarKardexSAP = async (tx, movimiento, detalle, conceptoMovAlmacen, es
         ? detalle.ubicacionFisicaOrigenId
         : detalle.ubicacionFisicaDestinoId;
 
-    // Determinar si es ingreso o egreso
-    const esIngreso = esOrigen
-        ? !conceptoMovAlmacen.esIngresoEgreso
-        : conceptoMovAlmacen.esIngresoEgreso;
-
+        // Determinar si es ingreso o egreso según tipoMovimientoId
+    // tipoMovimientoId: 2 = INGRESO, 3 = SALIDA, 4 = TRANSFERENCIA
+    let esIngreso;
+    
+    if (esOrigen) {
+        // ORIGEN siempre es EGRESO (salida del almacén origen)
+        esIngreso = false;
+    } else {
+        // DESTINO siempre es INGRESO (entrada al almacén destino)
+        esIngreso = true;
+    }
     const filtro = {
         empresaId: movimiento.empresaId,
         almacenId: almacenId, // ← DEBE SER DEFINIDO
@@ -458,7 +450,6 @@ const procesarKardexSAP = async (tx, movimiento, detalle, conceptoMovAlmacen, es
         nroSerie: detalle.nroSerie || "",
         ubicacionFisicaId: ubicacionFisicaId,
     };
-
     // Crear registro de kardex
     await tx.kardexAlmacen.create({
         data: {
@@ -524,7 +515,7 @@ const procesarKardexSAP = async (tx, movimiento, detalle, conceptoMovAlmacen, es
  * - Acumula ingresos - egresos
  * - Actualiza saldoFinalCant y saldoFinalPeso en cada registro
  * 
- * @param {BigInt} movimientoAlmacenId - ID del movimiento
+ * @param {Number} movimientoAlmacenId - ID del movimiento
  * @param {PrismaTransaction} tx - Transacción de Prisma
  */
 const calcularSaldosAcumuladosKardexSAP = async (movimientoAlmacenId, tx) => {
@@ -577,20 +568,20 @@ const calcularSaldosAcumuladosKardexSAP = async (movimientoAlmacenId, tx) => {
 
         // Construir filtro
         const filtro = {
-            empresaId: combinacion.empresaId ? BigInt(combinacion.empresaId) : null,
-            almacenId: combinacion.almacenId ? BigInt(combinacion.almacenId) : null,
-            productoId: combinacion.productoId ? BigInt(combinacion.productoId) : null,
-            clienteId: combinacion.clienteId ? BigInt(combinacion.clienteId) : null,
+            empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
+            almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
+            productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
+            clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
             esCustodia: combinacion.esCustodia,
             lote: combinacion.lote,
             fechaIngreso: combinacion.fechaIngreso ? new Date(combinacion.fechaIngreso) : null,
             fechaProduccion: combinacion.fechaProduccion ? new Date(combinacion.fechaProduccion) : null,
             fechaVencimiento: combinacion.fechaVencimiento ? new Date(combinacion.fechaVencimiento) : null,
-            estadoId: combinacion.estadoId ? BigInt(combinacion.estadoId) : null,
-            estadoCalidadId: combinacion.estadoCalidadId ? BigInt(combinacion.estadoCalidadId) : null,
+            estadoId: combinacion.estadoId ? Number(combinacion.estadoId) : null,
+            estadoCalidadId: combinacion.estadoCalidadId ? Number(combinacion.estadoCalidadId) : null,
             numContenedor: combinacion.numContenedor,
             nroSerie: combinacion.nroSerie,
-            ubicacionFisicaId: combinacion.ubicacionFisicaId ? BigInt(combinacion.ubicacionFisicaId) : null,
+            ubicacionFisicaId: combinacion.ubicacionFisicaId ? Number(combinacion.ubicacionFisicaId) : null,
         };
 
         // Obtener kardex ordenado cronológicamente
@@ -643,7 +634,7 @@ const calcularSaldosAcumuladosKardexSAP = async (movimientoAlmacenId, tx) => {
  * - Por cada combinación, suma ingresos - egresos
  * - Upsert en SaldosDetProductoCliente
  * 
- * @param {BigInt} movimientoAlmacenId - ID del movimiento
+ * @param {Number} movimientoAlmacenId - ID del movimiento
  * @param {PrismaTransaction} tx - Transacción de Prisma
  * @returns {Promise<Number>} Cantidad de saldos actualizados
  */
@@ -698,20 +689,20 @@ const recalcularSaldosDetalladosSAP = async (movimientoAlmacenId, tx) => {
 
         // Construir filtro
         const filtro = {
-            empresaId: combinacion.empresaId ? BigInt(combinacion.empresaId) : null,
-            almacenId: combinacion.almacenId ? BigInt(combinacion.almacenId) : null,
-            productoId: combinacion.productoId ? BigInt(combinacion.productoId) : null,
-            clienteId: combinacion.clienteId ? BigInt(combinacion.clienteId) : null,
+            empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
+            almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
+            productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
+            clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
             esCustodia: combinacion.esCustodia,
             lote: combinacion.lote,
             fechaIngreso: combinacion.fechaIngreso ? new Date(combinacion.fechaIngreso) : null,
             fechaProduccion: combinacion.fechaProduccion ? new Date(combinacion.fechaProduccion) : null,
             fechaVencimiento: combinacion.fechaVencimiento ? new Date(combinacion.fechaVencimiento) : null,
-            estadoId: combinacion.estadoId ? BigInt(combinacion.estadoId) : null,
-            estadoCalidadId: combinacion.estadoCalidadId ? BigInt(combinacion.estadoCalidadId) : null,
+            estadoId: combinacion.estadoId ? Number(combinacion.estadoId) : null,
+            estadoCalidadId: combinacion.estadoCalidadId ? Number(combinacion.estadoCalidadId) : null,
             numContenedor: combinacion.numContenedor,
             nroSerie: combinacion.nroSerie,
-            ubicacionFisicaId: combinacion.ubicacionFisicaId ? BigInt(combinacion.ubicacionFisicaId) : null,
+            ubicacionFisicaId: combinacion.ubicacionFisicaId ? Number(combinacion.ubicacionFisicaId) : null,
         };
 
         // Sumar desde kardex
@@ -723,7 +714,6 @@ const recalcularSaldosDetalladosSAP = async (movimientoAlmacenId, tx) => {
                 { id: "asc" },
             ],
         });
-
         let saldoCantidad = 0;
         let saldoPeso = 0;
 
@@ -736,7 +726,6 @@ const recalcularSaldosDetalladosSAP = async (movimientoAlmacenId, tx) => {
                 saldoPeso -= Number(kardex.egresoPesoVariables || kardex.egresoPeso || 0);
             }
         }
-
         // Upsert en SaldosDetProductoCliente
         // PATRÓN: findFirst + update/create (por constraint único con nulls)
         const existente = await tx.saldosDetProductoCliente.findFirst({
@@ -781,7 +770,7 @@ const recalcularSaldosDetalladosSAP = async (movimientoAlmacenId, tx) => {
  * - Calcula costo promedio ponderado
  * - Upsert en SaldosProductoCliente
  * 
- * @param {BigInt} movimientoAlmacenId - ID del movimiento
+ * @param {Number} movimientoAlmacenId - ID del movimiento
  * @param {PrismaTransaction} tx - Transacción de Prisma
  * @returns {Promise<Number>} Cantidad de saldos actualizados
  */
@@ -817,10 +806,10 @@ const recalcularSaldosGeneralesSAP = async (movimientoAlmacenId, tx) => {
         const combinacion = JSON.parse(combinacionStr);
 
         const filtro = {
-            empresaId: combinacion.empresaId ? BigInt(combinacion.empresaId) : null,
-            almacenId: combinacion.almacenId ? BigInt(combinacion.almacenId) : null,
-            productoId: combinacion.productoId ? BigInt(combinacion.productoId) : null,
-            clienteId: combinacion.clienteId ? BigInt(combinacion.clienteId) : null,
+            empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
+            almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
+            productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
+            clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
             esCustodia: combinacion.custodia,
         };
 
@@ -899,7 +888,7 @@ const recalcularSaldosGeneralesSAP = async (movimientoAlmacenId, tx) => {
 /**
  * Valida que los saldos en las tablas coincidan con el último saldo del kardex
  * 
- * @param {BigInt} movimientoAlmacenId - ID del movimiento
+ * @param {Number} movimientoAlmacenId - ID del movimiento
  * @param {PrismaTransaction} tx - Transacción de Prisma
  * @throws {ValidationError} Si hay inconsistencias
  */
@@ -951,20 +940,20 @@ const validarConsistenciaSAP = async (movimientoAlmacenId, tx) => {
         const combinacion = JSON.parse(combinacionStr);
 
         const filtro = {
-            empresaId: combinacion.empresaId ? BigInt(combinacion.empresaId) : null,
-            almacenId: combinacion.almacenId ? BigInt(combinacion.almacenId) : null,
-            productoId: combinacion.productoId ? BigInt(combinacion.productoId) : null,
-            clienteId: combinacion.clienteId ? BigInt(combinacion.clienteId) : null,
+            empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
+            almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
+            productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
+            clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
             esCustodia: combinacion.esCustodia,
             lote: combinacion.lote,
             fechaIngreso: combinacion.fechaIngreso ? new Date(combinacion.fechaIngreso) : null,
             fechaProduccion: combinacion.fechaProduccion ? new Date(combinacion.fechaProduccion) : null,
             fechaVencimiento: combinacion.fechaVencimiento ? new Date(combinacion.fechaVencimiento) : null,
-            estadoId: combinacion.estadoId ? BigInt(combinacion.estadoId) : null,
-            estadoCalidadId: combinacion.estadoCalidadId ? BigInt(combinacion.estadoCalidadId) : null,
+            estadoId: combinacion.estadoId ? Number(combinacion.estadoId) : null,
+            estadoCalidadId: combinacion.estadoCalidadId ? Number(combinacion.estadoCalidadId) : null,
             numContenedor: combinacion.numContenedor,
             nroSerie: combinacion.nroSerie,
-            ubicacionFisicaId: combinacion.ubicacionFisicaId ? BigInt(combinacion.ubicacionFisicaId) : null,
+            ubicacionFisicaId: combinacion.ubicacionFisicaId ? Number(combinacion.ubicacionFisicaId) : null,
         };
 
         // Obtener último saldo del kardex
@@ -1001,7 +990,7 @@ const validarConsistenciaSAP = async (movimientoAlmacenId, tx) => {
 /**
  * Valida que no existan saldos negativos
  * 
- * @param {BigInt} movimientoAlmacenId - ID del movimiento
+ * @param {Number} movimientoAlmacenId - ID del movimiento
  * @param {PrismaTransaction} tx - Transacción de Prisma
  * @throws {ValidationError} Si hay saldos negativos
  */

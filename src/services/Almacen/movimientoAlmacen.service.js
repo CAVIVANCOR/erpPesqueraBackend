@@ -42,15 +42,15 @@ async function validarForaneas(data) {
  */
 const listar = async () => {
   try {
-    return await prisma.movimientoAlmacen.findMany({ 
-      include: { 
+    return await prisma.movimientoAlmacen.findMany({
+      include: {
         empresa: true,
         tipoDocumento: true,
         conceptoMovAlmacen: true,
         entidadComercial: true,
-        detalles: true, 
-        preFacturas: true 
-      } 
+        detalles: true,
+        preFacturas: true
+      }
     });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -63,9 +63,9 @@ const listar = async () => {
  */
 const obtenerPorId = async (id) => {
   try {
-    const mov = await prisma.movimientoAlmacen.findUnique({ 
-      where: { id }, 
-      include: { 
+    const mov = await prisma.movimientoAlmacen.findUnique({
+      where: { id },
+      include: {
         empresa: true,
         tipoDocumento: true,
         conceptoMovAlmacen: true,
@@ -88,15 +88,15 @@ const obtenerPorId = async (id) => {
             ubicacionFisicaDestino: true
           }
         },
-        preFacturas: true 
-      } 
+        preFacturas: true
+      }
     });
     if (!mov) throw new NotFoundError('MovimientoAlmacen no encontrado');
-    
+
     // Cargar manualmente los almacenes origen y destino del concepto
     if (mov.conceptoMovAlmacen) {
 
-      
+
       if (mov.conceptoMovAlmacen.almacenOrigenId) {
         mov.conceptoMovAlmacen.almacenOrigen = await prisma.almacen.findUnique({
           where: { id: mov.conceptoMovAlmacen.almacenOrigenId }
@@ -108,43 +108,43 @@ const obtenerPorId = async (id) => {
         });
       }
     }
-    
+
     // Cargar manualmente el personal responsable de almacén
     if (mov.personalRespAlmacen) {
       const personalId = mov.personalRespAlmacen; // Es un BigInt con el ID
-      
+
       const personal = await prisma.personal.findUnique({
         where: { id: personalId }
       });
-      
+
       mov.personalRespAlmacen = personal; // Reemplazar el ID con el objeto completo
     }
-    
+
     // Cargar manualmente los estados de mercadería y calidad para cada detalle
     if (mov.detalles && mov.detalles.length > 0) {
       const estadoMercaderiaIds = [...new Set(mov.detalles.map(d => d.estadoMercaderiaId).filter(Boolean))];
       const estadoCalidadIds = [...new Set(mov.detalles.map(d => d.estadoCalidadId).filter(Boolean))];
-      
-      const estadosMercaderia = estadoMercaderiaIds.length > 0 
+
+      const estadosMercaderia = estadoMercaderiaIds.length > 0
         ? await prisma.estadoMultiFuncion.findMany({ where: { id: { in: estadoMercaderiaIds } } })
         : [];
-      
+
       const estadosCalidad = estadoCalidadIds.length > 0
         ? await prisma.estadoMultiFuncion.findMany({ where: { id: { in: estadoCalidadIds } } })
         : [];
-      
+
       // Mapear estados a los detalles
       mov.detalles = mov.detalles.map(detalle => ({
         ...detalle,
-        estadoMercaderia: detalle.estadoMercaderiaId 
-          ? estadosMercaderia.find(e => e.id === detalle.estadoMercaderiaId) 
+        estadoMercaderia: detalle.estadoMercaderiaId
+          ? estadosMercaderia.find(e => e.id === detalle.estadoMercaderiaId)
           : null,
         estadoCalidad: detalle.estadoCalidadId
           ? estadosCalidad.find(e => e.id === detalle.estadoCalidadId)
           : null
       }));
     }
-    
+
     return mov;
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -157,7 +157,7 @@ const obtenerPorId = async (id) => {
  */
 const crear = async (data) => {
   try {
-    
+
     if (!data.empresaId || !data.tipoDocumentoId || !data.conceptoMovAlmacenId || !data.fechaDocumento) {
       throw new ValidationError('Los campos empresaId, tipoDocumentoId, conceptoMovAlmacenId y fechaDocumento son obligatorios.');
     }
@@ -165,26 +165,26 @@ const crear = async (data) => {
       throw new ValidationError('El campo serieDocId es obligatorio.');
     }
     await validarForaneas(data);
-    
+
     // Usar transacción para generar número y actualizar correlativo atómicamente
     return await prisma.$transaction(async (tx) => {
       // 1. Obtener la serie seleccionada
       const serie = await tx.serieDoc.findUnique({
         where: { id: BigInt(data.serieDocId) }
       });
-      
+
       if (!serie) {
         throw new ValidationError('Serie de documento no encontrada.');
       }
-      
+
       // 2. Calcular nuevo correlativo
       const nuevoCorrelativo = Number(serie.correlativo) + 1;
-      
+
       // 3. Generar números con formato
       const numSerie = String(serie.serie).padStart(serie.numCerosIzqSerie, '0');
       const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, '0');
       const numeroDocumento = `${numSerie}-${numCorre}`;
-      
+
       // 4. Crear objeto limpio solo con campos del modelo (patrón estándar)
       const datosLimpios = {
         empresaId: data.empresaId,
@@ -221,21 +221,21 @@ const crear = async (data) => {
         urlMovAlmacenConCostosPdf: data.urlMovAlmacenConCostosPdf,
         unidadNegocioId: data.unidadNegocioId,
       };
-      
+
       // 5. Crear el movimiento de almacén (patrón estándar - solo cabecera)
-      const movimiento = await tx.movimientoAlmacen.create({ 
+      const movimiento = await tx.movimientoAlmacen.create({
         data: datosLimpios,
         include: {
           conceptoMovAlmacen: true
         }
       });
-      
+
       // 8. Actualizar el correlativo en SerieDoc
       await tx.serieDoc.update({
         where: { id: BigInt(data.serieDocId) },
         data: { correlativo: BigInt(nuevoCorrelativo) }
       });
-      
+
       return movimiento;
     });
   } catch (err) {
@@ -252,16 +252,16 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.movimientoAlmacen.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('MovimientoAlmacen no encontrado');
-    
+
     // Validar foráneas si se modifican
     await validarForaneas({ ...existente, ...data });
-    
+
     // Extraer detalles del data (no se actualizan aquí, se manejan por separado)
     const { detalles, ...dataMovimiento } = data;
-    
+
     // Actualizar solo los campos del movimiento, sin detalles
-    return await prisma.movimientoAlmacen.update({ 
-      where: { id }, 
+    return await prisma.movimientoAlmacen.update({
+      where: { id },
       data: dataMovimiento,
       include: {
         detalles: true,
@@ -276,19 +276,20 @@ const actualizar = async (id, data) => {
 };
 
 /**
- * Elimina un movimiento de almacén por ID, validando existencia y que no tenga detalles asociados.
+ * Elimina un movimiento de almacén por ID usando sistema SAP
+ * Elimina kardex, detalles y regenera saldos automáticamente
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.movimientoAlmacen.findUnique({ where: { id }, include: { detalles: true } });
-    if (!existente) throw new NotFoundError('MovimientoAlmacen no encontrado');
-    if (existente.detalles && existente.detalles.length > 0) {
-      throw new ConflictError('No se puede eliminar porque tiene detalles asociados.');
-    }
-    await prisma.movimientoAlmacen.delete({ where: { id } });
-    return true;
+    // Importar servicio de eliminación SAP
+    const eliminarMovimientoService = await import('./eliminarMovimientoAlmacen.service.js');
+
+    // Ejecutar eliminación completa con regeneración SAP
+    const resultado = await eliminarMovimientoService.default.eliminarMovimientoAlmacenCompleto(BigInt(id));
+
+    return resultado;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -360,7 +361,7 @@ const generarNumeroDocumento = async (serieDocId) => {
       serieDoc.serie,
       serieDoc.numCerosIzqSerie
     );
-    
+
     const numCorreDoc = llenaNumerosIzquierda(
       nuevoCorrelativo,
       serieDoc.numCerosIzqCorre
@@ -390,11 +391,11 @@ const cerrarMovimiento = async (id) => {
   try {
     const existente = await prisma.movimientoAlmacen.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('MovimientoAlmacen no encontrado');
-    
+
     // Cambiar estado a CERRADO (31)
-    return await prisma.movimientoAlmacen.update({ 
-      where: { id }, 
-      data: { 
+    return await prisma.movimientoAlmacen.update({
+      where: { id },
+      data: {
         estadoDocAlmacenId: BigInt(31),
         actualizadoEn: new Date()
       },
@@ -418,7 +419,7 @@ const cerrarMovimiento = async (id) => {
  */
 const anularMovimiento = async (id, empresaId) => {
   try {
-    const existente = await prisma.movimientoAlmacen.findUnique({ 
+    const existente = await prisma.movimientoAlmacen.findUnique({
       where: { id },
       include: {
         detalles: true,
@@ -430,7 +431,7 @@ const anularMovimiento = async (id, empresaId) => {
       }
     });
     if (!existente) throw new NotFoundError('MovimientoAlmacen no encontrado');
-    
+
     return await prisma.$transaction(async (tx) => {
       // 1. Eliminar registros de kardex relacionados a este movimiento
       const kardexEliminados = await tx.kardexAlmacen.deleteMany({
@@ -441,7 +442,7 @@ const anularMovimiento = async (id, empresaId) => {
 
       // 2. Obtener productos únicos afectados para recalcular saldos
       const productosAfectados = [...new Set(existente.detalles.map(d => d.productoId))];
-      
+
       // 3. Recalcular saldos para cada producto afectado
       let saldosDetActualizados = 0;
       let saldosGenActualizados = 0;
@@ -657,9 +658,9 @@ const anularMovimiento = async (id, empresaId) => {
       }
 
       // 4. Cambiar estado a ANULADO (32)
-      const movimientoAnulado = await tx.movimientoAlmacen.update({ 
-        where: { id }, 
-        data: { 
+      const movimientoAnulado = await tx.movimientoAlmacen.update({
+        where: { id },
+        data: {
           estadoDocAlmacenId: BigInt(32),
           actualizadoEn: new Date()
         },

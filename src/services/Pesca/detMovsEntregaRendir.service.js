@@ -357,7 +357,6 @@ const actualizar = async (id, data, usuarioId = null) => {
     if (datosActualizacion.asignacionOrigenId === 0) {
       datosActualizacion.asignacionOrigenId = null;
     }
-
     return await prisma.detMovsEntregaRendir.update({
       where: { id },
       data: datosActualizacion,

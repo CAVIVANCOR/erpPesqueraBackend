@@ -1,6 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { ValidationError, DatabaseError } from '../../utils/errors.js';
-import generarKardexService from './generarKardex.service.js';
+import { regenerarKardexYSaldosCompletoSAP } from './kardexSaldosSAP.service.js';
 
 /**
  * Crea un movimiento de almacén completo con sus detalles y genera el kardex automáticamente.
@@ -219,10 +219,10 @@ const crearMovimientoAlmacenCompleto = async (
       });
 
       // ========================================
-      // PASO 6: GENERAR KARDEX
+      // PASO 6: GENERAR KARDEX Y SALDOS (SERVICIO SAP)
       // ========================================
 
-      const kardex = await generarKardexService.generarKardexMovimiento(
+      const kardex = await regenerarKardexYSaldosCompletoSAP(
         movimiento.id,
         tx
       );
