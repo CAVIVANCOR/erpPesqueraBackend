@@ -91,6 +91,46 @@ export async function anular(req, res, next) {
 }
 
 /**
+ * Reactiva un documento de PreFactura
+ */
+export async function reactivarDocumento(req, res, next) {
+  try {
+    const { id } = req.params;
+    const usuarioId = req.user?.id;
+
+    if (!usuarioId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
+
+    const resultado = await preFacturaService.reactivarDocumentoPreFactura(
+      BigInt(id),
+      BigInt(usuarioId)
+    );
+
+    res.status(200).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Generar Comprobante Electrónico desde PreFactura EMITIDA
+ */
+export async function generarComprobanteElectronico(req, res, next) {
+  try {
+    const { id } = req.params;
+    const comprobanteElectronico = await preFacturaService.generarComprobanteElectronico(BigInt(id));
+
+    res.status(200).json({
+      message: 'Comprobante Electrónico generado exitosamente',
+      data: comprobanteElectronico,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Obtiene series de documentos filtradas
  * Query params: empresaId, tipoDocumentoId
  */

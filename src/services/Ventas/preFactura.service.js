@@ -7,6 +7,28 @@ import {
 } from "../../utils/errors.js";
 import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
 import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
+import {
+  capturarCombinacionesAfectadas,
+  eliminarKardexDeMovimiento,
+  recalcularSaldosAfectados,
+} from '../Almacen/kardexGenerico.service.js';
+
+// ========================================
+// CONSTANTES DE ESTADOS PREFACTURA
+// ========================================
+const TIPO_PROVIENE_PREFACTURA = 14; // Tipo Proviene De: PRE FACTURA
+
+const ESTADO_PREFACTURA = {
+  PENDIENTE: 45,
+  APROBADA: 46,
+  ANULADA: 47,
+  PARTICIONADA: 48,
+  FACTURADA: 95,
+  EMITIDA: 96,
+  COMPROBANTE_GENERADO: 97,
+  VALIDADO_SUNAT: 98,
+  NO_VALIDADO_SUNAT: 99,
+};
 
 /**
  * Servicio CRUD para PreFactura
@@ -631,8 +653,8 @@ const actualizar = async (id, data) => {
  * 
  * PATRÓN: Basado en eliminarMovimientoAlmacen.service.js y anular()
  * 
- * @param {BigInt} id - ID de la PreFactura a eliminar
- * @param {BigInt} usuarioId - ID del usuario que ejecuta
+ * @param {Number} id - ID de la PreFactura a eliminar
+ * @param {Number} usuarioId - ID del usuario que ejecuta
  * @param {PrismaTransaction} transaccion - Transacción opcional (para uso interno)
  * @returns {Promise<Object>} Resultado con contadores detallados
  */
@@ -1304,10 +1326,10 @@ const partirPreFactura = async (id) => {
       // 3. Validar que esté APROBADA (estado 46)
       if (
         !preFacturaOriginal.estadoId ||
-        Number(preFacturaOriginal.estadoId) !== 46
+        Number(preFacturaOriginal.estadoId) !== ESTADO_PREFACTURA.APROBADA
       ) {
         throw new ValidationError(
-          `Solo se pueden particionar PreFacturas APROBADAS (estado 46). Estado actual: ${preFacturaOriginal.estadoId}`,
+          `Solo se pueden particionar PreFacturas APROBADAS. Estado actual: ${preFacturaOriginal.estadoId}`,
         );
       }
 
@@ -1315,7 +1337,7 @@ const partirPreFactura = async (id) => {
       await prisma.preFactura.update({
         where: { id },
         data: {
-          estadoId: Number(48),
+          estadoId: ESTADO_PREFACTURA.PARTICIONADA,
           esParticionada: true,
         },
       });
@@ -1386,7 +1408,7 @@ const partirPreFactura = async (id) => {
         numeroDocumento: numeroDocumentoCopia1,
         numSerieDoc: numSerieCopia1,
         numCorreDoc: numCorreCopia1,
-        estadoId: Number(45),
+        estadoId: Number(ESTADO_PREFACTURA.PENDIENTE),
         esParticionada: false,
         preFacturaOrigenId: preFacturaOriginal.id,
       };
@@ -1426,7 +1448,7 @@ const partirPreFactura = async (id) => {
           numeroDocumento: numeroDocumentoCopia2,
           numSerieDoc: numSerieCopia2,
           numCorreDoc: numCorreCopia2,
-          estadoId: Number(45),
+          estadoId: ESTADO_PREFACTURA.PENDIENTE,
           esParticionada: false,
           preFacturaOrigenId: preFacturaOriginal.id,
         },
@@ -1501,7 +1523,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
 
       // Validar que esté APROBADA (estado 46) o EMITIDA (estado 96) para regenerar
       const estadoActual = Number(preFactura.estadoId);
-      if (estadoActual !== 46 && estadoActual !== 96) {
+      if (estadoActual !== ESTADO_PREFACTURA.APROBADA && estadoActual !== ESTADO_PREFACTURA.EMITIDA) {
         throw new ValidationError(
           "Solo se pueden facturar PreFacturas APROBADAS o EMITIDAS",
         );
@@ -1529,7 +1551,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
       }
 
       // ⭐ REGENERACIÓN: Eliminar CXC y ComprobanteElectronico existentes si ya fueron generados
-      if (estadoActual === 96) {
+      if (estadoActual === ESTADO_PREFACTURA.EMITIDA) {
         // Eliminar CuentaPorCobrar existente
         await tx.cuentaPorCobrar.deleteMany({
           where: { preFacturaId: preFacturaId },
@@ -1554,55 +1576,12 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
 
       // Usar totalNeto en lugar de preFactura.total para Saldos Iniciales
       const montoFinal = esSaldoInicial ? totalNeto : Number(preFactura.total);
-      // 3. Crear ComprobanteElectronico (pendiente de emisión a SUNAT)
-      const ahora = new Date();
-      const horaEmision = ahora.toTimeString().split(" ")[0]; // HH:MM:SS
 
-      const comprobanteElectronico = await tx.comprobanteElectronico.create({
-        data: {
-          // Origen
-          preFacturaId: preFactura.id,
-          // Empresa y sede
-          empresaId: preFactura.empresaId,
-          sedeId: preFactura.empresa.sedeId || Number(1), // Usar sede de empresa o default
-          // Tipo y serie SUNAT
-          tipoComprobanteId: preFactura.tipoDocumentoId,
-          serieDocId: preFactura.serieDocId,
-          numeroSerie:
-            preFactura.numSerieDoc || preFactura.serieDoc?.serie || "001",
-          numeroCorrelativo: Number(preFactura.numCorreDoc) || 1,
-          numeroCompleto: preFactura.numeroDocumento,
-          // Fechas
-          fechaEmision: ahora,
-          horaEmision: horaEmision,
-          fechaVencimiento: preFactura.fechaVencimiento,
+      // ========================================
+      // 3. ANALIZAR DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN (REGLAS SUNAT)
+      // ========================================
 
-          // Cliente
-          entidadComercialId: preFactura.clienteId,
-          tipoDocumentoClienteId:
-            preFactura.cliente.tipoDocumentoId || Number(6), // Default RUC
-          numeroDocumentoCliente: preFactura.cliente.numeroDocumento || "",
-          razonSocialCliente: preFactura.cliente.razonSocial || "",
-          direccionCliente: preFactura.cliente.direccion || "Sin dirección",
-          emailCliente: preFactura.cliente.email,
-          // Moneda
-          monedaId: preFactura.monedaId,
-          tipoCambio: preFactura.tipoCambio || 1.0,
-          // Condiciones de pago
-          formaPagoId: preFactura.formaPagoId || Number(1), // Default contado
-          montoPendientePago: montoFinal,
-          // Estados
-          estadoOSEId: Number(50), // PENDIENTE
-          estadoSUNATId: Number(60), // ACTIVO
-
-          // Observaciones
-          observaciones: `Comprobante generado desde PreFactura ${preFactura.codigo}`,
-        },
-      });
-
-      // 5. ANALIZAR DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN (REGLAS SUNAT)
-
-      // 5.1 Analizar DETRACCIÓN (basado en productos y monto mínimo)
+      // 3.1 Analizar DETRACCIÓN (basado en productos y monto mínimo)
       let tieneDetraccion = false;
       let porcentajeDetraccion = null;
       let montoDetraccion = 0;
@@ -1633,48 +1612,46 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         montoFinal >= montoMinimoDetraccion
       ) {
         montoDetraccion = montoFinal * (porcentajeDetraccion / 100);
-      } else if (tieneDetraccion && montoFinal < montoMinimoDetraccion) {
-        // Si el monto es menor al mínimo configurado, no aplica detracción
+      } else {
         tieneDetraccion = false;
         porcentajeDetraccion = null;
+        montoDetraccion = 0;
       }
 
-      // 5.2 Analizar RETENCIÓN (basado en cliente) - SOLO SI NO HAY DETRACCIÓN
-      // REGLA: Detracción + Retención = Solo Detracción (prioridad)
+      // 3.2 Analizar RETENCIÓN (basado en cliente)
       let tieneRetencion = false;
+      let porcentajeRetencion = null;
       let montoRetencion = 0;
 
-      if (!tieneDetraccion) {
-        // Solo aplica retención si NO hay detracción
-        if (preFactura.cliente.esAgenteRetencion) {
-          tieneRetencion = true;
-          const porcentajeRetencion = 3; // Retención estándar 3% del IGV
-          // Calcular sobre el IGV (no sobre el total)
-          const montoIGV = Number(preFactura.totalIGV) || 0;
-          montoRetencion = montoIGV * (porcentajeRetencion / 100);
-        }
+      if (preFactura.cliente.esAgenteRetencion) {
+        tieneRetencion = true;
+        porcentajeRetencion = Number(
+          preFactura.cliente.porcentajeRetencion || 3,
+        ); // Default 3%
+        montoRetencion = montoFinal * (porcentajeRetencion / 100);
       }
 
-      // 5.3 Analizar PERCEPCIÓN (basado en cliente y empresa) - INDEPENDIENTE
+      // 3.3 Analizar PERCEPCIÓN (basado en cliente y empresa) - INDEPENDIENTE
       // REGLA: Percepción puede coexistir con Detracción o Retención
       let tienePercepcion = false;
       let porcentajePercepcion = null;
       let montoPercepcion = 0;
 
-      // Si el cliente está sujeto a percepción y la empresa es agente de percepción
-      if (
-        preFactura.cliente.sujetoPercepcion &&
-        preFactura.empresa.soyAgentePercepcion
-      ) {
+      if (preFactura.empresa.esAgentePercepcion) {
         tienePercepcion = true;
-        porcentajePercepcion = 2; // Percepción estándar 2%
+        porcentajePercepcion = Number(
+          preFactura.empresa.porcentajePercepcion || 2,
+        ); // Default 2%
         montoPercepcion = montoFinal * (porcentajePercepcion / 100);
       }
 
-      // 6. Crear o Actualizar CuentaPorCobrar BLANCA (con comprobante SUNAT)
-      // Verificar si ya existe CxC para esta PreFactura (regeneración)
+      // ========================================
+      // 4. CREAR O ACTUALIZAR CUENTA POR COBRAR
+      // ========================================
+
+      // Verificar si ya existe CxC (caso regeneración)
       const cxcExistente = await tx.cuentaPorCobrar.findUnique({
-        where: { preFacturaId: preFactura.id },
+        where: { preFacturaId: preFacturaId },
         include: { pagos: true },
       });
 
@@ -1699,9 +1676,9 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         clienteId: preFactura.clienteId,
 
         // DOCUMENTO
-        numeroPreFactura: preFactura.numeroDocumento,
-        fechaEmision: preFactura.fechaDocumento || new Date(),
-        fechaVencimiento: preFactura.fechaVencimiento || new Date(),
+        numeroPreFactura: preFactura.codigo,
+        fechaEmision: preFactura.fechaDocumento,
+        fechaVencimiento: preFactura.fechaVencimiento,
 
         // MONTOS ALMACENADOS (recalculados si hay pagos)
         montoTotal: montoFinal,
@@ -1716,7 +1693,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         // RETENCIÓN (SUNAT PERÚ) - TOTALES
         tieneRetencion,
         montoRetencionTotal: montoRetencion,
-        porcentajeRetencion: tieneRetencion ? 3 : null,
+        porcentajeRetencion,
 
         // PERCEPCIÓN (SUNAT PERÚ) - TOTALES
         tienePercepcion,
@@ -1726,7 +1703,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         // FLAGS ESPECIALES
         esSaldoInicial: esSaldoInicial,
         esGerencial: false, // BLANCA (Formal/SUNAT)
-        comprobanteElectronicoId: comprobanteElectronico.id,
+        comprobanteElectronicoId: null, // ⭐ CAMBIO: No se crea CE aquí
 
         // MONEDA Y TIPO DE VENTA
         monedaId: preFactura.monedaId,
@@ -1755,20 +1732,22 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         });
       }
 
-      // 7. Actualizar PreFactura a EMITIDA (estado 96)
+      // ========================================
+      // 5. ACTUALIZAR PREFACTURA A EMITIDA (96) - SIN COMPROBANTE
+      // ========================================
       await tx.preFactura.update({
         where: { id: preFactura.id },
         data: {
           facturado: true,
           fechaFacturacion: new Date(),
-          estadoId: Number(96), // Estado EMITIDA
+          estadoId: ESTADO_PREFACTURA.EMITIDA, // Estado EMITIDA (solo CxC, sin CE)
         },
       });
 
       return {
         preFactura,
         cuentaPorCobrar,
-        comprobanteElectronico,
+        comprobanteElectronico: null, // ⭐ CAMBIO: No se genera CE
       };
     });
   } catch (err) {
@@ -1783,6 +1762,167 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
     throw err;
   }
 };
+
+
+
+/**
+ * Generar Comprobante Electrónico desde PreFactura EMITIDA
+ * 
+ * REQUISITOS:
+ * - PreFactura debe estar en estado EMITIDA (96)
+ * - Debe tener CuentaPorCobrar creada
+ * - NO debe tener ComprobanteElectronico previo
+ * 
+ * PROCESO:
+ * 1. Valida estado EMITIDA
+ * 2. Crea ComprobanteElectronico
+ * 3. Vincula CE con CxC
+ * 4. Cambia estado a COMPROBANTE GENERADO (97)
+ * 
+ * @param {Number} preFacturaId - ID de la PreFactura
+ * @returns {Object} - ComprobanteElectronico generado
+ */
+const generarComprobanteElectronico = async (preFacturaId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // ========================================
+      // 1. OBTENER PREFACTURA CON RELACIONES
+      // ========================================
+      const preFactura = await tx.preFactura.findUnique({
+        where: { id: preFacturaId },
+        include: {
+          cliente: true,
+          moneda: true,
+          detalles: {
+            include: {
+              producto: true,
+            },
+          },
+          empresa: true,
+          serieDoc: true,
+          tipoDocumento: true,
+          cuentaPorCobrar: true,
+          comprobantesElectronicos: true,
+        },
+      });
+
+      if (!preFactura) {
+        throw new NotFoundError("PreFactura no encontrada");
+      }
+
+      // ========================================
+      // 2. VALIDACIONES
+      // ========================================
+
+      // Validar que esté EMITIDA (estado 96)
+      const estadoActual = Number(preFactura.estadoId);
+      if (estadoActual !== ESTADO_PREFACTURA.EMITIDA) {
+        throw new ValidationError(
+          "Solo se pueden generar comprobantes desde PreFacturas EMITIDAS"
+        );
+      }
+
+      // Validar que NO sea GERENCIAL
+      if (preFactura.esGerencial) {
+        throw new ValidationError(
+          "Las PreFacturas GERENCIALES no generan Comprobantes Electrónicos SUNAT"
+        );
+      }
+
+      // Validar que tenga CuentaPorCobrar
+      if (!preFactura.cuentaPorCobrar) {
+        throw new ValidationError(
+          "La PreFactura debe tener una Cuenta por Cobrar antes de generar el Comprobante Electrónico"
+        );
+      }
+
+      // Validar que NO tenga ComprobanteElectronico previo
+      if (preFactura.comprobantesElectronicos && preFactura.comprobantesElectronicos.length > 0) {
+        throw new ValidationError(
+          "La PreFactura ya tiene un Comprobante Electrónico generado"
+        );
+      }
+
+      // ========================================
+      // 3. CREAR COMPROBANTE ELECTRÓNICO
+      // ========================================
+      const ahora = new Date();
+      const horaEmision = ahora.toTimeString().split(" ")[0]; // HH:MM:SS
+
+      const comprobanteElectronico = await tx.comprobanteElectronico.create({
+        data: {
+          // Origen
+          preFacturaId: preFactura.id,
+          // Empresa y sede
+          empresaId: preFactura.empresaId,
+          sedeId: preFactura.empresa.sedeId || Number(1),
+          // Tipo y serie SUNAT
+          tipoComprobanteId: preFactura.tipoDocumentoId,
+          serieDocId: preFactura.serieDocId,
+          numeroSerie: preFactura.numSerieDoc || preFactura.serieDoc?.serie || "001",
+          numeroCorrelativo: Number(preFactura.numCorreDoc) || 1,
+          numeroCompleto: preFactura.numeroDocumento,
+          // Fechas
+          fechaEmision: ahora,
+          horaEmision: horaEmision,
+          fechaVencimiento: preFactura.fechaVencimiento,
+          // Cliente
+          entidadComercialId: preFactura.clienteId,
+          tipoDocumentoClienteId: preFactura.cliente.tipoDocumentoId || Number(6),
+          numeroDocumentoCliente: preFactura.cliente.numeroDocumento || "",
+          razonSocialCliente: preFactura.cliente.razonSocial || "",
+          direccionCliente: preFactura.cliente.direccion || "Sin dirección",
+          emailCliente: preFactura.cliente.email,
+          // Moneda
+          monedaId: preFactura.monedaId,
+          tipoCambio: preFactura.tipoCambio || 1.0,
+          // Condiciones de pago
+          formaPagoId: preFactura.formaPagoId || Number(1),
+          montoPendientePago: Number(preFactura.total),
+          // Estados
+          estadoOSEId: Number(50), // PENDIENTE
+          estadoSUNATId: Number(60), // ACTIVO
+          // Observaciones
+          observaciones: `Comprobante generado desde PreFactura ${preFactura.codigo}`,
+        },
+      });
+
+      // ========================================
+      // 4. VINCULAR CE CON CXC
+      // ========================================
+      await tx.cuentaPorCobrar.update({
+        where: { id: preFactura.cuentaPorCobrar.id },
+        data: {
+          comprobanteElectronicoId: comprobanteElectronico.id,
+        },
+      });
+
+      // ========================================
+      // 5. ACTUALIZAR PREFACTURA A COMPROBANTE GENERADO (97)
+      // ========================================
+      await tx.preFactura.update({
+        where: { id: preFactura.id },
+        data: {
+          estadoId: ESTADO_PREFACTURA.COMPROBANTE_GENERADO,
+        },
+      });
+
+      return comprobanteElectronico;
+    });
+  } catch (err) {
+    if (
+      err instanceof NotFoundError ||
+      err instanceof ValidationError ||
+      err instanceof ConflictError
+    )
+      throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+
 
 /**
  * Facturar PreFactura Negra (Gerencial) - Caso 1: 100% Negro
@@ -1814,7 +1954,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
 
       // Validar que esté APROBADA (estado 46) o EMITIDA (estado 96) para regenerar
       const estadoActual = Number(preFactura.estadoId);
-      if (estadoActual !== 46 && estadoActual !== 96) {
+      if (estadoActual !== ESTADO_PREFACTURA.APROBADA && estadoActual !== ESTADO_PREFACTURA.EMITIDA) {
         throw new ValidationError(
           "Solo se pueden facturar PreFacturas APROBADAS o EMITIDAS",
         );
@@ -1842,7 +1982,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
       }
 
       // ⭐ REGENERACIÓN: Eliminar CXC existente si ya fue generada
-      if (estadoActual === 96) {
+      if (estadoActual === ESTADO_PREFACTURA.EMITIDA) {
         await tx.cuentaPorCobrar.deleteMany({
           where: { preFacturaId: preFacturaId },
         });
@@ -2025,7 +2165,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         data: {
           facturado: true,
           fechaFacturacion: new Date(),
-          estadoId: Number(95), // Estado FACTURADA
+          estadoId: ESTADO_PREFACTURA.FACTURADA,
         },
       });
 
@@ -2113,6 +2253,226 @@ const anular = async (id) => {
   });
 };
 
+
+/**
+ * Reactiva un documento de PreFactura (cambia estado a PENDIENTE)
+ * 
+ * PROCESO COMPLETO:
+ * 1. Valida que se puede reactivar (sin CxC con pagos, sin comprobante, no particionada)
+ * 2. Captura combinaciones afectadas (si tiene movimiento de almacén)
+ * 3. Elimina kardex del movimiento
+ * 4. Recalcula saldos de productos afectados
+ * 5. Cambia estado a PENDIENTE
+ * 
+ * RESULTADO:
+ * - Documento editable (estado PENDIENTE)
+ * - Kardex eliminado
+ * - Saldos correctos (como si el movimiento nunca existió)
+ * - Usuario puede modificar cantidades, productos, etc.
+ * - Al aprobar, se regenerará kardex con datos corregidos
+ * 
+ * RESTRICCIONES:
+ * - NO se puede reactivar si tiene CuentaPorCobrar con pagos
+ * - NO se puede reactivar si tiene ComprobanteElectronico
+ * - NO se puede reactivar si está particionada
+ * 
+ * @param {Number} id - ID de la PreFactura
+ * @param {Number} usuarioId - ID del usuario que reactiva
+ * @returns {Object} - PreFactura reactivada con estadísticas
+ */
+const reactivarDocumentoPreFactura = async (id, usuarioId) => {
+  try {
+    // Obtener la PreFactura con todas las relaciones necesarias
+    const preFactura = await prisma.preFactura.findUnique({
+      where: { id },
+      include: {
+        detalles: true,
+        cuentaPorCobrar: {
+          include: {
+            pagos: true,
+          },
+        },
+        comprobantesElectronicos: true,
+        movSalidaAlmacen: true,
+      },
+    });
+
+    if (!preFactura) {
+      throw new NotFoundError('PreFactura no encontrada');
+    }
+
+    // ========================================
+    // VALIDACIONES CRÍTICAS
+    // ========================================
+
+    // 1. Validar que el estado sea APROBADO (>45)
+    const estadoActual = Number(preFactura.estadoId);
+    if (estadoActual <= ESTADO_PREFACTURA.PENDIENTE) {
+      throw new ValidationError(
+        'Solo se pueden reactivar PreFacturas APROBADAS'
+      );
+    }
+
+    // 2. Validar que NO esté anulada
+    if (estadoActual === ESTADO_PREFACTURA.ANULADA) {
+      throw new ValidationError(
+        'No se puede reactivar una PreFactura ANULADA'
+      );
+    }
+
+    // 3. Validar que NO esté particionada
+    if (preFactura.esParticionada) {
+      throw new ValidationError(
+        'No se puede reactivar una PreFactura que fue particionada. ' +
+        'La PreFactura original ya no es válida.'
+      );
+    }
+
+    // 3. Validar que NO esté particionada
+    if (preFactura.esParticionada) {
+      throw new ValidationError(
+        'No se puede reactivar una PreFactura que fue particionada. ' +
+        'La PreFactura original ya no es válida.'
+      );
+    }
+
+    // 4. Validar que NO tenga CuentaPorCobrar con pagos  // ⬅️ AHORA SERÁ #4 (antes era #5)
+    if (preFactura.cuentaPorCobrar) {
+      const cxc = preFactura.cuentaPorCobrar;
+
+      if (cxc.pagos && cxc.pagos.length > 0) {
+        throw new ValidationError(
+          'No se puede reactivar una PreFactura que tiene Cuenta por Cobrar con pagos registrados. ' +
+          `La CxC tiene ${cxc.pagos.length} pago(s) por un total de ${cxc.montoPagado}.`
+        );
+      }
+    }
+
+    // 5. Validar que NO tenga CuentaPorCobrar con pagos
+    if (preFactura.cuentaPorCobrar) {
+      const cxc = preFactura.cuentaPorCobrar;
+
+      if (cxc.pagos && cxc.pagos.length > 0) {
+        throw new ValidationError(
+          'No se puede reactivar una PreFactura que tiene Cuenta por Cobrar con pagos registrados. ' +
+          `La CxC tiene ${cxc.pagos.length} pago(s) por un total de ${cxc.montoPagado}.`
+        );
+      }
+    }
+
+    // ========================================
+    // EJECUTAR EN TRANSACCIÓN ATÓMICA
+    // ========================================
+    return await prisma.$transaction(async (tx) => {
+      let kardexEliminados = 0;
+      let saldosDetActualizados = 0;
+      let saldosGenActualizados = 0;
+      let productosAfectados = 0;
+
+      // ========================================
+      // PASO 1: SI TIENE MOVIMIENTO DE ALMACÉN
+      // ========================================
+      if (preFactura.movSalidaAlmacenId) {
+        // 1.1 Capturar combinaciones afectadas
+        const combinaciones = await capturarCombinacionesAfectadas(
+          preFactura.movSalidaAlmacenId,
+          tx
+        );
+
+        // 1.2 Eliminar kardex del movimiento
+        kardexEliminados = await eliminarKardexDeMovimiento(
+          preFactura.movSalidaAlmacenId,
+          tx
+        );
+
+        // 1.3 Recalcular saldos afectados
+        const resultadoSaldos = await recalcularSaldosAfectados(combinaciones, tx);
+        saldosDetActualizados = resultadoSaldos.saldosDetActualizados;
+        saldosGenActualizados = resultadoSaldos.saldosGenActualizados;
+        productosAfectados = combinaciones.generales.length;
+      }
+
+      // ========================================
+      // PASO 2: ELIMINAR CUENTA POR COBRAR (si existe y sin pagos)
+      // ========================================
+      if (preFactura.cuentaPorCobrar) {
+        await tx.cuentaPorCobrar.delete({
+          where: { id: preFactura.cuentaPorCobrar.id },
+        });
+      }
+
+      // ========================================
+      // PASO 2B: ELIMINAR COMPROBANTE ELECTRÓNICO (si existe y no está en SUNAT)
+      // ========================================
+      if (preFactura.comprobantesElectronicos && preFactura.comprobantesElectronicos.length > 0) {
+        await tx.comprobanteElectronico.deleteMany({
+          where: { preFacturaId: id },
+        });
+      }
+      // ========================================
+      // PASO 3: BUSCAR ESTADO PENDIENTE (45)
+      // ========================================
+      const estadoPendiente = await tx.estadoMultiFuncion.findFirst({
+        where: {
+          tipoProvieneDeId: TIPO_PROVIENE_PREFACTURA,
+          id: ESTADO_PREFACTURA.PENDIENTE,
+        },
+      });
+
+      if (!estadoPendiente) {
+        throw new ValidationError(
+          'No se encontró el estado PENDIENTE para PreFactura'
+        );
+      }
+
+      // ========================================
+      // PASO 4: CAMBIAR ESTADO A PENDIENTE
+      // ========================================
+      const preFacturaReactivada = await tx.preFactura.update({
+        where: { id },
+        data: {
+          estadoId: estadoPendiente.id,
+          movSalidaAlmacenId: null, // Limpiar referencia al movimiento
+          facturado: false, // Marcar como no facturado
+          fechaFacturacion: null, // Limpiar fecha de facturación
+          fechaActualizacion: new Date(),
+          actualizadoPor: usuarioId,
+        },
+        include: {
+          empresa: true,
+          cliente: true,
+          tipoDocumento: true,
+          moneda: true,
+          detalles: {
+            include: {
+              producto: true,
+            },
+          },
+        },
+      });
+
+      // ========================================
+      // RETORNAR RESULTADO CON ESTADÍSTICAS
+      // ========================================
+      return {
+        preFactura: preFacturaReactivada,
+        kardexEliminados,
+        saldosDetActualizados,
+        saldosGenActualizados,
+        productosAfectados,
+        cuentaPorCobrarEliminada: preFactura.cuentaPorCobrar ? true : false,
+      };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith('P'))
+      throw new DatabaseError('Error de base de datos al reactivar PreFactura', err.message);
+    throw err;
+  }
+};
+
+
 /**
  * Aprobar PreFactura
  * Cambia el estado de PENDIENTE a APROBADA
@@ -2142,21 +2502,21 @@ const aprobar = async (id) => {
 
       // Verificar que el estado actual es PENDIENTE (tipoProvieneDeId = 9, estado <= 45)
       // Según tu filtro, estados > 45 son aprobados
-      if (!preFactura.estadoId || Number(preFactura.estadoId) !== 45) {
+      if (!preFactura.estadoId || Number(preFactura.estadoId) !== ESTADO_PREFACTURA.PENDIENTE) {
         throw new ValidationError(
-          "La PreFactura solo puede ser aprobada si está en estado PENDIENTE (id=45).",
+          "La PreFactura solo puede ser aprobada si está en estado PENDIENTE.",
         );
       }
       // Buscar el estado APROBADO (tipoProvieneDeId = 9, y estado > 45)
       // Asumiendo que el primer estado > 45 es APROBADO
       // Buscar el estado APROBADO (id = 46)
       const estadoAprobado = await prisma.estadoMultiFuncion.findUnique({
-        where: { id: Number(46) }, // BigInt literal
+        where: { id: ESTADO_PREFACTURA.APROBADA },
       });
 
       if (!estadoAprobado) {
         throw new ValidationError(
-          "No se encontró el estado APROBADO (id=46) para PreFacturas.",
+          "No se encontró el estado APROBADO para PreFacturas.",
         );
       }
 
@@ -2164,7 +2524,7 @@ const aprobar = async (id) => {
       const aprobada = await prisma.preFactura.update({
         where: { id },
         data: {
-          estadoId: Number(46),
+          estadoId: ESTADO_PREFACTURA.APROBADA,
           fechaAprobacion: new Date(),
           fechaActualizacion: new Date(),
         },
@@ -2197,7 +2557,7 @@ const aprobar = async (id) => {
  * NO lo guarda en BD, solo retorna la estructura para edición
  * Patrón: Igual a MovimientoActivoFijo.generarBorradorAsiento
  * 
- * @param {BigInt} preFacturaId - ID de la PreFactura
+ * @param {Number} preFacturaId - ID de la PreFactura
  * @returns {Promise<Object>} - Borrador del asiento contable
  */
 const generarBorradorAsiento = async (preFacturaId) => {
@@ -2416,9 +2776,9 @@ const generarBorradorAsiento = async (preFacturaId) => {
  * Guarda el asiento contable editado por el usuario y lo vincula a la PreFactura
  * Patrón: Igual a MovimientoActivoFijo.guardarAsientoContable
  * 
- * @param {BigInt} preFacturaId - ID de la PreFactura
- * @param {Object} asientoData - Datos del asiento editado por el usuario
- * @param {BigInt} creadoPor - ID del usuario que crea el asiento
+ * @param {Number} preFacturaId - ID de la PreFactura
+ * @param {Number} asientoData - Datos del asiento editado por el usuario
+ * @param {Number} creadoPor - ID del usuario que crea el asiento
  * @returns {Promise<Object>} - Asiento contable creado
  */
 const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
@@ -2641,7 +3001,7 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
  * Elimina un asiento contable específico
  * Patrón: Igual a MovimientoActivoFijo.eliminarAsientoContable
  * 
- * @param {BigInt} asientoId - ID del asiento a eliminar
+ * @param {Number} asientoId - ID del asiento a eliminar
  * @returns {Promise<boolean>} - true si se eliminó correctamente
  */
 const eliminarAsientoContable = async (asientoId) => {
@@ -2709,7 +3069,15 @@ const generarKardex = async (id, datosKardex, usuarioId, esRegeneracion = false)
       }
 
       // Validar estados permitidos (todos excepto PENDIENTE=45 y ANULADA=47)
-      const estadosPermitidos = [46, 48, 95, 96, 97, 98, 99];
+      const estadosPermitidos = [
+        ESTADO_PREFACTURA.APROBADA,
+        ESTADO_PREFACTURA.PARTICIONADA,
+        ESTADO_PREFACTURA.FACTURADA,
+        ESTADO_PREFACTURA.EMITIDA,
+        ESTADO_PREFACTURA.COMPROBANTE_GENERADO,
+        ESTADO_PREFACTURA.VALIDADO_SUNAT,
+        ESTADO_PREFACTURA.NO_VALIDADO_SUNAT,
+      ];
       if (!estadosPermitidos.includes(Number(preFactura.estadoId))) {
         throw new ValidationError(
           "La pre-factura debe estar APROBADA para generar movimiento"
@@ -2953,7 +3321,15 @@ const regenerarKardex = async (id, usuarioId) => {
       }
 
       // Validar estados permitidos
-      const estadosPermitidos = [46, 48, 95, 96, 97, 98, 99];
+      const estadosPermitidos = [
+        ESTADO_PREFACTURA.APROBADA,
+        ESTADO_PREFACTURA.PARTICIONADA,
+        ESTADO_PREFACTURA.FACTURADA,
+        ESTADO_PREFACTURA.EMITIDA,
+        ESTADO_PREFACTURA.COMPROBANTE_GENERADO,
+        ESTADO_PREFACTURA.VALIDADO_SUNAT,
+        ESTADO_PREFACTURA.NO_VALIDADO_SUNAT,
+      ];
       if (!estadosPermitidos.includes(Number(preFactura.estadoId))) {
         throw new ValidationError(
           "La pre-factura debe estar APROBADA para regenerar kardex"
@@ -3062,8 +3438,10 @@ export default {
   partirPreFactura,
   facturarPreFacturaNegra,
   facturarPreFacturaBlanca,
+  generarComprobanteElectronico, // ⭐ NUEVO
   anular,
   aprobar,
+  reactivarDocumentoPreFactura, // ⭐ NUEVO
   generarBorradorAsiento,
   guardarAsientoContable,
   eliminarAsientoContable,

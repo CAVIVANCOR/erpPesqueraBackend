@@ -69,6 +69,13 @@ router.post(
 );
 
 router.put(
+  '/:id/generar-comprobante',
+  autenticarJWT,
+  checkPermission('preFactura', 'editar'),
+  preFacturaController.generarComprobanteElectronico
+);
+
+router.put(
   '/:id/aprobar',
   autenticarJWT,
   checkPermission('preFactura', 'editar'),
@@ -169,6 +176,13 @@ router.put(
   autenticarJWT,
   checkPermission('preFactura', 'eliminar'),
   preFacturaController.anular
+);
+
+router.put(
+  '/:id/reactivar',
+  autenticarJWT,
+  checkPermission('preFactura', 'editar'),
+  preFacturaController.reactivarDocumento
 );
 
 export default router;
