@@ -430,23 +430,26 @@ model CentroCosto {
   CategoriaID        BigInt
   ParentCentroID     String?              @db.VarChar(20)
   id                 BigInt               @id @default(autoincrement())
+  cuentaContableId   BigInt?              // ⭐ NUEVO - Cuenta contable del centro (94.1, 94.2, etc.)
 
-  categoria       CategoriaCCosto @relation(fields: [CategoriaID], references: [id])
-  empresasCentro EmpresaCentroCosto[]
+  categoria                         CategoriaCCosto @relation(fields: [CategoriaID], references: [id])
+  empresasCentro                    EmpresaCentroCosto[]
   
-  entregasARendirVentas         EntregaARendirPVentas[] 
-  entregasARendirCompras        EntregaARendirPCompras[]
-  entregasARendirConsumo        EntregaARendirPescaConsumo[]
+  entregasARendirVentas             EntregaARendirPVentas[] 
+  entregasARendirCompras            EntregaARendirPCompras[]
+  entregasARendirConsumo            EntregaARendirPescaConsumo[]
 
-  entregasRendirMovAlmacen EntregaARendirMovAlmacen[]
+  entregasRendirMovAlmacen          EntregaARendirMovAlmacen[]
   entregasRendirContratoServicio    EntregaARendirContratoServicios[] @relation("EntregaRendirContratoServicio")
   detallesMovContratoServicio       DetMovsEntregaRendirContratoServicios[] @relation("DetMovContratoServicio")
-  detMovsInventario DetMovsEntregaRendirMovAlmacen[] @relation("DetMovInventario")
-  entregasRendirOTMantenimiento  EntregaARendirOTMantenimiento[] @relation("EntregaRendirOTMantenimiento")
-  detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("DetMovOTMantenimiento")
-  movimientosCaja        MovimientoCaja[]  @relation("MovimientoCajaCentroCosto")
-  saldosCuentaCorriente  SaldoCuentaCorriente[]  @relation("SaldoCuentaCorrienteCentroCosto")
-  asientosContables         AsientoContableInterfaz[]
+  detMovsInventario                 DetMovsEntregaRendirMovAlmacen[] @relation("DetMovInventario")
+  entregasRendirOTMantenimiento     EntregaARendirOTMantenimiento[] @relation("EntregaRendirOTMantenimiento")
+  detMovsEntregaOTMantenimiento     DetMovsEntregaRendirOTMantenimiento[] @relation("DetMovOTMantenimiento")
+  movimientosCaja                   MovimientoCaja[]  @relation("MovimientoCajaCentroCosto")
+  saldosCuentaCorriente             SaldoCuentaCorriente[]  @relation("SaldoCuentaCorrienteCentroCosto")
+  asientosContables                 AsientoContableInterfaz[]
+  cuentaContable                    PlanCuentasContable? @relation("CentroCostoToCuentaContable", fields: [cuentaContableId], references: [id])  // ⭐ NUEVO
+
 
 // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
@@ -454,11 +457,13 @@ model CentroCosto {
   detallesAsientos                DetalleAsientoContable[]
   lineasPresupuesto               LineaPresupuesto[]
   ejecucionesPresupuestales       EjecucionPresupuestal[]
-  subfamiliasProducto      SubfamiliaProducto[] @relation("SubfamiliaCentroCosto")  // 🆕 NUEVO
-  unidadesNegocio          UnidadNegocio[]  // 🆕 NUEVO
-  movimientosActivoFijo    MovimientoActivoFijo[]  // 🆕 NUEVA RELACIÓN
-  detMovsEntregaRendir  DetMovsEntregaRendir[]
+  subfamiliasProducto             SubfamiliaProducto[] @relation("SubfamiliaCentroCosto")  // 🆕 NUEVO
+  unidadesNegocio                 UnidadNegocio[]  // 🆕 NUEVO
+  movimientosActivoFijo           MovimientoActivoFijo[]  // 🆕 NUEVA RELACIÓN
+  detMovsEntregaRendir            DetMovsEntregaRendir[]
+  personal                        Personal[]          // ⭐ NUEVO - Relación inversa
 
+  @@index([cuentaContableId])                                                      // ⭐ NUEVO
 }
 
 model Color {
@@ -3903,6 +3908,7 @@ model Personal {
   marcaAsistencia           Boolean                 @default(true)   // ⭐ NUEVO - Si debe marcar asistencia
   esAdministrativo          Boolean                 @default(true)   // ⭐ NUEVO - true: horario rígido, false: horario flexible
   urlFirma                  String?
+  centroCostoId             BigInt?                // ⭐ NUEVO - Centro de costo del trabajador
 
   documentaciones           DocumentacionPersonal[]
   cargo                     CargosPersonal?    @relation(fields: [cargoId], references: [id])
@@ -3967,6 +3973,7 @@ model Personal {
   asientosContablesEnviados                   AsientoContableInterfaz[]  @relation("AsientoContableEnviadoPorId")
   configuracionesCuentaContableCreadas        ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableCreadorId")
   configuracionesCuentaContableActualizadas   ConfiguracionCuentaContable[]  @relation("ConfiguracionCuentaContableActualizadorId")
+  centroCosto                                 CentroCosto?            @relation(fields: [centroCostoId], references: [id])  // ⭐ NUEVO
 
 
   // ========================================
@@ -4012,6 +4019,8 @@ model Personal {
   detMovsEntregaRendirResponsable  DetMovsEntregaRendir[] @relation("ResponsableMovimiento")
   detMovsEntregaRendirCreados      DetMovsEntregaRendir[] @relation("CreadoPorDetMovsEntregaRendir")
   detMovsEntregaRendirActualizados DetMovsEntregaRendir[] @relation("ActualizadoPorDetMovsEntregaRendir")
+  @@index([centroCostoId])         // ⭐ NUEVO
+
 }
 
 
@@ -5741,6 +5750,7 @@ model PlanCuentasContable {
   actualizadoEn         DateTime                @updatedAt
   actualizadoPor        BigInt?
   
+
   // ========================================
   // RELACIONES
   // ========================================
@@ -5759,6 +5769,7 @@ model PlanCuentasContable {
   tiposActivoDepreciacionAcum     TipoActivo[]  @relation("TipoActivoCuentaDepAcum")
   tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR ESTA LÍNEA
   tiposDeudaPersonal    TipoDeudaPersonal[]     @relation("TipoDeudaPersonalToCuentaContable")  // ⭐ NUEVO: Tipos de deuda personal que usan esta cuenta
+  centrosCosto          CentroCosto[]           @relation("CentroCostoToCuentaContable")        // ⭐ NUEVO
 
   // ========================================
   // ÍNDICES
