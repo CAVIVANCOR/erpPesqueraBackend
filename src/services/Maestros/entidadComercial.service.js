@@ -23,14 +23,14 @@ async function validarEntidadComercial(data, excluirId = null) {
   if (data.numeroDocumento && data.empresaId) {
     const where = excluirId
       ? {
-          numeroDocumento: data.numeroDocumento,
-          empresaId: data.empresaId,
-          id: { not: excluirId },
-        }
+        numeroDocumento: data.numeroDocumento,
+        empresaId: data.empresaId,
+        id: { not: excluirId },
+      }
       : {
-          numeroDocumento: data.numeroDocumento,
-          empresaId: data.empresaId,
-        };
+        numeroDocumento: data.numeroDocumento,
+        empresaId: data.empresaId,
+      };
     const existe = await prisma.entidadComercial.findFirst({ where });
     if (existe)
       throw new ConflictError(
@@ -125,32 +125,32 @@ const listar = async () => {
         // Búsqueda manual de empresa
         const empresaRaw = entidad.empresaId
           ? await prisma.empresa.findUnique({
-              where: { id: entidad.empresaId },
-              select: { id: true, razonSocial: true, nombreComercial: true },
-            })
+            where: { id: entidad.empresaId },
+            select: { id: true, razonSocial: true, nombreComercial: true },
+          })
           : null;
 
         // Convertir BigInt a string manualmente para asegurar serialización
         const empresa = empresaRaw
           ? {
-              id: empresaRaw.id.toString(),
-              razonSocial: empresaRaw.razonSocial,
-              nombreComercial: empresaRaw.nombreComercial,
-            }
+            id: empresaRaw.id.toString(),
+            razonSocial: empresaRaw.razonSocial,
+            nombreComercial: empresaRaw.nombreComercial,
+          }
           : null;
 
         const personalCreador = entidad.creadoPor
           ? await prisma.personal.findUnique({
-              where: { id: entidad.creadoPor },
-              select: { id: true, nombres: true, apellidos: true },
-            })
+            where: { id: entidad.creadoPor },
+            select: { id: true, nombres: true, apellidos: true },
+          })
           : null;
 
         const personalActualizador = entidad.actualizadoPor
           ? await prisma.personal.findUnique({
-              where: { id: entidad.actualizadoPor },
-              select: { id: true, nombres: true, apellidos: true },
-            })
+            where: { id: entidad.actualizadoPor },
+            select: { id: true, nombres: true, apellidos: true },
+          })
           : null;
 
         return {
@@ -198,16 +198,16 @@ const obtenerPorId = async (id) => {
     // Agregar manualmente las relaciones con Personal para auditoría
     const personalCreador = entidad.creadoPor
       ? await prisma.personal.findUnique({
-          where: { id: entidad.creadoPor },
-          select: { id: true, nombres: true, apellidos: true },
-        })
+        where: { id: entidad.creadoPor },
+        select: { id: true, nombres: true, apellidos: true },
+      })
       : null;
 
     const personalActualizador = entidad.actualizadoPor
       ? await prisma.personal.findUnique({
-          where: { id: entidad.actualizadoPor },
-          select: { id: true, nombres: true, apellidos: true },
-        })
+        where: { id: entidad.actualizadoPor },
+        select: { id: true, nombres: true, apellidos: true },
+      })
       : null;
 
     return {
@@ -248,16 +248,16 @@ const crear = async (data) => {
     // Agregar manualmente las relaciones con Personal para auditoría
     const personalCreador = entidadCreada.creadoPor
       ? await prisma.personal.findUnique({
-          where: { id: entidadCreada.creadoPor },
-          select: { id: true, nombres: true, apellidos: true },
-        })
+        where: { id: entidadCreada.creadoPor },
+        select: { id: true, nombres: true, apellidos: true },
+      })
       : null;
 
     const personalActualizador = entidadCreada.actualizadoPor
       ? await prisma.personal.findUnique({
-          where: { id: entidadCreada.actualizadoPor },
-          select: { id: true, nombres: true, apellidos: true },
-        })
+        where: { id: entidadCreada.actualizadoPor },
+        select: { id: true, nombres: true, apellidos: true },
+      })
       : null;
 
     return {
@@ -306,16 +306,16 @@ const actualizar = async (id, data) => {
     // Agregar manualmente las relaciones con Personal para auditoría
     const personalCreador = entidadActualizada.creadoPor
       ? await prisma.personal.findUnique({
-          where: { id: entidadActualizada.creadoPor },
-          select: { id: true, nombres: true, apellidos: true },
-        })
+        where: { id: entidadActualizada.creadoPor },
+        select: { id: true, nombres: true, apellidos: true },
+      })
       : null;
 
     const personalActualizador = entidadActualizada.actualizadoPor
       ? await prisma.personal.findUnique({
-          where: { id: entidadActualizada.actualizadoPor },
-          select: { id: true, nombres: true, apellidos: true },
-        })
+        where: { id: entidadActualizada.actualizadoPor },
+        select: { id: true, nombres: true, apellidos: true },
+      })
       : null;
 
     return {
@@ -337,51 +337,454 @@ const actualizar = async (id, data) => {
 };
 
 /**
- * Elimina una entidad comercial por ID, validando existencia y que no tenga relaciones dependientes.
+ * Elimina una entidad comercial por ID con verificación exhaustiva de uso en módulos operativos.
+ * 
+ * LÓGICA:
+ * 1. Verifica si la entidad tiene operaciones en 32 modelos del sistema
+ * 2. Si tiene operaciones: Retorna error detallado con conteo por módulo
+ * 3. Si NO tiene operaciones: Elimina en cascada las 8 tablas maestras relacionadas
+ * 
+ * NOTA: Los permisos se validan en el middleware de autenticación (AccesosUsuario.puedeEliminar)
+ * 
+ * @param {BigInt} id - ID de la entidad comercial a eliminar
+ * @returns {Promise<Object>} Resultado con success, mensaje y detalles
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.entidadComercial.findUnique({
+    // ========================================
+    // PASO 1: VALIDACIONES PREVIAS
+    // ========================================
+
+    if (!id) {
+      throw new ValidationError("El ID de la Entidad Comercial es obligatorio");
+    }
+
+    // Validar que la entidad existe
+    const entidad = await prisma.entidadComercial.findUnique({
       where: { id },
-      include: {
-        contactos: true,
-        direcciones: true,
-        precios: true,
-        vehiculos: true,
-        lineasCredito: true,
-        movimientosAlmacen: true,
-        kardexAlmacenes: true,
-        requerimientosCompra: true,
-        ordenesCompra: true,
-        preFacturas: true,
+      select: {
+        id: true,
+        razonSocial: true,
+        numeroDocumento: true,
       },
     });
-    if (!existente) throw new NotFoundError("Entidad comercial no encontrada");
-    const dependientes = [
-      "contactos",
-      "direcciones",
-      "precios",
-      "vehiculos",
-      "lineasCredito",
-      "movimientosAlmacen",
-      "kardexAlmacenes",
-      "requerimientosCompra",
-      "ordenesCompra",
-      "preFacturas",
-    ];
-    for (const rel of dependientes) {
-      if (Array.isArray(existente[rel]) && existente[rel].length > 0) {
-        throw new ConflictError(
-          `No se puede eliminar la entidad comercial porque tiene ${rel} asociados.`,
-        );
-      }
+
+    if (!entidad) {
+      throw new NotFoundError("Entidad comercial no encontrada");
     }
-    await prisma.entidadComercial.delete({ where: { id } });
-    return true;
+
+    // ========================================
+    // PASO 2: VERIFICAR USO EN MÓDULOS OPERATIVOS (32 MODELOS)
+    // ========================================
+    // IMPORTANTE: Estos modelos NO se eliminan, solo se verifica si tienen registros
+    // Si tienen registros, se bloquea la eliminación de la EntidadComercial
+
+    const detalleUso = {};
+    let totalOperaciones = 0;
+
+    // 🔍 ALMACÉN E INVENTARIO (4 modelos)
+    const movimientosAlmacen = await prisma.movimientoAlmacen.count({
+      where: { entidadComercialId: id },
+    });
+    if (movimientosAlmacen > 0) {
+      detalleUso.movimientosAlmacen = movimientosAlmacen;
+      totalOperaciones += movimientosAlmacen;
+    }
+
+    const kardexAlmacenes = await prisma.kardexAlmacen.count({
+      where: { clienteId: id },
+    });
+    if (kardexAlmacenes > 0) {
+      detalleUso.kardexAlmacenes = kardexAlmacenes;
+      totalOperaciones += kardexAlmacenes;
+    }
+
+    const saldosDetProductoCliente = await prisma.saldosDetProductoCliente.count({
+      where: { clienteId: id },
+    });
+    if (saldosDetProductoCliente > 0) {
+      detalleUso.saldosDetProductoCliente = saldosDetProductoCliente;
+      totalOperaciones += saldosDetProductoCliente;
+    }
+
+    const saldosProductoCliente = await prisma.saldosProductoCliente.count({
+      where: { clienteId: id },
+    });
+    if (saldosProductoCliente > 0) {
+      detalleUso.saldosProductoCliente = saldosProductoCliente;
+      totalOperaciones += saldosProductoCliente;
+    }
+
+    // 🔍 COMPRAS (4 modelos)
+    const requerimientosCompra = await prisma.requerimientoCompra.count({
+      where: { proveedorId: id },
+    });
+    if (requerimientosCompra > 0) {
+      detalleUso.requerimientosCompra = requerimientosCompra;
+      totalOperaciones += requerimientosCompra;
+    }
+
+    const detallesReqCompra = await prisma.detalleReqCompra.count({
+      where: { proveedorId: id },
+    });
+    if (detallesReqCompra > 0) {
+      detalleUso.detallesReqCompra = detallesReqCompra;
+      totalOperaciones += detallesReqCompra;
+    }
+
+    const cotizacionesProveedores = await prisma.cotizacionProveedor.count({
+      where: { proveedorId: id },
+    });
+    if (cotizacionesProveedores > 0) {
+      detalleUso.cotizacionesProveedores = cotizacionesProveedores;
+      totalOperaciones += cotizacionesProveedores;
+    }
+
+    const ordenesCompra = await prisma.ordenCompra.count({
+      where: { proveedorId: id },
+    });
+    if (ordenesCompra > 0) {
+      detalleUso.ordenesCompra = ordenesCompra;
+      totalOperaciones += ordenesCompra;
+    }
+
+    // 🔍 VENTAS Y EXPORTACIÓN (4 modelos)
+    const cotizacionesVentas = await prisma.cotizacionVentas.count({
+      where: { clienteId: id },
+    });
+    if (cotizacionesVentas > 0) {
+      detalleUso.cotizacionesVentas = cotizacionesVentas;
+      totalOperaciones += cotizacionesVentas;
+    }
+
+    const preFacturas = await prisma.preFactura.count({
+      where: { clienteId: id },
+    });
+    if (preFacturas > 0) {
+      detalleUso.preFacturas = preFacturas;
+      totalOperaciones += preFacturas;
+    }
+
+    const costosExportacionCotizacion = await prisma.costosExportacionCotizacion.count({
+      where: { proveedorId: id },
+    });
+    if (costosExportacionCotizacion > 0) {
+      detalleUso.costosExportacionCotizacion = costosExportacionCotizacion;
+      totalOperaciones += costosExportacionCotizacion;
+    }
+
+    const costosExportacionPorIncoterm = await prisma.costoExportacionPorIncoterm.count({
+      where: { proveedorDefaultId: id },
+    });
+    if (costosExportacionPorIncoterm > 0) {
+      detalleUso.costosExportacionPorIncoterm = costosExportacionPorIncoterm;
+      totalOperaciones += costosExportacionPorIncoterm;
+    }
+
+    // 🔍 CAJA Y TESORERÍA (2 modelos)
+    const movimientosCaja = await prisma.movimientoCaja.count({
+      where: { entidadComercialId: id },
+    });
+    if (movimientosCaja > 0) {
+      detalleUso.movimientosCaja = movimientosCaja;
+      totalOperaciones += movimientosCaja;
+    }
+
+    const detalleMovsEntregaRendir = await prisma.detMovsEntregaRendir.count({
+      where: { entidadComercialId: id },
+    });
+    if (detalleMovsEntregaRendir > 0) {
+      detalleUso.detalleMovsEntregaRendir = detalleMovsEntregaRendir;
+      totalOperaciones += detalleMovsEntregaRendir;
+    }
+
+    // 🔍 PESCA (5 modelos)
+    const descargasFaenaPesca = await prisma.descargaFaenaPesca.count({
+      where: { clienteId: id },
+    });
+    if (descargasFaenaPesca > 0) {
+      detalleUso.descargasFaenaPesca = descargasFaenaPesca;
+      totalOperaciones += descargasFaenaPesca;
+    }
+
+    const descargasFaenaConsumo = await prisma.descargaFaenaConsumo.count({
+      where: { clienteId: id },
+    });
+    if (descargasFaenaConsumo > 0) {
+      detalleUso.descargasFaenaConsumo = descargasFaenaConsumo;
+      totalOperaciones += descargasFaenaConsumo;
+    }
+
+    const comisionesFidelizacion = await prisma.comisionFidelizacion.count({
+      where: { entidadComercialId: id },
+    });
+    if (comisionesFidelizacion > 0) {
+      detalleUso.comisionesFidelizacion = comisionesFidelizacion;
+      totalOperaciones += comisionesFidelizacion;
+    }
+
+    // DetCuotaPesca: Verifica 2 campos (entidadEmpresarialId, entidadComercialComisionistaAlquiler)
+    const detCuotasPesca = await prisma.detCuotaPesca.count({
+      where: {
+        OR: [
+          { entidadEmpresarialId: id },
+          { entidadComercialComisionistaAlquiler: id },
+        ],
+      },
+    });
+    if (detCuotasPesca > 0) {
+      detalleUso.detCuotasPesca = detCuotasPesca;
+      totalOperaciones += detCuotasPesca;
+    }
+
+    // TemporadaPesca: Verifica 2 campos (entidadEmpresarialAlquiladaId, entidadComercialComisionistaAlquiler)
+    const temporadasPesca = await prisma.temporadaPesca.count({
+      where: {
+        OR: [
+          { entidadEmpresarialAlquiladaId: id },
+          { entidadComercialComisionistaAlquiler: id },
+        ],
+      },
+    });
+    if (temporadasPesca > 0) {
+      detalleUso.temporadasPesca = temporadasPesca;
+      totalOperaciones += temporadasPesca;
+    }
+
+    // 🔍 MÓDULO FINANCIERO (9 modelos)
+    const comprobantesElectronicos = await prisma.comprobanteElectronico.count({
+      where: { entidadComercialId: id },
+    });
+    if (comprobantesElectronicos > 0) {
+      detalleUso.comprobantesElectronicos = comprobantesElectronicos;
+      totalOperaciones += comprobantesElectronicos;
+    }
+
+    const cuentasPorCobrar = await prisma.cuentaPorCobrar.count({
+      where: { clienteId: id },
+    });
+
+    if (cuentasPorCobrar > 0) {
+      detalleUso.cuentasPorCobrar = cuentasPorCobrar;
+      totalOperaciones += cuentasPorCobrar;
+    }
+
+    const cuentasPorPagar = await prisma.cuentaPorPagar.count({
+      where: { proveedorId: id },
+    });
+    if (cuentasPorPagar > 0) {
+      detalleUso.cuentasPorPagar = cuentasPorPagar;
+      totalOperaciones += cuentasPorPagar;
+    }
+
+    // LetraCambio: Verifica 3 campos (giradoId, beneficiarioId, avalId)
+    const letrasGirado = await prisma.letraCambio.count({
+      where: { giradoId: id },
+    });
+    const letrasBeneficiario = await prisma.letraCambio.count({
+      where: { beneficiarioId: id },
+    });
+    const letrasAval = await prisma.letraCambio.count({
+      where: { avalId: id },
+    });
+    const totalLetras = letrasGirado + letrasBeneficiario + letrasAval;
+    if (totalLetras > 0) {
+      detalleUso.letrasCambio = totalLetras;
+      totalOperaciones += totalLetras;
+    }
+
+    // EndosoLetraCambio: Verifica 2 campos (endosanteId, endosatarioId)
+    const endososComoEndosante = await prisma.endosoLetraCambio.count({
+      where: { endosanteId: id },
+    });
+    const endososComoEndosatario = await prisma.endosoLetraCambio.count({
+      where: { endosatarioId: id },
+    });
+    const totalEndosos = endososComoEndosante + endososComoEndosatario;
+    if (totalEndosos > 0) {
+      detalleUso.endososLetra = totalEndosos;
+      totalOperaciones += totalEndosos;
+    }
+
+    const retenciones = await prisma.retencion.count({
+      where: { proveedorId: id },
+    });
+    if (retenciones > 0) {
+      detalleUso.retenciones = retenciones;
+      totalOperaciones += retenciones;
+    }
+
+    const percepciones = await prisma.percepcion.count({
+      where: { proveedorId: id },
+    });
+    if (percepciones > 0) {
+      detalleUso.percepciones = percepciones;
+      totalOperaciones += percepciones;
+    }
+
+    const detallesAsientos = await prisma.detalleAsientoContable.count({
+      where: { entidadComercialId: id },
+    });
+    if (detallesAsientos > 0) {
+      detalleUso.detallesAsientos = detallesAsientos;
+      totalOperaciones += detallesAsientos;
+    }
+
+    const tiposDeudaTributaria = await prisma.tipoDeudaTributaria.count({
+      where: { entidadRecaudadoraId: id },
+    });
+    if (tiposDeudaTributaria > 0) {
+      detalleUso.tiposDeudaTributaria = tiposDeudaTributaria;
+      totalOperaciones += tiposDeudaTributaria;
+    }
+
+    // 🔍 OTROS MÓDULOS (4 modelos)
+    const contratosServicio = await prisma.contratoServicio.count({
+      where: { clienteId: id },
+    });
+    if (contratosServicio > 0) {
+      detalleUso.contratosServicio = contratosServicio;
+      totalOperaciones += contratosServicio;
+    }
+
+    const accesosInstalacion = await prisma.accesoInstalacion.count({
+      where: { entidadComercialId: id },
+    });
+    if (accesosInstalacion > 0) {
+      detalleUso.accesosInstalacion = accesosInstalacion;
+      totalOperaciones += accesosInstalacion;
+    }
+
+    const personalEnlazado = await prisma.personal.count({
+      where: { enlaceEntidadComercialId: id },
+    });
+    if (personalEnlazado > 0) {
+      detalleUso.personalEnlazado = personalEnlazado;
+      totalOperaciones += personalEnlazado;
+    }
+
+    const tarifasRutaProveedor = await prisma.tarifaCostoExportacionRuta.count({
+      where: { proveedorId: id },
+    });
+    if (tarifasRutaProveedor > 0) {
+      detalleUso.tarifasRutaProveedor = tarifasRutaProveedor;
+      totalOperaciones += tarifasRutaProveedor;
+    }
+
+    const detContratistasOT = await prisma.detContratistasOT.count({
+      where: { contratistaId: id },
+    });
+    if (detContratistasOT > 0) {
+      detalleUso.detContratistasOT = detContratistasOT;
+      totalOperaciones += detContratistasOT;
+    }
+
+    // ========================================
+    // PASO 3: DECISIÓN - BLOQUEAR O PERMITIR
+    // ========================================
+
+    if (totalOperaciones > 0) {
+      // ❌ BLOQUEAR ELIMINACIÓN - Tiene operaciones
+      return {
+        success: false,
+        mensaje: `No se puede eliminar la entidad comercial "${entidad.razonSocial}" porque tiene ${totalOperaciones} operaciones registradas en el sistema`,
+        detalleUso: detalleUso,
+        totalOperaciones: totalOperaciones,
+      };
+    }
+
+    // ========================================
+    // PASO 4: ELIMINAR EN CASCADA (SOLO SI NO TIENE OPERACIONES)
+    // ========================================
+    // Se eliminan las 8 tablas maestras relacionadas
+
+    const resultados = {
+      contactos: 0,
+      direcciones: 0,
+      precios: 0,
+      vehiculos: 0,
+      lineasCredito: 0,
+      ctaCteEntidad: 0,
+      detallesComisionFidelizacion: 0,
+      plataformasRecepcionPesca: 0,
+      entidadComercial: 0,
+    };
+
+    // 1. Eliminar ContactoEntidad
+    const contactosResult = await prisma.contactoEntidad.deleteMany({
+      where: { entidadComercialId: id },
+    });
+    resultados.contactos = Number(contactosResult.count);
+
+    // 2. Eliminar DireccionEntidad
+    const direccionesResult = await prisma.direccionEntidad.deleteMany({
+      where: { entidadComercialId: id },
+    });
+    resultados.direcciones = Number(direccionesResult.count);
+
+    // 3. Eliminar PrecioEntidad
+    const preciosResult = await prisma.precioEntidad.deleteMany({
+      where: { entidadComercialId: id },
+    });
+    resultados.precios = Number(preciosResult.count);
+
+    // 4. Eliminar VehiculoEntidad
+    const vehiculosResult = await prisma.vehiculoEntidad.deleteMany({
+      where: { entidadComercialId: id },
+    });
+    resultados.vehiculos = Number(vehiculosResult.count);
+
+    // 5. Eliminar LineaCreditoEntidad
+    const lineasCreditoResult = await prisma.lineaCreditoEntidad.deleteMany({
+      where: { entidadComercialId: id },
+    });
+    resultados.lineasCredito = Number(lineasCreditoResult.count);
+
+    // 6. Eliminar CtaCteEntidad
+    const ctaCteResult = await prisma.ctaCteEntidad.deleteMany({
+      where: { entidadComercialId: id },
+    });
+    resultados.ctaCteEntidad = Number(ctaCteResult.count);
+
+    // 7. Eliminar DetComisionFidelizacionEntidad
+    const detallesComisionResult = await prisma.detComisionFidelizacionEntidad.deleteMany({
+      where: { entidadComercialFidelizacionId: id },
+    });
+    resultados.detallesComisionFidelizacion = Number(detallesComisionResult.count);
+
+    // 8. Eliminar DetPlataformaRecepcionPesca
+    const plataformasResult = await prisma.detPlataformaRecepcionPesca.deleteMany({
+      where: { entidadComercialId: id },
+    });
+    resultados.plataformasRecepcionPesca = Number(plataformasResult.count);
+
+    // 9. Eliminar EntidadComercial
+    await prisma.entidadComercial.delete({
+      where: { id },
+    });
+    resultados.entidadComercial = 1;
+
+    // ========================================
+    // PASO 5: RETORNAR RESULTADO EXITOSO
+    // ========================================
+
+    return {
+      success: true,
+      mensaje: `Entidad comercial "${entidad.razonSocial}" eliminada exitosamente con todos sus registros relacionados`,
+      resultados: resultados,
+    };
+
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
-    if (err.code && err.code.startsWith("P"))
+    if (
+      err instanceof ValidationError ||
+      err instanceof NotFoundError ||
+      err instanceof ConflictError
+    ) {
+      throw err;
+    }
+    if (err.code && err.code.startsWith("P")) {
       throw new DatabaseError("Error de base de datos", err.message);
+    }
     throw err;
   }
 };

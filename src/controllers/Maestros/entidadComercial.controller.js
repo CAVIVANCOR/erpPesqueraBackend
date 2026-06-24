@@ -45,9 +45,17 @@ export async function actualizar(req, res, next) {
 
 export async function eliminar(req, res, next) {
   try {
-    const id = Number(req.params.id);
-    await entidadComercialService.eliminar(id);
-    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+    const id = BigInt(req.params.id);
+
+    const resultado = await entidadComercialService.eliminar(id);
+
+    // Si tiene operaciones (success: false), retornar con status 409 (Conflict)
+    if (!resultado.success) {
+      return res.status(409).json(toJSONBigInt(resultado));
+    }
+
+    // Si se eliminó correctamente (success: true), retornar con status 200
+    res.status(200).json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }
