@@ -4472,7 +4472,13 @@ model Producto {
   margenUtilidadObjetivo            Decimal?                            @db.Decimal(5, 2)  // % objetivo de margen
   descripcionEspanolExportacion     String?
   descripcionInglesExportacion      String?
-
+// ========================================
+// 🆕 CUENTAS CONTABLES PARA INVENTARIO
+// ========================================
+cuentaComprasId                   BigInt?                             // Cuenta 60 - COMPRAS (registro de compras)
+cuentaInventarioId                BigInt?                             // Cuenta 20 - MERCADERÍAS (stock en almacén)
+cuentaCostoVentasId               BigInt?                             // Cuenta 69 - COSTO DE VENTAS (costo al vender)
+cuentaVariacionId                 BigInt?                             // Cuenta 61 - VARIACIÓN DE EXISTENCIAS (contrapartida)
 
   familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
   subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
@@ -4510,6 +4516,13 @@ model Producto {
   gastosPlanificados                    DetGastosPlanificados[]
   serviciosContratistasOT               DetContratistasOT[] @relation("ProductoServicioOT")
   repuestosContratistasOT               DetRepuestosContratistaOT[]
+  // ========================================
+  // 🆕 RELACIONES CON CUENTAS CONTABLES
+  // ========================================
+  cuentaCompras         PlanCuentasContable?  @relation("ProductoCuentaCompras", fields: [cuentaComprasId], references: [id])
+  cuentaInventario      PlanCuentasContable?  @relation("ProductoCuentaInventario", fields: [cuentaInventarioId], references: [id])
+  cuentaCostoVentas     PlanCuentasContable?  @relation("ProductoCuentaCostoVentas", fields: [cuentaCostoVentasId], references: [id])
+  cuentaVariacion       PlanCuentasContable?  @relation("ProductoCuentaVariacion", fields: [cuentaVariacionId], references: [id])
 
 }
 
@@ -5770,6 +5783,13 @@ model PlanCuentasContable {
   tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR ESTA LÍNEA
   tiposDeudaPersonal    TipoDeudaPersonal[]     @relation("TipoDeudaPersonalToCuentaContable")  // ⭐ NUEVO: Tipos de deuda personal que usan esta cuenta
   centrosCosto          CentroCosto[]           @relation("CentroCostoToCuentaContable")        // ⭐ NUEVO
+// ========================================
+// 🆕 RELACIONES CON PRODUCTOS (INVENTARIO)
+// ========================================
+productosCompras      Producto[]              @relation("ProductoCuentaCompras")              // Productos que usan esta cuenta para COMPRAS (60)
+productosInventario   Producto[]              @relation("ProductoCuentaInventario")           // Productos que usan esta cuenta para INVENTARIO (20)
+productosCostoVentas  Producto[]              @relation("ProductoCuentaCostoVentas")          // Productos que usan esta cuenta para COSTO VENTAS (69)
+productosVariacion    Producto[]              @relation("ProductoCuentaVariacion")            // Productos que usan esta cuenta para VARIACIÓN (61)
 
   // ========================================
   // ÍNDICES
