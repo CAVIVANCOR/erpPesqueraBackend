@@ -2663,30 +2663,30 @@ model EntidadComercial {
   lineasCredito        LineaCreditoEntidad[]
   ctaCteEntidad        CtaCteEntidad[]
 
-  movimientosAlmacen MovimientoAlmacen[]
-  kardexAlmacenes   KardexAlmacen[]
-  requerimientosCompra RequerimientoCompra[] @relation("ProveedorRequerimiento")
-  detallesReqCompra DetalleReqCompra[] @relation("ProveedorDetalleReq")
-  cotizacionesProveedores CotizacionProveedor[] @relation("CotizacionProveedor")
-  ordenesCompra OrdenCompra[] @relation("ProveedorOrdenCompra")
-  movimientosCaja MovimientoCaja[]
-  detalleMovsEntregaRendir DetMovsEntregaRendir[]
-  detalleMovsEntregaRendirPescaConsumo DetMovsEntRendirPescaConsumo[]
-  detalleMovsEntregaRendirPCompras DetMovsEntregaRendirPCompras[]
-  saldosDetProductoCliente SaldosDetProductoCliente[]
-  saldosProductoCliente SaldosProductoCliente[]
+  movimientosAlmacen                    MovimientoAlmacen[]
+  kardexAlmacenes                       KardexAlmacen[]
+  requerimientosCompra                  RequerimientoCompra[] @relation("ProveedorRequerimiento")
+  detallesReqCompra                     DetalleReqCompra[] @relation("ProveedorDetalleReq")
+  cotizacionesProveedores               CotizacionProveedor[] @relation("CotizacionProveedor")
+  ordenesCompra                         OrdenCompra[] @relation("ProveedorOrdenCompra")
+  movimientosCaja                       MovimientoCaja[]
+  detalleMovsEntregaRendir              DetMovsEntregaRendir[]
+  detalleMovsEntregaRendirPescaConsumo  DetMovsEntRendirPescaConsumo[]
+  detalleMovsEntregaRendirPCompras      DetMovsEntregaRendirPCompras[]
+  saldosDetProductoCliente              SaldosDetProductoCliente[]
+  saldosProductoCliente                 SaldosProductoCliente[]
 
-  detalleMovsEntregaRendirPVentas DetMovsEntregaRendirPVentas[] @relation("ProveedorMovPVentas")
-  cotizacionesVentas CotizacionVentas[]
-  preFacturas PreFactura[] @relation("ClientePreFactura")
-  costosExportacionCotizacion CostosExportacionCotizacion[] @relation("ProveedorCostoExport")
-  costosExportacionPorIncoterm CostoExportacionPorIncoterm[] @relation("ProveedorDefaultCostoIncoterm")
-  detMovsEntregaRendirMovAlmacen DetMovsEntregaRendirMovAlmacen[] @relation("ProveedorMovInventario")
-  contratosServicioCliente  ContratoServicio[]  @relation("ContratoServicioCliente")
-  movimientosContratoServicio    DetMovsEntregaRendirContratoServicios[] @relation("ProveedorMovContratoServicio")
-  detMovsEntregaOTMantenimiento  DetMovsEntregaRendirOTMantenimiento[] @relation("ProveedorMovOTMantenimiento")
-  descargasFaenaPesca   DescargaFaenaPesca[]
-  descargasFaenaConsumo DescargaFaenaConsumo[]
+  detalleMovsEntregaRendirPVentas       DetMovsEntregaRendirPVentas[] @relation("ProveedorMovPVentas")
+  cotizacionesVentas                    CotizacionVentas[]
+  preFacturas                           PreFactura[] @relation("ClientePreFactura")
+  costosExportacionCotizacion           CostosExportacionCotizacion[] @relation("ProveedorCostoExport")
+  costosExportacionPorIncoterm          CostoExportacionPorIncoterm[] @relation("ProveedorDefaultCostoIncoterm")
+  detMovsEntregaRendirMovAlmacen        DetMovsEntregaRendirMovAlmacen[] @relation("ProveedorMovInventario")
+  contratosServicioCliente              ContratoServicio[]  @relation("ContratoServicioCliente")
+  movimientosContratoServicio           DetMovsEntregaRendirContratoServicios[] @relation("ProveedorMovContratoServicio")
+  detMovsEntregaOTMantenimiento         DetMovsEntregaRendirOTMantenimiento[] @relation("ProveedorMovOTMantenimiento")
+  descargasFaenaPesca                   DescargaFaenaPesca[]
+  descargasFaenaConsumo                 DescargaFaenaConsumo[]
 
   // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
@@ -2703,18 +2703,18 @@ model EntidadComercial {
   percepciones                    Percepcion[]
   detallesAsientos                DetalleAsientoContable[]
     // Relación inversa para TarifaCostoExportacionRuta
-  tarifasRutaProveedor          TarifaCostoExportacionRuta[] @relation("ProveedorTarifaRuta")
-  detCuotasPesca                DetCuotaPesca[]   @relation("EntidadEmpresarialDetCuotaPesca")
-  detCuotasPescaComisionista    DetCuotaPesca[] @relation("EntidadComisionistaAlquilerDetCuotaPesca")
-  temporadasPescaAlquiladas     TemporadaPesca[] @relation("EntidadEmpresarialAlquiladaTemporadaPesca")
-  temporadasPescaComisionista   TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
-  personalEnlazado              Personal[] @relation("PersonalEnlaceEntidad")
-  comisionesFidelizacion        ComisionFidelizacion[]
-  detallesComisionFidelizacion  DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
-  plataformasRecepcionPesca     DetPlataformaRecepcionPesca[]
-  contratistasOT                DetContratistasOT[] @relation("ContratistaOT")
-  accesosInstalacion            AccesoInstalacion[]  @relation("AccesoEntidadComercial")
-  tiposDeudaTributaria          TipoDeudaTributaria[]     // 🆕 AGREGAR
+  tarifasRutaProveedor            TarifaCostoExportacionRuta[] @relation("ProveedorTarifaRuta")
+  detCuotasPesca                  DetCuotaPesca[]   @relation("EntidadEmpresarialDetCuotaPesca")
+  detCuotasPescaComisionista      DetCuotaPesca[] @relation("EntidadComisionistaAlquilerDetCuotaPesca")
+  temporadasPescaAlquiladas       TemporadaPesca[] @relation("EntidadEmpresarialAlquiladaTemporadaPesca")
+  temporadasPescaComisionista     TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
+  personalEnlazado                Personal[] @relation("PersonalEnlaceEntidad")
+  comisionesFidelizacion          ComisionFidelizacion[]
+  detallesComisionFidelizacion    DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
+  plataformasRecepcionPesca       DetPlataformaRecepcionPesca[]
+  contratistasOT                  DetContratistasOT[] @relation("ContratistaOT")
+  accesosInstalacion              AccesoInstalacion[]  @relation("AccesoEntidadComercial")
+  tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR
 
 }
 
@@ -3704,6 +3704,11 @@ model MovimientoCaja {
   // Doble Vista
   incluirEnReporteFiscal                  Boolean?                      @default(true)
   motivoSinFactura                        String?                       @db.Text
+  // ========================================
+  // 🆕 CAMPOS PARA TRANSFERENCIAS (AGREGAR)
+  // ========================================
+  esTransferencia                         Boolean?                      @default(false)
+  movimientoRelacionadoId                 BigInt?
 
   // ========================================
   // RELACIONES EXISTENTES
@@ -3748,7 +3753,12 @@ model MovimientoCaja {
   movimientosInversion            MovimientoInversion[]
   prestamosDesembolso             PrestamoBancario[]    @relation("DesembolsoPrestamo")
   asientosContables               AsientoContable[]  // Relación inversa - Asientos generados
-
+  // ========================================
+  // 🆕 RELACIÓN PARA TRANSFERENCIAS (AGREGAR)
+  // ========================================
+  movimientoRelacionado     MovimientoCaja?           @relation("TransferenciaVinculada", fields: [movimientoRelacionadoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  movimientosPar            MovimientoCaja[]          @relation("TransferenciaVinculada")
+ 
 
   // ========================================
   // 🆕 ÍNDICES NUEVOS
@@ -3759,6 +3769,11 @@ model MovimientoCaja {
   @@index([incluirEnReporteFiscal])
   @@index([aprobadoPorId])
   @@index([rechazadoPorId])
+    // ========================================
+  // 🆕 ÍNDICES PARA TRANSFERENCIAS (AGREGAR)
+  // ========================================
+  @@index([esTransferencia])
+  @@index([movimientoRelacionadoId])
 }
 
 model NovedadPescaConsumo {
