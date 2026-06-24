@@ -15,4 +15,12 @@ router.get('/empresa/:empresaId/vencidas', deudaConPersonalController.listarVenc
 router.get('/personal/:personalId', deudaConPersonalController.listarPorPersonal);
 router.get('/tipo/:tipoDeudaId', deudaConPersonalController.listarPorTipo);
 
+
+// ========================================
+// RUTAS DE ASIENTOS CONTABLES
+// ========================================
+router.get('/:id/borrador-asiento', deudaConPersonalController.generarBorradorAsiento);
+router.post('/:id/guardar-asiento', deudaConPersonalController.guardarAsiento);
+router.delete('/:id/asiento/:asientoId', deudaConPersonalController.eliminarAsiento);
+
 export default router;

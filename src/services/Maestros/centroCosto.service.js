@@ -18,11 +18,28 @@ async function validarCategoria(categoriaId) {
 }
 
 /**
+ * Valida existencia de PlanCuentasContable (opcional).
+ * Lanza ValidationError si se proporciona y no existe.
+ * @param {BigInt} cuentaContableId
+ */
+async function validarCuentaContable(cuentaContableId) {
+  if (!cuentaContableId) return; // Campo opcional
+  const cuenta = await prisma.planCuentasContable.findUnique({ where: { id: cuentaContableId } });
+  if (!cuenta) throw new ValidationError('La cuenta contable no existe.');
+}
+
+/**
  * Lista todos los centros de costo.
  */
 const listar = async () => {
   try {
-    return await prisma.centroCosto.findMany({ include: { categoria: true, empresasCentro: true } });
+    return await prisma.centroCosto.findMany({ 
+      include: { 
+        categoria: true, 
+        empresasCentro: true,
+        cuentaContable: true  // ⭐ NUEVO
+      } 
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -34,7 +51,14 @@ const listar = async () => {
  */
 const obtenerPorId = async (id) => {
   try {
-    const centro = await prisma.centroCosto.findUnique({ where: { id }, include: { categoria: true, empresasCentro: true } });
+    const centro = await prisma.centroCosto.findUnique({ 
+      where: { id }, 
+      include: { 
+        categoria: true, 
+        empresasCentro: true,
+        cuentaContable: true  // ⭐ NUEVO
+      } 
+    });
     if (!centro) throw new NotFoundError('Centro de costo no encontrado');
     return centro;
   } catch (err) {
@@ -52,6 +76,7 @@ const crear = async (data) => {
       throw new ValidationError('Los campos Codigo, Nombre y CategoriaID son obligatorios.');
     }
     await validarCategoria(data.CategoriaID);
+    await validarCuentaContable(data.cuentaContableId);  // ⭐ NUEVO
     return await prisma.centroCosto.create({ data });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
@@ -69,6 +94,9 @@ const actualizar = async (id, data) => {
     if (!existente) throw new NotFoundError('Centro de costo no encontrado');
     if (data.CategoriaID !== undefined && data.CategoriaID !== null) {
       await validarCategoria(data.CategoriaID);
+    }
+    if (data.cuentaContableId !== undefined && data.cuentaContableId !== null) {  // ⭐ NUEVO
+      await validarCuentaContable(data.cuentaContableId);
     }
     return await prisma.centroCosto.update({ where: { id }, data });
   } catch (err) {

@@ -521,10 +521,14 @@ const crear = async (data) => {
         unidadNegocioId: data.unidadNegocioId,
         contratoServicioId: data.contratoServicioId,
         movSalidaAlmacenId: data.movSalidaAlmacenId,
-        fechaCreacion: data.fechaCreacion || new Date(),
-        fechaActualizacion: data.fechaActualizacion || new Date(),
-        creadoPor: data.creadoPor,
-        actualizadoPor: data.actualizadoPor,
+        // ════════════════════════════════════════════════════════════
+        // AUDITORÍA - CREACIÓN
+        // En creación: creadoPor y actualizadoPor deben ser el mismo usuario
+        // fechaCreacion: Prisma lo asigna con @default(now())
+        // fechaActualizacion: Prisma lo asigna con @updatedAt
+        // ════════════════════════════════════════════════════════════
+        creadoPor: data.creadoPor || null,
+        actualizadoPor: data.actualizadoPor || data.creadoPor || null, // En creación, copiar de creadoPor
         nroLiquidacionFacturacion:
           data.nroLiquidacionFacturacion?.trim() || null,
       };
@@ -601,14 +605,18 @@ const actualizar = async (id, data) => {
       );
     }
 
-    // Asegurar campos de auditoría
-    // Asegurar campos de auditoría
+    // ════════════════════════════════════════════════════════════
+    // AUDITORÍA - ACTUALIZACIÓN
+    // creadoPor: NUNCA cambiar, mantener el original
+    // actualizadoPor: SIEMPRE actualizar con el usuario que está editando
+    // fechaCreacion: NUNCA cambiar, mantener la original
+    // fechaActualizacion: Prisma lo actualiza automáticamente con @updatedAt
+    // ════════════════════════════════════════════════════════════
     const datosConAuditoria = {
       ...data,
-      fechaCreacion:
-        data.fechaCreacion || existente.fechaCreacion || new Date(),
-      creadoPor: data.creadoPor || existente.creadoPor || null,
-      fechaActualizacion: data.fechaActualizacion || new Date(),
+      creadoPor: existente.creadoPor, // PRESERVAR el creador original
+      actualizadoPor: data.actualizadoPor || null, // Actualizar con usuario actual
+      // fechaCreacion y fechaActualizacion: Prisma los maneja automáticamente
       // ⭐ PRESERVAR nroLiquidacionFacturacion si no viene en data
       nroLiquidacionFacturacion: data.hasOwnProperty('nroLiquidacionFacturacion')
         ? (data.nroLiquidacionFacturacion?.trim() || null)

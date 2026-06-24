@@ -98,3 +98,57 @@ export async function listarPorTipo(req, res, next) {
     next(err);
   }
 }
+
+
+/**
+ * Genera borrador de asiento contable para una deuda CTS
+ * GET /api/deudas-personal/:id/borrador-asiento
+ */
+export async function generarBorradorAsiento(req, res, next) {
+  try {
+    const deudaId = BigInt(req.params.id);
+    const borrador = await deudaConPersonalService.generarBorradorAsientoCTS(deudaId);
+    res.json(toJSONBigInt(borrador));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Guarda asiento(s) contable(s) para una deuda CTS
+ * POST /api/deudas-personal/:id/guardar-asiento
+ * Body: { asientos: [...] }
+ */
+export async function guardarAsiento(req, res, next) {
+  try {
+    const deudaId = BigInt(req.params.id);
+    const { asientos } = req.body;
+    const usuarioId = req.usuario?.id ? BigInt(req.usuario.id) : null;
+    
+    const resultado = await deudaConPersonalService.guardarAsientosCTS(
+      deudaId,
+      asientos,
+      usuarioId
+    );
+    
+    res.status(201).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Elimina un asiento contable de una deuda
+ * DELETE /api/deudas-personal/:id/asiento/:asientoId
+ */
+export async function eliminarAsiento(req, res, next) {
+  try {
+    const deudaId = BigInt(req.params.id);
+    const asientoId = BigInt(req.params.asientoId);
+    
+    const resultado = await deudaConPersonalService.eliminarAsientoCTS(deudaId, asientoId);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

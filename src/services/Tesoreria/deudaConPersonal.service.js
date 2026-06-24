@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import asientoContableService from '../Contabilidad/asientoContable.service.js';  // ⭐ NUEVO
 
 /**
  * Servicio CRUD para DeudaConPersonal
@@ -308,6 +309,322 @@ const listarPorTipo = async (tipoDeudaId) => {
   }
 };
 
+/**
+ * Genera borrador de asiento contable para una deuda CTS
+ * Retorna la estructura del asiento SIN guardarlo en BD
+ * @param {BigInt} deudaId - ID de la deuda
+ * @returns {Promise<Object>} Borrador del asiento
+ */
+const generarBorradorAsientoCTS = async (deudaId) => {
+  try {
+    // 1. Obtener la deuda con todas sus relaciones
+    const deuda = await prisma.deudaConPersonal.findUnique({
+      where: { id: deudaId },
+      include: {
+        empresa: true,
+        personal: {
+          include: {
+            centroCosto: {
+              include: {
+                cuentaContable: true  // Cuenta 94.x
+              }
+            }
+          }
+        },
+        tipoDeuda: {
+          include: {
+            cuentaContable: true  // Cuenta 41.x
+          }
+        },
+        moneda: true,
+        periodoContable: true
+      }
+    });
+
+    if (!deuda) {
+      throw new NotFoundError('Deuda con personal no encontrada');
+    }
+
+    // 2. Validar que tenga cuenta contable configurada
+    if (!deuda.tipoDeuda?.cuentaContable) {
+      throw new ValidationError(
+        `El tipo de deuda "${deuda.tipoDeuda?.nombre}" no tiene cuenta contable configurada. Configure la cuenta 41.x correspondiente.`
+      );
+    }
+
+    // 3. Obtener período contable
+    let periodoContableId = deuda.periodoContableId;
+    if (!periodoContableId) {
+      const fechaContable = deuda.fechaContable || deuda.fecha;
+      const periodoAbierto = await prisma.periodoContable.findFirst({
+        where: {
+          empresaId: deuda.empresaId,
+          fechaInicio: { lte: fechaContable },
+          fechaFin: { gte: fechaContable },
+          estado: {
+            descripcion: 'ABIERTO'
+          }
+        }
+      });
+
+      if (!periodoAbierto) {
+        throw new ValidationError(
+          `No existe un período contable ABIERTO para la fecha ${new Date(fechaContable).toLocaleDateString()}`
+        );
+      }
+      periodoContableId = periodoAbierto.id;
+    }
+
+    // 4. Obtener cuentas hardcodeadas del sistema
+    const cuenta391 = await prisma.planCuentasContable.findFirst({
+      where: { codigo: '39.1', empresaId: deuda.empresaId }
+    });
+    const cuenta621 = await prisma.planCuentasContable.findFirst({
+      where: { codigo: '62.1', empresaId: deuda.empresaId }
+    });
+    const cuenta791 = await prisma.planCuentasContable.findFirst({
+      where: { codigo: '79.1', empresaId: deuda.empresaId }
+    });
+
+    if (!cuenta391 || !cuenta621 || !cuenta791) {
+      throw new ValidationError(
+        'Faltan cuentas contables del sistema. Debe configurar: 39.1 (Saldos Iniciales), 62.1 (Gastos de Personal), 79.1 (Cargas Imputables)'
+      );
+    }
+
+    const fechaAsiento = deuda.fechaContable || deuda.fecha;
+    const monto = Number(deuda.montoOriginal);
+    const borradores = [];
+
+    // 5. CASO 1: SALDO INICIAL
+    if (deuda.esSaldoInicial) {
+      const glosaAsiento = `SALDO INICIAL CTS - ${deuda.personal.nombres} ${deuda.personal.apellidos} - ${deuda.tipoDeuda.nombre}`;
+      
+      borradores.push({
+        empresaId: deuda.empresaId,
+        periodoContableId: periodoContableId,
+        fechaAsiento: fechaAsiento,
+        glosa: glosaAsiento,
+        tipoLibro: deuda.esGerencial ? 'GERENCIAL' : 'FISCAL',
+        origenAsiento: 'AUTOMATICO',
+        monedaId: deuda.monedaId,
+        totalDebe: monto,
+        totalHaber: monto,
+        diferencia: 0,
+        estaCuadrado: true,
+        detalles: [
+          {
+            numeroLinea: 1,
+            planCuentaId: cuenta391.id,
+            planCuenta: cuenta391,
+            glosa: glosaAsiento,
+            debe: monto,
+            haber: 0,
+            monedaId: deuda.monedaId
+          },
+          {
+            numeroLinea: 2,
+            planCuentaId: deuda.tipoDeuda.cuentaContable.id,
+            planCuenta: deuda.tipoDeuda.cuentaContable,
+            glosa: glosaAsiento,
+            debe: 0,
+            haber: monto,
+            monedaId: deuda.monedaId
+          }
+        ]
+      });
+
+    } else {
+      // 6. CASO 2: PROVISIÓN MENSUAL
+
+      // ASIENTO 1: Provisión (62.1 vs 41.x)
+      const glosaProvision = `PROVISIÓN CTS ${new Date(fechaAsiento).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' }).toUpperCase()} - ${deuda.personal.nombres} ${deuda.personal.apellidos}`;
+      
+      borradores.push({
+        empresaId: deuda.empresaId,
+        periodoContableId: periodoContableId,
+        fechaAsiento: fechaAsiento,
+        glosa: glosaProvision,
+        tipoLibro: deuda.esGerencial ? 'GERENCIAL' : 'FISCAL',
+        origenAsiento: 'AUTOMATICO',
+        monedaId: deuda.monedaId,
+        totalDebe: monto,
+        totalHaber: monto,
+        diferencia: 0,
+        estaCuadrado: true,
+        detalles: [
+          {
+            numeroLinea: 1,
+            planCuentaId: cuenta621.id,
+            planCuenta: cuenta621,
+            glosa: glosaProvision,
+            debe: monto,
+            haber: 0,
+            monedaId: deuda.monedaId
+          },
+          {
+            numeroLinea: 2,
+            planCuentaId: deuda.tipoDeuda.cuentaContable.id,
+            planCuenta: deuda.tipoDeuda.cuentaContable,
+            glosa: glosaProvision,
+            debe: 0,
+            haber: monto,
+            monedaId: deuda.monedaId
+          }
+        ]
+      });
+
+      // ASIENTO 2: Destino (94.x vs 79.1)
+      if (!deuda.personal.centroCostoId || !deuda.personal.centroCosto?.cuentaContable) {
+        throw new ValidationError(
+          `El personal "${deuda.personal.nombres} ${deuda.personal.apellidos}" no tiene centro de costo configurado o el centro de costo no tiene cuenta contable (94.x) asignada.`
+        );
+      }
+
+      const glosaDestino = `DESTINO CTS ${new Date(fechaAsiento).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' }).toUpperCase()} - ${deuda.personal.centroCosto.Nombre}`;
+      
+      borradores.push({
+        empresaId: deuda.empresaId,
+        periodoContableId: periodoContableId,
+        fechaAsiento: fechaAsiento,
+        glosa: glosaDestino,
+        tipoLibro: deuda.esGerencial ? 'GERENCIAL' : 'FISCAL',
+        origenAsiento: 'AUTOMATICO',
+        monedaId: deuda.monedaId,
+        totalDebe: monto,
+        totalHaber: monto,
+        diferencia: 0,
+        estaCuadrado: true,
+        detalles: [
+          {
+            numeroLinea: 1,
+            planCuentaId: deuda.personal.centroCosto.cuentaContable.id,
+            planCuenta: deuda.personal.centroCosto.cuentaContable,
+            glosa: glosaDestino,
+            debe: monto,
+            haber: 0,
+            monedaId: deuda.monedaId,
+            centroCostoId: deuda.personal.centroCostoId,
+            centroCosto: deuda.personal.centroCosto
+          },
+          {
+            numeroLinea: 2,
+            planCuentaId: cuenta791.id,
+            planCuenta: cuenta791,
+            glosa: glosaDestino,
+            debe: 0,
+            haber: monto,
+            monedaId: deuda.monedaId
+          }
+        ]
+      });
+    }
+
+    return {
+      deudaId: deuda.id,
+      asientos: borradores
+    };
+
+  } catch (err) {
+    if (err instanceof ValidationError || err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al generar borrador de asiento', err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Guarda asiento(s) contable(s) para una deuda CTS
+ * @param {BigInt} deudaId - ID de la deuda
+ * @param {Array} asientosData - Array de asientos a guardar
+ * @param {BigInt} usuarioId - ID del usuario
+ * @returns {Promise<Object>} Asientos guardados
+ */
+const guardarAsientosCTS = async (deudaId, asientosData, usuarioId) => {
+  try {
+    const asientosGuardados = [];
+
+    for (const asientoData of asientosData) {
+      const asiento = await asientoContableService.crear({
+        ...asientoData,
+        submoduloOrigenId: null, // TODO: ID del submódulo "Deudas Personal"
+        procesoOrigenId: deudaId,
+        creadoPor: usuarioId,
+        detalles: asientoData.detalles.map(d => ({
+          ...d,
+          creadoPor: usuarioId
+        }))
+      });
+      asientosGuardados.push(asiento);
+    }
+
+    // Vincular asientos a la deuda
+    await prisma.deudaConPersonal.update({
+      where: { id: deudaId },
+      data: {
+        periodoContableId: asientosData[0].periodoContableId,
+        fechaContable: asientosData[0].fechaAsiento,
+        asientosContables: {
+          connect: asientosGuardados.map(a => ({ id: a.id }))
+        }
+      }
+    });
+
+    return {
+      success: true,
+      asientosGenerados: asientosGuardados.length,
+      asientos: asientosGuardados
+    };
+
+  } catch (err) {
+    if (err instanceof ValidationError || err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al guardar asientos', err.message);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Elimina un asiento contable de una deuda
+ * @param {BigInt} deudaId - ID de la deuda
+ * @param {BigInt} asientoId - ID del asiento a eliminar
+ * @returns {Promise<Object>} Resultado de la eliminación
+ */
+const eliminarAsientoCTS = async (deudaId, asientoId) => {
+  try {
+    // Verificar que el asiento pertenece a la deuda
+    const asiento = await prisma.asientoContable.findFirst({
+      where: {
+        id: asientoId,
+        procesoOrigenId: deudaId
+      }
+    });
+
+    if (!asiento) {
+      throw new NotFoundError('Asiento contable no encontrado o no pertenece a esta deuda');
+    }
+
+    // Eliminar el asiento (los detalles se eliminan en cascada)
+    await prisma.asientoContable.delete({
+      where: { id: asientoId }
+    });
+
+    return {
+      success: true,
+      message: 'Asiento eliminado correctamente'
+    };
+
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al eliminar asiento', err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -318,5 +635,8 @@ export default {
   listarPorPersonal,
   listarPendientes,
   listarVencidas,
-  listarPorTipo
+  listarPorTipo,
+  generarBorradorAsientoCTS,  // ⭐ NUEVO
+  guardarAsientosCTS,          // ⭐ NUEVO
+  eliminarAsientoCTS           // ⭐ NUEVO
 };

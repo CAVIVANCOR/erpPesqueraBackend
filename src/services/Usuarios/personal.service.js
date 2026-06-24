@@ -23,14 +23,14 @@ async function validarPersonal(data, excluirId = null) {
   if (data.numeroDocumento && data.empresaId) {
     const where = excluirId
       ? {
-          numeroDocumento: data.numeroDocumento,
-          empresaId: data.empresaId,
-          id: { not: excluirId },
-        }
+        numeroDocumento: data.numeroDocumento,
+        empresaId: data.empresaId,
+        id: { not: excluirId },
+      }
       : {
-          numeroDocumento: data.numeroDocumento,
-          empresaId: data.empresaId,
-        };
+        numeroDocumento: data.numeroDocumento,
+        empresaId: data.empresaId,
+      };
     const existe = await prisma.personal.findFirst({ where });
     if (existe)
       throw new ConflictError(
@@ -52,9 +52,10 @@ async function validarPersonal(data, excluirId = null) {
     { campo: "tipoDocumentoId", modelo: "tiposDocIdentidad" },
     { campo: "tipoContratoId", modelo: "tipoContrato" },
     { campo: "cargoId", modelo: "cargosPersonal" },
+    { campo: "centroCostoId", modelo: "centroCosto" },  // ⭐ NUEVO
     { campo: "ubigeoId", modelo: "ubigeo" },
     { campo: "areaFisicaId", modelo: "areaFisicaSede" },
-    { campo: "sedeEmpresaId", modelo: "sedesEmpresa" }, // sedeEmpresaId referencia a la tabla sede
+    { campo: "sedeEmpresaId", modelo: "sedesEmpresa" },
     { campo: "enlaceEntidadComercialId", modelo: "entidadComercial" },
   ];
   for (const ref of referencias) {
@@ -86,11 +87,12 @@ const listar = async (filtros = {}) => {
       where.esVendedor = filtros.esVendedor;
     }
 
-        const personal = await prisma.personal.findMany({
+    const personal = await prisma.personal.findMany({
       where,
       include: {
         usuario: true,
         cargo: true,
+        centroCosto: true,  // ⭐ NUEVO
         ubigeo: true,
         enlaceEntidadComercial: true,
       },
@@ -136,6 +138,7 @@ const obtenerPorId = async (id) => {
       include: {
         usuario: true,
         cargo: true,
+        centroCosto: true,  // ⭐ NUEVO
         ubigeo: true,
         tipoDocIdentidad: true,
         enlaceEntidadComercial: true,
