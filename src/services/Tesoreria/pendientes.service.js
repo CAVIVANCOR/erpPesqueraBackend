@@ -398,6 +398,195 @@ const listarPendientes = async (filtros = {}) => {
       });
     }
 
+    // ========================================
+    // CONSULTAR DEUDAS PERSONALES (si tipo es 'DEUDAS_PERSONAL')
+    // ========================================
+    let deudasPersonales = [];
+    if (tipo === 'DEUDAS_PERSONAL') {
+      const whereDeudas = {
+        saldoPendiente: { gt: 0 },
+      };
+
+      if (empresaId) {
+        whereDeudas.empresaId = Number(empresaId);
+      }
+
+      if (monedaId) {
+        whereDeudas.monedaId = Number(monedaId);
+      }
+
+      if (vencimiento) {
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        if (vencimiento === 'VENCIDOS') {
+          whereDeudas.fechaVencimiento = { lt: hoy };
+        } else if (vencimiento === 'HOY') {
+          const manana = new Date(hoy);
+          manana.setDate(manana.getDate() + 1);
+          whereDeudas.fechaVencimiento = {
+            gte: hoy,
+            lt: manana,
+          };
+        } else if (vencimiento === 'SEMANA') {
+          const finSemana = new Date(hoy);
+          finSemana.setDate(finSemana.getDate() + 7);
+          whereDeudas.fechaVencimiento = {
+            gte: hoy,
+            lt: finSemana,
+          };
+        }
+      }
+
+      deudasPersonales = await prisma.deudaConPersonal.findMany({
+        where: whereDeudas,
+        include: {
+          personal: {
+            select: {
+              id: true,
+              nombres: true,       // ✅ CORRECTO (plural)
+              apellidos: true,
+              numeroDocumento: true,
+              enlaceEntidadComercialId: true,
+            },
+          },
+          empresa: {
+            select: {
+              id: true,
+              razonSocial: true,
+              ruc: true,
+            },
+          },
+          tipoDeuda: {
+            select: {
+              id: true,
+              nombre: true,
+              descripcion: true,
+            },
+          },
+          moneda: {
+            select: {
+              id: true,
+              simbolo: true,
+              codigoSunat: true,
+            },
+          },
+          estado: {
+            select: {
+              id: true,
+              descripcion: true,
+              severityColor: true,
+            },
+          },
+          pagos: {
+            select: {
+              id: true,
+              montoPago: true,
+              fechaPago: true,
+              movimientoCajaId: true,
+            },
+            orderBy: {
+              fechaPago: 'desc',
+            },
+            take: 1,
+          },
+        },
+        orderBy: {
+          fechaVencimiento: 'asc',
+        },
+      });
+    }
+
+    // ========================================
+    // CONSULTAR DEUDAS TRIBUTARIAS (si tipo es 'DEUDAS_TRIBUTARIAS')
+    // ========================================
+    let deudasTributarias = [];
+    if (tipo === 'DEUDAS_TRIBUTARIAS') {
+      const whereDeudasTrib = {
+        saldoPendiente: { gt: 0 },
+      };
+
+      if (empresaId) {
+        whereDeudasTrib.empresaId = Number(empresaId);
+      }
+
+      if (monedaId) {
+        whereDeudasTrib.monedaId = Number(monedaId);
+      }
+
+      if (vencimiento) {
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        if (vencimiento === 'VENCIDOS') {
+          whereDeudasTrib.fechaVencimiento = { lt: hoy };
+        } else if (vencimiento === 'HOY') {
+          const manana = new Date(hoy);
+          manana.setDate(manana.getDate() + 1);
+          whereDeudasTrib.fechaVencimiento = {
+            gte: hoy,
+            lt: manana,
+          };
+        } else if (vencimiento === 'SEMANA') {
+          const finSemana = new Date(hoy);
+          finSemana.setDate(finSemana.getDate() + 7);
+          whereDeudasTrib.fechaVencimiento = {
+            gte: hoy,
+            lt: finSemana,
+          };
+        }
+      }
+
+      deudasTributarias = await prisma.deudaTributaria.findMany({
+        where: whereDeudasTrib,
+        include: {
+          empresa: {
+            select: {
+              id: true,
+              razonSocial: true,
+              ruc: true,
+            },
+          },
+          tipoDeuda: {
+            select: {
+              id: true,
+              nombre: true,
+              descripcion: true,
+            },
+          },
+          moneda: {
+            select: {
+              id: true,
+              simbolo: true,
+              codigoSunat: true,
+            },
+          },
+          estado: {
+            select: {
+              id: true,
+              descripcion: true,
+              severityColor: true,
+            },
+          },
+          pagos: {
+            select: {
+              id: true,
+              montoPago: true,
+              fechaPago: true,
+              movimientoCajaId: true,
+            },
+            orderBy: {
+              fechaPago: 'desc',
+            },
+            take: 1,
+          },
+        },
+        orderBy: {
+          fechaVencimiento: 'asc',
+        },
+      });
+    }
+
 
     // ========================================
     // TRANSFORMAR CxC A FORMATO CONSOLIDADO
@@ -536,10 +725,85 @@ const listarPendientes = async (filtros = {}) => {
     });
 
     // ========================================
+    // TRANSFORMAR DEUDAS PERSONALES A FORMATO CONSOLIDADO
+    // ========================================
+    const deudasConsolidadas = deudasPersonales.map((deuda) => ({
+      id: deuda.id,
+      tipo: 'EGRESO',
+      tipoDocumento: 'DEUDA_PERSONAL',
+      origen: 'Deuda Personal',
+      origenId: deuda.id,
+      documentoNumero: deuda.numeroDocumento || `DP-${deuda.id}`,
+      documentoTipo: deuda.tipoDeuda?.nombre || 'Deuda',
+      entidadComercial: {
+        id: deuda.personal?.id,
+        razonSocial: `${deuda.personal?.nombres} ${deuda.personal?.apellidos}`.trim(),
+        numeroDocumento: deuda.personal?.numeroDocumento,
+        tipo: 'Personal',
+      },
+      empresa: deuda.empresa,
+      fechaEmision: deuda.fecha,
+      fechaVencimiento: deuda.fechaVencimiento,
+      moneda: deuda.moneda,
+      montoTotal: deuda.montoOriginal,
+      montoPagado: deuda.montoPagado,
+      saldoPendiente: deuda.saldoPendiente,
+      estado: deuda.estado,
+      ultimoPago: deuda.pagos?.[0] || null,
+      movimientoCajaId: deuda.pagos?.[0]?.movimientoCajaId || null,
+      esDeudaPersonal: true,
+      esGerencial: deuda.esGerencial,
+      esSaldoInicial: deuda.esSaldoInicial,
+      personal: {
+        id: deuda.personal?.id,
+        nombreCompleto: `${deuda.personal?.nombres} ${deuda.personal?.apellidos}`.trim(),
+      },
+      tipoDeuda: deuda.tipoDeuda,
+      observaciones: deuda.observaciones,
+    }));
+
+    // ========================================
+    // TRANSFORMAR DEUDAS TRIBUTARIAS A FORMATO CONSOLIDADO
+    // ========================================
+    const deudasTributariasConsolidadas = deudasTributarias.map((deuda) => ({
+      id: deuda.id,
+      tipo: 'EGRESO',
+      tipoDocumento: 'DEUDA_TRIBUTARIA',
+      origen: 'Deuda Tributaria',
+      origenId: deuda.id,
+      documentoNumero: deuda.numeroDocumento || `DT-${deuda.id}`,
+      documentoTipo: deuda.tipoDeuda?.nombre || 'Tributo',
+      entidadComercial: {
+        id: null,
+        razonSocial: 'SUNAT',
+        numeroDocumento: '20131312955',
+        tipo: 'Entidad Gubernamental',
+      },
+      empresa: deuda.empresa,
+      fechaEmision: deuda.fecha,
+      fechaVencimiento: deuda.fechaVencimiento,
+      moneda: deuda.moneda,
+      montoTotal: deuda.montoOriginal,
+      montoPagado: deuda.montoPagado,
+      saldoPendiente: deuda.saldoPendiente,
+      estado: deuda.estado,
+      ultimoPago: deuda.pagos?.[0] || null,
+      movimientoCajaId: deuda.pagos?.[0]?.movimientoCajaId || null,
+      esDeudaTributaria: true,
+      tipoDeuda: deuda.tipoDeuda,
+      observaciones: deuda.observaciones,
+    }));
+
+    // ========================================
     // COMBINAR Y RETORNAR
     // ========================================
-    const pendientes = [...cxcConsolidadas, ...cxpConsolidadas, ...entregasConsolidadas];
-
+    const pendientes = [
+      ...cxcConsolidadas,
+      ...cxpConsolidadas,
+      ...entregasConsolidadas,
+      ...deudasConsolidadas,
+      ...deudasTributariasConsolidadas,
+    ];
     pendientes.sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
 
     return pendientes;
@@ -584,6 +848,40 @@ const obtenerResumen = async (empresaId = null) => {
     // CUENTAS POR PAGAR
     // ========================================
     const cxpAgrupadas = await prisma.cuentaPorPagar.groupBy({
+      by: ['monedaId'],
+      where: {
+        ...where,
+        saldoPendiente: { gt: 0 },
+      },
+      _sum: {
+        saldoPendiente: true,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    // ========================================
+    // DEUDAS PERSONALES
+    // ========================================
+    const deudasAgrupadas = await prisma.deudaConPersonal.groupBy({
+      by: ['monedaId'],
+      where: {
+        ...where,
+        saldoPendiente: { gt: 0 },
+      },
+      _sum: {
+        saldoPendiente: true,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    // ========================================
+    // DEUDAS TRIBUTARIAS
+    // ========================================
+    const deudasTributariasAgrupadas = await prisma.deudaTributaria.groupBy({
       by: ['monedaId'],
       where: {
         ...where,
@@ -697,6 +995,8 @@ const obtenerResumen = async (empresaId = null) => {
       ...new Set([
         ...cxcAgrupadas.map((g) => g.monedaId),
         ...cxpAgrupadas.map((g) => g.monedaId),
+        ...deudasAgrupadas.map((g) => g.monedaId),
+        ...deudasTributariasAgrupadas.map((g) => g.monedaId),  // ✅ AGREGAR
         ...asignacionesAgrupadas.map((g) => g.monedaId),
         ...gastosDirectosAgrupados.map((g) => g.monedaId),
         ...cxcVencidas.map((g) => g.monedaId),
@@ -735,6 +1035,16 @@ const obtenerResumen = async (empresaId = null) => {
       gastosDirectos: gastosDirectosAgrupados.map((g) => ({
         moneda: monedas.find((m) => m.id === g.monedaId),
         total: g._sum.monto,
+        cantidad: g._count.id,
+      })),
+      deudasPersonales: deudasAgrupadas.map((g) => ({
+        moneda: monedas.find((m) => m.id === g.monedaId),
+        total: g._sum.saldoPendiente,
+        cantidad: g._count.id,
+      })),
+      deudasTributarias: deudasTributariasAgrupadas.map((g) => ({
+        moneda: monedas.find((m) => m.id === g.monedaId),
+        total: g._sum.saldoPendiente,
         cantidad: g._count.id,
       })),
       vencidos: {
