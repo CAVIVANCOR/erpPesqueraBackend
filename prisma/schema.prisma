@@ -428,7 +428,7 @@ model CentroCosto {
   Nombre             String               @db.VarChar(255)
   Descripcion        String?
   CategoriaID        BigInt
-  ParentCentroID     String?              @db.VarChar(20)
+  ParentCentroID     String?              @db.VarChar(80) //Este casmpo lo utilizaremos como una subcategoria
   id                 BigInt               @id @default(autoincrement())
   cuentaContableId   BigInt?              // ⭐ NUEVO - Cuenta contable del centro (94.1, 94.2, etc.)
 
@@ -1858,7 +1858,8 @@ model DetMovsEntregaRendir {
   creadoPorId          BigInt?
   actualizadoEn        DateTime             @updatedAt
   actualizadoPorId     BigInt?
-  
+  refOperacionEspecializadaMovCaja  BigInt?
+
   // ═══════════════════════════════════════════════════════════
   // CAMPOS OPCIONALES EXISTENTES
   // ═══════════════════════════════════════════════════════════
@@ -2499,9 +2500,9 @@ model Empresa {
   // ========================================
   // ⭐ CAMPOS NUBEFACT - FACTURACIÓN ELECTRÓNICA
   // ========================================
-  nubefactUrl          String?     @db.VarChar(255)        // URL del API de Nubefact
-  nubefactToken        String?     @db.VarChar(500)        // Token de autenticación de Nubefact
-
+  nubefactUrl                         String?     @db.VarChar(255)        // URL del API de Nubefact
+  nubefactToken                       String?     @db.VarChar(500)        // Token de autenticación de Nubefact
+  ultimoCorrelativoOperacionCaja      BigInt?     @default(0)
   sedes                         SedesEmpresa[]
   centrosCosto                  EmpresaCentroCosto[]
   movimientosAlmacen            MovimientoAlmacen[]
@@ -3709,6 +3710,7 @@ model MovimientoCaja {
   // ========================================
   esTransferencia                         Boolean?                      @default(false)
   movimientoRelacionadoId                 BigInt?
+  refOperacionEspecializadaMovCaja        BigInt?
 
   // ========================================
   // RELACIONES EXISTENTES
@@ -4216,7 +4218,8 @@ model PagoDeudaPersonal {
   creadoPor             BigInt?                                               // Usuario que creó el registro
   actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
   actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
-  
+  refOperacionEspecializadaMovCaja  BigInt?
+
   // ========================================
   // RELACIONES
   // ========================================
@@ -4410,7 +4413,8 @@ model PagoDeudaTributaria {
   creadoPor             BigInt?                                               // Usuario que creó el registro
   actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
   actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
-  
+  refOperacionEspecializadaMovCaja  BigInt?
+
   // ========================================
   // RELACIONES
   // ========================================
@@ -6645,8 +6649,8 @@ model PagoCuentaPorCobrar {
   fechaCreacion         DateTime    @default(now())                  // Fecha de creación del registro
   fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
   creadoPor             BigInt?                                      // Usuario que creó el registro
-  actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
-
+  actualizadoPor        BigInt?                                      // Usuario que actualizó el registro 
+  refOperacionEspecializadaMovCaja  BigInt?
   // ========================================
   // RELACIONES
   // ========================================
@@ -6878,7 +6882,8 @@ model PagoCuentaPorPagar {
   fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
   creadoPor             BigInt?                                      // Usuario que creó el registro
   actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
-  
+  refOperacionEspecializadaMovCaja  BigInt?
+
   // ========================================
   // RELACIONES
   // ========================================
@@ -7388,7 +7393,8 @@ model PagoLetraCambio {
   // Auditoría
   registradoPor         BigInt?
   creadoEn              DateTime    @default(now())
-  
+  refOperacionEspecializadaMovCaja  BigInt?
+
   // Relaciones
   letraCambio           LetraCambio         @relation(fields: [letraCambioId], references: [id])
   moneda                Moneda              @relation(fields: [monedaId], references: [id])
@@ -8046,7 +8052,8 @@ model CuotaPrestamo {
   montoPagado           Decimal?                @db.Decimal(18, 2)   // Monto realmente pagado
   montoMora             Decimal?                @db.Decimal(18, 2)   // Monto de mora por atraso
   movimientoCajaId      BigInt?                                      // Relación con MovimientoCaja
-  
+  refOperacionEspecializadaMovCaja  BigInt?
+
   // ========================================
   // ESTADO DE PAGO
   // ========================================
