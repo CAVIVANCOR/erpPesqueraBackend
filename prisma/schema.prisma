@@ -2488,8 +2488,8 @@ model Empresa {
   entidadComercialId   BigInt?
 
     // 🆕 AGREGAR: Márgenes de utilidad globales (heredados a productos)
-  margenMinimoPermitido Decimal?            @default(20.00) @db.Decimal(5, 2)  // % mínimo de margen (ej: 20.00%)
-  margenUtilidadObjetivo Decimal?           @default(50.00) @db.Decimal(5, 2)  // % objetivo de margen (ej: 50.00%)
+  margenMinimoPermitido               Decimal?            @default(20.00) @db.Decimal(5, 2)  // % mínimo de margen (ej: 20.00%)
+  margenUtilidadObjetivo              Decimal?           @default(50.00) @db.Decimal(5, 2)  // % objetivo de margen (ej: 50.00%)
 
   porcentajeBaseLiqPesca              Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeComisionPatron            Decimal? @default(0.00) @db.Decimal(7,2)
@@ -2503,6 +2503,9 @@ model Empresa {
   nubefactUrl                         String?     @db.VarChar(255)        // URL del API de Nubefact
   nubefactToken                       String?     @db.VarChar(500)        // Token de autenticación de Nubefact
   ultimoCorrelativoOperacionCaja      BigInt?     @default(0)
+  porcentajePercepcion                Decimal?    @db.Decimal(5, 2)  // 🆕 AGREGAR ESTA LÍNEA
+
+
   sedes                         SedesEmpresa[]
   centrosCosto                  EmpresaCentroCosto[]
   movimientosAlmacen            MovimientoAlmacen[]
