@@ -8094,16 +8094,21 @@ model CuotaPrestamo {
 // ============================================
 
 model DesembolsoPrestamo {
-  id                    BigInt                  @id @default(autoincrement())
-  prestamoBancarioId    BigInt
-  numeroDesembolso      Int                                          // 1, 2, 3 (si hay desembolsos parciales)
-  fechaDesembolso       DateTime                                     // Fecha real del desembolso
-  monto                 Decimal                 @db.Decimal(18, 2)   // Monto desembolsado
-  movimientoCajaId      BigInt                                       // Movimiento de ingreso a caja/banco
-  observaciones         String?                 @db.Text
-  creadoEn              DateTime                @default(now())
-  creadoPor             BigInt?
-  
+  id                                BigInt                  @id @default(autoincrement())
+  prestamoBancarioId                BigInt
+  fechaDesembolso                   DateTime                                     // Fecha real del desembolso
+  monto                             Decimal                 @db.Decimal(18, 2)   // Monto desembolsado
+  movimientoCajaId                  BigInt                                       // Movimiento de ingreso a caja/banco
+  refOperacionEspecializadaMovCaja  BigInt?
+
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  fechaCreacion         DateTime    @default(now())                  // Fecha de creación del registro
+  fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
+  creadoPor             BigInt?                                      // Usuario que creó el registro
+  actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
+
   prestamo              PrestamoBancario        @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
   movimientoCaja        MovimientoCaja          @relation(fields: [movimientoCajaId], references: [id])
   personalCreador       Personal?               @relation(fields: [creadoPor], references: [id])
