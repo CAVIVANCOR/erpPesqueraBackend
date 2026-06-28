@@ -4,7 +4,11 @@ import {
   DatabaseError,
   ValidationError,
 } from "../../utils/errors.js";
-
+import {
+  TIPO_FILTRO_TESORERIA,
+  TIPO_DEUDA_TESORERIA,
+  TIPO_VENCIMIENTO_TESORERIA,
+} from "../../utils/tesoreria.constants.js";
 /**
  * Servicio para consulta de documentos pendientes de cobro y pago
  * Para vista de Tesorería - Pendientes
@@ -33,6 +37,7 @@ const listarPendientes = async (filtros = {}) => {
     const {
       empresaId,
       tipo,
+      tipoDeuda,
       vencimiento,
       monedaId,
     } = filtros;
@@ -117,7 +122,7 @@ const listarPendientes = async (filtros = {}) => {
     // CONSULTAR CxC (solo si tipo no es 'PAGAR')
     // ========================================
     let cuentasPorCobrar = [];
-    if (!tipo || tipo === 'COBRAR') {
+    if (!tipo || tipo === TIPO_FILTRO_TESORERIA.COBRAR) {
       cuentasPorCobrar = await prisma.cuentaPorCobrar.findMany({
         where: whereCxC,
         include: {
@@ -198,7 +203,7 @@ const listarPendientes = async (filtros = {}) => {
     // CONSULTAR CxP (solo si tipo no es 'COBRAR')
     // ========================================
     let cuentasPorPagar = [];
-    if (!tipo || tipo === 'PAGAR') {
+    if (!tipo || tipo === TIPO_FILTRO_TESORERIA.PAGAR || tipo === TIPO_FILTRO_TESORERIA.ASIGNACIONES || tipo === TIPO_FILTRO_TESORERIA.GASTOS_DIRECTOS) {
       cuentasPorPagar = await prisma.cuentaPorPagar.findMany({
         where: whereCxP,
         include: {
@@ -267,7 +272,7 @@ const listarPendientes = async (filtros = {}) => {
     // CONSULTAR ENTREGAS A RENDIR (solo si tipo no es 'COBRAR')
     // ========================================
     let entregasARendir = [];
-    if (!tipo || tipo === 'PAGAR') {
+    if (!tipo || tipo === TIPO_FILTRO_TESORERIA.ASIGNACIONES || tipo === TIPO_FILTRO_TESORERIA.GASTOS_DIRECTOS) {
       // Construir WHERE para Entregas a Rendir
       const whereEntregas = {
         validadoTesoreria: false,
@@ -298,6 +303,38 @@ const listarPendientes = async (filtros = {}) => {
           },
         ],
       };
+      // Filtrar por tipo específico de entrega
+      if (tipo === TIPO_FILTRO_TESORERIA.ASIGNACIONES) {
+        // Solo Asignaciones (sin entidad comercial)
+        whereEntregas.OR = [
+          {
+            tipoMovimiento: {
+              categoriaId: CATEGORIA_GASTOS_A_RENDIR,
+            },
+            formaParteCalculoEntregaARendir: true,
+            OR: [
+              { asignacionOrigenId: null },
+              { asignacionOrigenId: 0 },
+            ],
+          },
+        ];
+      } else if (tipo === TIPO_FILTRO_TESORERIA.GASTOS_DIRECTOS) {
+        // Solo Gastos Directos (con entidad comercial)
+        whereEntregas.OR = [
+          {
+            tipoMovimiento: {
+              categoriaId: { not: CATEGORIA_GASTOS_A_RENDIR },
+            },
+            formaParteCalculoEntregaARendir: false,
+            OR: [
+              { asignacionOrigenId: null },
+              { asignacionOrigenId: 0 },
+            ],
+            entidadComercialId: { not: null },
+          },
+        ];
+      }
+      // Si es TODOS, mantener el OR original (ya está definido arriba)
 
       // Aplicar filtros opcionales
       if (empresaId) {
@@ -402,7 +439,7 @@ const listarPendientes = async (filtros = {}) => {
     // CONSULTAR DEUDAS PERSONALES (si tipo es 'DEUDAS_PERSONAL')
     // ========================================
     let deudasPersonales = [];
-    if (tipo === 'DEUDAS_PERSONAL') {
+    if (tipoDeuda === TIPO_DEUDA_TESORERIA.DEUDAS_PERSONAL) {
       const whereDeudas = {
         saldoPendiente: { gt: 0 },
       };
@@ -501,7 +538,7 @@ const listarPendientes = async (filtros = {}) => {
     // CONSULTAR DEUDAS TRIBUTARIAS (si tipo es 'DEUDAS_TRIBUTARIAS')
     // ========================================
     let deudasTributarias = [];
-    if (tipo === 'DEUDAS_TRIBUTARIAS') {
+    if (tipoDeuda === TIPO_DEUDA_TESORERIA.DEUDAS_TRIBUTARIAS) {
       const whereDeudasTrib = {
         saldoPendiente: { gt: 0 },
       };

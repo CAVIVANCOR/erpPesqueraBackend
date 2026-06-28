@@ -13,7 +13,8 @@ export async function listarPendientes(req, res, next) {
   try {
     const filtros = {
       empresaId: req.query.empresaId ? Number(req.query.empresaId) : null,
-      tipo: req.query.tipoDeuda || req.query.tipo || null,
+      tipo: req.query.tipo || null,
+      tipoDeuda: req.query.tipoDeuda || null,
       vencimiento: req.query.vencimiento || null,
       monedaId: req.query.monedaId ? Number(req.query.monedaId) : null,
     };

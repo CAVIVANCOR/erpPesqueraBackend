@@ -1,6 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
-
+import correlativoService from './correlativoOperacionCaja.service.js';
 /**
  * ════════════════════════════════════════════════════════════
  * SERVICIO PROFESIONAL: PAGO DE DEUDAS AL PERSONAL
@@ -572,9 +572,10 @@ const procesarPago = async (deudaId, data) => {
 
     // Transacción atómica completa
     const resultado = await prisma.$transaction(async (tx) => {
-      // ═══════════════════════════════════════════════════════
-      // 1. CREAR MOVIMIENTO CAJA PRINCIPAL (MONTO DEL PAGO)
-      // ═══════════════════════════════════════════════════════
+      // Generar correlativo de operación
+      const correlativo = await correlativoService.generarCorrelativo(deuda.empresaId, tx);
+
+      // Crear movimiento caja principal (monto del pago)
       const movCajaPrincipal = await tx.movimientoCaja.create({
         data: {
           empresaOrigenId: deuda.empresaId,
@@ -590,13 +591,12 @@ const procesarPago = async (deudaId, data) => {
           numeroOperacion: data.numeroOperacion || null,
           operacionSinFactura: deuda.esGerencial,
           observaciones: data.observaciones || null,
-          creadoPor: data.usuarioId || null
+          creadoPor: data.usuarioId || null,
+          refOperacionEspecializadaMovCaja: Number(correlativo)
         }
       });
 
-      // ═══════════════════════════════════════════════════════
-      // 2. CREAR MOVIMIENTO CAJA ITF (SI APLICA)
-      // ═══════════════════════════════════════════════════════
+      // Crear movimiento caja ITF (si aplica)
       let movCajaITF = null;
       if (data.itf && Number(data.itf) > 0) {
         movCajaITF = await tx.movimientoCaja.create({
@@ -613,14 +613,13 @@ const procesarPago = async (deudaId, data) => {
             numeroOperacion: data.numeroOperacion || null,
             operacionSinFactura: true,
             observaciones: 'ITF generado automáticamente',
-            creadoPor: data.usuarioId || null
+            creadoPor: data.usuarioId || null,
+            refOperacionEspecializadaMovCaja: Number(correlativo)
           }
         });
       }
 
-      // ═══════════════════════════════════════════════════════
-      // 3. CREAR MOVIMIENTO CAJA COMISIÓN (SI APLICA)
-      // ═══════════════════════════════════════════════════════
+      // Crear movimiento caja comisión (si aplica)
       let movCajaComision = null;
       if (data.comision && Number(data.comision) > 0) {
         movCajaComision = await tx.movimientoCaja.create({
@@ -637,14 +636,13 @@ const procesarPago = async (deudaId, data) => {
             numeroOperacion: data.numeroOperacion || null,
             operacionSinFactura: true,
             observaciones: 'Comisión bancaria generada automáticamente',
-            creadoPor: data.usuarioId || null
+            creadoPor: data.usuarioId || null,
+            refOperacionEspecializadaMovCaja: Number(correlativo)
           }
         });
       }
 
-      // ═══════════════════════════════════════════════════════
-      // 4. CREAR REGISTRO DE PAGO DEUDA PERSONAL
-      // ═══════════════════════════════════════════════════════
+      // Crear registro de pago deuda personal
       const pago = await tx.pagoDeudaPersonal.create({
         data: {
           deudaConPersonalId: deudaId,
@@ -654,13 +652,12 @@ const procesarPago = async (deudaId, data) => {
           numeroOperacion: data.numeroOperacion || null,
           movimientoCajaId: movCajaPrincipal.id,
           observaciones: data.observaciones || null,
-          creadoPor: data.usuarioId || null
+          creadoPor: data.usuarioId || null,
+          refOperacionEspecializadaMovCaja: Number(correlativo)
         }
       });
 
-      // ═══════════════════════════════════════════════════════
-      // 5. ACTUALIZAR DEUDA CON PERSONAL
-      // ═══════════════════════════════════════════════════════
+      // Actualizar deuda con personal
       const nuevoMontoPagado = Number(deuda.montoPagado) + Number(data.montoPago);
       const nuevoSaldoPendiente = Number(deuda.montoOriginal) - nuevoMontoPagado;
       const nuevoEstadoId = calcularNuevoEstadoDeuda(nuevoSaldoPendiente);
@@ -675,9 +672,7 @@ const procesarPago = async (deudaId, data) => {
         }
       });
 
-      // ═══════════════════════════════════════════════════════
-      // 6. ACTUALIZAR SALDO DE CUENTA CORRIENTE
-      // ═══════════════════════════════════════════════════════
+      // Actualizar saldo de cuenta corriente
       await tx.cuentaCorriente.update({
         where: { id: Number(data.cuentaCorrienteOrigenId) },
         data: {
@@ -687,17 +682,17 @@ const procesarPago = async (deudaId, data) => {
         }
       });
 
-      // ═══════════════════════════════════════════════════════
-      // RETORNAR RESULTADO COMPLETO
-      // ═══════════════════════════════════════════════════════
+      // Retornar resultado completo
       return {
         success: true,
+        correlativo: Number(correlativo),
         pago,
         movimientoCajaPrincipal: movCajaPrincipal,
         movimientoCajaITF: movCajaITF,
         movimientoCajaComision: movCajaComision,
         deudaActualizada,
         resumen: {
+          numeroOperacion: Number(correlativo),
           montoPagado: Number(data.montoPago),
           itf: Number(data.itf || 0),
           comision: Number(data.comision || 0),
