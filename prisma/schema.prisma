@@ -1231,6 +1231,7 @@ model PreFactura {
   // Otros
   observaciones               String?     @db.Text                         // Observaciones generales
   urlPreFacturaPdf            String?     @db.VarChar(500)                 // URL del PDF de la PreFactura
+  urlDocumentoRef             String?     @db.VarChar(500)                 // URL del PDF de la Documento PreExistente Saldo Inicial
   centroCostoId               BigInt?                                      // Centro de costo
   contratoServicioId          BigInt?                                      // Contrato de servicio relacionado
   movSalidaAlmacenId          BigInt?                                      // Movimiento de salida de almacén relacionado
@@ -3690,6 +3691,7 @@ model MovimientoCaja {
   cuentaDestinoEntidadComercialId         BigInt?
   productoId                              BigInt?
   origenReferenciaIngresoMovCajaId        BigInt?
+  urlOperacionIndividualOperacionCaja     String?
 
   // ========================================
   // 🆕 CAMPOS NUEVOS (TODOS OPCIONALES)
@@ -7004,7 +7006,8 @@ model OrdenCompra {
   facturado                   Boolean?    @default(false)                // ⭐ NUEVO: true = Ya se generó CxP (Negra o Blanca)
   fechaFacturacion            DateTime?                                  // ⭐ NUEVO: Fecha de generación de CxP
   fechaVencimiento            DateTime?   @default(now())
-  
+  urlDocumentoRef             String?     @db.VarChar(500)                 // URL del PDF de la Documento PreExistente Saldo Inicial
+
   // ========================================
   // ⭐ CAMPOS NUEVOS - TIPO DE FACTURACIÓN Y PARTICIÓN
   // ========================================
