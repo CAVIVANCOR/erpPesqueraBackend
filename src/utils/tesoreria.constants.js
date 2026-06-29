@@ -143,6 +143,352 @@ export const TIPO_OPERACION_TESORERIA = {
   GASTO_URGENTE: 'GASTO_URGENTE',
 };
 
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// TIPOS DE OPERACIÓN ESPECIALIZADA - OPERACIONES DE CAJA
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * TIPO_OPERACION_CAJA
+ * 
+ * Define todos los tipos de operaciones especializadas que generan MovimientosCaja
+ * con trazabilidad completa mediante correlativoOperacionCaja.
+ * 
+ * BACKEND: Se usa en servicios especializados para identificar el tipo de operación
+ * FRONTEND: Se usa en diálogos para construir el objeto OperacionEspecializadaCaja
+ * 
+ * CATEGORÍAS:
+ * - ATENCIONES: Operaciones que atienden documentos pendientes
+ * - OPERACIONES: Operaciones directas de caja sin documento previo
+ */
+export const TIPO_OPERACION_CAJA = {
+  // ═══════════════════════════════════════════════════════════
+  // ATENCIONES (8 tipos)
+  // ═══════════════════════════════════════════════════════════
+  PAGO_CXC: 'PAGO_CXC',
+  PAGO_CXP: 'PAGO_CXP',
+  PAGO_DEUDA_PERSONAL: 'PAGO_DEUDA_PERSONAL',
+  PAGO_DEUDA_TRIBUTARIA: 'PAGO_DEUDA_TRIBUTARIA',
+  VALIDAR_ASIGNACION: 'VALIDAR_ASIGNACION',
+  VALIDAR_GASTO_DIRECTO: 'VALIDAR_GASTO_DIRECTO',
+  DESEMBOLSO_PRESTAMO: 'DESEMBOLSO_PRESTAMO',
+  PAGO_CUOTA_PRESTAMO: 'PAGO_CUOTA_PRESTAMO',
+  
+  // ═══════════════════════════════════════════════════════════
+  // OPERACIONES (5 tipos)
+  // ═══════════════════════════════════════════════════════════
+  TRANSFERENCIA_INTERNA: 'TRANSFERENCIA_INTERNA',
+  PAGO_PROVEEDOR_DIRECTO: 'PAGO_PROVEEDOR_DIRECTO',
+  RETIRO_DINERO: 'RETIRO_DINERO',
+  INGRESO_DINERO: 'INGRESO_DINERO',
+  PAGO_URGENTE: 'PAGO_URGENTE',
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// PORCENTAJES TRIBUTARIOS - SUNAT PERÚ
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * PORCENTAJES_SUNAT
+ * 
+ * Porcentajes estándar de SUNAT para cálculos tributarios.
+ * Estos son valores por defecto, la empresa puede tener valores personalizados.
+ */
+export const PORCENTAJES_SUNAT = {
+  ITF: 0.005,
+  DETRACCION_GENERAL: 4.00,
+  DETRACCION_TRANSPORTE: 4.00,
+  DETRACCION_ALQUILER: 10.00,
+  RETENCION_GENERAL: 3.00,
+  PERCEPCION_VENTA_INTERNA: 2.00,
+  PERCEPCION_IMPORTACION: 1.00,
+  PERCEPCION_COMBUSTIBLE: 0.50,
+};
+
+/**
+ * MONTOS_MINIMOS_SUNAT
+ * 
+ * Montos mínimos para aplicar conceptos tributarios según SUNAT.
+ */
+export const MONTOS_MINIMOS_SUNAT = {
+  DETRACCION: 700.00,
+  RETENCION: 700.00,
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// FUNCIONES DE CÁLCULO COMPARTIDAS (Frontend y Backend)
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Calcula el monto de ITF
+ */
+export const calcularITF = (monto) => {
+  return Number((monto * PORCENTAJES_SUNAT.ITF / 100).toFixed(2));
+};
+
+/**
+ * Calcula el monto de detracción
+ */
+export const calcularDetraccion = (monto, porcentaje = PORCENTAJES_SUNAT.DETRACCION_GENERAL) => {
+  return Number((monto * porcentaje / 100).toFixed(2));
+};
+
+/**
+ * Calcula el monto de retención
+ */
+export const calcularRetencion = (monto, porcentaje = PORCENTAJES_SUNAT.RETENCION_GENERAL) => {
+  return Number((monto * porcentaje / 100).toFixed(2));
+};
+
+/**
+ * Calcula el monto de percepción
+ */
+export const calcularPercepcion = (monto, porcentaje = PORCENTAJES_SUNAT.PERCEPCION_VENTA_INTERNA) => {
+  return Number((monto * porcentaje / 100).toFixed(2));
+};
+
+/**
+ * Valida si se debe aplicar detracción según monto mínimo
+ */
+export const debeAplicarDetraccion = (monto, montoMinimo = MONTOS_MINIMOS_SUNAT.DETRACCION) => {
+  return monto >= montoMinimo;
+};
+
+/**
+ * Valida si se debe aplicar retención según monto mínimo
+ */
+export const debeAplicarRetencion = (monto, montoMinimo = MONTOS_MINIMOS_SUNAT.RETENCION) => {
+  return monto >= montoMinimo;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// ESTRUCTURA DE OPERACIÓN ESPECIALIZADA DE CAJA
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * crearOperacionEspecializadaCaja
+ * 
+ * Factory function para crear el objeto de operación especializada.
+ * Garantiza que la estructura sea consistente en frontend y backend.
+ * 
+ * @param {Object} params - Parámetros de la operación
+ * @returns {Object} - Objeto OperacionEspecializadaCaja
+ */
+export const crearOperacionEspecializadaCaja = (params = {}) => {
+  return {
+    // ════════════════════════════════════════════════════════
+    // 1. METADATOS DE LA OPERACIÓN
+    // ════════════════════════════════════════════════════════
+    metadata: {
+      tipoOperacion: params.tipoOperacion || null,
+      empresaId: params.empresaId || null,
+      usuarioId: params.usuarioId || null,
+      fechaOperacion: params.fechaOperacion || new Date(),
+      correlativoOperacion: params.correlativoOperacion || null,
+      moduloOrigenId: params.moduloOrigenId || null,
+      centroCostoId: params.centroCostoId || null,
+      observaciones: params.observaciones || null,
+    },
+
+    // ════════════════════════════════════════════════════════
+    // 2. CUENTAS INVOLUCRADAS
+    // ════════════════════════════════════════════════════════
+    cuentas: {
+      cuentaOrigenId: params.cuentaOrigenId || null,
+      cuentaDestinoId: params.cuentaDestinoId || null,
+      cuentaSunatId: params.cuentaSunatId || null,
+      bancoOrigenId: params.bancoOrigenId || null,
+      entidadComercialId: params.entidadComercialId || null,
+    },
+
+    // ════════════════════════════════════════════════════════
+    // 3. MONTOS Y MONEDA
+    // ════════════════════════════════════════════════════════
+    montos: {
+      montoPrincipal: params.montoPrincipal || 0,
+      monedaId: params.monedaId || null,
+      tipoCambio: params.tipoCambio || 1.0000,
+      
+      detraccion: params.detraccion || {
+        aplica: false,
+        porcentaje: 0,
+        monto: 0,
+        numeroComprobante: null,
+        fechaComprobante: null,
+      },
+      
+      retencion: params.retencion || {
+        aplica: false,
+        porcentaje: 0,
+        monto: 0,
+        numeroComprobante: null,
+        fechaComprobante: null,
+      },
+      
+      percepcion: params.percepcion || {
+        aplica: false,
+        porcentaje: 0,
+        monto: 0,
+        numeroComprobante: null,
+        fechaComprobante: null,
+      },
+      
+      itf: params.itf || {
+        aplica: false,
+        porcentaje: PORCENTAJES_SUNAT.ITF,
+        monto: 0,
+      },
+      
+      comision: params.comision || {
+        aplica: false,
+        monto: 0,
+      },
+    },
+
+    // ════════════════════════════════════════════════════════
+    // 4. MEDIO DE PAGO
+    // ════════════════════════════════════════════════════════
+    medioPago: {
+      medioPagoId: params.medioPagoId || null,
+      numeroOperacion: params.numeroOperacion || null,
+      numeroCheque: params.numeroCheque || null,
+      fechaCheque: params.fechaCheque || null,
+    },
+
+    // ════════════════════════════════════════════════════════
+    // 5. DATOS ESPECÍFICOS DE LA OPERACIÓN
+    // ════════════════════════════════════════════════════════
+    datosEspecificos: {
+      cuentaPorCobrarId: params.cuentaPorCobrarId || null,
+      cuentaPorPagarId: params.cuentaPorPagarId || null,
+      deudaConPersonalId: params.deudaConPersonalId || null,
+      deudaTributariaId: params.deudaTributariaId || null,
+      cuotaPrestamoId: params.cuotaPrestamoId || null,
+      desembolsoPrestamoId: params.desembolsoPrestamoId || null,
+      detMovsEntregaRendirIds: params.detMovsEntregaRendirIds || [],
+      prestamoBancarioId: params.prestamoBancarioId || null,
+      numeroConstanciaSunat: params.numeroConstanciaSunat || null,
+      montoAplicadoDeuda: params.montoAplicadoDeuda || 0,
+      esTransferencia: params.esTransferencia || false,
+      movimientoRelacionadoId: params.movimientoRelacionadoId || null,
+    },
+
+    // ════════════════════════════════════════════════════════
+    // 6. MOVIMIENTOS PREVIEW
+    // ════════════════════════════════════════════════════════
+    movimientosPreview: params.movimientosPreview || [],
+  };
+};
+
+/**
+ * crearMovimientoPreview
+ * 
+ * Factory function para crear un movimiento preview.
+ * 
+ * @param {Object} params - Parámetros del movimiento
+ * @returns {Object} - Objeto MovimientoCajaPreview
+ */
+export const crearMovimientoPreview = (params = {}) => {
+  return {
+    orden: params.orden || 1,
+    tipo: params.tipo || 'INGRESO',
+    concepto: params.concepto || '',
+    cuentaCorrienteId: params.cuentaCorrienteId || null,
+    monto: params.monto || 0,
+    monedaId: params.monedaId || null,
+    tipoMovimientoId: params.tipoMovimientoId || null,
+    entidadComercialId: params.entidadComercialId || null,
+    productoId: params.productoId || null,
+  };
+};
+
+/**
+ * validarOperacionEspecializada
+ * 
+ * Valida que una operación especializada tenga todos los campos requeridos.
+ * Se usa tanto en frontend (antes de enviar) como en backend (antes de procesar).
+ * 
+ * @param {Object} operacion - Objeto OperacionEspecializadaCaja
+ * @returns {Object} - { valido: boolean, errores: string[] }
+ */
+export const validarOperacionEspecializada = (operacion) => {
+  const errores = [];
+
+  // Validar metadata
+  if (!operacion.metadata.tipoOperacion) {
+    errores.push('Tipo de operación es requerido');
+  }
+  if (!operacion.metadata.empresaId) {
+    errores.push('Empresa es requerida');
+  }
+  if (!operacion.metadata.usuarioId) {
+    errores.push('Usuario es requerido');
+  }
+  if (!operacion.metadata.fechaOperacion) {
+    errores.push('Fecha de operación es requerida');
+  }
+
+  // Validar montos
+  if (!operacion.montos.montoPrincipal || operacion.montos.montoPrincipal <= 0) {
+    errores.push('Monto principal debe ser mayor a cero');
+  }
+  if (!operacion.montos.monedaId) {
+    errores.push('Moneda es requerida');
+  }
+
+  // Validar medio de pago
+  if (!operacion.medioPago.medioPagoId) {
+    errores.push('Medio de pago es requerido');
+  }
+
+  // Validar movimientos preview
+  if (!operacion.movimientosPreview || operacion.movimientosPreview.length === 0) {
+    errores.push('Debe haber al menos un movimiento a crear');
+  }
+
+  return {
+    valido: errores.length === 0,
+    errores,
+  };
+};
+
+/**
+ * calcularResumenFinanciero
+ * 
+ * Calcula el resumen financiero de una operación.
+ * Útil para mostrar en el preview antes de guardar.
+ * 
+ * @param {Object} operacion - Objeto OperacionEspecializadaCaja
+ * @returns {Object} - Resumen financiero
+ */
+export const calcularResumenFinanciero = (operacion) => {
+  const { montos } = operacion;
+  
+  const totalIngresos = operacion.movimientosPreview
+    .filter(m => m.tipo === 'INGRESO')
+    .reduce((sum, m) => sum + m.monto, 0);
+  
+  const totalEgresos = operacion.movimientosPreview
+    .filter(m => m.tipo === 'EGRESO')
+    .reduce((sum, m) => sum + m.monto, 0);
+  
+  return {
+    montoPrincipal: montos.montoPrincipal,
+    montoDetraccion: montos.detraccion.aplica ? montos.detraccion.monto : 0,
+    montoRetencion: montos.retencion.aplica ? montos.retencion.monto : 0,
+    montoPercepcion: montos.percepcion.aplica ? montos.percepcion.monto : 0,
+    montoITF: montos.itf.aplica ? montos.itf.monto : 0,
+    montoComision: montos.comision.aplica ? montos.comision.monto : 0,
+    totalIngresos,
+    totalEgresos,
+    movimientoNeto: totalIngresos - totalEgresos,
+  };
+};
+
+
+
+
 // ════════════════════════════════════════════════════════════════════════════
 // ORIGEN DE DOCUMENTOS - TESORERÍA PENDIENTES
 // ════════════════════════════════════════════════════════════════════════════
@@ -350,6 +696,11 @@ export default {
   TIPO_OPERACION_TESORERIA,
   ORIGEN_DOCUMENTO_TESORERIA,
   
+  // Constantes de operaciones especializadas
+  TIPO_OPERACION_CAJA,
+  PORCENTAJES_SUNAT,
+  MONTOS_MINIMOS_SUNAT,
+  
   // Labels y configuración UI
   LABELS_TIPO_FILTRO,
   LABELS_TIPO_DEUDA,
@@ -357,4 +708,18 @@ export default {
   LABELS_TIPO_VENCIMIENTO,
   LABELS_TIPO_OPERACION,
   LABELS_TEXTO_ENTREGAS,
+  
+  // Funciones de cálculo
+  calcularITF,
+  calcularDetraccion,
+  calcularRetencion,
+  calcularPercepcion,
+  debeAplicarDetraccion,
+  debeAplicarRetencion,
+  
+  // Funciones de estructura
+  crearOperacionEspecializadaCaja,
+  crearMovimientoPreview,
+  validarOperacionEspecializada,
+  calcularResumenFinanciero,
 };
