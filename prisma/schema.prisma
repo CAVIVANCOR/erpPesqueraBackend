@@ -1293,6 +1293,7 @@ model PreFactura {
   detalles                    DetallePreFactura[]                                                                                          // Detalles de productos
   contratistasOT              DetContratistasOT[] @relation("PreFacturaContratistaOT")
   asientosContables           AsientoContable[]  // Relación inversa - Asientos generados
+  detallesDetraccion          DetalleDetraccion[]  @relation("PreFacturaDetraccion")
 
   
   // Índices
@@ -1415,7 +1416,8 @@ model CuentaCorriente {
   pagosPagar                      PagoCuentaPorPagar[]
 
 // Relaciones con Tesorería Avanzada
-prestamos             PrestamoBancario[]
+  prestamos                       PrestamoBancario[]
+  detraccionesCuentaSunat         Detraccion[]  @relation("CuentaSunatDetraccion")
 
   // ========================================
   // ÍNDICES
@@ -2553,6 +2555,7 @@ model Empresa {
   deudasConPersonal        DeudaConPersonal[]      // 🆕 AGREGAR ESTA LÍNEA
   detMovsEntregaRendir     DetMovsEntregaRendir[]
   deudasTributarias        DeudaTributaria[]       // 🆕 AGREGAR ESTA LÍNEA
+  detracciones             Detraccion[]
 
 @@index([monedaCalculosLiqId])
 
@@ -2719,6 +2722,7 @@ model EntidadComercial {
   contratistasOT                  DetContratistasOT[] @relation("ContratistaOT")
   accesosInstalacion              AccesoInstalacion[]  @relation("AccesoEntidadComercial")
   tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR
+  detraccionesComoCliente         Detraccion[]  @relation("ClienteDetraccion")
 
 }
 
@@ -3262,6 +3266,7 @@ model EstadoMultiFuncion {
   contratistasOT        DetContratistasOT[] @relation("EstadoContratistaOT")
   deudasConPersonal     DeudaConPersonal[]  // 🆕 AGREGAR ESTA LÍNEA
   deudasTributarias     DeudaTributaria[]   // 🆕 AGREGAR ESTA LÍNEA
+  detracciones          Detraccion[]
 }
 
 model FaenaPesca {
@@ -3575,6 +3580,7 @@ model Moneda {
   movimientosActivoFijo     MovimientoActivoFijo[]   // 🆕 Nueva relación
   deudasConPersonal         DeudaConPersonal[]       // 🆕 AGREGAR ESTA LÍNEA
   deudasTributarias         DeudaTributaria[]        // 🆕 AGREGAR ESTA LÍNEA
+  detracciones          Detraccion[]
 }
 
 model MotivoAcceso {
@@ -5903,7 +5909,8 @@ model PeriodoContable {
   ordenesCompra         OrdenCompra[]           // ✅ AGREGADO: Relación inversa
   deudasConPersonal     DeudaConPersonal[]        // 🆕 AGREGAR
   deudasTributarias     DeudaTributaria[]         // 🆕 AGREGAR
-  
+  detracciones          Detraccion[]
+
   @@unique([empresaId, anio, mes])
   @@index([empresaId])
   @@index([anio, mes])
@@ -5982,6 +5989,7 @@ model AsientoContable {
   pagoCuentasPorPagar   PagoCuentaPorPagar[]
   movimientosCaja       MovimientoCaja[]
   movimientosAlmacen    MovimientoAlmacen[]
+  detracciones          Detraccion[]           // ✅ AGREGAR ESTA LÍNEA
 
   // ========================================
   // ÍNDICES - CRÍTICO: índice en tipoLibro para filtrado rápido
@@ -6599,11 +6607,11 @@ model PagoCuentaPorCobrar {
   // DETRACCIÓN SPOT (SUNAT PERÚ)
   // Cliente deposita en cuenta SUNAT
   // ========================================
-  tieneDetraccion           Boolean     @default(false)              // ✅ AGREGADO
-  montoDetraccion           Decimal     @default(0) @db.Decimal(18, 2)  // ✅ AGREGADO
-  porcentajeDetraccion      Decimal?    @db.Decimal(5, 2)            // ✅ AGREGADO
-  numeroConstanciaDetraccion String?    @db.VarChar(50)              // ✅ AGREGADO: Número de constancia SUNAT
-  fechaDetraccion           DateTime?                                // ✅ AGREGADO: Fecha del depósito
+  // tieneDetraccion              Boolean     @default(false)                 ELIMINADO
+  // montoDetraccion              Decimal     @default(0) @db.Decimal(18, 2)  ELIMINADO
+  // porcentajeDetraccion         Decimal?    @db.Decimal(5, 2)               ELIMINADO
+  // numeroConstanciaDetraccion   String?     @db.VarChar(50)                 ELIMINADO
+  // fechaDetraccion              DateTime?                                   ELIMINADO
   
   // ========================================
   // RETENCIÓN (SUNAT PERÚ)
@@ -6649,11 +6657,14 @@ model PagoCuentaPorCobrar {
   // ========================================
   // AUDITORÍA
   // ========================================
-  fechaCreacion         DateTime    @default(now())                  // Fecha de creación del registro
-  fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
-  creadoPor             BigInt?                                      // Usuario que creó el registro
-  actualizadoPor        BigInt?                                      // Usuario que actualizó el registro 
+  fechaCreacion                     DateTime    @default(now())                  // Fecha de creación del registro
+  fechaActualizacion                DateTime?   @updatedAt                       // Fecha de última actualización
+  creadoPor                         BigInt?                                      // Usuario que creó el registro
+  actualizadoPor                    BigInt?                                      // Usuario que actualizó el registro 
+  
   refOperacionEspecializadaMovCaja  BigInt?
+  detraccionId                      BigInt?
+
   // ========================================
   // RELACIONES
   // ========================================
@@ -6667,6 +6678,7 @@ model PagoCuentaPorCobrar {
   movimientoCaja        MovimientoCaja?     @relation(fields: [movimientoCajaId], references: [id])
   periodoContable       PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
   asientosContables     AsientoContable[]  // Relación inversa
+  detraccion            Detraccion?         @relation(fields: [detraccionId], references: [id])
 
   // ========================================
   // ÍNDICES
@@ -6678,7 +6690,8 @@ model PagoCuentaPorCobrar {
   @@index([monedaPagoId])                                            // ✅ AGREGADO
   @@index([monedaDeudaId])                                           // ✅ AGREGADO
   @@index([periodoContableId])                                       // ✅ AGREGADO
-  @@index([tieneDetraccion])                                         // ✅ AGREGADO
+  @@index([detraccionId])                                            // ✅ CORRECTO
+  @@index([refOperacionEspecializadaMovCaja])                        // ✅ AGREGAR ESTE
   @@index([tieneRetencion])                                          // ✅ AGREGADO
   @@index([tienePercepcion])                                         // ✅ AGREGADO
 }
@@ -7442,6 +7455,144 @@ model EndosoLetraCambio {
   @@index([fechaEndoso])
   @@index([tipoEndoso])
 }
+
+
+
+
+// ============================================
+// TipoDetraccion
+// Catálogo de tipos de detracción según SUNAT
+// Tasas pueden variar según servicio/bien
+// ============================================
+
+model TipoDetraccion {
+  id                    BigInt      @id @default(autoincrement())
+  codigo                String      @unique @db.VarChar(10)     // "001", "004", "007", "019"
+  nombre                String      @db.VarChar(200)            // "Azúcar", "Transporte de bienes", "Arrendamiento", "Intermediación laboral"
+  tasa                  Decimal     @db.Decimal(5, 2)           // 4.00, 10.00, 12.00
+  activo                Boolean     @default(true)
+  
+  // Relaciones inversas
+  detracciones          Detraccion[]
+  
+  @@index([activo])
+}
+
+// ============================================
+// Detraccion
+// Constancia de Detracción recibida del cliente
+// SIEMPRE se crea, incluso para casos simples
+// ============================================
+
+model Detraccion {
+  id                    BigInt      @id @default(autoincrement())
+  
+  // Documento
+  empresaId             BigInt
+  numeroConstancia      String      @db.VarChar(50)             // DET-2026-001234 (número de constancia SUNAT)
+  fechaDeposito         DateTime                                // Fecha en que cliente depositó en SUNAT
+  
+  // Cliente (quien deposita la detracción)
+  clienteId             BigInt
+  
+  // Tipo de detracción
+  tipoDetraccionId      BigInt?                                 // Opcional: tipo según catálogo SUNAT
+  tasaDetraccion        Decimal     @db.Decimal(5, 2)           // 4.00, 10.00, etc.
+  
+  // Montos
+  monedaId              BigInt
+  importeTotal          Decimal     @db.Decimal(18, 2)          // Total de las facturas afectas
+  importeDetraido       Decimal     @db.Decimal(18, 2)          // Monto depositado en cuenta SUNAT
+  
+  // Cuenta SUNAT destino
+  cuentaSunatId         BigInt?                                 // Cuenta corriente SUNAT (CuentaCorriente)
+  
+  // Estado
+  estadoId              BigInt                                  // DEPOSITADO, APLICADO, ANULADO
+  
+  // Aplicación como crédito fiscal
+  aplicado              Boolean     @default(false)
+  fechaAplicacion       DateTime?
+  
+  observaciones         String?     @db.Text
+  
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  fechaContable         DateTime    @default(now())             // Fecha del período contable
+  periodoContableId     BigInt?                                 // Período contable (para control de cierre)
+  
+  // ========================================
+  // VINCULACIÓN CON OPERACIÓN ESPECIALIZADA
+  // ========================================
+  refOperacionEspecializadaMovCaja  BigInt?                     // Correlativo de operación de caja
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  fechaCreacion         DateTime    @default(now())
+  fechaActualizacion    DateTime?   @updatedAt
+  creadoPor             BigInt?
+  actualizadoPor        BigInt?
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  empresa               Empresa                     @relation(fields: [empresaId], references: [id])
+  cliente               EntidadComercial            @relation("ClienteDetraccion", fields: [clienteId], references: [id])
+  tipoDetraccion        TipoDetraccion?             @relation(fields: [tipoDetraccionId], references: [id])
+  moneda                Moneda                      @relation(fields: [monedaId], references: [id])
+  estado                EstadoMultiFuncion          @relation(fields: [estadoId], references: [id])
+  cuentaSunat           CuentaCorriente?            @relation("CuentaSunatDetraccion", fields: [cuentaSunatId], references: [id])
+  periodoContable       PeriodoContable?            @relation(fields: [periodoContableId], references: [id])
+  
+  // Relaciones inversas
+  detalles              DetalleDetraccion[]
+  pagosCuentaPorCobrar  PagoCuentaPorCobrar[]
+  asientosContables     AsientoContable[]           // ✅ Asientos contables generados
+
+  @@index([empresaId, fechaDeposito])
+  @@index([clienteId])
+  @@index([estadoId])
+  @@index([aplicado])
+  @@index([periodoContableId])
+  @@index([numeroConstancia])
+  @@index([refOperacionEspecializadaMovCaja])
+}
+
+// ============================================
+// DetalleDetraccion
+// Facturas/documentos afectos a la detracción
+// Vincula Detraccion con PreFactura (origen de todos los documentos)
+// ============================================
+
+model DetalleDetraccion {
+  id                    BigInt      @id @default(autoincrement())
+  detraccionId          BigInt
+  
+  // ========================================
+  // DOCUMENTO ORIGEN (PreFactura)
+  // Todos los documentos (FAC, BOL, NC, ND, RxH) vienen de PreFactura
+  // ========================================
+  preFacturaOrigenId    BigInt                                  // Origen único de todos los documentos
+  
+  // ========================================
+  // MONTOS
+  // ========================================
+  importeTotal          Decimal     @db.Decimal(18, 2)          // Monto total del documento
+  importeDetraido       Decimal     @db.Decimal(18, 2)          // Monto detraído de este documento
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  detraccion            Detraccion          @relation(fields: [detraccionId], references: [id], onDelete: Cascade)
+  preFacturaOrigen      PreFactura          @relation("PreFacturaDetraccion", fields: [preFacturaOrigenId], references: [id])
+  
+  @@index([detraccionId])
+  @@index([preFacturaOrigenId])
+}
+
+
 
 
 // ============================================
