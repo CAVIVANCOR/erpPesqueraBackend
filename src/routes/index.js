@@ -16,6 +16,7 @@ import tipoAfectacionIGVRoutes from './FacturacionElectronica/tipoAfectacionIGV.
 import comprobanteElectronicoRoutes from './FacturacionElectronica/comprobanteElectronico.routes.js';
 import cuentaPorCobrarRoutes from './CuentasPorCobrarPagar/cuentaPorCobrar.routes.js';
 import cuentaPorPagarRoutes from './CuentasPorCobrarPagar/cuentaPorPagar.routes.js';
+import tipoDetraccionRoutes from './Tesoreria/tipoDetraccion.routes.js';
 import pagoRoutes from './CuentasPorCobrarPagar/pago.routes.js';
 import flujoCajaRoutes from './Tesoreria/flujoCaja.routes.js';
 import conciliacionBancariaRoutes from './Tesoreria/conciliacionBancaria.routes.js';
@@ -263,6 +264,10 @@ import tipoDeudaTributariaRoutes from './Tesoreria/tipoDeudaTributaria.routes.js
 import categoriaTipoDeudaTributariaRoutes from './Tesoreria/categoriaTipoDeudaTributaria.routes.js';
 import deudaTributariaRoutes from './Tesoreria/deudaTributaria.routes.js';
 import pagoDeudaTributariaRoutes from './Tesoreria/pagoDeudaTributaria.routes.js';
+import pagoEspecializadoCxCRoutes from './CuentasPorCobrarPagar/pagoEspecializadoCuentaPorCobrar.routes.js';
+
+
+
 const router = express.Router();
 
 // Rutas públicas de autenticación
@@ -381,6 +386,8 @@ router.use('/tipos-activo', tipoActivoRoutes);
 router.use('/detalles-permiso-activo', detallePermisoActivoRoutes);
 // Rutas para PermisoAutorizacion
 router.use('/permisos-autorizacion', permisoAutorizacionRoutes);
+router.use('/tesoreria/tipos-detraccion', tipoDetraccionRoutes);
+
 // Rutas para EstadoMultiFuncion
 router.use('/estados-multi-funcion', estadoMultiFuncionRoutes);
 // Rutas para TipoProvieneDe
@@ -546,6 +553,7 @@ router.use('/det-docs-req-cotiza-ventas', detDocsReqCotizaVentasRoutes);
 // Rutas para EntregaARendirPVentas
 router.use('/entrega-a-rendir-p-ventas', entregaARendirPVentasRoutes);
 router.use('/entregas-rendir-ventas', entregaARendirPVentasImpresionRoutes);
+router.use('/pagos-especializados-cxc', pagoEspecializadoCxCRoutes);
 
 // Rutas para DetMovsEntregaRendirPVentas
 router.use('/det-movs-entrega-rendir-p-ventas', detMovsEntregaRendirPVentasRoutes);
