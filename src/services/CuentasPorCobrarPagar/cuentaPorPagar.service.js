@@ -7,6 +7,16 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  * Documentado en español.
  */
 
+// ========================================
+// CONSTANTES DE ESTADOS - CUENTAS POR PAGAR
+// ========================================
+const ESTADO_CXP_PENDIENTE = 106;
+const ESTADO_CXP_PAGO_PARCIAL = 107;
+const ESTADO_CXP_PAGADO = 108;
+const ESTADO_CXP_VENCIDO = 109;
+const ESTADO_CXP_ANULADO = 110;
+const ESTADO_CXP_CANJEADO = 111;
+
 async function validarCuentaPorPagar(data) {
   if (data.empresaId) {
     const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
@@ -70,6 +80,61 @@ async function validarCuentaPorPagar(data) {
   }
 }
 
+
+/**
+ * Calcula el estado automático de una Cuenta por Pagar
+ * Estados automáticos: 106, 107, 108, 109
+ * Estados manuales (se respetan): 110 (ANULADO), 111 (CANJEADO)
+ * 
+ * @param {number} montoTotal - Monto total de la deuda
+ * @param {number} montoPagado - Monto ya pagado
+ * @param {number} saldoPendiente - Saldo pendiente de pago
+ * @param {Date} fechaVencimiento - Fecha de vencimiento
+ * @param {BigInt|null} estadoActual - Estado actual (para respetar manuales)
+ * @returns {BigInt} Estado calculado
+ */
+const calcularEstadoCxP = (
+  montoTotal,
+  montoPagado,
+  saldoPendiente,
+  fechaVencimiento,
+  estadoActual = null,
+) => {
+  // Si el estado actual es ANULADO (110) o CANJEADO (111), NO recalcular
+  if (
+    estadoActual &&
+    (Number(estadoActual) === ESTADO_CXP_ANULADO || Number(estadoActual) === ESTADO_CXP_CANJEADO)
+  ) {
+    return estadoActual;
+  }
+
+  const total = Number(montoTotal || 0);
+  const pagado = Number(montoPagado || 0);
+  const saldo = Number(saldoPendiente || 0);
+  const hoy = new Date();
+  const vencimiento = fechaVencimiento ? new Date(fechaVencimiento) : null;
+
+  // 109 - VENCIDO: Ya pasó la fecha de vencimiento y aún hay saldo pendiente
+  if (vencimiento && vencimiento < hoy && saldo > 0) {
+    return Number(ESTADO_CXP_VENCIDO);
+  }
+
+  // 108 - PAGADO: Saldo pendiente es 0 y se pagó al menos el total
+  if (saldo === 0 && pagado >= total) {
+    return Number(ESTADO_CXP_PAGADO);
+  }
+
+  // 107 - PAGO PARCIAL: Hay al menos un pago pero aún queda saldo
+  if (pagado > 0 && saldo > 0) {
+    return Number(ESTADO_CXP_PAGO_PARCIAL);
+  }
+
+  // 106 - PENDIENTE: No hay ningún pago (estado por defecto)
+  return Number(ESTADO_CXP_PENDIENTE);
+};
+
+
+
 const listar = async () => {
   try {
     return await prisma.cuentaPorPagar.findMany({
@@ -127,16 +192,29 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    if (!data.empresaId || !data.proveedorId || !data.fechaEmision || !data.montoTotal || !data.monedaId || !data.estadoId) {
+    if (!data.empresaId || !data.proveedorId || !data.fechaEmision || !data.montoTotal || !data.monedaId) {
       throw new ValidationError('Faltan campos obligatorios.');
     }
 
     await validarCuentaPorPagar(data);
 
+    const montoPagado = data.montoPagado || 0;
+    const saldoPendiente = (data.montoTotal || 0) - montoPagado;
+
+    // Calcular estado automáticamente (solo si no es ANULADO o CANJEADO)
+    const estadoCalculado = calcularEstadoCxP(
+      data.montoTotal,
+      montoPagado,
+      saldoPendiente,
+      data.fechaVencimiento,
+      data.estadoId,
+    );
+
     const cuentaData = {
       ...data,
-      montoPagado: data.montoPagado || 0,
-      saldoPendiente: (data.montoTotal || 0) - (data.montoPagado || 0),
+      montoPagado,
+      saldoPendiente,
+      estadoId: estadoCalculado,
       esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
       tieneDetraccion: data.tieneDetraccion || false,
       montoDetraccionTotal: data.montoDetraccionTotal || 0,
@@ -164,6 +242,7 @@ const crear = async (data) => {
   }
 };
 
+
 const actualizar = async (id, data) => {
   try {
     const existente = await prisma.cuentaPorPagar.findUnique({ where: { id } });
@@ -189,11 +268,27 @@ const actualizar = async (id, data) => {
     const montoPagado = montoPagadoRecalculado;
 
     const saldoPendiente = Number(montoTotal) - Number(montoPagado);
+    const fechaVencimiento =
+      data.fechaVencimiento !== undefined
+        ? data.fechaVencimiento
+        : existente.fechaVencimiento;
+
+    // Calcular estado automáticamente (respetando ANULADO y CANJEADO)
+    const estadoActual =
+      data.estadoId !== undefined ? data.estadoId : existente.estadoId;
+    const estadoCalculado = calcularEstadoCxP(
+      montoTotal,
+      montoPagado,
+      saldoPendiente,
+      fechaVencimiento,
+      estadoActual,
+    );
 
     const cuentaData = {
       ...data,
       montoPagado, // ✅ Forzar el montoPagado recalculado
       saldoPendiente,
+      estadoId: estadoCalculado,
       esGerencial: data.esGerencial,
       actualizadoPor: data.actualizadoPor || null,
       fechaActualizacion: new Date()

@@ -80,6 +80,28 @@ export async function anular(req, res, next) {
   }
 }
 
+
+/**
+ * Reactivar Orden de Compra
+ * PUT /api/ordenes-compra/:id/reactivar
+ */
+export async function reactivarDocumentoOrdenCompra(req, res, next) {
+  try {
+    const id = BigInt(req.params.id);
+    const usuarioId = req.user?.id;
+ 
+    const resultado = await ordenCompraService.reactivarDocumentoOrdenCompra(
+      id,
+      usuarioId ? BigInt(usuarioId) : null
+    );
+ 
+    res.status(200).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+ 
+
 /**
  * Genera un MovimientoAlmacen desde una Orden de Compra aprobada
  */

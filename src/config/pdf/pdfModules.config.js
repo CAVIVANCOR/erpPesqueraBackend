@@ -98,6 +98,19 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
+  "orden-compra-comprobante-proveedor": {
+    uploadPath: "uploads/pdf-system/orden-compra-comprobante-proveedor",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/orden-compra-comprobante-proveedor",
+    maxFileSize: 20 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "OrdenCompra",
+      field: "urlDocumentoRef",
+    },
+  },
+
   "cotizacion-ventas": {
     uploadPath: "uploads/pdf-system/cotizaciones-ventas",
     oldPaths: ["/uploads/cotizaciones-ventas/"],

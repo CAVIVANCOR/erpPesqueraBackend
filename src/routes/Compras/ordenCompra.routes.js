@@ -79,6 +79,14 @@ router.post(
   ordenCompraController.anular
 );
 
+// Reactivar Orden de Compra
+router.put(
+  '/:id/reactivar', 
+  autenticarJWT, 
+  checkPermission('ordenCompra', 'editar'),
+  ordenCompraController.reactivarDocumentoOrdenCompra
+);
+
 // ========================================
 // RUTAS DE KARDEX
 // (Generan recursos derivados - solo requieren 'ver')
