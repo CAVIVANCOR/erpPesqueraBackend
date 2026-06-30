@@ -7022,6 +7022,13 @@ model OrdenCompra {
   fechaDcmtoAfectoNCND        DateTime?                       // Fecha del Documento en OrdenCompra Afectado por la NC o ND
   dcmtoAfectoNCNDId           BigInt?                         // Id del Documento en OrdenCompra Afectado por la NC o ND
   numeroDcmtoAfectoNCND       String?     @db.VarChar(40)     // Numero del Documento en OrdenCompra Afectado por la NC o ND
+
+  // Montos (se calculan desde DetalleOrdenCompra)
+  subtotal                    Decimal?     @db.Decimal(18, 2)               // Suma de (cantidad × precio) de todos los detalles
+  totalDescuentos             Decimal?     @db.Decimal(18, 2)               // Total de descuentos aplicados
+  totalIGV                    Decimal?     @db.Decimal(18, 2)               // Total de IGV (18%)
+  total                       Decimal?     @db.Decimal(18, 2)               // Total final a pagar
+
   dcmtoAfectoNCND             OrdenCompra?            @relation("OrdenCompraAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
   notasCreditoDebito          OrdenCompra[]           @relation("OrdenCompraAfectadaNCND")  // NC/ND que afectan a esta OC
 
