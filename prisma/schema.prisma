@@ -2213,18 +2213,26 @@ model UbicacionFisica {
 
 
 model DetalleOrdenCompra {
-  id             BigInt      @id @default(autoincrement())
-  ordenCompraId  BigInt                                         // Orden a la que pertenece
-  productoId     BigInt                                         // Producto a comprar
-  cantidad       Decimal                                        // Cantidad ordenada
-  cantidadRecibida Decimal?  @default(0)                        // Cantidad realmente recibida
-  precioUnitario Decimal                                        // Precio por unidad
-  subtotal Decimal?                                             // cantidad * precioUnitario
-  centroCostoId  BigInt?                                        // Centro de costo específico
-  observaciones  String?     @db.Text                           // Notas del item
-  creadoEn       DateTime    @default(now())
-  actualizadoEn  DateTime    @updatedAt
-  
+  id                          BigInt      @id @default(autoincrement())
+  ordenCompraId               BigInt                                         // Orden a la que pertenece
+  productoId                  BigInt                                         // Producto a comprar
+    // DATOS ALMACÉN (Calculados automáticamente desde cantidadCompra y precioUnitarioCompra)
+  cantidad                    Decimal                                        // Cantidad en unidad base (ej: 75 Sacos) - CALCULADO
+  precioUnitario              Decimal                                        // Precio en unidad base (ej: $50/Saco) - CALCULADO
+
+  cantidadRecibida            Decimal?  @default(0)                        // Cantidad realmente recibida
+  subtotal                    Decimal?                                     // cantidad * precioUnitario
+  centroCostoId               BigInt?                                      // Centro de costo específico
+  observaciones               String?     @db.Text                         // Notas del item
+ // Auditoría
+  fechaCreacion               DateTime @default(now())
+  fechaActualizacion          DateTime? @updatedAt
+  creadoPor                   BigInt?
+  actualizadoPor              BigInt?
+    // ⭐ NUEVOS CAMPOS - DATOS COMERCIALES (Lo que ingresa el usuario)
+  cantidadCompra              Decimal?    @db.Decimal(18, 3)      // Cantidad en unidad comercial (ej: 1.5 TN)
+  precioUnitarioCompra        Decimal?    @db.Decimal(18, 6)      // Precio en unidad comercial (ej: $2,500/TN)
+
   ordenCompra    OrdenCompra @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
   producto       Producto @relation(fields: [productoId], references: [id])
 
