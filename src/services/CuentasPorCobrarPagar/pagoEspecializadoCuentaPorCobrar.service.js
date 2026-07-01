@@ -314,9 +314,6 @@ const procesarPagoEspecializado = async (data) => {
       // PASO 1: GENERAR CORRELATIVO DE OPERACIÓN
       // ════════════════════════════════════════════════════════════
       const correlativo = await correlativoService.generarCorrelativo(data.empresaId, tx);
-
-      console.log(`✅ Correlativo generado: #${correlativo}`);
-
       // ════════════════════════════════════════════════════════════
       // PASO 2: CREAR MOVIMIENTO DE CAJA - INGRESO
       // ════════════════════════════════════════════════════════════
@@ -338,8 +335,6 @@ const procesarPagoEspecializado = async (data) => {
           creadoPor: data.creadoPor || null
         }
       });
-
-      console.log(`✅ MovimientoCaja Ingreso creado: #${movimientoIngreso.id}`);
 
       // ════════════════════════════════════════════════════════════
       // PASO 3: CREAR MOVIMIENTO DE CAJA - ITF (si aplica)
@@ -364,7 +359,6 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
 
-        console.log(`✅ MovimientoCaja ITF creado: #${movimientoITF.id}`);
       }
 
       // ════════════════════════════════════════════════════════════
@@ -390,7 +384,6 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
 
-        console.log(`✅ MovimientoCaja Comisión creado: #${movimientoComision.id}`);
       }
 
       // ════════════════════════════════════════════════════════════
@@ -422,7 +415,6 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
 
-        console.log(`✅ Detracción creada: #${detraccion.id} - ${detraccion.numeroConstancia}`);
 
         // Crear DetalleDetraccion vinculando con la PreFactura
         if (cuentaPorCobrar.preFacturaId) {
@@ -435,7 +427,6 @@ const procesarPagoEspecializado = async (data) => {
             }
           });
 
-          console.log(`✅ DetalleDetraccion creado para PreFactura #${cuentaPorCobrar.preFacturaId}`);
         }
       }
 
@@ -472,7 +463,6 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
 
-        console.log(`✅ Retención creada: #${retencion.id} - ${retencion.numeroDocumento}`);
 
         // Crear DetalleRetencion
         if (cuentaPorCobrar.preFactura) {
@@ -490,7 +480,6 @@ const procesarPagoEspecializado = async (data) => {
             }
           });
 
-          console.log(`✅ DetalleRetencion creado`);
         }
       }
 
@@ -527,7 +516,6 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
 
-        console.log(`✅ Percepción creada: #${percepcion.id} - ${percepcion.numeroDocumento}`);
 
         // Crear DetallePercepcion
         if (cuentaPorCobrar.preFactura) {
@@ -542,7 +530,6 @@ const procesarPagoEspecializado = async (data) => {
             }
           });
 
-          console.log(`✅ DetallePercepcion creado`);
         }
       }
 
@@ -601,8 +588,6 @@ const procesarPagoEspecializado = async (data) => {
         }
       });
 
-      console.log(`✅ PagoCuentaPorCobrar creado: #${pagoCuentaPorCobrar.id}`);
-
       // ════════════════════════════════════════════════════════════
       // PASO 9: ACTUALIZAR TRAZABILIDAD EN MOVIMIENTOS DE CAJA
       // ════════════════════════════════════════════════════════════
@@ -630,8 +615,6 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
       }
-
-      console.log(`✅ Trazabilidad actualizada en MovimientoCaja`);
 
       // ════════════════════════════════════════════════════════════
       // PASO 10: ACTUALIZAR SALDO DE CUENTA POR COBRAR
@@ -665,8 +648,6 @@ const procesarPagoEspecializado = async (data) => {
           estadoId: nuevoEstado
         }
       });
-
-      console.log(`✅ CuentaPorCobrar actualizada - Saldo: ${saldoPendiente}`);
 
       // ════════════════════════════════════════════════════════════
       // PASO 11: PREPARAR RESPUESTA
