@@ -308,6 +308,10 @@ const crear = async (data) => {
             : empresa.porcentajeIgv,
         esExoneradoAlIGV:
           data.esExoneradoAlIGV !== undefined ? data.esExoneradoAlIGV : false,
+        subtotal: data.subtotal,
+        totalDescuentos: data.totalDescuentos,
+        totalIGV: data.totalIGV,
+        total: data.total,
         tipoDocumentoFinalId: data.tipoDocumentoFinalId,
         serieDocFinalId: data.serieDocFinalId,
         numeroDocumentoFinal: data.numeroDocumentoFinal,
@@ -396,6 +400,10 @@ const actualizar = async (id, data) => {
         urlDocumentoRef: data.urlDocumentoRef,
         porcentajeIGV: data.porcentajeIGV,
         esExoneradoAlIGV: data.esExoneradoAlIGV,
+        subtotal: data.subtotal,
+        totalDescuentos: data.totalDescuentos,
+        totalIGV: data.totalIGV,
+        total: data.total,
         tipoDocumentoFinalId: data.tipoDocumentoFinalId,
         serieDocFinalId: data.serieDocFinalId,
         numeroDocumentoFinal: data.numeroDocumentoFinal,
@@ -1949,6 +1957,12 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
           moneda: true,
           empresa: true,
           periodoContable: true,
+          tipoDocumento: true,
+          detalles: {
+            include: {
+              producto: true,
+            },
+          },
         },
       });
 
@@ -1975,7 +1989,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
         );
       }
 
-   
+
 
       // ========================================
       // 3. BUSCAR ESTADO PENDIENTE PARA CXP (ID 106)
@@ -1998,18 +2012,42 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
       const esSaldoInicial = ordenCompra.tipoDocumento?.codigo === "SI-CXP";
 
       // ========================================
-      // 5. CALCULAR MONTOS
+      // 5. OBTENER O CALCULAR MONTOS
       // ========================================
-      const pagosPreviosSI = Number(ordenCompra.pagosPreviosSI) || 0;
-      const subtotalNeto = Number(ordenCompra.subtotal) - pagosPreviosSI;
-      const porcentajeIGV = Number(ordenCompra.porcentajeIGV) || 0;
-      const igvNeto = ordenCompra.esExoneradoAlIGV
-        ? 0
-        : subtotalNeto * (porcentajeIGV / 100);
-      const totalNeto = subtotalNeto + igvNeto;
+      let montoFinal;
 
-      // Usar totalNeto para Saldos Iniciales, total normal para OC regulares
-      const montoFinal = esSaldoInicial ? totalNeto : Number(ordenCompra.total);
+      // Si la OC tiene total calculado, usarlo directamente
+      if (ordenCompra.total && Number(ordenCompra.total) > 0) {
+        montoFinal = Number(ordenCompra.total);
+
+        // Para Saldos Iniciales, restar pagos previos
+        if (esSaldoInicial) {
+          const pagosPreviosSI = Number(ordenCompra.pagosPreviosSI) || 0;
+          montoFinal = montoFinal - pagosPreviosSI;
+        }
+      } else {
+        // Fallback: Si no tiene total (OC antiguas), calcular desde detalles
+        if (!ordenCompra.detalles || ordenCompra.detalles.length === 0) {
+          throw new ValidationError(
+            "La OrdenCompra no tiene detalles ni total calculado. No se puede generar la CxP."
+          );
+        }
+
+        // Calcular desde detalles
+        const subtotal = ordenCompra.detalles.reduce((sum, detalle) => {
+          const cantidad = Number(detalle.cantidad || 0);
+          const precioUnitario = Number(detalle.precioUnitario || 0);
+          return sum + (cantidad * precioUnitario);
+        }, 0);
+
+        const pagosPreviosSI = Number(ordenCompra.pagosPreviosSI) || 0;
+        const subtotalNeto = subtotal - pagosPreviosSI;
+        const porcentajeIGV = Number(ordenCompra.porcentajeIGV) || 0;
+        const igvNeto = ordenCompra.esExoneradoAlIGV
+          ? 0
+          : subtotalNeto * (porcentajeIGV / 100);
+        montoFinal = subtotalNeto + igvNeto;
+      }
 
       // ========================================
       // 6. DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN
@@ -2073,7 +2111,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
           estadoId: estadoPendiente.id,
           observaciones: esSaldoInicial
             ? `Saldo Inicial CxP - ${ordenCompra.proveedor.razonSocial}`
-            : `CxP ${ordenCompra.esGerencial ? 'Negra' : 'Blanca'} generada desde OrdenCompra ${ordenCompra.codigo}`,
+            : `CxP ${ordenCompra.esGerencial ? 'Negra' : 'Blanca'} generada desde OrdenCompra ${ordenCompra.numeroDocumento || 'SIN-NUMERO'}`,
 
           // INTEGRACIÓN CONTABLE - HEREDADO DE ORDENCOMPRA
           fechaContable: ordenCompra.fechaContable,
