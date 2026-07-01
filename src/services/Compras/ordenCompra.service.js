@@ -6,6 +6,7 @@ import {
 } from "../../utils/errors.js";
 import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
 import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
+import { ESTADO_ORDEN_COMPRA } from "../../utils/estados.constants.js";
 
 async function validarForaneas(data) {
   if (data.empresaId) {
@@ -262,12 +263,12 @@ const crear = async (data) => {
       });
 
       const estadoInicial = await tx.estadoMultiFuncion.findFirst({
-        where: { id: 38 },
+        where: { id: ESTADO_ORDEN_COMPRA.PENDIENTE },
       });
 
       if (!estadoInicial) {
         throw new ValidationError(
-          "No se encontró el estado inicial PENDIENTE (id=38)",
+          `No se encontró el estado inicial PENDIENTE (id=${ESTADO_ORDEN_COMPRA.PENDIENTE})`,
         );
       }
 
@@ -355,7 +356,7 @@ const actualizar = async (id, data) => {
     const existe = await prisma.ordenCompra.findUnique({ where: { id } });
     if (!existe) throw new NotFoundError("OrdenCompra no encontrada");
 
-    if (Number(existe.estadoId) === 40) {
+    if (Number(existe.estadoId) === ESTADO_ORDEN_COMPRA.ANULADO) {
       throw new ValidationError("No se puede modificar una orden anulada");
     }
 
@@ -534,7 +535,7 @@ const eliminar = async (id) => {
     const existe = await prisma.ordenCompra.findUnique({ where: { id } });
     if (!existe) throw new NotFoundError("OrdenCompra no encontrada");
 
-    if (Number(existe.estadoId) === 40) {
+    if (Number(existe.estadoId) === ESTADO_ORDEN_COMPRA.ANULADO) {
       throw new ValidationError("No se puede eliminar una orden anulada.");
     }
 
@@ -577,7 +578,7 @@ const aprobar = async (id) => {
     const orden = await prisma.ordenCompra.findUnique({ where: { id } });
     if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
 
-    if (Number(orden.estadoId) !== 38) {
+    if (Number(orden.estadoId) !== ESTADO_ORDEN_COMPRA.PENDIENTE) {
       throw new ValidationError(
         "Solo se pueden aprobar órdenes en estado PENDIENTE",
       );
@@ -600,7 +601,7 @@ const aprobar = async (id) => {
     const aprobado = await prisma.ordenCompra.update({
       where: { id },
       data: {
-        estadoId: Number(39),
+        estadoId: ESTADO_ORDEN_COMPRA.APROBADO,
         aprobadoPorId: parametroAprobador.personalRespId,
         actualizadoEn: new Date(),
       },
@@ -635,7 +636,7 @@ const anular = async (id) => {
       });
 
       if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
-      if (Number(orden.estadoId) === 40) {
+      if (Number(orden.estadoId) === ESTADO_ORDEN_COMPRA.ANULADO) {
         throw new ValidationError("La orden ya está anulada");
       }
 
@@ -653,7 +654,7 @@ const anular = async (id) => {
       const anulado = await tx.ordenCompra.update({
         where: { id },
         data: {
-          estadoId: Number(40),
+          estadoId: ESTADO_ORDEN_COMPRA.ANULADO,
           movIngresoAlmacenId: null,
           actualizadoEn: new Date(),
         },
@@ -715,19 +716,17 @@ const reactivarDocumentoOrdenCompra = async (id, usuarioId) => {
     // VALIDACIONES CRÍTICAS
     // ========================================
 
-    // 1. Validar que el estado sea APROBADO (>38)
+    // 1. Validar que el estado sea APROBADO o superior
     const estadoActual = Number(ordenCompra.estadoId);
-    const ESTADO_PENDIENTE = 38;
-    const ESTADO_ANULADA = 40;
 
-    if (estadoActual <= ESTADO_PENDIENTE) {
+    if (estadoActual <= ESTADO_ORDEN_COMPRA.PENDIENTE) {
       throw new ValidationError(
         'Solo se pueden reactivar Órdenes de Compra APROBADAS'
       );
     }
 
     // 2. Validar que NO esté anulada
-    if (estadoActual === ESTADO_ANULADA) {
+    if (estadoActual === ESTADO_ORDEN_COMPRA.ANULADO) {
       throw new ValidationError(
         'No se puede reactivar una Orden de Compra ANULADA'
       );
@@ -821,7 +820,7 @@ const reactivarDocumentoOrdenCompra = async (id, usuarioId) => {
       // ========================================
       const estadoPendiente = await tx.estadoMultiFuncion.findFirst({
         where: {
-          id: ESTADO_PENDIENTE,
+          id: ESTADO_ORDEN_COMPRA.PENDIENTE,
         },
       });
 
@@ -979,9 +978,16 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
 
       if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
 
-      if (Number(orden.estadoId) !== 39) {
+      // Validar que la orden esté en estado válido para generar kardex
+      const estadoId = Number(orden.estadoId);
+      const estadosValidos = [
+        ESTADO_ORDEN_COMPRA.APROBADO,
+        ESTADO_ORDEN_COMPRA.PARTICIONADA,
+        ESTADO_ORDEN_COMPRA.FACTURADA,
+      ];
+      if (!estadosValidos.includes(estadoId)) {
         throw new ValidationError(
-          "Solo se puede generar movimiento para órdenes aprobadas",
+          "Solo se puede generar movimiento para órdenes APROBADAS, PARTICIONADAS o FACTURADAS",
         );
       }
 
@@ -1039,19 +1045,13 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         throw new ValidationError("El concepto de movimiento no existe");
       }
 
-      if (!concepto.tipoDocumentoId) {
-        throw new ValidationError(
-          "El concepto no tiene tipo de documento configurado",
-        );
-      }
-
       // ========================================
       // PASO 4: OBTENER RESPONSABLE DE ALMACÉN
       // ========================================
       const parametroAprobador = await tx.parametroAprobador.findFirst({
         where: {
           empresaId: orden.empresaId,
-          tipoAprobadorId: Number(2), // Responsable de Almacén
+          moduloSistemaId: Number(6), // ALMACÉN
           cesado: false,
         },
       });
@@ -1071,10 +1071,19 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         );
       }
 
+      // Usar tipoDocumentoId de la orden o del concepto (priorizar orden)
+      const tipoDocumentoIdMovimiento = orden.tipoDocumentoId || concepto.tipoDocumentoId;
+
+      if (!tipoDocumentoIdMovimiento) {
+        throw new ValidationError(
+          "No se puede generar movimiento: la orden y el concepto no tienen tipo de documento configurado"
+        );
+      }
+
       const serieMovAlmacen = await tx.serieDoc.findFirst({
         where: {
           empresaId: orden.empresaId,
-          tipoDocumentoId: concepto.tipoDocumentoId,
+          tipoDocumentoId: tipoDocumentoIdMovimiento,
           serie: orden.serieDoc.serie, // ⭐ MISMA SERIE QUE LA ORDEN
           activo: true,
         },
@@ -1082,7 +1091,7 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
 
       if (!serieMovAlmacen) {
         throw new ValidationError(
-          `No se encontró una serie activa para el tipo de documento ${concepto.tipoDocumentoId} con la serie "${orden.serieDoc.serie}"`,
+          `No se encontró una serie activa para el tipo de documento ${tipoDocumentoIdMovimiento} con la serie "${orden.serieDoc.serie}"`,
         );
       }
 
@@ -1092,7 +1101,7 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
       const cabecera = {
         empresaId: orden.empresaId,
         almacenId: datosKardex.almacenId,
-        tipoDocumentoId: concepto.tipoDocumentoId,
+        tipoDocumentoId: tipoDocumentoIdMovimiento,
         conceptoMovAlmacenId: datosKardex.conceptoMovAlmacenId,
         serieDocId: serieMovAlmacen.id,
         fechaDocumento: datosKardex.fechaDocumento || new Date(),
@@ -1147,7 +1156,7 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         where: { id },
         data: {
           movIngresoAlmacenId: resultado.movimiento.id,
-          fechaActualizacion: new Date(),
+          actualizadoEn: new Date(),
         },
         include: {
           empresa: true,
@@ -1205,8 +1214,8 @@ const regenerarKardex = async (id, usuarioId) => {
 
       if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
 
-      // ✅ Validar que la orden esté APROBADA (39) y tenga kardex generado
-      if (Number(orden.estadoId) !== 39) {
+      // ✅ Validar que la orden esté APROBADA y tenga kardex generado
+      if (Number(orden.estadoId) !== ESTADO_ORDEN_COMPRA.APROBADO) {
         throw new ValidationError(
           "Solo se puede regenerar kardex de órdenes aprobadas",
         );
@@ -1224,7 +1233,7 @@ const regenerarKardex = async (id, usuarioId) => {
       await tx.ordenCompra.update({
         where: { id },
         data: {
-          estadoId: Number(39), // APROBADO
+          estadoId: ESTADO_ORDEN_COMPRA.APROBADO, // APROBADO
           movIngresoAlmacenId: null,
           actualizadoEn: new Date(),
         },
@@ -1450,7 +1459,7 @@ const partirOrdenCompra = async (id) => {
       // ========================================
       if (
         !ordenCompraOriginal.estadoId ||
-        Number(ordenCompraOriginal.estadoId) !== 39
+        Number(ordenCompraOriginal.estadoId) !== ESTADO_ORDEN_COMPRA.APROBADO
       ) {
         throw new ValidationError(
           `Solo se pueden particionar OrdenCompra APROBADAS (estado 39). Estado actual: ${ordenCompraOriginal.estadoId}`
@@ -1541,7 +1550,7 @@ const partirOrdenCompra = async (id) => {
         numeroDocumento: numeroDocumentoCopia1,
         numSerieDoc: numSerieCopia1,
         numCorreDoc: numCorreCopia1,
-        estadoId: Number(38), // PENDIENTE (para que usuario pueda editar)
+        estadoId: ESTADO_ORDEN_COMPRA.PENDIENTE, // PENDIENTE (para que usuario pueda editar)
         esParticionada: false,
         ordenCompraOrigenId: ordenCompraOriginal.id,
       };
@@ -1583,7 +1592,7 @@ const partirOrdenCompra = async (id) => {
           numeroDocumento: numeroDocumentoCopia2,
           numSerieDoc: numSerieCopia2,
           numCorreDoc: numCorreCopia2,
-          estadoId: Number(38), // PENDIENTE (para que usuario pueda editar)
+          estadoId: ESTADO_ORDEN_COMPRA.PENDIENTE, // PENDIENTE (para que usuario pueda editar)
           esParticionada: false,
           ordenCompraOrigenId: ordenCompraOriginal.id,
         },
@@ -1823,7 +1832,7 @@ async function crearOrdenCompraDirecta(
       tipoCambio: requerimiento.tipoCambio,
       fechaEntrega: requerimiento.fechaRequerida,
       solicitanteId: requerimiento.solicitanteId,
-      estadoId: Number(38),
+      estadoId: ESTADO_ORDEN_COMPRA.PENDIENTE,
       centroCostoId: requerimiento.centroCostoId,
       unidadNegocioId: requerimiento.unidadNegocioId,
       observaciones: requerimiento.observaciones,
@@ -1907,7 +1916,7 @@ async function crearOrdenCompraConCotizacion(
       tipoCambio: requerimiento.tipoCambio,
       fechaEntrega: requerimiento.fechaRequerida,
       solicitanteId: requerimiento.solicitanteId,
-      estadoId: Number(38),
+      estadoId: ESTADO_ORDEN_COMPRA.PENDIENTE,
       centroCostoId: requerimiento.centroCostoId,
       unidadNegocioId: requerimiento.unidadNegocioId,
       observaciones: requerimiento.observaciones,
@@ -1976,7 +1985,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
 
       // Validar estado: debe ser APROBADA (39) o superior
       const estadoActual = Number(ordenCompra.estadoId);
-      if (estadoActual < 39) {
+      if (estadoActual < ESTADO_ORDEN_COMPRA.APROBADO) {
         throw new ValidationError(
           `Solo se pueden generar CxP desde OrdenCompra en estado APROBADA (39) o superior. Estado actual: ${estadoActual}`
         );
@@ -2125,7 +2134,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
       const ordenCompraActualizada = await tx.ordenCompra.update({
         where: { id: ordenCompraId },
         data: {
-          estadoId: Number(113), // FACTURADA
+          estadoId: ESTADO_ORDEN_COMPRA.FACTURADA, // FACTURADA
           facturado: true,
           fechaFacturacion: new Date(),
         },
