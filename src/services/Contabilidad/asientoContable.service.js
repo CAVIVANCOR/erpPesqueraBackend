@@ -5,6 +5,7 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
+import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 
 /**
  * Maneja errores de Prisma y los convierte en errores específicos
@@ -302,14 +303,14 @@ const crear = async (data) => {
 
     // Siempre crear en estado PENDIENTE (76)
     const estadoPendiente = await prisma.estadoMultiFuncion.findUnique({
-      where: { id: Number(76) },
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
     });
     if (!estadoPendiente) {
       throw new ValidationError(
         "Estado PENDIENTE (76) no encontrado en el sistema.",
       );
     }
-    data.estadoId = Number(76);
+    data.estadoId = Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE);
 
     await validarAsientoContable(data);
 
@@ -441,17 +442,17 @@ const actualizar = async (id, data) => {
       );
     }
 
-    // Solo se pueden modificar asientos PENDIENTE (76) o APROBADO (77)
-    // Los ANULADOS (78) NO se pueden modificar
+    // Solo se pueden modificar asientos PENDIENTE o APROBADO
+    // Los ANULADOS NO se pueden modificar
     const estadoId = Number(existente.estadoId);
-    if (estadoId !== 76 && estadoId !== 77) {
+    if (estadoId !== ESTADO_ASIENTO_CONTABLE.PENDIENTE && estadoId !== ESTADO_ASIENTO_CONTABLE.APROBADO) {
       throw new ConflictError(
         "Solo se pueden modificar asientos en estado PENDIENTE o APROBADO.",
       );
     }
     // Si el asiento está APROBADO, volverlo a PENDIENTE al editar
     const estadoPendiente = await prisma.estadoMultiFuncion.findUnique({
-      where: { id: 76 },
+      where: { id: ESTADO_ASIENTO_CONTABLE.PENDIENTE },
     });
     if (!estadoPendiente) {
       throw new ValidationError("Estado PENDIENTE no encontrado en el sistema.");
@@ -486,7 +487,7 @@ const actualizar = async (id, data) => {
         ).getFullYear();
         nuevoNumeroAsiento = `ASI-${anioAsiento}-${String(nuevoCorrelativo).padStart(6, "0")}`;
       }
-            await tx.asientoContable.update({
+      await tx.asientoContable.update({
         where: { id },
         data: {
           periodoContableId: data.periodoContableId,
@@ -504,7 +505,7 @@ const actualizar = async (id, data) => {
           totalHaber: data.totalHaber,
           diferencia: data.diferencia,
           estaCuadrado: data.estaCuadrado,
-          estadoId: 76, // ✅ Siempre volver a PENDIENTE al editar
+          estadoId: ESTADO_ASIENTO_CONTABLE.PENDIENTE, // ✅ Siempre volver a PENDIENTE al editar
           actualizadoPor: data.actualizadoPor,
         },
       });
@@ -632,7 +633,7 @@ const eliminar = async (id) => {
     if (!existente) throw new NotFoundError("Asiento contable no encontrado");
 
     // Solo se pueden eliminar asientos en estado PENDIENTE (76)
-    if (Number(existente.estadoId) !== 76) {
+    if (Number(existente.estadoId) !== ESTADO_ASIENTO_CONTABLE.PENDIENTE) {
       throw new ConflictError(
         "Solo se pueden eliminar asientos en estado PENDIENTE (76).",
       );
@@ -733,7 +734,7 @@ const aprobarAsiento = async (id, aprobadoPorId) => {
     if (!asiento) throw new NotFoundError("Asiento contable no encontrado");
 
     // Solo se pueden aprobar asientos en estado PENDIENTE (76)
-    if (Number(asiento.estadoId) !== 76) {
+    if (Number(asiento.estadoId) !== ESTADO_ASIENTO_CONTABLE.PENDIENTE) {
       throw new ConflictError(
         "Solo se pueden aprobar asientos en estado PENDIENTE (76).",
       );
@@ -767,10 +768,11 @@ const aprobarAsiento = async (id, aprobadoPorId) => {
       );
     }
 
-    // Validar que el estado APROBADO (77) exista
+    // Validar que el estado APROBADO exista
     const estadoAprobado = await prisma.estadoMultiFuncion.findUnique({
-      where: { id: Number(77) },
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.APROBADO) },
     });
+
     if (!estadoAprobado) {
       throw new ValidationError(
         "Estado APROBADO (77) no encontrado en el sistema.",
@@ -780,7 +782,7 @@ const aprobarAsiento = async (id, aprobadoPorId) => {
     return await prisma.asientoContable.update({
       where: { id },
       data: {
-        estadoId: Number(77), // Estado APROBADO
+        estadoId: Number(ESTADO_ASIENTO_CONTABLE.APROBADO),
         fechaAprobacion: new Date(),
         aprobadoPor: aprobadoPorId,
       },
@@ -824,9 +826,9 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
 
     if (!asiento) throw new NotFoundError("Asiento contable no encontrado");
 
-    // Solo se pueden anular asientos APROBADOS (77)
-    if (Number(asiento.estadoId) !== 77) {
-      throw new ConflictError("Solo se pueden anular asientos APROBADOS (77).");
+    // Solo se pueden anular asientos APROBADOS
+    if (Number(asiento.estadoId) !== ESTADO_ASIENTO_CONTABLE.APROBADO) {
+      throw new ConflictError("Solo se pueden anular asientos APROBADOS.");
     }
 
     const estadoPeriodoBloqueado = await prisma.estadoMultiFuncion.findFirst({
@@ -846,10 +848,11 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
       throw new ValidationError("Debe proporcionar un motivo de anulación.");
     }
 
-    // Validar que el estado ANULADO (78) exista
+    // Validar que el estado ANULADO exista
     const estadoAnulado = await prisma.estadoMultiFuncion.findUnique({
-      where: { id: Number(78) },
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.ANULADO) },
     });
+
     if (!estadoAnulado) {
       throw new ValidationError(
         "Estado ANULADO (78) no encontrado en el sistema.",
@@ -859,7 +862,7 @@ const anularAsiento = async (id, anuladoPorId, motivoAnulacion) => {
     return await prisma.asientoContable.update({
       where: { id },
       data: {
-        estadoId: Number(78), // Estado ANULADO
+        estadoId: Number(ESTADO_ASIENTO_CONTABLE.ANULADO),
         fechaAnulacion: new Date(),
         anuladoPor: anuladoPorId,
         motivoAnulacion,
@@ -1006,7 +1009,7 @@ const unirAsientos = async (asientoIds, usuarioId) => {
     // VALIDACIÓN 3: Todos deben estar en estado PENDIENTE (76)
     // ========================================
     const asientosNoPendientes = asientos.filter(
-      (a) => Number(a.estadoId) !== 76,
+      (a) => Number(a.estadoId) !== ESTADO_ASIENTO_CONTABLE.PENDIENTE,
     );
     if (asientosNoPendientes.length > 0) {
       const numerosAsientos = asientosNoPendientes

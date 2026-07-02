@@ -8,6 +8,7 @@ import {
 } from "../../utils/errors.js";
 // Importa servicios necesarios para generación de asientos contables
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
+import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 
 // Define las relaciones que se incluirán al consultar saldos
 const incluirRelaciones = {
@@ -325,7 +326,7 @@ const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
           origenAsiento: asientoData.origenAsiento || "AUTOMATICO",
           submoduloOrigenId: submodulo.id,
           procesoOrigenId: saldoId,
-          estadoId: BigInt(76), // PENDIENTE
+          estadoId: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE), // PENDIENTE
           totalDebe,
           totalHaber,
           diferencia,
@@ -425,7 +426,7 @@ async function generarAsientoSaldoInicial(
     }
 
     const estadoPendiente = await tx.estadoMultiFuncion.findUnique({
-      where: { id: BigInt(76) },
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
     });
     if (!estadoPendiente) {
       throw new ValidationError("Estado PENDIENTE (76) no encontrado.");
@@ -473,7 +474,7 @@ async function generarAsientoSaldoInicial(
         origenAsiento: "AUTOMATICO",
         submoduloOrigenId: null,
         procesoOrigenId: saldo.id,
-        estadoId: BigInt(76),
+        estadoId: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE),
         totalDebe,
         totalHaber,
         diferencia: 0,

@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { ESTADO_PERIODO_CONTABLE } from "../../utils/estados.constants.js";
 
 /**
  * Servicio CRUD para PeriodoContable

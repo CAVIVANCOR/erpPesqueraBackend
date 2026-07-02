@@ -6,6 +6,7 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import lineaCreditoService from "../Tesoreria/lineaCredito.service.js";
+import { ESTADO_PERIODO_CONTABLE } from "../../utils/estados.constants.js";
 
 const { obtenerTipoCambio } = lineaCreditoService;
 
@@ -56,7 +57,7 @@ async function validarForaneas(data) {
       throw new ValidationError("El período contable referenciado no existe.");
 
     // Validar que el período esté ABIERTO (estadoId = 73)
-    if (Number(periodo.estadoId) !== 73) {
+    if (Number(periodo.estadoId) !== ESTADO_PERIODO_CONTABLE.ABIERTO) {
       throw new ValidationError(
         "El período contable debe estar ABIERTO para registrar movimientos.",
       );
@@ -456,7 +457,7 @@ const generarBorradorAsiento = async (movimientoId) => {
     }
 
     // Validar que el período esté ABIERTO
-    if (Number(periodoContable.estadoId) !== 73) {
+    if (Number(periodoContable.estadoId) !== ESTADO_PERIODO_CONTABLE.ABIERTO) {
       throw new ValidationError(
         "El período contable debe estar ABIERTO para generar asientos.",
       );
@@ -685,7 +686,7 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
     }
 
     // Validar que el período esté ABIERTO
-    if (Number(movimiento.periodoContable.estadoId) !== 73) {
+    if (Number(movimiento.periodoContable.estadoId) !== ESTADO_PERIODO_CONTABLE.ABIERTO) {
       throw new ValidationError(
         "El período contable debe estar ABIERTO para generar o regenerar asientos.",
       );

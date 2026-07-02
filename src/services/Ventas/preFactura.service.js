@@ -12,24 +12,12 @@ import {
   eliminarKardexDeMovimiento,
   recalcularSaldosAfectados,
 } from '../Almacen/kardexGenerico.service.js';
+import { ESTADO_PERIODO_CONTABLE,ESTADO_PREFACTURA, ESTADO_ASIENTO_CONTABLE  } from "../../utils/estados.constants.js";
 
 // ========================================
 // CONSTANTES DE ESTADOS PREFACTURA
 // ========================================
 const TIPO_PROVIENE_PREFACTURA = 14; // Tipo Proviene De: PRE FACTURA
-
-const ESTADO_PREFACTURA = {
-  PENDIENTE: 45,
-  APROBADA: 46,
-  ANULADA: 47,
-  PARTICIONADA: 48,
-  FACTURADA: 95,
-  EMITIDA: 96,
-  COMPROBANTE_GENERADO: 97,
-  VALIDADO_SUNAT: 98,
-  NO_VALIDADO_SUNAT: 99,
-};
-
 /**
  * Servicio CRUD para PreFactura
  * Gestiona pre-facturas generadas desde cotizaciones aprobadas
@@ -2378,26 +2366,58 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
       let productosAfectados = 0;
 
       // ========================================
-      // PASO 1: SI TIENE MOVIMIENTO DE ALMACÉN
+      // PASO 1: SI TIENE MOVIMIENTO DE ALMACÉN - ELIMINARLO COMPLETAMENTE
       // ========================================
-      if (preFactura.movSalidaAlmacenId) {
-        // 1.1 Capturar combinaciones afectadas
-        const combinaciones = await capturarCombinacionesAfectadas(
-          preFactura.movSalidaAlmacenId,
-          tx
-        );
+      let movimientosEliminados = [];
+      let detallesMovimientoEliminados = 0;
 
-        // 1.2 Eliminar kardex del movimiento
-        kardexEliminados = await eliminarKardexDeMovimiento(
-          preFactura.movSalidaAlmacenId,
-          tx
-        );
+      // 1.1 Buscar TODOS los movimientos relacionados con esta PreFactura
+      const movimientos = await tx.movimientoAlmacen.findMany({
+        where: { pedidoVentaId: preFactura.id },
+        include: {
+          detalles: true,
+        },
+      });
 
-        // 1.3 Recalcular saldos afectados
-        const resultadoSaldos = await recalcularSaldosAfectados(combinaciones, tx);
-        saldosDetActualizados = resultadoSaldos.saldosDetActualizados;
-        saldosGenActualizados = resultadoSaldos.saldosGenActualizados;
-        productosAfectados = combinaciones.generales.length;
+      if (movimientos && movimientos.length > 0) {
+        // 1.2 Procesar cada movimiento
+        for (const movimiento of movimientos) {
+          movimientosEliminados.push({
+            id: movimiento.id,
+            numeroDocumento: movimiento.numeroDocumento,
+            fechaDocumento: movimiento.fechaDocumento,
+          });
+          detallesMovimientoEliminados += movimiento.detalles?.length || 0;
+
+          // 1.3 Capturar combinaciones afectadas
+          const combinaciones = await capturarCombinacionesAfectadas(
+            movimiento.id,
+            tx
+          );
+
+          // 1.4 Eliminar kardex del movimiento
+          const kardexDelMovimiento = await eliminarKardexDeMovimiento(
+            movimiento.id,
+            tx
+          );
+          kardexEliminados += kardexDelMovimiento;
+
+          // 1.5 Eliminar detalles del movimiento
+          await tx.detalleMovimientoAlmacen.deleteMany({
+            where: { movimientoAlmacenId: movimiento.id },
+          });
+
+          // 1.6 Eliminar movimiento de almacén
+          await tx.movimientoAlmacen.delete({
+            where: { id: movimiento.id },
+          });
+
+          // 1.7 Recalcular saldos afectados
+          const resultadoSaldos = await recalcularSaldosAfectados(combinaciones, tx);
+          saldosDetActualizados += resultadoSaldos.saldosDetActualizados;
+          saldosGenActualizados += resultadoSaldos.saldosGenActualizados;
+          productosAfectados += combinaciones.generales.length;
+        }
       }
 
       // ========================================
@@ -2412,11 +2432,42 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
       // ========================================
       // PASO 2B: ELIMINAR COMPROBANTE ELECTRÓNICO (si existe y no está en SUNAT)
       // ========================================
+      let comprobantesEliminados = 0;
       if (preFactura.comprobantesElectronicos && preFactura.comprobantesElectronicos.length > 0) {
+        comprobantesEliminados = preFactura.comprobantesElectronicos.length;
         await tx.comprobanteElectronico.deleteMany({
           where: { preFacturaId: id },
         });
       }
+
+      // ========================================
+      // PASO 2C: ELIMINAR ASIENTOS CONTABLES
+      // ========================================
+      let asientosEliminados = 0;
+      const asientosContables = await tx.asientoContable.findMany({
+        where: {
+          preFacturasId: { has: id },
+        },
+      });
+
+      if (asientosContables && asientosContables.length > 0) {
+        asientosEliminados = asientosContables.length;
+
+        // Eliminar detalles de asientos
+        for (const asiento of asientosContables) {
+          await tx.detalleAsientoContable.deleteMany({
+            where: { asientoContableId: asiento.id },
+          });
+        }
+
+        // Eliminar asientos
+        await tx.asientoContable.deleteMany({
+          where: {
+            id: { in: asientosContables.map(a => a.id) },
+          },
+        });
+      }
+
       // ========================================
       // PASO 3: BUSCAR ESTADO PENDIENTE (45)
       // ========================================
@@ -2460,15 +2511,38 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
       });
 
       // ========================================
-      // RETORNAR RESULTADO CON ESTADÍSTICAS
+      // RETORNAR RESULTADO CON ESTADÍSTICAS COMPLETAS
       // ========================================
       return {
         preFactura: preFacturaReactivada,
-        kardexEliminados,
-        saldosDetActualizados,
-        saldosGenActualizados,
-        productosAfectados,
-        cuentaPorCobrarEliminada: preFactura.cuentaPorCobrar ? true : false,
+        movimientosAlmacen: movimientosEliminados.length > 0 ? {
+          eliminados: movimientosEliminados.length,
+          movimientos: movimientosEliminados,
+          kardexEliminados,
+          detallesEliminados: detallesMovimientoEliminados,
+        } : {
+          eliminados: 0,
+        },
+        saldos: {
+          saldosDetActualizados,
+          saldosGenActualizados,
+          productosAfectados,
+        },
+        cuentaPorCobrar: preFactura.cuentaPorCobrar ? {
+          eliminada: true,
+          cxcId: preFactura.cuentaPorCobrar.id,
+          montoTotal: preFactura.cuentaPorCobrar.montoTotal,
+        } : {
+          eliminada: false,
+        },
+        comprobantesElectronicos: {
+          eliminados: comprobantesEliminados,
+        },
+        asientosContables: {
+          eliminados: asientosEliminados,
+          asientosIds: asientosContables?.map(a => a.id) || [],
+        },
+        mensaje: 'PreFactura reactivada exitosamente',
       };
     });
   } catch (err) {
@@ -2591,8 +2665,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
       );
     }
 
-    // Validar que el período esté ABIERTO (estadoId = 73)
-    if (Number(preFactura.periodoContable.estadoId) !== 73) {
+    // Validar que el período esté ABIERTO
+    if (Number(preFactura.periodoContable.estadoId) !== ESTADO_PERIODO_CONTABLE.ABIERTO) {
       throw new ValidationError(
         "El período contable debe estar ABIERTO para generar asientos.",
       );
@@ -2826,9 +2900,9 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
       );
     }
 
-    // Buscar estado "PENDIENTE" para Asientos Contables (ID 76)
+    // Buscar estado "PENDIENTE" para Asientos Contables
     const estadoPendiente = await prisma.estadoMultiFuncion.findFirst({
-      where: { id: Number(76) },
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
     });
 
     if (!estadoPendiente) {
@@ -3023,7 +3097,7 @@ const eliminarAsientoContable = async (asientoId) => {
     }
 
     // Validar que NO esté aprobado (estadoId != 75)
-    if (Number(asiento.estadoId) === 75) {
+    if (Number(asiento.estadoId) === ESTADO_ASIENTO_CONTABLE.APROBADO) {
       throw new ValidationError(
         "No se puede eliminar un asiento contable aprobado. Debe desaprobarlo primero.",
       );
@@ -3212,7 +3286,8 @@ const generarKardex = async (id, datosKardex, usuarioId, esRegeneracion = false)
         estadoDocAlmacenId: Number(30), // PENDIENTE
         esCustodia: false,
         personalRespAlmacen: parametroAprobador.personalRespId,
-        preFacturaId: preFactura.id,
+        pedidoVentaId: preFactura.id, // ⭐ CORREGIDO: era preFacturaId
+        unidadNegocioId: preFactura.unidadNegocioId, // ⭐ HEREDADO de PreFactura
         dirOrigenId: datosKardex.dirOrigenId,
         dirDestinoId: datosKardex.dirDestinoId,
         observaciones: datosKardex.observaciones || `Salida por Pre-Factura ${preFactura.numeroDocumento}`,
@@ -3362,7 +3437,17 @@ const regenerarKardex = async (id, usuarioId) => {
       // 3. CONSTRUIR CABECERA Y DETALLES ACTUALIZADOS
       // ========================================
       const cabecera = {
+        empresaId: preFactura.empresaId,
+        tipoDocumentoId: movimientoAnterior.tipoDocumentoId,
+        conceptoMovAlmacenId: movimientoAnterior.conceptoMovAlmacenId,
+        serieDocId: movimientoAnterior.serieDocId,
         fechaDocumento: preFactura.fechaDocumento,
+        entidadComercialId: preFactura.clienteId,
+        estadoDocAlmacenId: Number(30),
+        esCustodia: false,
+        personalRespAlmacen: movimientoAnterior.personalRespAlmacen,
+        pedidoVentaId: preFactura.id,
+        unidadNegocioId: preFactura.unidadNegocioId,
         dirOrigenId: movimientoAnterior.dirOrigenId,
         dirDestinoId: movimientoAnterior.dirDestinoId,
         observaciones: `Regeneración de kardex por ${preFactura.numeroDocumento}`,

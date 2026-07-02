@@ -97,3 +97,12 @@ export const TIPO_DOCUMENTO_SUNAT = {
   RETENCION: 27,
   PERCEPCION: 28,
 };
+
+// ────────────────────────────────────────────────────────────
+// ESTADOS: PERIODO CONTABLE
+// ────────────────────────────────────────────────────────────
+export const ESTADO_PERIODO_CONTABLE = {
+  ABIERTO: 73,      // Permite registrar asientos contables
+  CERRADO: 74,      // No permite nuevos asientos (cierre mensual)
+  BLOQUEADO: 75,    // Bloqueado definitivamente (después de declaración SUNAT)
+};

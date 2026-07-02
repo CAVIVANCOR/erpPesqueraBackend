@@ -197,6 +197,8 @@ const crearMovimientoAlmacenCompleto = async (
 
               observaciones: det.observaciones || null,
               detalleReqCompraId: det.detalleReqCompraId || null,
+              ubicacionFisicaOrigenId: det.ubicacionFisicaOrigenId || null, // ⭐ AGREGAR
+              ubicacionFisicaDestinoId: det.ubicacionFisicaDestinoId || null, // ⭐ AGREGAR
             }))
           }
         },

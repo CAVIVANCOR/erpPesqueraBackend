@@ -1,6 +1,7 @@
 import prisma from "../../config/prismaClient.js";
 import { ValidationError, DatabaseError } from "../../utils/errors.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
+import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 
 /**
  * Servicio de integración contable para Préstamos Bancarios
@@ -48,7 +49,7 @@ async function generarAsientoDesembolso(prestamo, tx, creadoPor) {
 
     // Obtener estado PENDIENTE (76)
     const estadoPendiente = await tx.estadoMultiFuncion.findUnique({
-      where: { id: BigInt(76) },
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
     });
     if (!estadoPendiente) {
       throw new ValidationError("Estado PENDIENTE (76) no encontrado.");
@@ -104,7 +105,7 @@ async function generarAsientoDesembolso(prestamo, tx, creadoPor) {
         origenAsiento: "AUTOMATICO",
         submoduloOrigenId: submodulo.id,
         procesoOrigenId: prestamo.id,
-        estadoId: BigInt(76),
+        estadoId: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE),
         totalDebe: montoDesembolso,
         totalHaber: montoDesembolso,
         diferencia: 0,
@@ -193,7 +194,7 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
 
     // Obtener estado PENDIENTE (76)
     const estadoPendiente = await tx.estadoMultiFuncion.findUnique({
-      where: { id: BigInt(76) },
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
     });
     if (!estadoPendiente) {
       throw new ValidationError("Estado PENDIENTE (76) no encontrado.");
@@ -259,7 +260,7 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
         origenAsiento: "AUTOMATICO",
         submoduloOrigenId: submodulo.id,
         procesoOrigenId: cuota.id,
-        estadoId: BigInt(76),
+        estadoId: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE),
         totalDebe: montoTotal,
         totalHaber: montoTotal,
         diferencia: 0,

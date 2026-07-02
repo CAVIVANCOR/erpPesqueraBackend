@@ -6,7 +6,12 @@ import {
 } from "../../utils/errors.js";
 import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
 import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
-import { ESTADO_ORDEN_COMPRA } from "../../utils/estados.constants.js";
+import { ESTADO_ORDEN_COMPRA, ESTADO_PERIODO_CONTABLE, ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
+import {
+  capturarCombinacionesAfectadas,
+  eliminarKardexDeMovimiento,
+  recalcularSaldosAfectados,
+} from "../Almacen/kardexGenerico.service.js";
 
 async function validarForaneas(data) {
   if (data.empresaId) {
@@ -763,28 +768,59 @@ const reactivarDocumentoOrdenCompra = async (id, usuarioId) => {
       let asientosEliminados = 0;
 
       // ========================================
-      // PASO 1: SI TIENE MOVIMIENTO DE ALMACÉN
+      // PASO 1: SI TIENE MOVIMIENTO DE ALMACÉN - ELIMINARLO COMPLETAMENTE
       // ========================================
-      if (ordenCompra.movIngresoAlmacenId) {
-        // 1.1 Capturar combinaciones afectadas
-        const combinaciones = await capturarCombinacionesAfectadas(
-          ordenCompra.movIngresoAlmacenId,
-          tx
-        );
+      let movimientosEliminados = [];
+      let detallesMovimientoEliminados = 0;
 
-        // 1.2 Eliminar kardex del movimiento
-        kardexEliminados = await eliminarKardexDeMovimiento(
-          ordenCompra.movIngresoAlmacenId,
-          tx
-        );
+      // 1.1 Buscar TODOS los movimientos relacionados con esta OrdenCompra
+      const movimientos = await tx.movimientoAlmacen.findMany({
+        where: { ordenCompraId: ordenCompra.id },
+        include: {
+          detalles: true,
+        },
+      });
 
-        // 1.3 Recalcular saldos afectados
-        const resultadoSaldos = await recalcularSaldosAfectados(combinaciones, tx);
-        saldosDetActualizados = resultadoSaldos.saldosDetActualizados;
-        saldosGenActualizados = resultadoSaldos.saldosGenActualizados;
-        productosAfectados = combinaciones.generales.length;
+      if (movimientos && movimientos.length > 0) {
+        // 1.2 Procesar cada movimiento
+        for (const movimiento of movimientos) {
+          movimientosEliminados.push({
+            id: movimiento.id,
+            numeroDocumento: movimiento.numeroDocumento,
+            fechaDocumento: movimiento.fechaDocumento,
+          });
+          detallesMovimientoEliminados += movimiento.detalles?.length || 0;
+
+          // 1.3 Capturar combinaciones afectadas
+          const combinaciones = await capturarCombinacionesAfectadas(
+            movimiento.id,
+            tx
+          );
+
+          // 1.4 Eliminar kardex del movimiento
+          const kardexDelMovimiento = await eliminarKardexDeMovimiento(
+            movimiento.id,
+            tx
+          );
+          kardexEliminados += kardexDelMovimiento;
+
+          // 1.5 Eliminar detalles del movimiento
+          await tx.detalleMovimientoAlmacen.deleteMany({
+            where: { movimientoAlmacenId: movimiento.id },
+          });
+
+          // 1.6 Eliminar movimiento de almacén
+          await tx.movimientoAlmacen.delete({
+            where: { id: movimiento.id },
+          });
+
+          // 1.7 Recalcular saldos afectados
+          const resultadoSaldos = await recalcularSaldosAfectados(combinaciones, tx);
+          saldosDetActualizados += resultadoSaldos.saldosDetActualizados;
+          saldosGenActualizados += resultadoSaldos.saldosGenActualizados;
+          productosAfectados += combinaciones.generales.length;
+        }
       }
-
       // ========================================
       // PASO 2: ELIMINAR CUENTA POR PAGAR (si existe y sin pagos)
       // ========================================
@@ -857,16 +893,35 @@ const reactivarDocumentoOrdenCompra = async (id, usuarioId) => {
       });
 
       // ========================================
-      // RETORNAR RESULTADO CON ESTADÍSTICAS
+      // RETORNAR RESULTADO CON ESTADÍSTICAS COMPLETAS
       // ========================================
       return {
         ordenCompra: ordenCompraReactivada,
-        kardexEliminados,
-        saldosDetActualizados,
-        saldosGenActualizados,
-        productosAfectados,
-        cuentaPorPagarEliminada: ordenCompra.cuentaPorPagar ? true : false,
-        asientosEliminados,
+        movimientosAlmacen: movimientosEliminados.length > 0 ? {
+          eliminados: movimientosEliminados.length,
+          movimientos: movimientosEliminados,
+          kardexEliminados,
+          detallesEliminados: detallesMovimientoEliminados,
+        } : {
+          eliminados: 0,
+        },
+        saldos: {
+          saldosDetActualizados,
+          saldosGenActualizados,
+          productosAfectados,
+        },
+        cuentaPorPagar: ordenCompra.cuentaPorPagar ? {
+          eliminada: true,
+          cxpId: ordenCompra.cuentaPorPagar.id,
+          montoTotal: ordenCompra.cuentaPorPagar.montoTotal,
+        } : {
+          eliminada: false,
+        },
+        asientosContables: {
+          eliminados: asientosEliminados,
+          asientosIds: ordenCompra.asientosContables?.map(a => a.id) || [],
+        },
+        mensaje: 'Orden de Compra reactivada exitosamente',
       };
     });
   } catch (err) {
@@ -1110,6 +1165,7 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         esCustodia: false,
         personalRespAlmacen: parametroAprobador.personalRespId,
         ordenCompraId: orden.id,
+        unidadNegocioId: orden.unidadNegocioId, // ⭐ HEREDADO de OrdenCompra
         dirOrigenId: datosKardex.dirOrigenId,
         dirDestinoId: datosKardex.dirDestinoId,
         observaciones: datosKardex.observaciones || `Ingreso por Orden de Compra ${orden.numeroDocumento}`,
@@ -1136,6 +1192,7 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         costoUnitario: det.precioUnitario || 0,
         observaciones: null,
         detalleReqCompraId: det.detalleReqCompraId || null,
+        ubicacionFisicaDestinoId: datosKardex.ubicacionFisicaId ? BigInt(datosKardex.ubicacionFisicaId) : null, // ⭐ AGREGAR ESTA LÍNEA
       }));
 
       // ========================================
@@ -1337,6 +1394,7 @@ const regenerarKardex = async (id, usuarioId) => {
         dirOrigenId: direccionOrigenId,
         dirDestinoId: orden.direccionRecepcionAlmacenId,
         ordenCompraId: orden.id,
+        unidadNegocioId: orden.unidadNegocioId, // ⭐ AGREGAR ESTA LÍNEA
         observaciones: `Ingreso por Orden de Compra ${orden.numeroDocumento} (REGENERADO)`,
       };
 
@@ -1511,7 +1569,7 @@ const partirOrdenCompra = async (id) => {
 
       let correlativoBase = 1;
       if (ultimaOrdenCompra) {
-        const partes = ultimaOrdenCompra.codigo.split("-");
+        const partes = ultimaOrdenCompra.numeroDocumento.split("-");
         correlativoBase = parseInt(partes[2]) + 1;
       }
 
@@ -2086,7 +2144,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
           proveedorId: ordenCompra.proveedorId,
 
           // DOCUMENTO
-          numeroOrdenCompra: ordenCompra.numeroDocumento || ordenCompra.codigo,
+          numeroOrdenCompra: ordenCompra.numeroDocumento,
           fechaEmision: ordenCompra.fechaDocumento || new Date(),
           fechaVencimiento: ordenCompra.fechaVencimiento || new Date(),
 
@@ -2152,7 +2210,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
       return {
         ordenCompra: ordenCompraActualizada,
         cuentaPorPagar,
-        mensaje: `CuentaPorPagar ${ordenCompra.esGerencial ? 'NEGRA' : 'BLANCA'} generada exitosamente para OrdenCompra ${ordenCompra.codigo}. Monto: ${montoFinal.toFixed(2)}`,
+        mensaje: `CuentaPorPagar ${ordenCompra.esGerencial ? 'NEGRA' : 'BLANCA'} generada exitosamente para OrdenCompra ${ordenCompra.numeroDocumento}. Monto: ${montoFinal.toFixed(2)}`,
       };
     });
   } catch (err) {
@@ -2182,6 +2240,16 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         moneda: true,
         periodoContable: true,
         tipoDocumento: true,
+        detalles: {
+          include: {
+            producto: {
+              include: {
+                cuentaCompras: true,
+                familia: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -2195,12 +2263,91 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       );
     }
 
-    // Validar que el período esté ABIERTO (estadoId = 73)
-    if (Number(ordenCompra.periodoContable.estadoId) !== 73) {
+    // Validar que el período esté ABIERTO
+    if (Number(ordenCompra.periodoContable.estadoId) !== ESTADO_PERIODO_CONTABLE.ABIERTO) {
       throw new ValidationError(
         "El período contable debe estar ABIERTO para generar asientos."
       );
     }
+
+    // ========================================
+    // VALIDAR TOTALES
+    // ========================================
+    if (!ordenCompra.total || Number(ordenCompra.total) === 0) {
+      throw new ValidationError(
+        "La OrdenCompra no tiene totales calculados. " +
+        "Guarde la orden con detalles antes de generar el asiento."
+      );
+    }
+
+    // INSERTAR DESPUÉS DE LA LÍNEA 2270 (después de validar totales):
+
+    // ========================================
+    // FUNCIÓN HELPER: Buscar cuenta de compras
+    // ========================================
+    const buscarCuentaCompras = async (producto) => {
+      // 1. Si el producto tiene cuenta asignada, usarla
+      if (producto.cuentaComprasId && producto.cuentaCompras) {
+        return {
+          cuenta: producto.cuentaCompras,
+          usaFallback: false,
+          mensaje: null,
+        };
+      }
+
+      // 2. Buscar cuenta fallback por familia del producto
+      // Mapeo de familias a códigos de cuenta
+      const mapeoFamilias = {
+        // Puedes ajustar estos nombres según tus familias reales
+        "MERCADERIAS": "601",
+        "MERCADERIA": "601",
+        "MATERIAS PRIMAS": "602",
+        "MATERIA PRIMA": "602",
+        "SUMINISTROS": "6032",
+        "SUMINISTRO": "6032",
+        "MATERIALES AUXILIARES": "6031",
+        "REPUESTOS": "6033",
+        "REPUESTO": "6033",
+      };
+
+      let codigoBuscar = "60"; // Cuenta genérica por defecto
+
+      if (producto.familia?.nombre) {
+        const nombreFamilia = producto.familia.nombre.toUpperCase();
+        // Buscar coincidencia exacta o parcial
+        for (const [key, codigo] of Object.entries(mapeoFamilias)) {
+          if (nombreFamilia.includes(key)) {
+            codigoBuscar = codigo;
+            break;
+          }
+        }
+      }
+
+      // 3. Buscar cuenta en BD
+      const cuentaFallback = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: { startsWith: codigoBuscar },
+          activo: true,
+          esImputable: true,
+        },
+      });
+
+      if (!cuentaFallback) {
+        throw new ValidationError(
+          `No se encontró cuenta contable para el producto "${producto.descripcionBase}". ` +
+          `Configure la cuenta en el producto o verifique el plan de cuentas.`
+        );
+      }
+
+      return {
+        cuenta: cuentaFallback,
+        usaFallback: true,
+        mensaje: `⚠️ Producto "${producto.descripcionBase}" (ID: ${producto.id}) no tiene cuenta contable asignada. Se usó cuenta genérica ${cuentaFallback.codigoCuenta} - ${cuentaFallback.nombreCuenta}.`,
+      };
+    };
+
+
+
 
     // ========================================
     // BUSCAR CUENTAS CONTABLES NECESARIAS
@@ -2214,17 +2361,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       },
     });
 
-    // Cuenta Compras (60 - Compras)
-    const cuentaCompras = await prisma.planCuentasContable.findFirst({
-      where: {
-        codigoCuenta: { startsWith: "60" },
-        activo: true,
-      },
-    });
-
-    if (!cuentaCxP || !cuentaCompras) {
+    // ✅ REEMPLAZAR (LÍNEA 2369):
+    if (!cuentaCxP) {
       throw new ValidationError(
-        "No se encontraron las cuentas contables necesarias (42.1 Cuentas por Pagar o 60 Compras). " +
+        "No se encontró la cuenta de Cuentas por Pagar (42.1). " +
         "Configure el plan de cuentas antes de generar el asiento."
       );
     }
@@ -2240,7 +2380,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       empresaId: ordenCompra.empresaId,
       periodoContableId: ordenCompra.periodoContableId,
       fechaAsiento: ordenCompra.fechaContable,
-      glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
+      glosa: `Compra según OrdenCompra ${ordenCompra.numeroDocumento}`,
       tipoLibro: tipoLibro,
       origenAsiento: "AUTOMATICO",
       monedaId: ordenCompra.monedaId,
@@ -2249,56 +2389,80 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     };
 
     // ========================================
+    // GENERAR DETALLES DEL ASIENTO
+    // ========================================
+    const warnings = [];
+    let numeroLinea = 1;
+
+    // ========================================
     // CASO 1: GERENCIAL (sin IGV)
     // ========================================
     if (ordenCompra.esGerencial) {
-      borrador.detalles = [
-        {
-          numeroLinea: 1,
-          planCuentaId: cuentaCompras.id,
-          glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
-          debe: total,
+      // Recorrer detalles de la orden
+      for (const detalle of ordenCompra.detalles) {
+        const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+
+        if (usaFallback && mensaje) {
+          warnings.push(mensaje);
+        }
+
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuenta.id,
+          glosa: `Compra ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
+          debe: Number(detalle.subtotal),
           haber: 0,
-          centroCostoId: ordenCompra.centroCostoId,
-        },
-        {
-          numeroLinea: 2,
-          planCuentaId: cuentaCxP.id,
-          glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
-          debe: 0,
-          haber: total,
-          entidadComercialId: ordenCompra.proveedorId,
-          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
-          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
-          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
-        },
-      ];
+          centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+        });
+      }
+
+      // Agregar CxP (HABER)
+      borrador.detalles.push({
+        numeroLinea: numeroLinea++,
+        planCuentaId: cuentaCxP.id,
+        glosa: `Compra según OrdenCompra ${ordenCompra.numeroDocumento}`,
+        debe: 0,
+        haber: total,
+        entidadComercialId: ordenCompra.proveedorId,
+        tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+        numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+        fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+      });
     }
     // ========================================
     // CASO 2: FISCAL EXONERADA (sin IGV)
     // ========================================
     else if (ordenCompra.esExoneradoAlIGV) {
-      borrador.detalles = [
-        {
-          numeroLinea: 1,
-          planCuentaId: cuentaCompras.id,
-          glosa: `Compra exonerada según OrdenCompra ${ordenCompra.codigo}`,
-          debe: total,
+      // Recorrer detalles de la orden
+      for (const detalle of ordenCompra.detalles) {
+        const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+
+        if (usaFallback && mensaje) {
+          warnings.push(mensaje);
+        }
+
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuenta.id,
+          glosa: `Compra exonerada ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
+          debe: Number(detalle.subtotal),
           haber: 0,
-          centroCostoId: ordenCompra.centroCostoId,
-        },
-        {
-          numeroLinea: 2,
-          planCuentaId: cuentaCxP.id,
-          glosa: `Compra exonerada según OrdenCompra ${ordenCompra.codigo}`,
-          debe: 0,
-          haber: total,
-          entidadComercialId: ordenCompra.proveedorId,
-          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
-          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
-          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
-        },
-      ];
+          centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+        });
+      }
+
+      // Agregar CxP (HABER)
+      borrador.detalles.push({
+        numeroLinea: numeroLinea++,
+        planCuentaId: cuentaCxP.id,
+        glosa: `Compra exonerada según OrdenCompra ${ordenCompra.numeroDocumento}`,
+        debe: 0,
+        haber: total,
+        entidadComercialId: ordenCompra.proveedorId,
+        tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+        numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+        fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+      });
     }
     // ========================================
     // CASO 3: FISCAL CON IGV
@@ -2318,34 +2482,52 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         );
       }
 
-      borrador.detalles = [
-        {
-          numeroLinea: 1,
-          planCuentaId: cuentaCompras.id,
-          glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
-          debe: subtotal, // Sin IGV
+      // Recorrer detalles de la orden
+      for (const detalle of ordenCompra.detalles) {
+        const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+
+        if (usaFallback && mensaje) {
+          warnings.push(mensaje);
+        }
+
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuenta.id,
+          glosa: `Compra ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
+          debe: Number(detalle.subtotal), // Sin IGV
           haber: 0,
-          centroCostoId: ordenCompra.centroCostoId,
-        },
-        {
-          numeroLinea: 2,
-          planCuentaId: cuentaIGV.id,
-          glosa: `IGV 18% según OrdenCompra ${ordenCompra.codigo}`,
-          debe: totalIGV,
-          haber: 0,
-        },
-        {
-          numeroLinea: 3,
-          planCuentaId: cuentaCxP.id,
-          glosa: `Compra según OrdenCompra ${ordenCompra.codigo}`,
-          debe: 0,
-          haber: total, // Con IGV
-          entidadComercialId: ordenCompra.proveedorId,
-          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
-          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
-          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
-        },
-      ];
+          centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+        });
+      }
+
+      // Agregar IGV (DEBE)
+      borrador.detalles.push({
+        numeroLinea: numeroLinea++,
+        planCuentaId: cuentaIGV.id,
+        glosa: `IGV 18% según OrdenCompra ${ordenCompra.numeroDocumento}`,
+        debe: totalIGV,
+        haber: 0,
+      });
+
+      // Agregar CxP (HABER)
+      borrador.detalles.push({
+        numeroLinea: numeroLinea++,
+        planCuentaId: cuentaCxP.id,
+        glosa: `Compra según OrdenCompra ${ordenCompra.numeroDocumento}`,
+        debe: 0,
+        haber: total, // Con IGV
+        entidadComercialId: ordenCompra.proveedorId,
+        tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+        numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+        fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+      });
+    }
+
+    // ========================================
+    // AGREGAR WARNINGS AL BORRADOR
+    // ========================================
+    if (warnings.length > 0) {
+      borrador.warnings = warnings;
     }
 
     return borrador;
@@ -2405,9 +2587,9 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
       );
     }
 
-    // Buscar estado "PENDIENTE" para Asientos Contables (ID 76)
+    // Buscar estado "PENDIENTE" para Asientos Contables
     const estadoPendiente = await prisma.estadoMultiFuncion.findFirst({
-      where: { id: Number(76) },
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
     });
 
     if (!estadoPendiente) {
@@ -2603,8 +2785,8 @@ const eliminarAsientoContable = async (asientoId) => {
       throw new NotFoundError("Asiento contable no encontrado");
     }
 
-    // Validar que NO esté aprobado (estadoId != 77)
-    if (Number(asiento.estadoId) === 77) {
+    // Validar que NO esté aprobado
+    if (Number(asiento.estadoId) === ESTADO_ASIENTO_CONTABLE.APROBADO) {
       throw new ValidationError(
         "No se puede eliminar un asiento contable aprobado. Debe desaprobarlo primero."
       );
