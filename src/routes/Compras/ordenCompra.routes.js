@@ -16,8 +16,8 @@ const router = Router();
 
 // Rutas específicas (DEBEN IR ANTES de las rutas con parámetros)
 router.post(
-  '/generar-desde-requerimiento', 
-  autenticarJWT, 
+  '/generar-desde-requerimiento',
+  autenticarJWT,
   checkPermission('ordenCompra', 'crear'),
   ordenCompraController.generarDesdeRequerimiento
 );
@@ -27,36 +27,36 @@ router.post(
 // (Operaciones propias del modelo)
 // ========================================
 router.get(
-  '/', 
-  autenticarJWT, 
+  '/',
+  autenticarJWT,
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.listar
 );
 
 router.get(
-  '/:id', 
-  autenticarJWT, 
+  '/:id',
+  autenticarJWT,
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.obtenerPorId
 );
 
 router.post(
-  '/', 
-  autenticarJWT, 
+  '/',
+  autenticarJWT,
   checkPermission('ordenCompra', 'crear'),
   ordenCompraController.crear
 );
 
 router.put(
-  '/:id', 
-  autenticarJWT, 
+  '/:id',
+  autenticarJWT,
   checkPermission('ordenCompra', 'editar'),
   ordenCompraController.actualizar
 );
 
 router.delete(
-  '/:id', 
-  autenticarJWT, 
+  '/:id',
+  autenticarJWT,
   checkPermission('ordenCompra', 'eliminar'),
   ordenCompraController.eliminar
 );
@@ -66,23 +66,23 @@ router.delete(
 // (Operaciones propias del modelo)
 // ========================================
 router.post(
-  '/:id/aprobar', 
-  autenticarJWT, 
+  '/:id/aprobar',
+  autenticarJWT,
   checkPermission('ordenCompra', 'aprobar'),
   ordenCompraController.aprobar
 );
 
 router.post(
-  '/:id/anular', 
-  autenticarJWT, 
+  '/:id/anular',
+  autenticarJWT,
   checkPermission('ordenCompra', 'eliminar'),
   ordenCompraController.anular
 );
 
 // Reactivar Orden de Compra
 router.put(
-  '/:id/reactivar', 
-  autenticarJWT, 
+  '/:id/reactivar',
+  autenticarJWT,
   checkPermission('ordenCompra', 'editar'),
   ordenCompraController.reactivarDocumentoOrdenCompra
 );
@@ -92,22 +92,22 @@ router.put(
 // (Generan recursos derivados - solo requieren 'ver')
 // ========================================
 router.post(
-  '/:id/generar-movimiento', 
-  autenticarJWT, 
+  '/:id/generar-movimiento',
+  autenticarJWT,
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.generarMovimiento
 );
 
 router.post(
-  '/:id/generar-kardex', 
-  autenticarJWT, 
+  '/:id/generar-kardex',
+  autenticarJWT,
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.generarKardex
 );
 
 router.post(
-  '/:id/regenerar-kardex', 
-  autenticarJWT, 
+  '/:id/regenerar-kardex',
+  autenticarJWT,
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.regenerarKardex
 );
@@ -117,8 +117,8 @@ router.post(
 // (Operación propia del modelo)
 // ========================================
 router.put(
-  '/:id/partir', 
-  autenticarJWT, 
+  '/:id/partir',
+  autenticarJWT,
   checkPermission('ordenCompra', 'editar'),
   ordenCompraController.partirOrdenCompra
 );
@@ -128,8 +128,8 @@ router.put(
 // (Genera recurso derivado - solo requiere 'ver')
 // ========================================
 router.post(
-  '/:id/generar-cxp', 
-  autenticarJWT, 
+  '/:id/generar-cxp',
+  autenticarJWT,
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.generarCuentaPorPagar
 );
@@ -151,6 +151,15 @@ router.post(
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.guardarAsientoContable
 );
+
+// ⭐ NUEVO: Ruta PUT para actualizar asiento existente
+router.put(
+  '/:id/guardar-asiento',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.guardarAsientoContable
+);
+
 
 // ========================================
 // RUTA DE ELIMINAR ASIENTO

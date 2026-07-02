@@ -119,6 +119,20 @@ const obtenerPorId = async (id) => {
         moneda: true,
         unidadNegocio: true,
         periodoContable: true, // ✅ AGREGADO
+        asientosContables: {
+          include: {
+            estado: true,
+            detalles: {
+              include: {
+                planCuenta: true,
+                centroCosto: true,
+                entidadComercial: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { fechaAsiento: "desc" },
+        },
         estado: true,
         detalles: {
           include: {
@@ -456,6 +470,10 @@ const actualizar = async (id, data) => {
         urlDocumentoRef: data.urlDocumentoRef,
         porcentajeIGV: data.porcentajeIGV,
         esExoneradoAlIGV: data.esExoneradoAlIGV,
+        subtotal: data.subtotal,
+        totalDescuentos: data.totalDescuentos,
+        totalIGV: data.totalIGV,
+        total: data.total,
         tipoDocumentoFinalId: data.tipoDocumentoFinalId,
         serieDocFinalId: data.serieDocFinalId,
         numeroDocumentoFinal: data.numeroDocumentoFinal,
@@ -2323,8 +2341,8 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         }
       }
 
-      // 3. Buscar cuenta en BD
-      const cuentaFallback = await prisma.planCuentasContable.findFirst({
+      // 3. Buscar cuenta en BD (PRIMERO intentar con imputables)
+      let cuentaFallback = await prisma.planCuentasContable.findFirst({
         where: {
           codigoCuenta: { startsWith: codigoBuscar },
           activo: true,
@@ -2332,11 +2350,56 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         },
       });
 
+      // 4. Si no encuentra imputable, buscar SIN filtro de esImputable
+      if (!cuentaFallback) {
+        cuentaFallback = await prisma.planCuentasContable.findFirst({
+          where: {
+            codigoCuenta: { startsWith: codigoBuscar },
+            activo: true,
+          },
+        });
+      }
+
+      // 5. Si tampoco encuentra con código específico, intentar con "60"
+      if (!cuentaFallback) {
+        cuentaFallback = await prisma.planCuentasContable.findFirst({
+          where: {
+            codigoCuenta: { startsWith: "60" },
+            activo: true,
+          },
+        });
+      }
+
+      // 6. Si definitivamente no hay ninguna cuenta, lanzar error
       if (!cuentaFallback) {
         throw new ValidationError(
-          `No se encontró cuenta contable para el producto "${producto.descripcionBase}". ` +
-          `Configure la cuenta en el producto o verifique el plan de cuentas.`
+          `No se encontró ninguna cuenta contable de compras (60*) activa. ` +
+          `Verifique el plan de cuentas o asigne una cuenta específica al producto "${producto.descripcionBase}".`
         );
+      }
+
+      if (!cuentaFallback) {
+        // Si no se encuentra cuenta específica, buscar cuenta genérica "60"
+        const cuentaGenerica = await prisma.planCuentasContable.findFirst({
+          where: {
+            codigoCuenta: { startsWith: "60" },
+            activo: true,
+            esImputable: true,
+          },
+        });
+
+        if (!cuentaGenerica) {
+          throw new ValidationError(
+            `No se encontró ninguna cuenta contable de compras (60*) activa e imputable. ` +
+            `Verifique el plan de cuentas.`
+          );
+        }
+
+        return {
+          cuenta: cuentaGenerica,
+          usaFallback: true,
+          mensaje: `⚠️ Producto "${producto.descripcionBase}": No tiene cuenta asignada ni familia configurada. Se usó cuenta genérica ${cuentaGenerica.codigoCuenta} - ${cuentaGenerica.descripcion}.`,
+        };
       }
 
       return {
@@ -2552,6 +2615,22 @@ const generarBorradorAsiento = async (ordenCompraId) => {
  */
 const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => {
   try {
+    // ⭐ VALIDAR QUE asientoData TENGA LA ESTRUCTURA CORRECTA
+
+    if (!asientoData) {
+      throw new ValidationError("No se recibieron datos del asiento contable");
+    }
+
+    if (!asientoData.detalles || !Array.isArray(asientoData.detalles)) {
+      throw new ValidationError(
+        `Estructura de asiento inválida. Se esperaba 'detalles' como array, se recibió: ${typeof asientoData.detalles}`
+      );
+    }
+
+    if (asientoData.detalles.length === 0) {
+      throw new ValidationError("El asiento debe tener al menos un detalle");
+    }
+
     // ✅ DETECTAR SI ES EDICIÓN O CREACIÓN
     const esEdicion = asientoData.id !== undefined && asientoData.id !== null;
 
@@ -2571,11 +2650,11 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
 
     // Calcular totales
     const totalDebe = asientoData.detalles.reduce(
-      (sum, d) => sum + Number(d.debe),
+      (sum, d) => sum + Number(d.debe || 0),
       0
     );
     const totalHaber = asientoData.detalles.reduce(
-      (sum, d) => sum + Number(d.haber),
+      (sum, d) => sum + Number(d.haber || 0),
       0
     );
     const diferencia = totalDebe - totalHaber;
