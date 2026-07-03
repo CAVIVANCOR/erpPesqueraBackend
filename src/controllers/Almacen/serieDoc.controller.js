@@ -52,3 +52,21 @@ export async function eliminar(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Generar nuevo correlativo (incrementa SerieDoc.correlativo)
+ */
+export async function generarCorrelativo(req, res, next) {
+  try {
+    const { serieDocId } = req.body;
+
+    if (!serieDocId) {
+      return res.status(400).json({ error: 'serieDocId es requerido' });
+    }
+
+    const resultado = await serieDocService.generarCorrelativo(serieDocId);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

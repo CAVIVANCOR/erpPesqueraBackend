@@ -109,10 +109,51 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Generar nuevo correlativo (incrementa SerieDoc.correlativo)
+ */
+const generarCorrelativo = async (serieDocId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const serie = await tx.serieDoc.findUnique({
+        where: { id: Number(serieDocId) }
+      });
+
+      if (!serie) {
+        throw new NotFoundError('Serie no encontrada');
+      }
+
+      const nuevoCorrelativo = Number(serie.correlativo) + 1;
+      const numSerieDoc = String(serie.serie).padStart(Number(serie.numCerosIzqSerie), '0');
+      const numCorreDoc = String(nuevoCorrelativo).padStart(Number(serie.numCerosIzqCorre), '0');
+      const numeroDocumento = `${numSerieDoc}-${numCorreDoc}`;
+
+      await tx.serieDoc.update({
+        where: { id: Number(serieDocId) },
+        data: { correlativo: nuevoCorrelativo }
+      });
+
+      return {
+        tipoDocumentoId: Number(serie.tipoDocumentoId),
+        serieDocId: Number(serie.id),
+        numSerieDoc,
+        numCorreDoc,
+        numeroDocumento
+      };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  generarCorrelativo
 };

@@ -45,4 +45,11 @@ router.delete(
   serieDocController.eliminar
 );
 
+router.post(
+  '/generar-correlativo',
+  autenticarJWT,
+  checkPermission('serieDoc', 'editar'),
+  serieDocController.generarCorrelativo
+);
+
 export default router;
