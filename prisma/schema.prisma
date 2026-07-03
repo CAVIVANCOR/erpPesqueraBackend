@@ -1247,6 +1247,11 @@ model PreFactura {
   dcmtoAfectoNCNDId           BigInt?                         // Id del Documento en PreFactura Afectado por la NC o ND
   numeroDcmtoAfectoNCND       String?     @db.VarChar(40)     // Numero del Documento en PreFactura Afectado por la NC o ND
   
+  // Impuesto a la Renta (Recibos por Honorarios)
+  aplicaImpuestoRenta         Boolean     @default(false)                  // true = Aplica retención de Impuesto a la Renta
+  porcentajeImpuestoRenta     Decimal?    @db.Decimal(5, 2)                // Porcentaje de Impuesto a la Renta (normalmente 8%)
+  montoImpuestoRenta          Decimal?    @db.Decimal(18, 2)               // Monto calculado de Impuesto a la Renta
+  
   // Relaciones
   empresa                     Empresa                 @relation(fields: [empresaId], references: [id])
   tipoDocumento               TipoDocumento           @relation(fields: [tipoDocumentoId], references: [id])
@@ -2515,6 +2520,7 @@ model Empresa {
   nubefactToken                       String?     @db.VarChar(500)        // Token de autenticación de Nubefact
   ultimoCorrelativoOperacionCaja      BigInt?     @default(0)
   porcentajePercepcion                Decimal?    @db.Decimal(5, 2)  // 🆕 AGREGAR ESTA LÍNEA
+  porcentajeImpuestoRenta             Decimal?    @default(8.00) @db.Decimal(5, 2)  // % Impuesto a la Renta para Recibos por Honorarios
 
 
   sedes                         SedesEmpresa[]
@@ -7036,6 +7042,11 @@ model OrdenCompra {
   totalDescuentos             Decimal?     @db.Decimal(18, 2)               // Total de descuentos aplicados
   totalIGV                    Decimal?     @db.Decimal(18, 2)               // Total de IGV (18%)
   total                       Decimal?     @db.Decimal(18, 2)               // Total final a pagar
+
+  // Impuesto a la Renta (Recibos por Honorarios del Proveedor)
+  aplicaImpuestoRenta         Boolean     @default(false)                  // true = Aplica retención de Impuesto a la Renta
+  porcentajeImpuestoRenta     Decimal?    @db.Decimal(5, 2)                // Porcentaje de Impuesto a la Renta (normalmente 8%)
+  montoImpuestoRenta          Decimal?    @db.Decimal(18, 2)               // Monto calculado de Impuesto a la Renta
 
   dcmtoAfectoNCND             OrdenCompra?            @relation("OrdenCompraAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
   notasCreditoDebito          OrdenCompra[]           @relation("OrdenCompraAfectadaNCND")  // NC/ND que afectan a esta OC
