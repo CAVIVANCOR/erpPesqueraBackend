@@ -12,7 +12,7 @@ import {
   eliminarKardexDeMovimiento,
   recalcularSaldosAfectados,
 } from '../Almacen/kardexGenerico.service.js';
-import { ESTADO_PERIODO_CONTABLE,ESTADO_PREFACTURA, ESTADO_ASIENTO_CONTABLE  } from "../../utils/estados.constants.js";
+import { ESTADO_PERIODO_CONTABLE, ESTADO_PREFACTURA, ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 
 // ========================================
 // CONSTANTES DE ESTADOS PREFACTURA
@@ -2301,11 +2301,11 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
     // VALIDACIONES CRÍTICAS
     // ========================================
 
-    // 1. Validar que el estado sea APROBADO (>45)
+    // 1. Validar que el estado sea APROBADO, FACTURADO o EMITIDO
     const estadoActual = Number(preFactura.estadoId);
     if (estadoActual <= ESTADO_PREFACTURA.PENDIENTE) {
       throw new ValidationError(
-        'Solo se pueden reactivar PreFacturas APROBADAS'
+        'Solo se pueden reactivar PreFacturas APROBADAS, FACTURADAS o EMITIDAS'
       );
     }
 
@@ -2446,7 +2446,11 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
       let asientosEliminados = 0;
       const asientosContables = await tx.asientoContable.findMany({
         where: {
-          preFacturasId: { has: id },
+          preFacturas: {
+            some: {
+              id: id
+            }
+          },
         },
       });
 

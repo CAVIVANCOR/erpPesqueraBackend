@@ -114,7 +114,8 @@ const listar = async (filtros = {}) => {
             color: true
           }
         },
-        cliente: true
+        cliente: true,
+        ubicacionFisica: true  // ← AGREGAR ESTA LÍNEA
       },
       orderBy: [
         { producto: { descripcionArmada: 'asc' } },

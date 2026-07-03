@@ -103,8 +103,8 @@ export async function reactivarDocumento(req, res, next) {
     }
 
     const resultado = await preFacturaService.reactivarDocumentoPreFactura(
-      BigInt(id),
-      BigInt(usuarioId)
+      Number(id),
+      Number(usuarioId)
     );
 
     res.status(200).json(toJSONBigInt(resultado));
@@ -119,7 +119,7 @@ export async function reactivarDocumento(req, res, next) {
 export async function generarComprobanteElectronico(req, res, next) {
   try {
     const { id } = req.params;
-    const comprobanteElectronico = await preFacturaService.generarComprobanteElectronico(BigInt(id));
+    const comprobanteElectronico = await preFacturaService.generarComprobanteElectronico(Number(id));
 
     res.status(200).json({
       message: 'Comprobante Electrónico generado exitosamente',

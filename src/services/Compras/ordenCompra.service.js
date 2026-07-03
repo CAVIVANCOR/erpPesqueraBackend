@@ -1210,7 +1210,7 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         costoUnitario: det.precioUnitario || 0,
         observaciones: null,
         detalleReqCompraId: det.detalleReqCompraId || null,
-        ubicacionFisicaDestinoId: datosKardex.ubicacionFisicaId ? BigInt(datosKardex.ubicacionFisicaId) : null, // ⭐ AGREGAR ESTA LÍNEA
+        ubicacionFisicaDestinoId: datosKardex.ubicacionFisicaId ? Number(datosKardex.ubicacionFisicaId) : null, // ⭐ AGREGAR ESTA LÍNEA
       }));
 
       // ========================================
