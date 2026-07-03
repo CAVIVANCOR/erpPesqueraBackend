@@ -70,3 +70,21 @@ export async function generarCorrelativo(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Buscar series por empresa y tipo de documento
+ */
+export async function buscarPorEmpresaYTipo(req, res, next) {
+  try {
+    const { empresaId, tipoDocumentoId } = req.query;
+
+    if (!empresaId || !tipoDocumentoId) {
+      return res.status(400).json({ error: 'empresaId y tipoDocumentoId son requeridos' });
+    }
+
+    const series = await serieDocService.buscarPorEmpresaYTipo(Number(empresaId), Number(tipoDocumentoId));
+    res.json(toJSONBigInt(series));
+  } catch (err) {
+    next(err);
+  }
+}

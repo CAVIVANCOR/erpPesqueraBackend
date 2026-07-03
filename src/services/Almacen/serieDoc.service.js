@@ -148,6 +148,24 @@ const generarCorrelativo = async (serieDocId) => {
   }
 };
 
+const buscarPorEmpresaYTipo = async (empresaId, tipoDocumentoId) => {
+  try {
+    const series = await prisma.serieDoc.findMany({
+      where: {
+        empresaId: Number(empresaId),
+        tipoDocumentoId: Number(tipoDocumentoId),
+        activo: true
+      },
+      orderBy: {
+        serie: 'asc'
+      }
+    });
+    return series;
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
 
 export default {
   listar,
@@ -155,5 +173,7 @@ export default {
   crear,
   actualizar,
   eliminar,
-  generarCorrelativo
+  generarCorrelativo,
+  buscarPorEmpresaYTipo
+
 };

@@ -326,6 +326,9 @@ const crear = async (data) => {
           data.porcentajeIGV !== undefined
             ? data.porcentajeIGV
             : empresa.porcentajeIgv,
+        aplicaImpuestoRenta: data.aplicaImpuestoRenta || false,
+        porcentajeImpuestoRenta: data.porcentajeImpuestoRenta || null,
+        montoImpuestoRenta: data.montoImpuestoRenta || null,
         esExoneradoAlIGV:
           data.esExoneradoAlIGV !== undefined ? data.esExoneradoAlIGV : false,
         subtotal: data.subtotal,
@@ -420,6 +423,9 @@ const actualizar = async (id, data) => {
         urlDocumentoRef: data.urlDocumentoRef,
         porcentajeIGV: data.porcentajeIGV,
         esExoneradoAlIGV: data.esExoneradoAlIGV,
+        aplicaImpuestoRenta: data.aplicaImpuestoRenta,
+        porcentajeImpuestoRenta: data.porcentajeImpuestoRenta,
+        montoImpuestoRenta: data.montoImpuestoRenta,
         subtotal: data.subtotal,
         totalDescuentos: data.totalDescuentos,
         totalIGV: data.totalIGV,

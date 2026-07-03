@@ -501,6 +501,9 @@ const crear = async (data) => {
         exoneradoIgv:
           data.exoneradoIgv !== undefined ? data.exoneradoIgv : false,
         porcentajeIgv: data.porcentajeIgv,
+        aplicaImpuestoRenta: data.aplicaImpuestoRenta || false,
+        porcentajeImpuestoRenta: data.porcentajeImpuestoRenta || null,
+        montoImpuestoRenta: data.montoImpuestoRenta || null,
         factorExportacion: data.factorExportacion,
         factorExportacionReal: data.factorExportacionReal,
         observaciones: data.observaciones,
@@ -609,6 +612,15 @@ const actualizar = async (id, data) => {
       nroLiquidacionFacturacion: data.hasOwnProperty('nroLiquidacionFacturacion')
         ? (data.nroLiquidacionFacturacion?.trim() || null)
         : existente.nroLiquidacionFacturacion,
+      aplicaImpuestoRenta: data.hasOwnProperty('aplicaImpuestoRenta')
+        ? data.aplicaImpuestoRenta
+        : existente.aplicaImpuestoRenta,
+      porcentajeImpuestoRenta: data.hasOwnProperty('porcentajeImpuestoRenta')
+        ? data.porcentajeImpuestoRenta
+        : existente.porcentajeImpuestoRenta,
+      montoImpuestoRenta: data.hasOwnProperty('montoImpuestoRenta')
+        ? data.montoImpuestoRenta
+        : existente.montoImpuestoRenta,
     };
 
     return await prisma.preFactura.update({

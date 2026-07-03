@@ -17,6 +17,21 @@ router.get(
   serieDocController.listar
 );
 
+// ⚠️ IMPORTANTE: Rutas específicas ANTES de rutas con parámetros
+router.get(
+  '/buscar-por-empresa-tipo',
+  autenticarJWT,
+  checkPermission('serieDoc', 'ver'),
+  serieDocController.buscarPorEmpresaYTipo
+);
+
+router.post(
+  '/generar-correlativo',
+  autenticarJWT,
+  checkPermission('serieDoc', 'editar'),
+  serieDocController.generarCorrelativo
+);
+
 router.get(
   '/:id', 
   autenticarJWT, 
@@ -43,13 +58,6 @@ router.delete(
   autenticarJWT, 
   checkPermission('serieDoc', 'eliminar'),
   serieDocController.eliminar
-);
-
-router.post(
-  '/generar-correlativo',
-  autenticarJWT,
-  checkPermission('serieDoc', 'editar'),
-  serieDocController.generarCorrelativo
 );
 
 export default router;
