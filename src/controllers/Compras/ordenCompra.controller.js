@@ -87,12 +87,12 @@ export async function anular(req, res, next) {
  */
 export async function reactivarDocumentoOrdenCompra(req, res, next) {
   try {
-    const id = BigInt(req.params.id);
+    const id = Number(req.params.id);
     const usuarioId = req.user?.id;
 
     const resultado = await ordenCompraService.reactivarDocumentoOrdenCompra(
       id,
-      usuarioId ? BigInt(usuarioId) : null
+      usuarioId ? Number(usuarioId) : null
     );
 
     res.status(200).json(toJSONBigInt(resultado));
@@ -118,7 +118,7 @@ export async function generarMovimiento(req, res, next) {
     const resultado = await ordenCompraService.generarKardex(
       id,
       datosKardex,
-      BigInt(usuarioId)
+      Number(usuarioId)
     );
     res.json(toJSONBigInt(resultado));
   } catch (err) {
@@ -138,7 +138,7 @@ export async function generarKardex(req, res, next) {
       return res.status(401).json({ error: 'Usuario no autenticado' });
     }
 
-    const resultado = await ordenCompraService.generarKardex(id, BigInt(usuarioId));
+    const resultado = await ordenCompraService.generarKardex(id, Number(usuarioId));
     res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
@@ -168,8 +168,8 @@ export const regenerarKardex = async (req, res, next) => {
     }
 
     const resultado = await ordenCompraService.regenerarKardex(
-      BigInt(id),
-      BigInt(usuarioId)
+      Number(id),
+      Number(usuarioId)
     );
 
     res.json(toJSONBigInt(resultado));
@@ -184,7 +184,7 @@ export const regenerarKardex = async (req, res, next) => {
  */
 export async function partirOrdenCompra(req, res, next) {
   try {
-    const id = BigInt(req.params.id);
+    const id = Number(req.params.id);
     const resultado = await ordenCompraService.partirOrdenCompra(id);
 
     res.status(200).json(toJSONBigInt({
@@ -203,7 +203,7 @@ export async function partirOrdenCompra(req, res, next) {
  */
 export async function generarCuentaPorPagar(req, res, next) {
   try {
-    const id = BigInt(req.params.id);
+    const id = Number(req.params.id);
     const resultado = await ordenCompraService.generarCuentaPorPagar(id);
 
     res.status(200).json(toJSONBigInt({
@@ -222,7 +222,7 @@ export async function generarCuentaPorPagar(req, res, next) {
  */
 export async function generarBorradorAsiento(req, res, next) {
   try {
-    const id = BigInt(req.params.id);
+    const id = Number(req.params.id);
     const borrador = await ordenCompraService.generarBorradorAsiento(id);
 
     res.status(200).json(toJSONBigInt({
@@ -240,7 +240,7 @@ export async function generarBorradorAsiento(req, res, next) {
  */
 export async function guardarAsientoContable(req, res, next) {
   try {
-    const id = BigInt(req.params.id);
+    const id = Number(req.params.id);
     // Extraer asientoData correctamente
     let asientoData = req.body.asientoData || req.body;
 
@@ -248,7 +248,7 @@ export async function guardarAsientoContable(req, res, next) {
     if (asientoData.success && asientoData.data) {
       asientoData = asientoData.data;
     }
-    const creadoPor = req.usuario?.id ? BigInt(req.usuario.id) : null;
+    const creadoPor = req.usuario?.id ? Number(req.usuario.id) : null;
 
     const asiento = await ordenCompraService.guardarAsientoContable(
       id,
@@ -272,7 +272,7 @@ export async function guardarAsientoContable(req, res, next) {
  */
 export async function eliminarAsientoContable(req, res, next) {
   try {
-    const asientoId = BigInt(req.params.asientoId);
+    const asientoId = Number(req.params.asientoId);
     await ordenCompraService.eliminarAsientoContable(asientoId);
 
     res.status(200).json(toJSONBigInt({

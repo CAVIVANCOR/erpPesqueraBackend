@@ -71,7 +71,9 @@ const listar = async () => {
         formaPago: true,
         moneda: true,
         unidadNegocio: true,
-        periodoContable: true, // ✅ AGREGADO
+        periodoContable: true,
+        tipoDocumentoFinal: true, // ✅ AGREGAR
+        estado: true,
         detalles: {
           include: {
             producto: true,
@@ -231,6 +233,7 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
+    // ✅ Validaciones iniciales
     if (!data.empresaId || !data.tipoDocumentoId || !data.proveedorId) {
       throw new ValidationError(
         "Los campos empresaId, tipoDocumentoId y proveedorId son obligatorios.",
@@ -249,38 +252,37 @@ const crear = async (data) => {
     );
 
     return await prisma.$transaction(async (tx) => {
-      const empresa = await tx.empresa.findUnique({
-        where: { id: Number(data.empresaId) },
-      });
+      // ✅ Obtener empresa y serie en paralelo
+      const [empresa, serie] = await Promise.all([
+        tx.empresa.findUnique({
+          where: { id: Number(data.empresaId) },
+        }),
+        tx.serieDoc.findUnique({
+          where: { id: Number(data.serieDocId) },
+        }),
+      ]);
 
       if (!empresa) {
         throw new ValidationError("Empresa no encontrada.");
       }
 
-      const serie = await tx.serieDoc.findUnique({
-        where: { id: Number(data.serieDocId) },
-      });
-
       if (!serie) {
         throw new ValidationError("Serie de documento no encontrada.");
       }
 
+      // ✅ Generar correlativo y número de documento
       const nuevoCorrelativo = Number(serie.correlativo) + 1;
-      const numSerie = String(serie.serie).padStart(
-        serie.numCerosIzqSerie,
-        "0",
-      );
-      const numCorre = String(nuevoCorrelativo).padStart(
-        serie.numCerosIzqCorre,
-        "0",
-      );
+      const numSerie = String(serie.serie).padStart(serie.numCerosIzqSerie, "0");
+      const numCorre = String(nuevoCorrelativo).padStart(serie.numCerosIzqCorre, "0");
       const numeroDocumento = `${numSerie}-${numCorre}`;
 
+      // ✅ Actualizar correlativo de serie
       await tx.serieDoc.update({
         where: { id: Number(data.serieDocId) },
-        data: { correlativo: Number(nuevoCorrelativo) },
+        data: { correlativo: nuevoCorrelativo },
       });
 
+      // ✅ Obtener estado inicial
       const estadoInicial = await tx.estadoMultiFuncion.findFirst({
         where: { id: ESTADO_ORDEN_COMPRA.PENDIENTE },
       });
@@ -291,68 +293,63 @@ const crear = async (data) => {
         );
       }
 
-      const datosLimpios = {
-        empresaId: data.empresaId,
-        tipoDocumentoId: data.tipoDocumentoId,
-        serieDocId: data.serieDocId,
-        numSerieDoc: numSerie,
-        numCorreDoc: numCorre,
-        numeroDocumento,
-        fechaDocumento: data.fechaDocumento || new Date(),
-        fechaContable: data.fechaContable,
-        periodoContableId: data.periodoContableId,
-        requerimientoCompraId: data.requerimientoCompraId,
-        proveedorId: data.proveedorId,
-        formaPagoId: data.formaPagoId,
-        monedaId: data.monedaId,
-        tipoCambio: tipoCambioFinal, // ✅ Usar valor validado
-        fechaEntrega: data.fechaEntrega,
-        fechaRecepcion: data.fechaRecepcion,
-        fechaVencimiento: data.fechaVencimiento,
-        solicitanteId: data.solicitanteId,
-        aprobadoPorId: data.aprobadoPorId,
-        estadoId: estadoInicial.id,
-        centroCostoId: data.centroCostoId,
-        movIngresoAlmacenId: data.movIngresoAlmacenId,
-        observaciones: data.observaciones,
-        urlOrdenCompraPdf: data.urlOrdenCompraPdf,
-        urlDocumentoRef: data.urlDocumentoRef,
-        unidadNegocioId: data.unidadNegocioId,
-        creadoEn: data.creadoEn || new Date(),
-        actualizadoEn: data.actualizadoEn || new Date(),
-        creadoPor: data.creadoPor,
-        actualizadoPor: data.actualizadoPor,
-        porcentajeIGV:
-          data.porcentajeIGV !== undefined
-            ? data.porcentajeIGV
-            : empresa.porcentajeIgv,
-        aplicaImpuestoRenta: data.aplicaImpuestoRenta || false,
-        porcentajeImpuestoRenta: data.porcentajeImpuestoRenta || null,
-        montoImpuestoRenta: data.montoImpuestoRenta || null,
-        esExoneradoAlIGV:
-          data.esExoneradoAlIGV !== undefined ? data.esExoneradoAlIGV : false,
-        subtotal: data.subtotal,
-        totalDescuentos: data.totalDescuentos,
-        totalIGV: data.totalIGV,
-        total: data.total,
-        tipoDocumentoFinalId: data.tipoDocumentoFinalId,
-        serieDocFinalId: data.serieDocFinalId,
-        numeroDocumentoFinal: data.numeroDocumentoFinal,
-        numSerieDocFinal: data.numSerieDocFinal,
-        numCorreDocFinal: data.numCorreDocFinal,
-        comprobanteRecibido: data.comprobanteRecibido,
-        fechaRecepcionComprobante: data.fechaRecepcionComprobante,
-        direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
-        contactoProveedorId: data.contactoProveedorId,
-        facturado: data.facturado !== undefined ? data.facturado : false,
-        fechaFacturacion: data.fechaFacturacion,
-        esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
-        ordenCompraOrigenId: data.ordenCompraOrigenId,
-        esParticionada:
-          data.esParticionada !== undefined ? data.esParticionada : false,
-      };
+      // ✅ Crear orden de compra
       const ordenCreada = await tx.ordenCompra.create({
-        data: datosLimpios,
+        data: {
+          empresaId: data.empresaId,
+          tipoDocumentoId: data.tipoDocumentoId,
+          serieDocId: data.serieDocId,
+          numSerieDoc: numSerie,
+          numCorreDoc: numCorre,
+          numeroDocumento,
+          fechaDocumento: data.fechaDocumento || new Date(),
+          fechaContable: data.fechaContable,
+          periodoContableId: data.periodoContableId,
+          requerimientoCompraId: data.requerimientoCompraId,
+          proveedorId: data.proveedorId,
+          formaPagoId: data.formaPagoId,
+          monedaId: data.monedaId,
+          tipoCambio: tipoCambioFinal,
+          fechaEntrega: data.fechaEntrega,
+          fechaRecepcion: data.fechaRecepcion,
+          fechaVencimiento: data.fechaVencimiento,
+          solicitanteId: data.solicitanteId,
+          aprobadoPorId: data.aprobadoPorId,
+          estadoId: estadoInicial.id,
+          centroCostoId: data.centroCostoId,
+          movIngresoAlmacenId: data.movIngresoAlmacenId,
+          observaciones: data.observaciones,
+          urlOrdenCompraPdf: data.urlOrdenCompraPdf,
+          urlDocumentoRef: data.urlDocumentoRef,
+          unidadNegocioId: data.unidadNegocioId,
+          creadoEn: data.creadoEn || new Date(),
+          actualizadoEn: data.actualizadoEn || new Date(),
+          creadoPor: data.creadoPor,
+          actualizadoPor: data.actualizadoPor,
+          porcentajeIGV: data.porcentajeIGV !== undefined ? data.porcentajeIGV : empresa.porcentajeIgv,
+          aplicaImpuestoRenta: data.aplicaImpuestoRenta || false,
+          porcentajeImpuestoRenta: data.porcentajeImpuestoRenta || null,
+          montoImpuestoRenta: data.montoImpuestoRenta || null,
+          esExoneradoAlIGV: data.esExoneradoAlIGV !== undefined ? data.esExoneradoAlIGV : false,
+          pagosPreviosSI: data.pagosPreviosSI !== undefined ? data.pagosPreviosSI : null,
+          subtotal: data.subtotal,
+          totalDescuentos: data.totalDescuentos,
+          totalIGV: data.totalIGV,
+          total: data.total,
+          tipoDocumentoFinalId: data.tipoDocumentoFinalId,
+          numeroDocumentoFinal: data.numeroDocumentoFinal,
+          numSerieDocFinal: data.numSerieDocFinal,
+          numCorreDocFinal: data.numCorreDocFinal,
+          comprobanteRecibido: data.comprobanteRecibido,
+          fechaRecepcionComprobante: data.fechaRecepcionComprobante,
+          direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
+          contactoProveedorId: data.contactoProveedorId,
+          facturado: data.facturado !== undefined ? data.facturado : false,
+          fechaFacturacion: data.fechaFacturacion,
+          esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
+          ordenCompraOrigenId: data.ordenCompraOrigenId,
+          esParticionada: data.esParticionada !== undefined ? data.esParticionada : false,
+        },
         include: {
           empresa: true,
           tipoDocumento: true,
@@ -391,147 +388,84 @@ const actualizar = async (id, data) => {
         data.fechaDocumento || existe.fechaDocumento,
       );
     }
-
     const actualizado = await prisma.$transaction(async (tx) => {
-      // Objeto para edición (CON relaciones para validación)
-      const dataParaEdicion = {
-        empresaId: data.empresaId,
-        tipoDocumentoId: data.tipoDocumentoId,
-        serieDocId: data.serieDocId,
-        numSerieDoc: data.numSerieDoc,
-        numCorreDoc: data.numCorreDoc,
-        numeroDocumento: data.numeroDocumento,
-        fechaDocumento: data.fechaDocumento,
-        fechaContable: data.fechaContable,
-        periodoContableId: data.periodoContableId,
-        fechaVencimiento: data.fechaVencimiento,
-        requerimientoCompraId: data.requerimientoCompraId,
-        proveedorId: data.proveedorId,
-        formaPagoId: data.formaPagoId,
-        monedaId: data.monedaId,
-        tipoCambio: data.tipoCambio,
-        fechaEntrega: data.fechaEntrega,
-        fechaRecepcion: data.fechaRecepcion,
-        solicitanteId: data.solicitanteId,
-        aprobadoPorId: data.aprobadoPorId,
-        estadoId: data.estadoId,
-        centroCostoId: data.centroCostoId,
-        unidadNegocioId: data.unidadNegocioId,
-        movIngresoAlmacenId: data.movIngresoAlmacenId,
-        observaciones: data.observaciones,
-        urlOrdenCompraPdf: data.urlOrdenCompraPdf,
-        urlDocumentoRef: data.urlDocumentoRef,
-        porcentajeIGV: data.porcentajeIGV,
-        esExoneradoAlIGV: data.esExoneradoAlIGV,
-        aplicaImpuestoRenta: data.aplicaImpuestoRenta,
-        porcentajeImpuestoRenta: data.porcentajeImpuestoRenta,
-        montoImpuestoRenta: data.montoImpuestoRenta,
-        subtotal: data.subtotal,
-        totalDescuentos: data.totalDescuentos,
-        totalIGV: data.totalIGV,
-        total: data.total,
-        tipoDocumentoFinalId: data.tipoDocumentoFinalId,
-        serieDocFinalId: data.serieDocFinalId,
-        numeroDocumentoFinal: data.numeroDocumentoFinal,
-        numSerieDocFinal: data.numSerieDocFinal,
-        numCorreDocFinal: data.numCorreDocFinal,
-        comprobanteRecibido: data.comprobanteRecibido,
-        fechaRecepcionComprobante: data.fechaRecepcionComprobante,
-        direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
-        contactoProveedorId: data.contactoProveedorId,
-        facturado: data.facturado,
-        fechaFacturacion: data.fechaFacturacion,
-        esGerencial: data.esGerencial,
-        ordenCompraOrigenId: data.ordenCompraOrigenId,
-        esParticionada: data.esParticionada,
-      };
-
-      // Objeto para grabación (SIN relaciones, solo IDs)
-      const dataParaGrabacion = {
-        empresaId: data.empresaId,
-        tipoDocumentoId: data.tipoDocumentoId,
-        serieDocId: data.serieDocId,
-        numSerieDoc: data.numSerieDoc,
-        numCorreDoc: data.numCorreDoc,
-        numeroDocumento: data.numeroDocumento,
-        fechaDocumento: data.fechaDocumento,
-        fechaContable: data.fechaContable,
-        periodoContableId: data.periodoContableId,
-        fechaVencimiento: data.fechaVencimiento,
-        requerimientoCompraId: data.requerimientoCompraId,
-        proveedorId: data.proveedorId,
-        formaPagoId: data.formaPagoId,
-        monedaId: data.monedaId,
-        tipoCambio: data.tipoCambio,
-        fechaEntrega: data.fechaEntrega,
-        fechaRecepcion: data.fechaRecepcion,
-        solicitanteId: data.solicitanteId,
-        aprobadoPorId: data.aprobadoPorId,
-        estadoId: data.estadoId,
-        centroCostoId: data.centroCostoId,
-        unidadNegocioId: data.unidadNegocioId,
-        movIngresoAlmacenId: data.movIngresoAlmacenId,
-        observaciones: data.observaciones,
-        urlOrdenCompraPdf: data.urlOrdenCompraPdf,
-        urlDocumentoRef: data.urlDocumentoRef,
-        porcentajeIGV: data.porcentajeIGV,
-        esExoneradoAlIGV: data.esExoneradoAlIGV,
-        subtotal: data.subtotal,
-        totalDescuentos: data.totalDescuentos,
-        totalIGV: data.totalIGV,
-        total: data.total,
-        tipoDocumentoFinalId: data.tipoDocumentoFinalId,
-        serieDocFinalId: data.serieDocFinalId,
-        numeroDocumentoFinal: data.numeroDocumentoFinal,
-        numSerieDocFinal: data.numSerieDocFinal,
-        numCorreDocFinal: data.numCorreDocFinal,
-        comprobanteRecibido: data.comprobanteRecibido,
-        fechaRecepcionComprobante: data.fechaRecepcionComprobante,
-        direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
-        contactoProveedorId: data.contactoProveedorId,
-        facturado: data.facturado,
-        fechaFacturacion: data.fechaFacturacion,
-        esGerencial: data.esGerencial,
-        ordenCompraOrigenId: data.ordenCompraOrigenId,
-        esParticionada: data.esParticionada,
-        actualizadoEn: new Date(),
-      };
-
+      // ✅ Actualizar orden de compra
       const ordenActualizada = await tx.ordenCompra.update({
         where: { id },
-        data: dataParaGrabacion,
-        include: {
-          empresa: true,
-          tipoDocumento: true,
-          serieDoc: true,
-          proveedor: true,
-          moneda: true,
-          unidadNegocio: true,
-          detalles: {
-            include: {
-              producto: true,
-            },
-          },
+        data: {
+          empresaId: data.empresaId,
+          tipoDocumentoId: data.tipoDocumentoId,
+          serieDocId: data.serieDocId,
+          numSerieDoc: data.numSerieDoc,
+          numCorreDoc: data.numCorreDoc,
+          numeroDocumento: data.numeroDocumento,
+          fechaDocumento: data.fechaDocumento,
+          fechaContable: data.fechaContable,
+          periodoContableId: data.periodoContableId,
+          fechaVencimiento: data.fechaVencimiento,
+          requerimientoCompraId: data.requerimientoCompraId,
+          proveedorId: data.proveedorId,
+          formaPagoId: data.formaPagoId,
+          monedaId: data.monedaId,
+          tipoCambio: data.tipoCambio,
+          fechaEntrega: data.fechaEntrega,
+          fechaRecepcion: data.fechaRecepcion,
+          solicitanteId: data.solicitanteId,
+          aprobadoPorId: data.aprobadoPorId,
+          estadoId: data.estadoId,
+          centroCostoId: data.centroCostoId,
+          unidadNegocioId: data.unidadNegocioId,
+          movIngresoAlmacenId: data.movIngresoAlmacenId,
+          observaciones: data.observaciones,
+          urlOrdenCompraPdf: data.urlOrdenCompraPdf,
+          urlDocumentoRef: data.urlDocumentoRef,
+          porcentajeIGV: data.porcentajeIGV,
+          esExoneradoAlIGV: data.esExoneradoAlIGV,
+          pagosPreviosSI: data.pagosPreviosSI !== undefined ? data.pagosPreviosSI : null,
+          aplicaImpuestoRenta: data.aplicaImpuestoRenta,
+          porcentajeImpuestoRenta: data.porcentajeImpuestoRenta,
+          montoImpuestoRenta: data.montoImpuestoRenta,
+          subtotal: data.subtotal,
+          totalDescuentos: data.totalDescuentos,
+          totalIGV: data.totalIGV,
+          total: data.total,
+          tipoDocumentoFinalId: data.tipoDocumentoFinalId,
+          numeroDocumentoFinal: data.numeroDocumentoFinal,
+          numSerieDocFinal: data.numSerieDocFinal,
+          numCorreDocFinal: data.numCorreDocFinal,
+          comprobanteRecibido: data.comprobanteRecibido,
+          fechaRecepcionComprobante: data.fechaRecepcionComprobante,
+          direccionRecepcionAlmacenId: data.direccionRecepcionAlmacenId,
+          contactoProveedorId: data.contactoProveedorId,
+          facturado: data.facturado,
+          fechaFacturacion: data.fechaFacturacion,
+          esGerencial: data.esGerencial,
+          ordenCompraOrigenId: data.ordenCompraOrigenId,
+          esParticionada: data.esParticionada,
+          actualizadoEn: new Date(),
+          actualizadoPor: data.actualizadoPor,
         },
       });
 
+      // ✅ Recalcular subtotales de detalles
       const detalles = await tx.detalleOrdenCompra.findMany({
         where: { ordenCompraId: id },
       });
 
-      if (detalles && detalles.length > 0) {
-        for (const detalle of detalles) {
-          const subtotalCalculado =
-            Number(detalle.cantidad) * Number(detalle.precioUnitario);
-          await tx.detalleOrdenCompra.update({
-            where: { id: detalle.id },
-            data: {
-              subtotal: subtotalCalculado,
-            },
-          });
-        }
+      if (detalles.length > 0) {
+        await Promise.all(
+          detalles.map((detalle) =>
+            tx.detalleOrdenCompra.update({
+              where: { id: detalle.id },
+              data: {
+                subtotal: Number(detalle.cantidad) * Number(detalle.precioUnitario),
+              },
+            })
+          )
+        );
       }
 
+      // ✅ Retornar orden actualizada con relaciones
       return await tx.ordenCompra.findUnique({
         where: { id },
         include: {
@@ -540,6 +474,7 @@ const actualizar = async (id, data) => {
           serieDoc: true,
           proveedor: true,
           moneda: true,
+          unidadNegocio: true,
           detalles: {
             include: {
               producto: true,
@@ -655,7 +590,6 @@ const aprobar = async (id) => {
     throw err;
   }
 };
-
 const anular = async (id) => {
   try {
     return await prisma.$transaction(async (tx) => {
@@ -923,27 +857,31 @@ const reactivarDocumentoOrdenCompra = async (id, usuarioId) => {
         ordenCompra: ordenCompraReactivada,
         movimientosAlmacen: movimientosEliminados.length > 0 ? {
           eliminados: movimientosEliminados.length,
-          movimientos: movimientosEliminados,
-          kardexEliminados,
-          detallesEliminados: detallesMovimientoEliminados,
+          movimientos: movimientosEliminados.map(m => ({
+            id: Number(m.id),
+            numeroDocumento: m.numeroDocumento,
+            fechaDocumento: m.fechaDocumento,
+          })),
+          kardexEliminados: Number(kardexEliminados),
+          detallesEliminados: Number(detallesMovimientoEliminados),
         } : {
           eliminados: 0,
         },
         saldos: {
-          saldosDetActualizados,
-          saldosGenActualizados,
-          productosAfectados,
+          saldosDetActualizados: Number(saldosDetActualizados),
+          saldosGenActualizados: Number(saldosGenActualizados),
+          productosAfectados: Number(productosAfectados),
         },
         cuentaPorPagar: ordenCompra.cuentaPorPagar ? {
           eliminada: true,
-          cxpId: ordenCompra.cuentaPorPagar.id,
-          montoTotal: ordenCompra.cuentaPorPagar.montoTotal,
+          cxpId: Number(ordenCompra.cuentaPorPagar.id),
+          montoTotal: Number(ordenCompra.cuentaPorPagar.montoTotal),
         } : {
           eliminada: false,
         },
         asientosContables: {
-          eliminados: asientosEliminados,
-          asientosIds: ordenCompra.asientosContables?.map(a => a.id) || [],
+          eliminados: Number(asientosEliminados),
+          asientosIds: ordenCompra.asientosContables?.map(a => Number(a.id)) || [],
         },
         mensaje: 'Orden de Compra reactivada exitosamente',
       };
