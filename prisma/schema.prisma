@@ -4523,6 +4523,8 @@ cuentaComprasId                   BigInt?                             // Cuenta 
 cuentaInventarioId                BigInt?                             // Cuenta 20 - MERCADERÍAS (stock en almacén)
 cuentaCostoVentasId               BigInt?                             // Cuenta 69 - COSTO DE VENTAS (costo al vender)
 cuentaVariacionId                 BigInt?                             // Cuenta 61 - VARIACIÓN DE EXISTENCIAS (contrapartida)
+tipoDetraccionId                  BigInt?                             // 🆕 AGREGAR ESTE
+
 
   familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
   subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
@@ -4567,6 +4569,7 @@ cuentaVariacionId                 BigInt?                             // Cuenta 
   cuentaInventario      PlanCuentasContable?  @relation("ProductoCuentaInventario", fields: [cuentaInventarioId], references: [id])
   cuentaCostoVentas     PlanCuentasContable?  @relation("ProductoCuentaCostoVentas", fields: [cuentaCostoVentasId], references: [id])
   cuentaVariacion       PlanCuentasContable?  @relation("ProductoCuentaVariacion", fields: [cuentaVariacionId], references: [id])
+  tipoDetraccion        TipoDetraccion?        @relation(fields: [tipoDetraccionId], references: [id])  // 🆕 AGREGAR ESTA
 
 }
 
@@ -7503,7 +7506,8 @@ model TipoDetraccion {
   
   // Relaciones inversas
   detracciones          Detraccion[]
-  
+  productos             Producto[]                              // 🆕 AGREGAR ESTA LÍNEA
+
   @@index([activo])
 }
 
