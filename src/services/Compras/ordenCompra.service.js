@@ -572,7 +572,12 @@ const aprobar = async (id) => {
       include: {
         empresa: true,
         tipoDocumento: true,
+        tipoDocumentoFinal: true,
         proveedor: true,
+        moneda: true,
+        estado: true,
+        unidadNegocio: true,
+        periodoContable: true,
         detalles: {
           include: {
             producto: true,
@@ -624,7 +629,12 @@ const anular = async (id) => {
         include: {
           empresa: true,
           tipoDocumento: true,
+          tipoDocumentoFinal: true,
           proveedor: true,
+          moneda: true,
+          estado: true,
+          unidadNegocio: true,
+          periodoContable: true,
           detalles: {
             include: {
               producto: true,
@@ -841,7 +851,11 @@ const reactivarDocumentoOrdenCompra = async (id, usuarioId) => {
           empresa: true,
           proveedor: true,
           tipoDocumento: true,
+          tipoDocumentoFinal: true,
           moneda: true,
+          estado: true,
+          unidadNegocio: true,
+          periodoContable: true,
           detalles: {
             include: {
               producto: true,
