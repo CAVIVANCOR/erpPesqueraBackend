@@ -1,57 +1,56 @@
-import express from 'express';
-import tipoDetraccionController from '../../controllers/Tesoreria/tipoDetraccion.controller.js';
+import { Router } from 'express';
+import * as tipoDetraccionController from '../../controllers/Tesoreria/tipoDetraccion.controller.js';
 import { autenticarJWT } from '../../middlewares/authMiddleware.js';
 import { checkPermission } from '../../middlewares/checkPermission.js';
 
-const router = express.Router();
+const router = Router();
 
 /**
  * Rutas CRUD para TipoDetraccion
  * Catálogo de tipos de detracción según SUNAT
- * Ruta del submódulo: 'tipoDetraccion'
+ * Ruta del submódulo: 'tipos-detraccion'
  */
 
 router.get(
-  '/',
-  autenticarJWT,
-  checkPermission('tipoDetraccion', 'ver'),
+  '/', 
+  autenticarJWT, 
+  checkPermission('tipos-detraccion', 'ver'),
   tipoDetraccionController.listar
 );
 
 router.get(
-  '/:id',
-  autenticarJWT,
-  checkPermission('tipoDetraccion', 'ver'),
+  '/activos', 
+  autenticarJWT, 
+  checkPermission('tipos-detraccion', 'ver'),
+  tipoDetraccionController.listarActivos
+);
+
+router.get(
+  '/:id', 
+  autenticarJWT, 
+  checkPermission('tipos-detraccion', 'ver'),
   tipoDetraccionController.obtenerPorId
 );
 
 router.post(
-  '/',
-  autenticarJWT,
-  checkPermission('tipoDetraccion', 'crear'),
+  '/', 
+  autenticarJWT, 
+  checkPermission('tipos-detraccion', 'crear'),
   tipoDetraccionController.crear
 );
 
 router.put(
-  '/:id',
-  autenticarJWT,
-  checkPermission('tipoDetraccion', 'editar'),
+  '/:id', 
+  autenticarJWT, 
+  checkPermission('tipos-detraccion', 'editar'),
   tipoDetraccionController.actualizar
 );
 
 router.delete(
-  '/:id',
-  autenticarJWT,
-  checkPermission('tipoDetraccion', 'eliminar'),
+  '/:id', 
+  autenticarJWT, 
+  checkPermission('tipos-detraccion', 'eliminar'),
   tipoDetraccionController.eliminar
-);
-
-// Rutas específicas
-router.get(
-  '/activos/lista',
-  autenticarJWT,
-  checkPermission('tipoDetraccion', 'ver'),
-  tipoDetraccionController.listarActivos
 );
 
 export default router;

@@ -20,7 +20,12 @@ const includeRelaciones = {
   tipoAlmacenamiento: true,
   marca: true,
   tipoMaterial: true,
-  color: true
+  color: true,
+  tipoDetraccion: true,
+  cuentaCompras: true,
+  cuentaInventario: true,
+  cuentaCostoVentas: true,
+  cuentaVariacion: true
 };
 
 /**
@@ -118,6 +123,39 @@ async function validarProducto(data, excluirId = null) {
       const existe = await ref.model.findUnique({ where: { id: data[ref.key] } });
       if (!existe) throw new ValidationError(`${ref.label} no existente.`);
     }
+  }
+
+  // Validar cuentas contables opcionales si se envían
+  const cuentasContables = [
+    { key: 'cuentaComprasId', label: 'Cuenta de compras' },
+    { key: 'cuentaInventarioId', label: 'Cuenta de inventario' },
+    { key: 'cuentaCostoVentasId', label: 'Cuenta de costo de ventas' },
+    { key: 'cuentaVariacionId', label: 'Cuenta de variación' }
+  ];
+
+  for (const cuenta of cuentasContables) {
+    if (data[cuenta.key] !== undefined && data[cuenta.key] !== null) {
+      const existe = await prisma.planCuentasContable.findUnique({
+        where: { id: data[cuenta.key] }
+      });
+      if (!existe) {
+        throw new ValidationError(`${cuenta.label} no existente.`);
+      }
+    }
+  }
+
+  // Validar tipoDetraccionId si se envía
+  if (data.tipoDetraccionId !== undefined && data.tipoDetraccionId !== null) {
+    const tipoDetraccion = await prisma.tipoDetraccion.findUnique({
+      where: { id: data.tipoDetraccionId }
+    });
+    if (!tipoDetraccion) {
+      throw new ValidationError('Tipo de detracción no existente.');
+    }
+    // Auto-llenar porcentajeDetraccion desde TipoDetraccion.tasa
+    data.porcentajeDetraccion = tipoDetraccion.tasa;
+    // Auto-marcar sujetoDetraccion = true
+    data.sujetoDetraccion = true;
   }
 
   // Validar unidadMedidaComercialId si se envía explícitamente

@@ -1,65 +1,63 @@
 import tipoDetraccionService from '../../services/Tesoreria/tipoDetraccion.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
-const listar = async (req, res, next) => {
+/**
+ * Controlador para TipoDetraccion
+ * Documentado en español.
+ */
+export async function listar(req, res, next) {
   try {
-    const tipos = await tipoDetraccionService.listar();
-    res.json(toJSONBigInt(tipos));
+    const tiposDetraccion = await tipoDetraccionService.listar();
+    res.json(toJSONBigInt(tiposDetraccion));
   } catch (err) {
     next(err);
   }
-};
+}
 
-const obtenerPorId = async (req, res, next) => {
+export async function listarActivos(req, res, next) {
   try {
-    const tipo = await tipoDetraccionService.obtenerPorId(Number(req.params.id));
-    res.json(toJSONBigInt(tipo));
+    const tiposDetraccion = await tipoDetraccionService.listarActivos();
+    res.json(toJSONBigInt(tiposDetraccion));
   } catch (err) {
     next(err);
   }
-};
+}
 
-const crear = async (req, res, next) => {
+export async function obtenerPorId(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const tipoDetraccion = await tipoDetraccionService.obtenerPorId(id);
+    res.json(toJSONBigInt(tipoDetraccion));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function crear(req, res, next) {
   try {
     const nuevo = await tipoDetraccionService.crear(req.body);
     res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
     next(err);
   }
-};
+}
 
-const actualizar = async (req, res, next) => {
+export async function actualizar(req, res, next) {
   try {
-    const actualizado = await tipoDetraccionService.actualizar(Number(req.params.id), req.body);
+    const id = Number(req.params.id);
+    const actualizado = await tipoDetraccionService.actualizar(id, req.body);
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
     next(err);
   }
-};
+}
 
-const eliminar = async (req, res, next) => {
+export async function eliminar(req, res, next) {
   try {
-    await tipoDetraccionService.eliminar(Number(req.params.id));
-    res.status(200).json(toJSONBigInt({ eliminado: true, id: Number(req.params.id) }));
+    const id = Number(req.params.id);
+    await tipoDetraccionService.eliminar(id);
+    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
   } catch (err) {
     next(err);
   }
-};
-
-const listarActivos = async (req, res, next) => {
-  try {
-    const tipos = await tipoDetraccionService.listarActivos();
-    res.json(toJSONBigInt(tipos));
-  } catch (err) {
-    next(err);
-  }
-};
-
-export default {
-  listar,
-  obtenerPorId,
-  crear,
-  actualizar,
-  eliminar,
-  listarActivos
-};
+}
