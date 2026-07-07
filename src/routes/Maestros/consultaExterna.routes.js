@@ -8,7 +8,7 @@ const router = Router();
 router.get('/reniec/:dni', async (req, res) => {
   try {
     const { dni } = req.params;
-    
+
     // Validar formato de DNI
     if (!dni || dni.length !== 8 || !/^\d+$/.test(dni)) {
       return res.status(400).json({
@@ -17,7 +17,7 @@ router.get('/reniec/:dni', async (req, res) => {
     }
 
     const token = process.env.TOKEN_API_DECOLETA_SUNAT_RENIEC_TC;
-    
+
     if (!token) {
       console.error('Token de API RENIEC no configurado');
       return res.status(500).json({
@@ -58,7 +58,7 @@ router.get('/reniec/:dni', async (req, res) => {
 router.post('/sunat/ruc/:ruc', async (req, res) => {
   try {
     const { ruc } = req.params;
-    
+
     // Validar formato de RUC
     if (!ruc || ruc.length !== 11 || !/^\d+$/.test(ruc)) {
       return res.status(400).json({
@@ -67,7 +67,7 @@ router.post('/sunat/ruc/:ruc', async (req, res) => {
     }
 
     const token = process.env.TOKEN_API_DECOLETA_SUNAT_RENIEC_TC;
-    
+
     if (!token) {
       console.error('Token de API SUNAT no configurado');
       return res.status(500).json({
@@ -110,7 +110,7 @@ router.post('/sunat/ruc/:ruc', async (req, res) => {
 router.get('/sunat/ruc-full/:ruc', async (req, res) => {
   try {
     const { ruc } = req.params;
-    
+
     // Validar formato de RUC
     if (!ruc || ruc.length !== 11 || !/^\d+$/.test(ruc)) {
       return res.status(400).json({
@@ -119,7 +119,7 @@ router.get('/sunat/ruc-full/:ruc', async (req, res) => {
     }
 
     const token = process.env.TOKEN_API_DECOLETA_SUNAT_RENIEC_TC;
-    
+
     if (!token) {
       console.error('Token de API SUNAT no configurado');
       return res.status(500).json({
@@ -163,9 +163,9 @@ router.get('/sunat/ruc-full/:ruc', async (req, res) => {
 router.get('/sunat/tipo-cambio', async (req, res) => {
   try {
     const { date, month, year } = req.query;
-    
+
     const token = process.env.TOKEN_API_DECOLETA_SUNAT_RENIEC_TC;
-    
+
     if (!token) {
       console.error('Token de API SUNAT no configurado');
       return res.status(500).json({
@@ -176,14 +176,16 @@ router.get('/sunat/tipo-cambio', async (req, res) => {
     // Construir URL con parámetros
     let url = 'https://api.decolecta.com/v1/tipo-cambio/sunat';
     const params = new URLSearchParams();
-    
+
     if (date) {
-      params.append('date', date);
+      // Si viene con hora (ISO string), extraer solo la fecha YYYY-MM-DD
+      const fechaLimpia = date.includes('T') ? date.split('T')[0] : date;
+      params.append('date', fechaLimpia);
     } else if (month && year) {
       params.append('month', month);
       params.append('year', year);
     }
-    
+
     if (params.toString()) {
       url += `?${params.toString()}`;
     }

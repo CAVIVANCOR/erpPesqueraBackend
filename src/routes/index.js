@@ -386,7 +386,6 @@ router.use('/tipos-activo', tipoActivoRoutes);
 router.use('/detalles-permiso-activo', detallePermisoActivoRoutes);
 // Rutas para PermisoAutorizacion
 router.use('/permisos-autorizacion', permisoAutorizacionRoutes);
-router.use('/tesoreria/tipos-detraccion', tipoDetraccionRoutes);
 
 // Rutas para EstadoMultiFuncion
 router.use('/estados-multi-funcion', estadoMultiFuncionRoutes);
@@ -712,6 +711,8 @@ router.use('/tesoreria/tipos-deuda-personal', tipoDeudaPersonalRoutes);
 router.use('/tesoreria/deudas-con-personal', deudaConPersonalRoutes);
 router.use('/tesoreria/pagos-deuda-personal', pagoDeudaPersonalRoutes);
 router.use('/tesoreria/categorias-tipo-deuda-personal', categoriaTipoDeudaPersonalRoutes);
+router.use('/tesoreria/tipo-detraccion', tipoDetraccionRoutes);
+
 // ========================================
 // 🆕 RUTAS - DEUDAS TRIBUTARIAS
 // ========================================
