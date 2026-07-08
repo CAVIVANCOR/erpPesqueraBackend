@@ -130,3 +130,30 @@ export async function actualizarEstadosVencidos(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Generar cronograma de cuotas automáticamente
+ */
+export async function generarCronograma(req, res, next) {
+  try {
+    const { prestamoBancarioId } = req.params;
+    const cuotas = await cuotaPrestamoService.generarCronograma(BigInt(prestamoBancarioId));
+    res.json(toJSONBigInt(cuotas));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Guardar/actualizar múltiples cuotas (bulk)
+ */
+export async function guardarBulk(req, res, next) {
+  try {
+    const { prestamoBancarioId } = req.params;
+    const { cuotas } = req.body;
+    const resultado = await cuotaPrestamoService.guardarBulk(BigInt(prestamoBancarioId), cuotas);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

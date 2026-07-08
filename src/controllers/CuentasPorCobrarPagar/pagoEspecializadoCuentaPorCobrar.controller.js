@@ -1,5 +1,6 @@
 import pagoEspecializadoService from '../../services/CuentasPorCobrarPagar/pagoEspecializadoCuentaPorCobrar.service.js';
 import { ValidationError } from '../../utils/errors.js';
+import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
 /**
  * ════════════════════════════════════════════════════════════
@@ -79,11 +80,11 @@ export const procesarPagoEspecializado = async (req, res, next) => {
     // Procesar pago
     const resultado = await pagoEspecializadoService.procesarPagoEspecializado(data);
 
-    res.status(201).json({
+    res.status(201).json(toJSONBigInt({
       success: true,
       message: `Pago especializado registrado exitosamente. Operación #${resultado.correlativo}`,
       data: resultado
-    });
+    }));
   } catch (error) {
     next(error);
   }
@@ -102,10 +103,10 @@ export const obtenerDetallePago = async (req, res, next) => {
 
     const detalle = await pagoEspecializadoService.obtenerDetallePago(id);
 
-    res.status(200).json({
+    res.status(200).json(toJSONBigInt({
       success: true,
       data: detalle
-    });
+    }));
   } catch (error) {
     next(error);
   }
@@ -131,10 +132,10 @@ export const obtenerPagosPorCorrelativo = async (req, res, next) => {
       correlativo
     );
 
-    res.status(200).json({
+    res.status(200).json(toJSONBigInt({
       success: true,
       data: operacion
-    });
+    }));
   } catch (error) {
     next(error);
   }
@@ -163,11 +164,11 @@ export const listarPagosEspecializados = async (req, res, next) => {
       filtros
     );
 
-    res.status(200).json({
+    res.status(200).json(toJSONBigInt({
       success: true,
       data: pagos,
       total: pagos.length
-    });
+    }));
   } catch (error) {
     next(error);
   }
@@ -193,10 +194,48 @@ export const obtenerResumenOperacion = async (req, res, next) => {
       correlativo
     );
 
-    res.status(200).json({
+    res.status(200).json(toJSONBigInt({
       success: true,
       data: resumen
-    });
+    }));
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Actualizar URL del voucher consolidado
+ */
+export const actualizarUrlVoucherConsolidado = async (req, res, next) => {
+  try {
+    const { movimientoIngresoId } = req.params;
+    const { urlPdf } = req.body;
+    
+    const resultado = await pagoEspecializadoCuentaPorCobrarService.actualizarUrlVoucherConsolidado(
+      movimientoIngresoId,
+      urlPdf
+    );
+    
+    res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Actualizar URL del voucher individual
+ */
+export const actualizarUrlVoucherIndividual = async (req, res, next) => {
+  try {
+    const { movimientoId } = req.params;
+    const { urlPdf } = req.body;
+    
+    const resultado = await pagoEspecializadoCuentaPorCobrarService.actualizarUrlVoucherIndividual(
+      movimientoId,
+      urlPdf
+    );
+    
+    res.json(resultado);
   } catch (error) {
     next(error);
   }

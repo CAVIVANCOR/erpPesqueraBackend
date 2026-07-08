@@ -404,6 +404,36 @@ const listarConFiltrosAvanzados = async (req, res, next) => {
   }
 };
 
+
+export const obtenerPorCorrelativo = async (req, res, next) => {
+  try {
+    const { correlativo } = req.params;
+    
+    const movimientos = await prisma.movimientoCaja.findMany({
+      where: {
+        refOperacionEspecializadaMovCaja: BigInt(correlativo)
+      },
+      include: {
+        tipoMovimiento: true,
+        moneda: true,
+        estadoMovimientoCaja: true,
+        empresaOrigen: true,
+        cuentaCorrienteOrigen: { include: { banco: true } },
+        cuentaCorrienteDestino: { include: { banco: true } },
+        entidadComercial: true,
+        medioPago: true
+      },
+      orderBy: { id: 'asc' }
+    });
+
+    res.json(movimientos);
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
 export default {
   listar,
   obtenerPorId,
@@ -418,5 +448,6 @@ export default {
   subirDocumento,
   servirArchivoComprobante,
   servirArchivoDocumento,
-  listarConFiltrosAvanzados
+  listarConFiltrosAvanzados,
+  obtenerPorCorrelativo,
 };

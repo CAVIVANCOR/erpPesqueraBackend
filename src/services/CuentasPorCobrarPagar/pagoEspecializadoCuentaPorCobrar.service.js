@@ -99,7 +99,7 @@ async function validarDatosPagoEspecializado(data) {
   ];
 
   const camposFaltantes = camposRequeridos.filter(campo => !data[campo]);
-  
+
   if (camposFaltantes.length > 0) {
     throw new ValidationError(
       `Faltan campos obligatorios: ${camposFaltantes.join(', ')}`
@@ -327,12 +327,9 @@ const procesarPagoEspecializado = async (data) => {
           monedaId: Number(data.monedaPagoId),
           medioPagoId: Number(data.medioPagoId),
           cuentaCorrienteDestinoId: data.cuentaBancariaId ? Number(data.cuentaBancariaId) : null,
-          fechaOperacion: new Date(data.fechaPago),
-          numeroOperacion: data.numeroOperacion || null,
-          observaciones: `Pago de ${cuentaPorCobrar.numeroPreFactura} - Cliente: ${cuentaPorCobrar.cliente.razonSocial}`,
-          estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
-          origenMovimiento: 'PAGO_CXC_ESPECIALIZADO',
-          creadoPor: data.creadoPor || null
+          fechaOperacionMovCaja: new Date(data.fechaPago),
+          descripcion: `Pago de ${cuentaPorCobrar.numeroPreFactura} - Cliente: ${cuentaPorCobrar.cliente.razonSocial}`,
+          estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO
         }
       });
 
@@ -351,11 +348,9 @@ const procesarPagoEspecializado = async (data) => {
             monedaId: Number(data.monedaPagoId),
             medioPagoId: Number(data.medioPagoId),
             cuentaCorrienteOrigenId: data.cuentaBancariaId ? Number(data.cuentaBancariaId) : null,
-            fechaOperacion: new Date(data.fechaPago),
-            observaciones: `ITF - Operación #${correlativo} - ${cuentaPorCobrar.numeroPreFactura}`,
-            estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
-            origenMovimiento: 'PAGO_CXC_ESPECIALIZADO',
-            creadoPor: data.creadoPor || null
+            fechaOperacionMovCaja: new Date(data.fechaPago),
+            descripcion: `ITF - Operación #${correlativo} - ${cuentaPorCobrar.numeroPreFactura}`,
+            estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO
           }
         });
 
@@ -376,11 +371,9 @@ const procesarPagoEspecializado = async (data) => {
             monedaId: Number(data.monedaPagoId),
             medioPagoId: Number(data.medioPagoId),
             cuentaCorrienteOrigenId: data.cuentaBancariaId ? Number(data.cuentaBancariaId) : null,
-            fechaOperacion: new Date(data.fechaPago),
-            observaciones: `Comisión Bancaria - Operación #${correlativo} - ${cuentaPorCobrar.numeroPreFactura}`,
-            estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
-            origenMovimiento: 'PAGO_CXC_ESPECIALIZADO',
-            creadoPor: data.creadoPor || null
+            fechaOperacionMovCaja: new Date(data.fechaPago),
+            descripcion: `Comisión Bancaria - Operación #${correlativo} - ${cuentaPorCobrar.numeroPreFactura}`,
+            estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO
           }
         });
 
@@ -673,9 +666,9 @@ const procesarPagoEspecializado = async (data) => {
           montoDetraccion: detraccion ? Number(data.detraccion.importeDetraido) : 0,
           montoRetencion: retencion ? Number(data.retencion.importeRetenido) : 0,
           montoPercepcion: percepcion ? Number(data.percepcion.importePercibido) : 0,
-          montoNetoCaja: Number(data.montoPagado) - 
-                         (movimientoITF ? Number(data.montoITF) : 0) - 
-                         (movimientoComision ? Number(data.montoComision) : 0),
+          montoNetoCaja: Number(data.montoPagado) -
+            (movimientoITF ? Number(data.montoITF) : 0) -
+            (movimientoComision ? Number(data.montoComision) : 0),
           deudaCancelada: Number(data.montoAplicadoDeuda),
           saldoPendiente: saldoPendiente
         }
@@ -683,15 +676,15 @@ const procesarPagoEspecializado = async (data) => {
     });
   } catch (err) {
     console.error('❌ Error en procesarPagoEspecializado:', err);
-    
+
     if (err instanceof ValidationError || err instanceof NotFoundError) {
       throw err;
     }
-    
+
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos al procesar pago', err.message);
     }
-    
+
     throw err;
   }
 };
@@ -817,11 +810,11 @@ const obtenerDetallePago = async (pagoId) => {
     };
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
-    
+
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos al obtener detalle de pago', err.message);
     }
-    
+
     throw err;
   }
 };
@@ -886,7 +879,7 @@ const obtenerPagosPorCorrelativo = async (empresaId, correlativo) => {
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos al obtener pagos por correlativo', err.message);
     }
-    
+
     throw err;
   }
 };
@@ -954,7 +947,7 @@ const listarPagosEspecializados = async (empresaId, filtros = {}) => {
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos al listar pagos especializados', err.message);
     }
-    
+
     throw err;
   }
 };
@@ -994,9 +987,9 @@ const obtenerResumenOperacion = async (empresaId, correlativo) => {
 
     // Separar movimientos por tipo
     const movimientoIngreso = operacion.movimientos.find(
-      m => m.origenMovimiento === 'PAGO_CXC_ESPECIALIZADO' && 
-           m.tipoMovimientoId !== TIPOS_MOVIMIENTO.ITF &&
-           m.tipoMovimientoId !== TIPOS_MOVIMIENTO.COMISION_BANCARIA
+      m => m.origenMovimiento === 'PAGO_CXC_ESPECIALIZADO' &&
+        m.tipoMovimientoId !== TIPOS_MOVIMIENTO.ITF &&
+        m.tipoMovimientoId !== TIPOS_MOVIMIENTO.COMISION_BANCARIA
     );
 
     const movimientoITF = operacion.movimientos.find(
@@ -1019,9 +1012,9 @@ const obtenerResumenOperacion = async (empresaId, correlativo) => {
         montoDetraccion: totalDetraccion,
         montoRetencion: totalRetencion,
         montoPercepcion: totalPercepcion,
-        montoNetoCaja: totalMontoPagado - 
-                       (movimientoITF ? Number(movimientoITF.monto) : 0) - 
-                       (movimientoComision ? Number(movimientoComision.monto) : 0),
+        montoNetoCaja: totalMontoPagado -
+          (movimientoITF ? Number(movimientoITF.monto) : 0) -
+          (movimientoComision ? Number(movimientoComision.monto) : 0),
         deudaCancelada: totalMontoAplicado
       },
       pagos: operacion.pagos,
@@ -1035,7 +1028,7 @@ const obtenerResumenOperacion = async (empresaId, correlativo) => {
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos al obtener resumen de operación', err.message);
     }
-    
+
     throw err;
   }
 };
@@ -1044,10 +1037,44 @@ const obtenerResumenOperacion = async (empresaId, correlativo) => {
 // EXPORTAR FUNCIONES
 // ════════════════════════════════════════════════════════════
 
+/**
+ * Actualizar URL del voucher consolidado en MovimientoCaja
+ */
+const actualizarUrlVoucherConsolidado = async (movimientoIngresoId, urlPdf) => {
+  try {
+    await prisma.movimientoCaja.update({
+      where: { id: Number(movimientoIngresoId) },
+      data: { urlComprobanteOperacionMovCaja: urlPdf }
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Error al actualizar URL voucher consolidado:', error);
+    throw new DatabaseError('Error al actualizar URL del voucher consolidado');
+  }
+};
+
+/**
+ * Actualizar URL del voucher individual en MovimientoCaja
+ */
+const actualizarUrlVoucherIndividual = async (movimientoId, urlPdf) => {
+  try {
+    await prisma.movimientoCaja.update({
+      where: { id: Number(movimientoId) },
+      data: { urlOperacionIndividualOperacionCaja: urlPdf }
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Error al actualizar URL voucher individual:', error);
+    throw new DatabaseError('Error al actualizar URL del voucher individual');
+  }
+};
+
 export default {
   procesarPagoEspecializado,
   obtenerDetallePago,
   obtenerPagosPorCorrelativo,
   listarPagosEspecializados,
-  obtenerResumenOperacion
+  obtenerResumenOperacion,
+  actualizarUrlVoucherConsolidado,
+  actualizarUrlVoucherIndividual
 };

@@ -392,7 +392,9 @@ const listarPorPrestamo = async (prestamoBancarioId) => {
         },
         personalCreador: true,
       },
-      orderBy: { numeroDesembolso: "asc" },
+      orderBy: {
+        fechaDesembolso: "asc",
+      }
     });
   } catch (err) {
     if (err.code && err.code.startsWith("P")) {

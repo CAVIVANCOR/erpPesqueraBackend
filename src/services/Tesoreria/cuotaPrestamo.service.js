@@ -868,16 +868,221 @@ const recalcularCuotasPorPrestamo = async (prestamoBancarioId) => {
   }
 };
 
+/**
+ * Generar cronograma de cuotas automáticamente según tipo de amortización
+ */
+async function generarCronograma(prestamoBancarioId) {
+  const prestamo = await prisma.prestamoBancario.findUnique({
+    where: { id: prestamoBancarioId },
+    include: {
+      moneda: true,
+    },
+  });
+
+  if (!prestamo) {
+    throw new NotFoundError("Préstamo bancario no encontrado.");
+  }
+
+  const cuotas = [];
+  const montoDesembolsado = parseFloat(prestamo.montoDesembolsado);
+
+  // Priorizar tasaInteresEfectiva (TCEA) para cálculos, fallback a tasaInteresAnual (TNA)
+  const tasaAnual = prestamo.tasaInteresEfectiva
+    ? parseFloat(prestamo.tasaInteresEfectiva)
+    : parseFloat(prestamo.tasaInteresAnual);
+
+  const numeroCuotas = prestamo.numeroCuotas;
+  const plazoMeses = prestamo.plazoMeses;
+  const comision = parseFloat(prestamo.comisionMantenimiento || 0);
+  const seguro = parseFloat(prestamo.seguroDesgravamen || 0);
+
+  // Calcular tasa mensual efectiva desde tasa anual efectiva
+  const tasaMensual = Math.pow(1 + tasaAnual / 100, 1 / 12) - 1;
+
+  let saldoCapital = montoDesembolsado;
+
+  // CASO ESPECIAL: 1 sola cuota (Préstamo Bullet)
+  if (numeroCuotas === 1) {
+    const fechaVencimiento = new Date(prestamo.fechaVencimiento);
+
+    // Calcular interés compuesto para el período
+    const tasaAnualDecimal = tasaAnual / 100;
+    const tasaPeriodo = Math.pow(1 + tasaAnualDecimal, plazoMeses / 12) - 1;
+    const interesTotal = montoDesembolsado * tasaPeriodo;
+
+    cuotas.push({
+      prestamoBancarioId,
+      numeroCuota: 1,
+      fechaVencimiento,
+      montoCapital: montoDesembolsado,
+      montoInteres: interesTotal,
+      montoComision: comision,
+      montoSeguro: seguro,
+      montoTotal: montoDesembolsado + interesTotal + comision + seguro,
+      saldoCapitalAntes: montoDesembolsado,
+      saldoCapitalDespues: 0,
+      estadoPago: "PENDIENTE",
+      diasMora: 0,
+    });
+  } else {
+    // CASO NORMAL: Múltiples cuotas
+    for (let i = 1; i <= numeroCuotas; i++) {
+      const fechaVencimiento = calcularFechaVencimiento(prestamo, i);
+
+      let montoCapital = 0;
+      let montoInteres = saldoCapital * tasaMensual;
+
+      if (prestamo.tipoAmortizacion === "FRANCES") {
+        const cuotaFija = montoDesembolsado * (tasaMensual * Math.pow(1 + tasaMensual, numeroCuotas)) / (Math.pow(1 + tasaMensual, numeroCuotas) - 1);
+        montoCapital = cuotaFija - montoInteres;
+      } else if (prestamo.tipoAmortizacion === "ALEMAN") {
+        montoCapital = montoDesembolsado / numeroCuotas;
+      } else if (prestamo.tipoAmortizacion === "AMERICANO") {
+        montoCapital = i === numeroCuotas ? montoDesembolsado : 0;
+      }
+
+      // Ajuste en última cuota para cuadrar saldo
+      if (i === numeroCuotas) {
+        montoCapital = saldoCapital;
+      }
+
+      const saldoAntes = saldoCapital;
+      const saldoDespues = saldoCapital - montoCapital;
+      const montoTotal = montoCapital + montoInteres + comision + seguro;
+
+      cuotas.push({
+        prestamoBancarioId,
+        numeroCuota: i,
+        fechaVencimiento,
+        montoCapital,
+        montoInteres,
+        montoComision: comision,
+        montoSeguro: seguro,
+        montoTotal,
+        saldoCapitalAntes: saldoAntes,
+        saldoCapitalDespues: saldoDespues,
+        estadoPago: "PENDIENTE",
+        diasMora: 0,
+      });
+
+      saldoCapital = saldoDespues;
+    }
+  }
+
+  // Eliminar cuotas existentes antes de crear nuevas
+  await prisma.cuotaPrestamo.deleteMany({
+    where: { prestamoBancarioId },
+  });
+
+  const cuotasCreadas = await prisma.$transaction(
+    cuotas.map((cuota) =>
+      prisma.cuotaPrestamo.create({
+        data: cuota,
+        include: {
+          prestamo: {
+            include: {
+              moneda: true,
+              estado: true,
+            },
+          },
+        },
+      })
+    )
+  );
+
+  return cuotasCreadas;
+}
+
+/**
+ * Calcular fecha de vencimiento según frecuencia de pago
+ */
+function calcularFechaVencimiento(prestamo, numeroCuota) {
+  // Si es la última cuota, usar siempre la fecha de vencimiento del préstamo
+  if (numeroCuota === prestamo.numeroCuotas) {
+    return new Date(prestamo.fechaVencimiento);
+  }
+
+  const fechaBase = new Date(prestamo.fechaDesembolso);
+  let fecha = new Date(fechaBase);
+
+  // Calcular mes/año según frecuencia (mantener día original por ahora)
+  if (prestamo.frecuenciaPago === "MENSUAL") {
+    fecha.setMonth(fechaBase.getMonth() + numeroCuota);
+  } else if (prestamo.frecuenciaPago === "TRIMESTRAL") {
+    fecha.setMonth(fechaBase.getMonth() + numeroCuota * 3);
+  } else if (prestamo.frecuenciaPago === "SEMESTRAL") {
+    fecha.setMonth(fechaBase.getMonth() + numeroCuota * 6);
+  } else if (prestamo.frecuenciaPago === "ANUAL") {
+    fecha.setFullYear(fechaBase.getFullYear() + numeroCuota);
+  } else if (prestamo.frecuenciaPago === "DIAS" && prestamo.numeroDias) {
+    fecha.setDate(fechaBase.getDate() + numeroCuota * prestamo.numeroDias);
+    return fecha; // Para DIAS no aplicar diaPago
+  }
+
+  // FORZAR día específico si diaPago está definido
+  if (prestamo.diaPago && prestamo.diaPago > 0) {
+    const anio = fecha.getFullYear();
+    const mes = fecha.getMonth();
+    const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
+    const diaFinal = Math.min(prestamo.diaPago, ultimoDiaMes);
+    fecha.setDate(diaFinal);
+  }
+
+  return fecha;
+}
+
+/**
+ * Guardar/actualizar múltiples cuotas (bulk)
+ */
+async function guardarBulk(prestamoBancarioId, cuotas) {
+  await prisma.cuotaPrestamo.deleteMany({
+    where: { prestamoBancarioId },
+  });
+
+  const cuotasCreadas = await prisma.$transaction(
+    cuotas.map((cuota) =>
+      prisma.cuotaPrestamo.create({
+        data: {
+          prestamoBancarioId,
+          numeroCuota: cuota.numeroCuota,
+          fechaVencimiento: new Date(cuota.fechaVencimiento),
+          montoCapital: cuota.montoCapital,
+          montoInteres: cuota.montoInteres,
+          montoComision: cuota.montoComision || 0,
+          montoSeguro: cuota.montoSeguro || 0,
+          montoTotal: cuota.montoTotal,
+          saldoCapitalAntes: cuota.saldoCapitalAntes,
+          saldoCapitalDespues: cuota.saldoCapitalDespues,
+          estadoPago: cuota.estadoPago || "PENDIENTE",
+          diasMora: cuota.diasMora || 0,
+        },
+        include: {
+          prestamo: {
+            include: {
+              moneda: true,
+              estado: true,
+            },
+          },
+        },
+      })
+    )
+  );
+
+  return cuotasCreadas;
+}
+
 export default {
   listar,
+  listarPendientes,
+  listarVencidas,
+  listarPorPrestamo,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
   registrarPago,
-  listarPorPrestamo,
-  listarPendientes,
-  listarVencidas,
   actualizarEstadosVencidos,
+  generarCronograma,
+  guardarBulk,
   recalcularCuotasPorPrestamo,
 };

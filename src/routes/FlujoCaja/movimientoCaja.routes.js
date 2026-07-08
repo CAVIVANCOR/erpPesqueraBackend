@@ -67,6 +67,13 @@ router.get(
 );
 
 router.get(
+  "/correlativo/:correlativo",
+  autenticarJWT,
+  checkPermission("movimientoCaja", "ver"),
+  movimientoCajaController.obtenerPorCorrelativo
+);
+
+router.get(
   "/:id",
   autenticarJWT,
   checkPermission("movimientoCaja", "ver"),

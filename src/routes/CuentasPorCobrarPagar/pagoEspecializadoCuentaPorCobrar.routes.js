@@ -41,4 +41,14 @@ router.get('/empresa/:empresaId', autenticarJWT, pagoEspecializadoController.lis
 // ════════════════════════════════════════════════════════════
 router.get('/resumen/:empresaId/:correlativo', autenticarJWT, pagoEspecializadoController.obtenerResumenOperacion);
 
+// ════════════════════════════════════════════════════════════
+// PATCH: ACTUALIZAR URL VOUCHER CONSOLIDADO
+// ════════════════════════════════════════════════════════════
+router.patch('/voucher-consolidado/:movimientoIngresoId', autenticarJWT, pagoEspecializadoController.actualizarUrlVoucherConsolidado);
+
+// ════════════════════════════════════════════════════════════
+// PATCH: ACTUALIZAR URL VOUCHER INDIVIDUAL
+// ════════════════════════════════════════════════════════════
+router.patch('/voucher-individual/:movimientoId', autenticarJWT, pagoEspecializadoController.actualizarUrlVoucherIndividual);
+
 export default router;
