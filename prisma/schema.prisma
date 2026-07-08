@@ -8094,12 +8094,12 @@ model PrestamoBancario {
   // ========================================
   // CONDICIONES FINANCIERAS
   // ========================================
-  tasaInteresAnual      Decimal                 @db.Decimal(7, 4)    // Tasa de interés anual (ej: 12.5000)
-  tasaInteresEfectiva   Decimal?                @db.Decimal(7, 4)    // TEA (Tasa Efectiva Anual)
-  tasaMoratoria         Decimal?                @db.Decimal(7, 4)    // Tasa de mora por atraso
-  comisionInicial       Decimal?                @db.Decimal(18, 2)   // Comisión de apertura
-  comisionMantenimiento Decimal?                @db.Decimal(18, 2)   // Comisión mensual de mantenimiento
-  seguroDesgravamen     Decimal?                @db.Decimal(18, 2)   // Seguro de desgravamen mensual
+  tasaInteresAnual      Decimal                 @db.Decimal(10, 6)    // TNA - Tasa Nominal Anual (contractual, ej: 12.5000)
+  tasaInteresEfectiva   Decimal?                @db.Decimal(10, 6)    // TCEA - Tasa Costo Efectivo Anual (para cálculos, incluye capitalización)
+  tasaMoratoria         Decimal?                @db.Decimal(10, 6)    // Tasa de mora por atraso
+  comisionInicial       Decimal?                @db.Decimal(18, 6)   // Comisión de apertura
+  comisionMantenimiento Decimal?                @db.Decimal(18, 6)   // Comisión mensual de mantenimiento
+  seguroDesgravamen     Decimal?                @db.Decimal(18, 6)   // Seguro de desgravamen mensual
   
   // ========================================
   // PLAZO Y ESTRUCTURA DE PAGOS
