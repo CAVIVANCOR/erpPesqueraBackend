@@ -923,6 +923,7 @@ async function generarCronograma(prestamoBancarioId) {
       saldoCapitalDespues: 0,
       estadoPago: "PENDIENTE",
       diasMora: 0,
+      creadoPor: prestamo.creadoPor || null,
     });
   } else {
     // CASO NORMAL: Múltiples cuotas
@@ -963,8 +964,8 @@ async function generarCronograma(prestamoBancarioId) {
         saldoCapitalDespues: saldoDespues,
         estadoPago: "PENDIENTE",
         diasMora: 0,
+        creadoPor: prestamo.creadoPor || null,
       });
-
       saldoCapital = saldoDespues;
     }
   }
@@ -1086,6 +1087,8 @@ async function guardarBulk(prestamoBancarioId, cuotas) {
       saldoCapitalDespues: parseFloat(cuota.saldoCapitalDespues),
       estadoPago: cuota.estadoPago || "PENDIENTE",
       diasMora: parseInt(cuota.diasMora || 0),
+      creadoPor: cuota.creadoPor ? BigInt(cuota.creadoPor) : null,
+      actualizadoPor: cuota.actualizadoPor ? BigInt(cuota.actualizadoPor) : null,
     };
 
     if (index === 0) {
