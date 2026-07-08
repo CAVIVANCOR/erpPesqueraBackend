@@ -8240,28 +8240,22 @@ model CuotaPrestamo {
   montoMora             Decimal?                @db.Decimal(18, 2)   // Monto de mora por atraso
   movimientoCajaId      BigInt?                                      // Relación con MovimientoCaja
   refOperacionEspecializadaMovCaja  BigInt?
-
-  // ========================================
-  // ESTADO DE PAGO
-  // ========================================
   estadoPago            EstadoPagoCuota                              // PENDIENTE | PAGADO | VENCIDO | PARCIAL
   diasMora              Int?                                         // Días de atraso
-  
-  // ========================================
-  // OBSERVACIONES
-  // ========================================
   observaciones         String?                 @db.Text
   
   // ========================================
   // AUDITORÍA
   // ========================================
   creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
   actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
   
   // ========================================
   // RELACIONES
   // ========================================
-  prestamo              PrestamoBancario        @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
+  prestamo              PrestamoBancario?       @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
   movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
   asientosContables     AsientoContable[]  // Relación inversa - Asientos generados
 
