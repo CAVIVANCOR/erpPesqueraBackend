@@ -8239,7 +8239,7 @@ model CuotaPrestamo {
   estadoPago            EstadoPagoCuota                              // PENDIENTE | PAGADO | VENCIDO | PARCIAL
   diasMora              Int?                                         // Días de atraso
   observaciones         String?                 @db.Text
-  
+  saldoInicialPagada    Boolean                 @default(false)      // Sirve para marcar que es una cuota que ya se pago años anteriores y No requiere Cobro por que es un Saldo Inicial
   // ========================================
   // AUDITORÍA
   // ========================================
