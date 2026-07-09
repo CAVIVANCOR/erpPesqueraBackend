@@ -1251,7 +1251,21 @@ model PreFactura {
   aplicaImpuestoRenta         Boolean     @default(false)                  // true = Aplica retención de Impuesto a la Renta
   porcentajeImpuestoRenta     Decimal?    @db.Decimal(5, 2)                // Porcentaje de Impuesto a la Renta (normalmente 8%)
   montoImpuestoRenta          Decimal?    @db.Decimal(18, 2)               // Monto calculado de Impuesto a la Renta
-  
+   // Detracción
+  aplicaDetraccion            Boolean @default(false)
+  tipoDetraccionId            BigInt?
+  porcentajeDetraccion        Decimal? @db.Decimal(5,2)
+  montoDetraccion             Decimal? @db.Decimal(18,2)
+  // Retención
+  aplicaRetencion             Boolean @default(false)
+  porcentajeRetencion         Decimal? @db.Decimal(5,2)
+  montoRetencion              Decimal? @db.Decimal(18,2)
+  // Percepción
+  aplicaPercepcion            Boolean @default(false)
+  porcentajePercepcion        Decimal? @db.Decimal(5,2)
+  montoPercepcion             Decimal? @db.Decimal(18,2)
+  tipoAfectacionIGVId         BigInt?
+
   // Relaciones
   empresa                     Empresa                 @relation(fields: [empresaId], references: [id])
   tipoDocumento               TipoDocumento           @relation(fields: [tipoDocumentoId], references: [id])
@@ -1300,6 +1314,7 @@ model PreFactura {
   contratistasOT              DetContratistasOT[] @relation("PreFacturaContratistaOT")
   asientosContables           AsientoContable[]  // Relación inversa - Asientos generados
   detallesDetraccion          DetalleDetraccion[]  @relation("PreFacturaDetraccion")
+  tipoAfectacionIGV           TipoAfectacionIGV?  @relation(fields: [tipoAfectacionIGVId], references: [id])
 
   
   // Índices
@@ -1314,6 +1329,7 @@ model PreFactura {
   @@index([preFacturaOrigenId])                                          // ⭐ NUEVO: Trazabilidad de particiones
   @@index([esParticionada])                                              // ⭐ NUEVO: Filtrar PreFacturas particionadas
   @@index([unidadNegocioId])
+  @@index([tipoAfectacionIGVId])
 
 }
 
@@ -4514,24 +4530,24 @@ model Producto {
   margenUtilidadObjetivo            Decimal?                            @db.Decimal(5, 2)  // % objetivo de margen
   descripcionEspanolExportacion     String?
   descripcionInglesExportacion      String?
-// ========================================
-// 🆕 CUENTAS CONTABLES PARA INVENTARIO
-// ========================================
-cuentaComprasId                   BigInt?                             // Cuenta 60 - COMPRAS (registro de compras)
-cuentaInventarioId                BigInt?                             // Cuenta 20 - MERCADERÍAS (stock en almacén)
-cuentaCostoVentasId               BigInt?                             // Cuenta 69 - COSTO DE VENTAS (costo al vender)
-cuentaVariacionId                 BigInt?                             // Cuenta 61 - VARIACIÓN DE EXISTENCIAS (contrapartida)
-tipoDetraccionId                  BigInt?                             // 🆕 AGREGAR ESTE
+  // ========================================
+  // 🆕 CUENTAS CONTABLES PARA INVENTARIO
+  // ========================================
+  cuentaComprasId                   BigInt?                             // Cuenta 60 - COMPRAS (registro de compras)
+  cuentaInventarioId                BigInt?                             // Cuenta 20 - MERCADERÍAS (stock en almacén)
+  cuentaCostoVentasId               BigInt?                             // Cuenta 69 - COSTO DE VENTAS (costo al vender)
+  cuentaVariacionId                 BigInt?                             // Cuenta 61 - VARIACIÓN DE EXISTENCIAS (contrapartida)
+  tipoDetraccionId                  BigInt?                             // 🆕 AGREGAR ESTE
+  tipoAfectacionIGVId               BigInt?
 
-
-  familia                 FamiliaProducto      @relation(fields: [familiaId], references: [id])
-  subfamilia              SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
-  unidadMedida            UnidadMedida         @relation("UnidadMedidaToProducto", fields: [unidadMedidaId], references: [id])
-  unidadMedidaComercial   UnidadMedida?        @relation("UnidadMedidaComercialToProducto", fields: [unidadMedidaComercialId], references: [id])
-  tipoMaterial            TipoMaterial?        @relation(fields: [tipoMaterialId], references: [id])
-  color                   Color?               @relation(fields: [colorId], references: [id])
-  tipoAlmacenamiento      TipoAlmacenamiento   @relation(fields: [tipoAlmacenamientoId], references: [id])
-  marca                   Marca                @relation(fields: [marcaId], references: [id])
+  familia                               FamiliaProducto      @relation(fields: [familiaId], references: [id])
+  subfamilia                            SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
+  unidadMedida                          UnidadMedida         @relation("UnidadMedidaToProducto", fields: [unidadMedidaId], references: [id])
+  unidadMedidaComercial                 UnidadMedida?        @relation("UnidadMedidaComercialToProducto", fields: [unidadMedidaComercialId], references: [id])
+  tipoMaterial                          TipoMaterial?        @relation(fields: [tipoMaterialId], references: [id])
+  color                                 Color?               @relation(fields: [colorId], references: [id])
+  tipoAlmacenamiento                    TipoAlmacenamiento   @relation(fields: [tipoAlmacenamientoId], references: [id])
+  marca                                 Marca                @relation(fields: [marcaId], references: [id])
   detallesMovimiento                    DetalleMovimientoAlmacen[]
   kardexAlmacenes                       KardexAlmacen[]
   detallesRequerimientosCompra          DetalleReqCompra[]
@@ -4567,7 +4583,10 @@ tipoDetraccionId                  BigInt?                             // 🆕 AG
   cuentaInventario      PlanCuentasContable?  @relation("ProductoCuentaInventario", fields: [cuentaInventarioId], references: [id])
   cuentaCostoVentas     PlanCuentasContable?  @relation("ProductoCuentaCostoVentas", fields: [cuentaCostoVentasId], references: [id])
   cuentaVariacion       PlanCuentasContable?  @relation("ProductoCuentaVariacion", fields: [cuentaVariacionId], references: [id])
-  tipoDetraccion        TipoDetraccion?        @relation(fields: [tipoDetraccionId], references: [id])  // 🆕 AGREGAR ESTA
+  tipoDetraccion        TipoDetraccion?       @relation(fields: [tipoDetraccionId], references: [id])  // 🆕 AGREGAR ESTA
+  tipoAfectacionIGV     TipoAfectacionIGV?    @relation(fields: [tipoAfectacionIGVId], references: [id])
+
+  @@index([tipoAfectacionIGVId])
 
 }
 
@@ -6196,24 +6215,6 @@ model AccesosUsuario {
 
 
 // ============================================
-// TipoAfectacionIGV - Catálogo 07 SUNAT
-// Tipo de Afectación del IGV
-// ============================================
-
-model TipoAfectacionIGV {
-  id                BigInt      @id @default(autoincrement())
-  codigoSunat       String      @unique @db.VarChar(2)       // "10", "20", "30", "40"
-  nombre            String      @db.VarChar(100)             // "Gravado - Operación Onerosa"
-  afectoIGV         Boolean     @default(true)               // true = genera IGV
-  activo            Boolean     @default(true)
-  
-  detallesComprobante DetalleComprobante[]
-  
-  @@index([codigoSunat])
-  @@index([activo])
-}
-
-// ============================================
 // ComprobanteElectronico
 // Comprobantes electrónicos SUNAT (Factura, Boleta, NC, ND)
 // Integrado con Nubefact OSE
@@ -6974,39 +6975,76 @@ model MedioPago {
   @@index([activo])
 }
 
+// ==========================================================
+// TipoAfectacionIGV
+// Catálogo Oficial SUNAT - Tipo de Afectación del IGV
+// Catálogo 07 de SUNAT (UBL 2.1)
+// Se utiliza en Compras y Ventas
+// ==========================================================
+
+enum CategoriaAfectacionIGV {
+  GRAVADO
+  EXONERADO
+  INAFECTO
+  EXPORTACION
+  GRATUITO
+}
+
+model TipoAfectacionIGV {
+  id                       BigInt   @id @default(autoincrement())
+  codigo                   String   @unique @db.VarChar(2)
+  nombre                   String   @db.VarChar(150)
+  descripcion              String?  @db.VarChar(300)
+  categoria                CategoriaAfectacionIGV
+  activo                   Boolean  @default(true)
+  permiteCreditoFiscal     Boolean  @default(false)    // Permite usar crédito fiscal
+  calculaIGV               Boolean  @default(false)    // Aplica cálculo de IGV
+
+  // Relaciones
+  productos                Producto[]
+  ordenesCompra            OrdenCompra[]
+  preFacturas              PreFactura[]
+  detallesComprobante      DetalleComprobante[]
+
+  @@index([codigo])
+  @@index([categoria])
+  @@index([activo])
+}
+
+
 
 model OrdenCompra {
-  id                   BigInt      @id @default(autoincrement())
-  empresaId            BigInt
-  tipoDocumentoId      BigInt
-  serieDocId           BigInt?
-  numSerieDoc          String?     @db.VarChar(40)
-  numCorreDoc          String?     @db.VarChar(40)
-  numeroDocumento      String?
-  fechaDocumento       DateTime    @default(now())
-  fechaContable        DateTime    @default(now())
+  id                          BigInt      @id @default(autoincrement())
+  empresaId                   BigInt
+  tipoDocumentoId             BigInt
+  serieDocId                  BigInt?
+  numSerieDoc                 String?     @db.VarChar(40)
+  numCorreDoc                 String?     @db.VarChar(40)
+  numeroDocumento             String?
+  fechaDocumento              DateTime    @default(now())
+  fechaContable               DateTime    @default(now())
   periodoContableId           BigInt?                                      // ✅ AGREGADO: Período contable (para control de cierre)
-  requerimientoCompraId BigInt?
-  proveedorId          BigInt
-  formaPagoId          BigInt?
-  monedaId             BigInt?
-  tipoCambio           Decimal?
-  fechaEntrega         DateTime?
-  fechaRecepcion       DateTime?
-  solicitanteId        BigInt?
-  aprobadoPorId        BigInt?
-  estadoId             BigInt
-  centroCostoId        BigInt?
-  movIngresoAlmacenId  BigInt?
-  observaciones        String?     @db.Text
-  urlOrdenCompraPdf    String?
-  creadoEn             DateTime    @default(now())
-  actualizadoEn        DateTime    @updatedAt
-  creadoPor            BigInt?
-  actualizadoPor       BigInt?
-  porcentajeIGV        Decimal?
-  esExoneradoAlIGV     Boolean?    @default(false)
-  pagosPreviosSI       Decimal?  @db.Decimal(18, 2)
+  requerimientoCompraId       BigInt?
+  proveedorId                 BigInt
+  formaPagoId                 BigInt?
+  monedaId                    BigInt?
+  tipoCambio                  Decimal?
+  fechaEntrega                DateTime?
+  fechaRecepcion              DateTime?
+  solicitanteId               BigInt?
+  aprobadoPorId               BigInt?
+  estadoId                    BigInt
+  centroCostoId               BigInt?
+  movIngresoAlmacenId         BigInt?
+  observaciones               String?     @db.Text
+  urlOrdenCompraPdf           String?
+  creadoEn                    DateTime    @default(now())
+  actualizadoEn               DateTime    @updatedAt
+  creadoPor                   BigInt?
+  actualizadoPor              BigInt?
+  porcentajeIGV               Decimal?
+  esExoneradoAlIGV            Boolean?    @default(false)
+  pagosPreviosSI              Decimal?    @db.Decimal(18, 2)
   // ========================================
   // ⭐ CAMPOS NUEVOS - DOCUMENTO FINAL (COMPROBANTE DEL PROVEEDOR)
   // Define qué comprobante se recibirá del proveedor
@@ -7047,22 +7085,38 @@ model OrdenCompra {
   aplicaImpuestoRenta         Boolean     @default(false)                  // true = Aplica retención de Impuesto a la Renta
   porcentajeImpuestoRenta     Decimal?    @db.Decimal(5, 2)                // Porcentaje de Impuesto a la Renta (normalmente 8%)
   montoImpuestoRenta          Decimal?    @db.Decimal(18, 2)               // Monto calculado de Impuesto a la Renta
+  tipoAfectacionIGVId         BigInt?
+  // Detracción
+  aplicaDetraccion            Boolean     @default(false)
+  tipoDetraccionId            BigInt?
+  porcentajeDetraccion        Decimal?    @db.Decimal(5,2)
+  montoDetraccion             Decimal?    @db.Decimal(18,2)
+  // Retención
+  aplicaRetencion             Boolean     @default(false)
+  porcentajeRetencion         Decimal?    @db.Decimal(5,2)
+  montoRetencion              Decimal?    @db.Decimal(18,2)
+  // Percepción
+  aplicaPercepcion            Boolean     @default(false)
+  porcentajePercepcion        Decimal?     @db.Decimal(5,2)
+  montoPercepcion             Decimal?     @db.Decimal(18,2)
+
 
   dcmtoAfectoNCND             OrdenCompra?            @relation("OrdenCompraAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
   notasCreditoDebito          OrdenCompra[]           @relation("OrdenCompraAfectadaNCND")  // NC/ND que afectan a esta OC
 
+
   // ========================================
   // RELACIONES EXISTENTES
   // ========================================
-  requerimientoCompra  RequerimientoCompra? @relation(fields: [requerimientoCompraId], references: [id])
-  proveedor            EntidadComercial @relation("ProveedorOrdenCompra", fields: [proveedorId], references: [id])
-  formaPago            FormaPago? @relation(fields: [formaPagoId], references: [id])
-  tipoDocumento        TipoDocumento @relation(fields: [tipoDocumentoId], references: [id])
-  serieDoc             SerieDoc? @relation(fields: [serieDocId], references: [id])
-  empresa              Empresa @relation(fields: [empresaId], references: [id])
-  moneda               Moneda? @relation(fields: [monedaId], references: [id])
-  estado               EstadoMultiFuncion @relation(fields: [estadoId], references: [id])
-  motivoNotaCreditoDebito   MotivoNotaCreditoDebito? @relation("MotivoNCNDOrdenCompra", fields: [motivoNotaCreditoDebitoId], references: [id])
+  requerimientoCompra         RequerimientoCompra?        @relation(fields: [requerimientoCompraId], references: [id])
+  proveedor                   EntidadComercial            @relation("ProveedorOrdenCompra", fields: [proveedorId], references: [id])
+  formaPago                   FormaPago?                  @relation(fields: [formaPagoId], references: [id])
+  tipoDocumento               TipoDocumento               @relation(fields: [tipoDocumentoId], references: [id])
+  serieDoc                    SerieDoc?                   @relation(fields: [serieDocId], references: [id])
+  empresa                     Empresa                     @relation(fields: [empresaId], references: [id])
+  moneda                      Moneda?                     @relation(fields: [monedaId], references: [id])
+  estado                      EstadoMultiFuncion          @relation(fields: [estadoId], references: [id])
+  motivoNotaCreditoDebito     MotivoNotaCreditoDebito?    @relation("MotivoNCNDOrdenCompra", fields: [motivoNotaCreditoDebitoId], references: [id])
   
   // ========================================
   // ⭐ RELACIONES NUEVAS - COMPROBANTE DEL PROVEEDOR
@@ -7081,12 +7135,13 @@ model OrdenCompra {
   cuentaPorPagar       CuentaPorPagar?        // ⭐ NUEVO: 1:1 - Cuenta por pagar generada
   unidadNegocio        UnidadNegocio?         @relation(fields: [unidadNegocioId], references: [id])
 
-  percepciones         Percepcion[]
-  datosAdicionales     DetDatosAdicionalesOrdenCompra[]
-  detalles             DetalleOrdenCompra[]
-  repuestosContratistasOT       DetRepuestosContratistaOT[]
-  asientosContables  AsientoContable[]  // Relación inversa - Asientos generados
-  periodoContable           PeriodoContable?        @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
+  percepciones              Percepcion[]
+  datosAdicionales          DetDatosAdicionalesOrdenCompra[]
+  detalles                  DetalleOrdenCompra[]
+  repuestosContratistasOT   DetRepuestosContratistaOT[]
+  asientosContables         AsientoContable[]  // Relación inversa - Asientos generados
+  periodoContable           PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
+  tipoAfectacionIGV         TipoAfectacionIGV?  @relation(fields: [tipoAfectacionIGVId], references: [id])
 
   
   // ========================================
@@ -7107,6 +7162,7 @@ model OrdenCompra {
   @@index([ordenCompraOrigenId])                                         // ⭐ NUEVO: Trazabilidad de particiones
   @@index([esParticionada])                                              // ⭐ NUEVO: Filtrar OCs particionadas
   @@index([unidadNegocioId])
+  @@index([tipoAfectacionIGVId])
 
 }
 
