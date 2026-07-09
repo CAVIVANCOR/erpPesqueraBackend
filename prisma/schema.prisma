@@ -3775,7 +3775,6 @@ model MovimientoCaja {
 
   // Nuevas relaciones con Tesorería Avanzada
   cuotasPrestamo                  CuotaPrestamo[]
-  desembolsosPrestamo             DesembolsoPrestamo[]
   inversionesLiquidadas           InversionFinanciera[]
   movimientosInversion            MovimientoInversion[]
   prestamosDesembolso             PrestamoBancario[]    @relation("DesembolsoPrestamo")
@@ -4038,7 +4037,6 @@ model Personal {
   // Nuevas relaciones con Tesorería Avanzada
   prestamosCreados                PrestamoBancario[]       @relation("PrestamoCreador")
   prestamosActualizados           PrestamoBancario[]       @relation("PrestamoActualizador")
-  desembolsosCreados              DesembolsoPrestamo[]
   lineasCreditoCreadas            LineaCredito[]           @relation("LineaCreditoCreador")
   lineasCreditoActualizadas       LineaCredito[]       @relation("LineaCreditoActualizador")
   inversionesCreadas              InversionFinanciera[]    @relation("InversionCreador")
@@ -5989,7 +5987,6 @@ model AsientoContable {
 
 // Nuevas relaciones con Tesorería Avanzada
   cuotasPrestamo        CuotaPrestamo[]
-  desembolsosPrestamo   DesembolsoPrestamo[]
   inversionesLiquidadas InversionFinanciera[]
   movimientosInversion  MovimientoInversion[]
   prestamos             PrestamoBancario[]
@@ -8175,7 +8172,6 @@ model PrestamoBancario {
   tipoPrestamo                TipoPrestamo            @relation("PrestamoBancarioTipoPrestamo", fields: [tipoPrestamoId], references: [id])
 
   cuotas                CuotaPrestamo[]
-  desembolsos           DesembolsoPrestamo[]
   garantias             GarantiaPrestamo[]
   pagosCuentaPorPagar   PagoCuentaPorPagar[]
   asientosContables     AsientoContable[]
@@ -8269,39 +8265,6 @@ model CuotaPrestamo {
   @@index([fechaPago])
 }
 
-
-// ============================================
-// MODELO 2.3: Desembolso de Préstamo
-// ============================================
-
-model DesembolsoPrestamo {
-  id                                BigInt                  @id @default(autoincrement())
-  prestamoBancarioId                BigInt
-  fechaDesembolso                   DateTime                                     // Fecha real del desembolso
-  monto                             Decimal                 @db.Decimal(18, 2)   // Monto desembolsado
-  movimientoCajaId                  BigInt                                       // Movimiento de ingreso a caja/banco
-  refOperacionEspecializadaMovCaja  BigInt?
-
-  // ========================================
-  // AUDITORÍA
-  // ========================================
-  fechaCreacion         DateTime    @default(now())                  // Fecha de creación del registro
-  fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
-  creadoPor             BigInt?                                      // Usuario que creó el registro
-  actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
-
-  prestamo              PrestamoBancario        @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
-  movimientoCaja        MovimientoCaja          @relation(fields: [movimientoCajaId], references: [id])
-  personalCreador       Personal?               @relation(fields: [creadoPor], references: [id])
-  asientosContables     AsientoContable[]  // Relación inversa - Asientos generados
-
-  // ========================================
-  // ÍNDICES
-  // ========================================
-  @@index([prestamoBancarioId])
-  @@index([fechaDesembolso])
-  @@index([movimientoCajaId])
-}
 
 
 // ============================================
