@@ -6,6 +6,7 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import lineaCreditoService from "./lineaCredito.service.js";
+import cuotaPrestamoService from "./cuotaPrestamo.service.js";
 const { obtenerTipoCambio } = lineaCreditoService;
 /**
  * Servicio CRUD para PrestamoBancario
@@ -479,7 +480,7 @@ const crear = async (data) => {
           where: { id: data.prestamoRefinanciadoId },
           data: { estadoId: BigInt(84) }, // Estado REFINANCIADO
         });
-           }
+      }
 
       return nuevoPrestamo;
     });
@@ -627,6 +628,10 @@ const actualizar = async (id, data) => {
       },
     });
 
+    // ⭐ RECALCULAR SALDOS DEL PRÉSTAMO DESDE LAS CUOTAS
+    console.log('🔄 Recalculando saldos del préstamo después de actualizar...');
+    await cuotaPrestamoService.actualizarSaldosPrestamo(id);
+
     // ⭐ ACTUALIZAR SALDOS DE LÍNEAS DE CRÉDITO
     // Si cambió la línea de crédito, actualizar ambas (antigua y nueva)
     if (
@@ -639,7 +644,24 @@ const actualizar = async (id, data) => {
       await lineaCreditoService.actualizarSaldosLinea(lineaCreditoIdNueva);
     }
 
-    return prestamoActualizado;
+    // Recargar préstamo con saldos actualizados
+    const prestamoConSaldos = await prisma.prestamoBancario.findUnique({
+      where: { id },
+      include: {
+        empresa: true,
+        banco: true,
+        cuentaCorriente: true,
+        moneda: true,
+        estado: true,
+        lineaCredito: true,
+        tipoPrestamo: true,
+        cuotas: {
+          orderBy: { numeroCuota: "asc" },
+        },
+      },
+    });
+
+    return prestamoConSaldos;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;

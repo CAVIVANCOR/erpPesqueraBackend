@@ -157,3 +157,17 @@ export async function guardarBulk(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Marcar cuota como saldo inicial
+ */
+export async function marcarComoSaldoInicial(req, res, next) {
+  try {
+    const { id } = req.params;
+    const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
+    const cuota = await cuotaPrestamoService.marcarComoSaldoInicial(BigInt(id), usuarioId);
+    res.json(toJSONBigInt(cuota));
+  } catch (err) {
+    next(err);
+  }
+}

@@ -134,22 +134,38 @@ function calcularDiasMora(fechaVencimiento, fechaPago = null) {
 async function actualizarSaldosPrestamo(prestamoBancarioId) {
   const cuotas = await prisma.cuotaPrestamo.findMany({
     where: { prestamoBancarioId },
+    include: {
+      prestamo: {
+        include: {
+          estado: true,
+        },
+      },
+    },
   });
 
-  const capitalPagado = cuotas
-    .filter((c) => c.estadoPago === "PAGADO")
-    .reduce((sum, c) => sum + parseFloat(c.montoCapital), 0);
+  // Filtrar cuotas pagadas (PAGADO o SALDO_INICIAL)
+  const cuotasPagadas = cuotas.filter(
+    (c) => c.estadoPago === "PAGADO" || c.saldoInicialPagada
+  );
 
-  const interesPagado = cuotas
-    .filter((c) => c.estadoPago === "PAGADO")
-    .reduce((sum, c) => sum + parseFloat(c.montoInteres), 0);
+  const capitalPagado = cuotasPagadas.reduce(
+    (sum, c) => sum + parseFloat(c.montoCapital),
+    0
+  );
+
+  const interesPagado = cuotasPagadas.reduce(
+    (sum, c) => sum + parseFloat(c.montoInteres),
+    0
+  );
 
   const prestamo = await prisma.prestamoBancario.findUnique({
     where: { id: prestamoBancarioId },
   });
 
   const saldoCapital = parseFloat(prestamo.montoDesembolsado) - capitalPagado;
-  const saldoInteres = 0; // Se recalcula según cuotas pendientes
+  const saldoInteres = cuotas
+    .filter((c) => c.estadoPago === "VENCIDO")
+    .reduce((sum, c) => sum + parseFloat(c.montoInteres), 0);
 
   await prisma.prestamoBancario.update({
     where: { id: prestamoBancarioId },
@@ -160,6 +176,89 @@ async function actualizarSaldosPrestamo(prestamoBancarioId) {
       saldoInteres,
     },
   });
+}
+
+
+/**
+ * Marca una cuota como saldo inicial (pagada antes del 01/01/2026)
+ * @param {BigInt} cuotaId - ID de la cuota
+ * @param {BigInt} usuarioId - ID del usuario que realiza la acción
+ * @returns {Promise<Object>} Cuota actualizada
+ */
+async function marcarComoSaldoInicial(cuotaId, usuarioId) {
+  const cuota = await prisma.cuotaPrestamo.findUnique({
+    where: { id: cuotaId },
+    include: { prestamo: true },
+  });
+
+  if (!cuota) {
+    throw new NotFoundError("La cuota no existe.");
+  }
+
+  if (cuota.saldoInicialPagada) {
+    throw new ConflictError("La cuota ya está marcada como saldo inicial.");
+  }
+
+  const fechaCorte = new Date("2026-01-01");
+  if (cuota.fechaVencimiento >= fechaCorte) {
+    throw new ValidationError(
+      "Solo se pueden marcar como saldo inicial las cuotas con vencimiento anterior al 01/01/2026."
+    );
+  }
+
+  const cuotaActualizada = await prisma.$transaction(async (tx) => {
+    const updated = await tx.cuotaPrestamo.update({
+      where: { id: cuotaId },
+      data: {
+        saldoInicialPagada: true,
+        estadoPago: "PAGADO", // Prisma enum
+        fechaPago: new Date("2025-12-31"),
+        montoPagado: cuota.montoTotal,
+        diasMora: 0,
+        montoMora: 0,
+        actualizadoPor: usuarioId,
+      },
+      include: {
+        prestamo: {
+          include: {
+            moneda: true,
+            estado: true,
+          },
+        },
+      },
+    });
+
+    await actualizarSaldosPrestamo(cuota.prestamoBancarioId);
+
+    const cuotasPendientes = await tx.cuotaPrestamo.count({
+      where: {
+        prestamoBancarioId: cuota.prestamoBancarioId,
+        estadoPago: { in: ["PENDIENTE", "VENCIDO", "PARCIAL"] },
+      },
+    });
+
+    let nuevoEstadoId;
+    if (cuotasPendientes === 0) {
+      nuevoEstadoId = BigInt(82);
+    } else {
+      const cuotasVencidas = await tx.cuotaPrestamo.count({
+        where: {
+          prestamoBancarioId: cuota.prestamoBancarioId,
+          estadoPago: "VENCIDO",
+        },
+      });
+      nuevoEstadoId = cuotasVencidas > 0 ? BigInt(83) : BigInt(81);
+    }
+
+    await tx.prestamoBancario.update({
+      where: { id: cuota.prestamoBancarioId },
+      data: { estadoId: nuevoEstadoId },
+    });
+
+    return updated;
+  });
+
+  return cuotaActualizada;
 }
 
 /**
@@ -1110,4 +1209,6 @@ export default {
   generarCronograma,
   guardarBulk,
   recalcularCuotasPorPrestamo,
+  marcarComoSaldoInicial,
+  actualizarSaldosPrestamo,
 };

@@ -11,6 +11,7 @@ router.get('/prestamo/:prestamoBancarioId', cuotaPrestamoController.listarPorPre
 router.get('/:id', cuotaPrestamoController.obtenerPorId);
 router.post('/', cuotaPrestamoController.crear);
 router.post('/:id/pagar', cuotaPrestamoController.registrarPago);
+router.post('/:id/marcar-saldo-inicial', cuotaPrestamoController.marcarComoSaldoInicial);
 router.post('/actualizar-vencidos', cuotaPrestamoController.actualizarEstadosVencidos);
 router.post('/generar-cronograma/:prestamoBancarioId', cuotaPrestamoController.generarCronograma);
 router.post('/bulk/:prestamoBancarioId', cuotaPrestamoController.guardarBulk);
