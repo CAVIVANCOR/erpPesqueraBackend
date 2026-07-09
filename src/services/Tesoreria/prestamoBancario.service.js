@@ -6,7 +6,6 @@ import {
   ConflictError,
 } from "../../utils/errors.js";
 import lineaCreditoService from "./lineaCredito.service.js";
-import integracionContablePrestamo from "./integracionContablePrestamo.service.js";
 const { obtenerTipoCambio } = lineaCreditoService;
 /**
  * Servicio CRUD para PrestamoBancario
@@ -307,9 +306,6 @@ const listar = async () => {
         cuotas: {
           orderBy: { numeroCuota: "asc" },
         },
-        desembolsos: {
-          orderBy: { fechaDesembolso: "desc" },
-        },
         garantias: {
           where: { activo: true },
         },
@@ -340,10 +336,9 @@ const obtenerPorId = async (id) => {
         lineaCredito: true,
         tipoPrestamo: true,
         cuotas: {
-          orderBy: { numeroCuota: "asc" },
-        },
-        desembolsos: {
-          orderBy: { fechaDesembolso: "desc" },
+          orderBy: {
+            numeroCuota: "asc"
+          }
         },
         garantias: true,
         prestamoRefinanciado: true,
@@ -484,19 +479,7 @@ const crear = async (data) => {
           where: { id: data.prestamoRefinanciadoId },
           data: { estadoId: BigInt(84) }, // Estado REFINANCIADO
         });
-      }
-
-      // ⭐ GENERAR ASIENTO CONTABLE DE DESEMBOLSO
-      try {
-        await integracionContablePrestamo.generarAsientoDesembolso(
-          nuevoPrestamo,
-          tx,
-          data.creadoPor,
-        );
-      } catch (err) {
-        console.error("Error al generar asiento de desembolso:", err);
-        // No fallar la transacción, solo registrar el error
-      }
+           }
 
       return nuevoPrestamo;
     });

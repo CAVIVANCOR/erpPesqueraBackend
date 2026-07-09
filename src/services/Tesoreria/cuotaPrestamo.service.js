@@ -5,7 +5,6 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
-import integracionContablePrestamo from "./integracionContablePrestamo.service.js";
 
 /**
  * Servicio CRUD para CuotaPrestamo
@@ -497,18 +496,6 @@ const registrarPago = async (id, dataPago) => {
         },
       });
 
-      // ⭐ GENERAR ASIENTO CONTABLE DE PAGO DE CUOTA
-      try {
-        await integracionContablePrestamo.generarAsientoPagoCuota(
-          updated,
-          updated.prestamo,
-          tx,
-          null,
-        );
-      } catch (err) {
-        console.error("Error al generar asiento de pago de cuota:", err);
-      }
-
       // Actualizar saldos del préstamo
       await actualizarSaldosPrestamo(cuota.prestamoBancarioId);
 
@@ -901,7 +888,7 @@ async function generarCronograma(prestamoBancarioId) {
 
   let saldoCapital = montoDesembolsado;
 
-    // CASO ESPECIAL: 1 sola cuota (Préstamo Bullet)
+  // CASO ESPECIAL: 1 sola cuota (Préstamo Bullet)
   if (numeroCuotas === 1) {
     const fechaVencimiento = new Date(prestamo.fechaVencimiento);
 
@@ -1068,7 +1055,7 @@ async function guardarBulk(prestamoBancarioId, cuotas) {
   // ✅ ACTUALIZAR cuotas existentes (NO eliminar)
   const operaciones = cuotas.map((cuota, index) => {
     const cuotaId = BigInt(cuota.id);
-    
+
     const data = {
       numeroCuota: parseInt(cuota.numeroCuota),
       fechaVencimiento: new Date(cuota.fechaVencimiento),

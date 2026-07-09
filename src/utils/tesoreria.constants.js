@@ -365,7 +365,6 @@ export const crearOperacionEspecializadaCaja = (params = {}) => {
       deudaConPersonalId: params.deudaConPersonalId || null,
       deudaTributariaId: params.deudaTributariaId || null,
       cuotaPrestamoId: params.cuotaPrestamoId || null,
-      desembolsoPrestamoId: params.desembolsoPrestamoId || null,
       detMovsEntregaRendirIds: params.detMovsEntregaRendirIds || [],
       prestamoBancarioId: params.prestamoBancarioId || null,
       numeroConstanciaSunat: params.numeroConstanciaSunat || null,
