@@ -7,44 +7,32 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  * Documentado en español.
  */
 
-/**
- * Valida los datos de un tipo de afectación IGV.
- * @param {Object} data - Datos del tipo de afectación
- */
 async function validarTipoAfectacionIGV(data) {
-  // Validar código SUNAT único
-  if (data.codigoSunat) {
-    const existente = await prisma.tipoAfectacionIGV.findFirst({
-      where: {
-        codigoSunat: data.codigoSunat,
-        id: data.id ? { not: data.id } : undefined
-      }
-    });
-    if (existente) {
-      throw new ValidationError(`El código SUNAT "${data.codigoSunat}" ya existe.`);
-    }
+  if (data.codigo && data.codigo.trim().length === 0) {
+    throw new ValidationError('El código no puede estar vacío.');
   }
 
-  // Validar porcentaje IGV
-  if (data.porcentajeIGV !== undefined && data.porcentajeIGV !== null) {
-    if (data.porcentajeIGV < 0 || data.porcentajeIGV > 100) {
-      throw new ValidationError('El porcentaje de IGV debe estar entre 0 y 100.');
-    }
+  if (data.codigo && data.codigo.length > 2) {
+    throw new ValidationError('El código no puede exceder 2 caracteres.');
   }
 
-  // Validar tipo operación
-  if (data.tipoOperacion && !['GRAVADO', 'EXONERADO', 'INAFECTO', 'EXPORTACION', 'GRATUITO'].includes(data.tipoOperacion)) {
-    throw new ValidationError('El tipo de operación debe ser: GRAVADO, EXONERADO, INAFECTO, EXPORTACION o GRATUITO.');
+  if (data.nombre && data.nombre.trim().length === 0) {
+    throw new ValidationError('El nombre no puede estar vacío.');
+  }
+
+  if (data.nombre && data.nombre.length > 150) {
+    throw new ValidationError('El nombre no puede exceder 150 caracteres.');
+  }
+
+  if (data.descripcion && data.descripcion.length > 300) {
+    throw new ValidationError('La descripción no puede exceder 300 caracteres.');
   }
 }
 
-/**
- * Lista todos los tipos de afectación IGV ordenados por código SUNAT.
- */
 const listar = async () => {
   try {
     return await prisma.tipoAfectacionIGV.findMany({
-      orderBy: { codigoSunat: 'asc' }
+      orderBy: { codigo: 'asc' }
     });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) {
@@ -54,9 +42,20 @@ const listar = async () => {
   }
 };
 
-/**
- * Obtiene un tipo de afectación IGV por ID.
- */
+const listarActivos = async () => {
+  try {
+    return await prisma.tipoAfectacionIGV.findMany({
+      where: { activo: true },
+      orderBy: { codigo: 'asc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
 const obtenerPorId = async (id) => {
   try {
     const tipo = await prisma.tipoAfectacionIGV.findUnique({
@@ -73,79 +72,89 @@ const obtenerPorId = async (id) => {
   }
 };
 
-/**
- * Crea un nuevo tipo de afectación IGV.
- */
 const crear = async (data) => {
   try {
-    // Validar campos obligatorios
-    if (!data.codigoSunat || !data.descripcion) {
-      throw new ValidationError('Los campos codigoSunat y descripcion son obligatorios.');
+    if (!data.codigo) {
+      throw new ValidationError('El código es obligatorio.');
+    }
+
+    if (!data.nombre) {
+      throw new ValidationError('El nombre es obligatorio.');
+    }
+
+    if (!data.categoria) {
+      throw new ValidationError('La categoría es obligatoria.');
     }
 
     await validarTipoAfectacionIGV(data);
 
     const tipoData = {
-      ...data,
-      fechaActualizacion: new Date()
+      codigo: data.codigo.trim(),
+      nombre: data.nombre.trim(),
+      descripcion: data.descripcion?.trim() || null,
+      categoria: data.categoria,
+      activo: data.activo !== undefined ? data.activo : true,
+      permiteCreditoFiscal: data.permiteCreditoFiscal !== undefined ? data.permiteCreditoFiscal : false,
+      calculaIGV: data.calculaIGV !== undefined ? data.calculaIGV : false
     };
-
     return await prisma.tipoAfectacionIGV.create({ data: tipoData });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) {
+      if (err.code === 'P2002') {
+        throw new ConflictError('Ya existe un tipo de afectación IGV con ese código.');
+      }
       throw new DatabaseError('Error de base de datos', err.message);
     }
     throw err;
   }
 };
 
-/**
- * Actualiza un tipo de afectación IGV existente.
- */
 const actualizar = async (id, data) => {
   try {
     const existente = await prisma.tipoAfectacionIGV.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Tipo de afectación IGV no encontrado');
 
-    await validarTipoAfectacionIGV({ ...data, id });
-
-    const tipoData = {
-      ...data,
-      fechaActualizacion: new Date()
-    };
+    await validarTipoAfectacionIGV(data);
 
     return await prisma.tipoAfectacionIGV.update({
       where: { id },
-      data: tipoData
+      data: data
     });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) {
+      if (err.code === 'P2002') {
+        throw new ConflictError('Ya existe un tipo de afectación IGV con ese código.');
+      }
       throw new DatabaseError('Error de base de datos', err.message);
     }
     throw err;
   }
 };
 
-/**
- * Elimina un tipo de afectación IGV por ID.
- * Valida que no esté siendo usado en comprobantes electrónicos.
- */
 const eliminar = async (id) => {
   try {
     const existente = await prisma.tipoAfectacionIGV.findUnique({
       where: { id },
       include: {
+        productos: true,
+        ordenesCompra: true,
+        preFacturas: true,
         detallesComprobante: true
       }
     });
 
     if (!existente) throw new NotFoundError('Tipo de afectación IGV no encontrado');
 
-    // Validar que no esté siendo usado
-    if (existente.detallesComprobante && existente.detallesComprobante.length > 0) {
-      throw new ConflictError('No se puede eliminar el tipo de afectación porque está siendo usado en comprobantes electrónicos.');
+    const totalRelaciones = 
+      (existente.productos?.length || 0) +
+      (existente.ordenesCompra?.length || 0) +
+      (existente.preFacturas?.length || 0) +
+      (existente.detallesComprobante?.length || 0);
+
+    if (totalRelaciones > 0) {
+      throw new ConflictError('No se puede eliminar el tipo porque tiene registros asociados.');
     }
 
     await prisma.tipoAfectacionIGV.delete({ where: { id } });
@@ -159,52 +168,13 @@ const eliminar = async (id) => {
   }
 };
 
-/**
- * Lista tipos de afectación IGV activos.
- */
-const listarActivos = async () => {
+const listarPorCategoria = async (categoria) => {
   try {
     return await prisma.tipoAfectacionIGV.findMany({
-      where: { activo: true },
-      orderBy: { codigoSunat: 'asc' }
+      where: { categoria, activo: true },
+      orderBy: { codigo: 'asc' }
     });
   } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
-
-/**
- * Lista tipos de afectación IGV por tipo de operación.
- */
-const listarPorTipoOperacion = async (tipoOperacion) => {
-  try {
-    return await prisma.tipoAfectacionIGV.findMany({
-      where: { tipoOperacion },
-      orderBy: { codigoSunat: 'asc' }
-    });
-  } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
-
-/**
- * Obtiene un tipo de afectación IGV por código SUNAT.
- */
-const obtenerPorCodigoSunat = async (codigoSunat) => {
-  try {
-    const tipo = await prisma.tipoAfectacionIGV.findFirst({
-      where: { codigoSunat }
-    });
-    if (!tipo) throw new NotFoundError(`Tipo de afectación IGV con código SUNAT "${codigoSunat}" no encontrado`);
-    return tipo;
-  } catch (err) {
-    if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos', err.message);
     }
@@ -214,11 +184,10 @@ const obtenerPorCodigoSunat = async (codigoSunat) => {
 
 export default {
   listar,
+  listarActivos,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
-  listarActivos,
-  listarPorTipoOperacion,
-  obtenerPorCodigoSunat
+  listarPorCategoria
 };

@@ -158,6 +158,17 @@ async function validarProducto(data, excluirId = null) {
     data.sujetoDetraccion = true;
   }
 
+  
+  // Validar tipoAfectacionIGVId si se envía
+  if (data.tipoAfectacionIGVId !== undefined && data.tipoAfectacionIGVId !== null) {
+    const tipoAfectacionIGV = await prisma.tipoAfectacionIGV.findUnique({
+      where: { id: data.tipoAfectacionIGVId }
+    });
+    if (!tipoAfectacionIGV) {
+      throw new ValidationError('Tipo de afectación IGV no existente.');
+    }
+  }
+  
   // Validar unidadMedidaComercialId si se envía explícitamente
   // NOTA: Si es null/undefined, normalizarDatosProducto ya lo iguala a unidadMedidaId
   if (data.unidadMedidaComercialId !== undefined &&

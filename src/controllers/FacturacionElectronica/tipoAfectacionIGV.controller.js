@@ -1,14 +1,18 @@
 import tipoAfectacionIGVService from '../../services/FacturacionElectronica/tipoAfectacionIGV.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
-/**
- * Controlador para TipoAfectacionIGV
- * Documentado en español.
- */
-
 export async function listar(req, res, next) {
   try {
     const tipos = await tipoAfectacionIGVService.listar();
+    res.json(toJSONBigInt(tipos));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listarActivos(req, res, next) {
+  try {
+    const tipos = await tipoAfectacionIGVService.listarActivos();
     res.json(toJSONBigInt(tipos));
   } catch (err) {
     next(err);
@@ -54,30 +58,11 @@ export async function eliminar(req, res, next) {
   }
 }
 
-export async function listarActivos(req, res, next) {
+export async function listarPorCategoria(req, res, next) {
   try {
-    const tipos = await tipoAfectacionIGVService.listarActivos();
+    const categoria = req.params.categoria;
+    const tipos = await tipoAfectacionIGVService.listarPorCategoria(categoria);
     res.json(toJSONBigInt(tipos));
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function listarPorTipoOperacion(req, res, next) {
-  try {
-    const tipoOperacion = req.params.tipoOperacion;
-    const tipos = await tipoAfectacionIGVService.listarPorTipoOperacion(tipoOperacion);
-    res.json(toJSONBigInt(tipos));
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function obtenerPorCodigoSunat(req, res, next) {
-  try {
-    const codigoSunat = req.params.codigoSunat;
-    const tipo = await tipoAfectacionIGVService.obtenerPorCodigoSunat(codigoSunat);
-    res.json(toJSONBigInt(tipo));
   } catch (err) {
     next(err);
   }
