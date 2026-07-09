@@ -901,15 +901,18 @@ async function generarCronograma(prestamoBancarioId) {
 
   let saldoCapital = montoDesembolsado;
 
-  // CASO ESPECIAL: 1 sola cuota (Préstamo Bullet)
+    // CASO ESPECIAL: 1 sola cuota (Préstamo Bullet)
   if (numeroCuotas === 1) {
     const fechaVencimiento = new Date(prestamo.fechaVencimiento);
 
-    // Calcular interés compuesto para el período
-    const tasaAnualDecimal = tasaAnual / 100;
-    const tasaPeriodo = Math.pow(1 + tasaAnualDecimal, plazoMeses / 12) - 1;
-    const interesTotal = montoDesembolsado * tasaPeriodo;
+    // Calcular días reales entre desembolso y vencimiento
+    const fechaDesembolso = new Date(prestamo.fechaDesembolso);
+    const dias = Math.round((fechaVencimiento - fechaDesembolso) / (1000 * 60 * 60 * 24));
 
+    // Calcular interés con días reales (base 360)
+    const tasaAnualDecimal = tasaAnual / 100;
+    const tasaPeriodo = Math.pow(1 + tasaAnualDecimal, dias / 360) - 1;
+    const interesTotal = montoDesembolsado * tasaPeriodo;
     cuotas.push({
       prestamoBancarioId,
       numeroCuota: 1,
@@ -1062,45 +1065,34 @@ async function guardarBulk(prestamoBancarioId, cuotas) {
   // Convertir a Number para Prisma
   const prestamoId = Number(prestamoBancarioId);
 
-  console.log('===== GUARDAR BULK DEBUG =====');
-  console.log('prestamoBancarioId recibido:', prestamoBancarioId, 'tipo:', typeof prestamoBancarioId);
-  console.log('prestamoId convertido:', prestamoId, 'tipo:', typeof prestamoId);
-  console.log('Número de cuotas:', cuotas.length);
-  console.log('Primera cuota recibida:', JSON.stringify(cuotas[0], null, 2));
-
-  await prisma.cuotaPrestamo.deleteMany({
-    where: { prestamoBancarioId: prestamoId },
-  });
-
-  // Crear cuotas SIN include
-  const cuotasParaCrear = cuotas.map((cuota, index) => {
+  // ✅ ACTUALIZAR cuotas existentes (NO eliminar)
+  const operaciones = cuotas.map((cuota, index) => {
+    const cuotaId = BigInt(cuota.id);
+    
     const data = {
-      prestamoBancarioId: prestamoId,
       numeroCuota: parseInt(cuota.numeroCuota),
       fechaVencimiento: new Date(cuota.fechaVencimiento),
-      montoCapital: parseFloat(cuota.montoCapital),
-      montoInteres: parseFloat(cuota.montoInteres),
+      montoCapital: parseFloat(cuota.montoCapital || 0),
+      montoInteres: parseFloat(cuota.montoInteres || 0),
       montoComision: parseFloat(cuota.montoComision || 0),
       montoSeguro: parseFloat(cuota.montoSeguro || 0),
-      montoTotal: parseFloat(cuota.montoTotal),
-      saldoCapitalAntes: parseFloat(cuota.saldoCapitalAntes),
-      saldoCapitalDespues: parseFloat(cuota.saldoCapitalDespues),
+      montoTotal: parseFloat(cuota.montoTotal || 0),
+      saldoCapitalAntes: parseFloat(cuota.saldoCapitalAntes || 0),
+      saldoCapitalDespues: parseFloat(cuota.saldoCapitalDespues || 0),
       estadoPago: cuota.estadoPago || "PENDIENTE",
       diasMora: parseInt(cuota.diasMora || 0),
-      creadoPor: cuota.creadoPor ? BigInt(cuota.creadoPor) : null,
       actualizadoPor: cuota.actualizadoPor ? BigInt(cuota.actualizadoPor) : null,
     };
 
-    if (index === 0) {
-      console.log('Data procesada para primera cuota:', JSON.stringify(data, null, 2));
-    }
-
-    return prisma.cuotaPrestamo.create({ data });
+    return prisma.cuotaPrestamo.update({
+      where: { id: cuotaId },
+      data: data
+    });
   });
 
-  await prisma.$transaction(cuotasParaCrear);
+  await prisma.$transaction(operaciones);
 
-  // Cargar las cuotas con sus relaciones DESPUÉS de crearlas
+  // Cargar las cuotas con sus relaciones DESPUÉS de actualizar
   const cuotasConRelaciones = await prisma.cuotaPrestamo.findMany({
     where: { prestamoBancarioId: prestamoId },
     include: {
