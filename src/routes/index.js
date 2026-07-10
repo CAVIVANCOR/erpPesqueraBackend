@@ -13,6 +13,7 @@ import configuracionCuentaContableContabilidadRoutes from './Contabilidad/config
 import enumsContabilidadRoutes from './Contabilidad/enumsContabilidad.routes.js';
 import documentosOrigenRoutes from './Contabilidad/documentosOrigen.routes.js';
 import tipoAfectacionIGVRoutes from './FacturacionElectronica/tipoAfectacionIGV.routes.js';
+import tipoOperacionSunatRoutes from './FacturacionElectronica/tipoOperacionSunat.routes.js';
 import comprobanteElectronicoRoutes from './FacturacionElectronica/comprobanteElectronico.routes.js';
 import cuentaPorCobrarRoutes from './CuentasPorCobrarPagar/cuentaPorCobrar.routes.js';
 import cuentaPorPagarRoutes from './CuentasPorCobrarPagar/cuentaPorPagar.routes.js';
@@ -678,6 +679,7 @@ router.use('/contabilidad/configuracion-cuenta-contable', configuracionCuentaCon
 router.use('/contabilidad/documentos-origen', documentosOrigenRoutes);
 router.use('/contabilidad/enums', enumsContabilidadRoutes);
 // Rutas para Facturación Electrónica
+router.use('/facturacion-electronica/tipo-operacion-sunat', tipoOperacionSunatRoutes);
 router.use('/facturacion-electronica/tipo-afectacion-igv', tipoAfectacionIGVRoutes);
 router.use('/facturacion-electronica/comprobante-electronico', comprobanteElectronicoRoutes);
 // Rutas para Cuentas Por Cobrar/Pagar

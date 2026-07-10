@@ -629,7 +629,6 @@ const actualizar = async (id, data) => {
     });
 
     // ⭐ RECALCULAR SALDOS DEL PRÉSTAMO DESDE LAS CUOTAS
-    console.log('🔄 Recalculando saldos del préstamo después de actualizar...');
     await cuotaPrestamoService.actualizarSaldosPrestamo(id);
 
     // ⭐ ACTUALIZAR SALDOS DE LÍNEAS DE CRÉDITO
