@@ -1333,7 +1333,8 @@ model PreFactura {
   detallesDetraccion          DetalleDetraccion[]  @relation("PreFacturaDetraccion")
   tipoAfectacionIGV           TipoAfectacionIGV?  @relation(fields: [tipoAfectacionIGVId], references: [id])
   tipoOperacionSunat          TipoOperacionSunat? @relation(fields: [tipoOperacionSunatId], references: [id])
-  
+  tipoDetraccion              TipoDetraccion?  @relation("PreFacturaTipoDetraccion", fields: [tipoDetraccionId], references: [id])
+
   // Índices
   @@index([empresaId, fechaDocumento])
   @@index([clienteId])
@@ -7141,7 +7142,8 @@ model OrdenCompra {
   asientosContables         AsientoContable[]  // Relación inversa - Asientos generados
   periodoContable           PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
   tipoOperacionSunat        TipoOperacionSunat?  @relation(fields: [tipoOperacionSunatId], references: [id])
-  
+  tipoDetraccion            TipoDetraccion?  @relation("OrdenCompraTipoDetraccion", fields: [tipoDetraccionId], references: [id])
+
   // ========================================
   // ÍNDICES EXISTENTES
   // ========================================
@@ -7603,7 +7605,9 @@ model TipoDetraccion {
   productos             Producto[]                              // 🆕 AGREGAR ESTA LÍNEA
   detallePrefacturas    DetallePreFactura[]
   detalleOrdenCompra    DetalleOrdenCompra[]
-
+  preFacturas           PreFactura[]        @relation("PreFacturaTipoDetraccion")      // ✅ AGREGAR
+  ordenesCompra         OrdenCompra[]       @relation("OrdenCompraTipoDetraccion")     // ✅ AGREGAR
+  
   @@index([activo])
 }
 
