@@ -1125,6 +1125,22 @@ model DetMovsEntregaRendirPVentas {
 
 }
 
+// ============================================
+// CATÁLOGO 01: TIPO DE OPERACIÓN SUNAT
+// Base de conocimiento reutilizable para Ventas y Compras
+// ============================================
+model TipoOperacionSunat {
+  id            BigInt         @id @default(autoincrement())
+  codigo        String         @unique @db.VarChar(4)  // Ej: "0101", "0200", "0502"
+  descripcion   String         @db.VarChar(250)        // Nombre oficial SUNAT (ej: "Venta Interna", "Exportación de Bienes")
+
+  // Relaciones inversas (Vincula ambos mundos en tu ERP)
+  preFacturas   PreFactura[]     // Relación con tu módulo de Ventas
+  ordenCompra   OrdenCompra[]     // Relación con tu módulo de Compras/Gastos
+
+  @@index([codigo])
+}
+
 
 // ============================================
 // PreFactura - Nota de Venta Interna
@@ -1223,7 +1239,8 @@ model PreFactura {
   // Impuestos
   exoneradoIgv                Boolean     @default(false)                  // true = Exonerado de IGV
   porcentajeIgv               Decimal?    @db.Decimal(5, 2)                // Porcentaje de IGV (normalmente 18%)
-  
+  tipoOperacionSunatId        BigInt?                         
+
   // Factores exportación
   factorExportacion           Decimal?    @db.Decimal(18, 6)               // Factor de exportación estimado
   factorExportacionReal       Decimal?    @db.Decimal(18, 6)               // Factor de exportación real
@@ -1315,7 +1332,7 @@ model PreFactura {
   asientosContables           AsientoContable[]  // Relación inversa - Asientos generados
   detallesDetraccion          DetalleDetraccion[]  @relation("PreFacturaDetraccion")
   tipoAfectacionIGV           TipoAfectacionIGV?  @relation(fields: [tipoAfectacionIGVId], references: [id])
-
+  tipoOperacionSunat          TipoOperacionSunat? @relation(fields: [tipoOperacionSunatId], references: [id])
   
   // Índices
   @@index([empresaId, fechaDocumento])
@@ -1330,7 +1347,7 @@ model PreFactura {
   @@index([esParticionada])                                              // ⭐ NUEVO: Filtrar PreFacturas particionadas
   @@index([unidadNegocioId])
   @@index([tipoAfectacionIGVId])
-
+  @@index([tipoOperacionSunatId])
 }
 
 
@@ -1359,10 +1376,19 @@ model DetallePreFactura {
   creadoPor                   BigInt?
   actualizadoPor              BigInt?
 
+  tipoAfectacionIGVId         BigInt?    // 10 = Gravado (Venta Local), 40 = Exportación (Venta Exterior)
+  tipoDetraccionId            BigInt?   // Código Sunat (004 Recursos Hidrobiológicos)
+  porcentajeDetraccion        Decimal?  @db.Decimal(5, 2)
+
   preFactura                  PreFactura @relation(fields: [preFacturaId], references: [id], onDelete: Cascade)
   producto                    Producto @relation(fields: [productoId], references: [id])
+  tipoAfectacionIGV           TipoAfectacionIGV?  @relation(fields: [tipoAfectacionIGVId], references: [id])
+  tipoDetraccion              TipoDetraccion?    @relation(fields: [tipoDetraccionId], references: [id])
   
   @@index([preFacturaId])
+  @@index([productoId])
+  @@index([tipoAfectacionIGVId])
+  @@index([tipoDetraccionId])
 }
 
 model MotivoNotaCreditoDebito {
@@ -2232,35 +2258,6 @@ model UbicacionFisica {
 }
 
 
-
-model DetalleOrdenCompra {
-  id                          BigInt      @id @default(autoincrement())
-  ordenCompraId               BigInt                                         // Orden a la que pertenece
-  productoId                  BigInt                                         // Producto a comprar
-    // DATOS ALMACÉN (Calculados automáticamente desde cantidadCompra y precioUnitarioCompra)
-  cantidad                    Decimal                                        // Cantidad en unidad base (ej: 75 Sacos) - CALCULADO
-  precioUnitario              Decimal                                        // Precio en unidad base (ej: $50/Saco) - CALCULADO
-
-  cantidadRecibida            Decimal?  @default(0)                        // Cantidad realmente recibida
-  subtotal                    Decimal?                                     // cantidad * precioUnitario
-  centroCostoId               BigInt?                                      // Centro de costo específico
-  observaciones               String?     @db.Text                         // Notas del item
- // Auditoría
-  fechaCreacion               DateTime @default(now())
-  fechaActualizacion          DateTime? @updatedAt
-  creadoPor                   BigInt?
-  actualizadoPor              BigInt?
-    // ⭐ NUEVOS CAMPOS - DATOS COMERCIALES (Lo que ingresa el usuario)
-  cantidadCompra              Decimal?    @db.Decimal(18, 3)      // Cantidad en unidad comercial (ej: 1.5 TN)
-  precioUnitarioCompra        Decimal?    @db.Decimal(18, 6)      // Precio en unidad comercial (ej: $2,500/TN)
-
-  ordenCompra    OrdenCompra @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
-  producto       Producto @relation(fields: [productoId], references: [id])
-
-  @@index([ordenCompraId])
-  @@index([productoId])
-}
-
 model RequerimientoCompra {
   id                    BigInt      @id @default(autoincrement())
   empresaId             BigInt                                  // Empresa que solicita la compra
@@ -2512,7 +2509,7 @@ model Empresa {
   cesado               Boolean              @default(false)
   representantelegalId BigInt?
   cuentaDetraccion     String?
-  montoMinimoRetencion Decimal?
+  montoMinimoRetencion Decimal?             @default(700.00) @db.Decimal(10, 2)
   montoMinimoDetraccion Decimal?            @default(700.00) @db.Decimal(10, 2)  // Monto mínimo para aplicar detracción (default S/ 700)
   porcentajeRetencion  Decimal?
   soyAgentePercepcion  Boolean              @default(false)
@@ -2532,8 +2529,8 @@ model Empresa {
   // ========================================
   // ⭐ CAMPOS NUBEFACT - FACTURACIÓN ELECTRÓNICA
   // ========================================
-  nubefactUrl                         String?     @db.VarChar(255)        // URL del API de Nubefact
-  nubefactToken                       String?     @db.VarChar(500)        // Token de autenticación de Nubefact
+  nubefactUrl                         String?     // URL del API de Nubefact
+  nubefactToken                       String?     // Token de autenticación de Nubefact
   ultimoCorrelativoOperacionCaja      BigInt?     @default(0)
   porcentajePercepcion                Decimal?    @db.Decimal(5, 2)  // 🆕 AGREGAR ESTA LÍNEA
   porcentajeImpuestoRenta             Decimal?    @default(8.00) @db.Decimal(5, 2)  // % Impuesto a la Renta para Recibos por Honorarios
@@ -7002,8 +6999,9 @@ model TipoAfectacionIGV {
 
   // Relaciones
   productos                Producto[]
-  ordenesCompra            OrdenCompra[]
   preFacturas              PreFactura[]
+  detallePreFacturas       DetallePreFactura[]
+  detalleOrdenCompra       DetalleOrdenCompra[]
   detallesComprobante      DetalleComprobante[]
 
   @@index([codigo])
@@ -7043,6 +7041,7 @@ model OrdenCompra {
   creadoPor                   BigInt?
   actualizadoPor              BigInt?
   porcentajeIGV               Decimal?
+  tipoOperacionSunatId        BigInt?   
   esExoneradoAlIGV            Boolean?    @default(false)
   pagosPreviosSI              Decimal?    @db.Decimal(18, 2)
   // ========================================
@@ -7085,7 +7084,7 @@ model OrdenCompra {
   aplicaImpuestoRenta         Boolean     @default(false)                  // true = Aplica retención de Impuesto a la Renta
   porcentajeImpuestoRenta     Decimal?    @db.Decimal(5, 2)                // Porcentaje de Impuesto a la Renta (normalmente 8%)
   montoImpuestoRenta          Decimal?    @db.Decimal(18, 2)               // Monto calculado de Impuesto a la Renta
-  tipoAfectacionIGVId         BigInt?
+
   // Detracción
   aplicaDetraccion            Boolean     @default(false)
   tipoDetraccionId            BigInt?
@@ -7127,7 +7126,7 @@ model OrdenCompra {
   // ⭐ RELACIONES NUEVAS - PARTICIÓN
   // ========================================
   ordenCompraOrigen    OrdenCompra?            @relation("ParticionOrdenCompra", fields: [ordenCompraOrigenId], references: [id])  // ⭐ NUEVO: OC madre
-  ordenesCompraHijas   OrdenCompra[]           @relation("ParticionOrdenCompra")                                                    // ⭐ NUEVO: OCs hijas (Blanca y Negra)
+  ordenesCompraHijas   OrdenCompra[]           @relation("ParticionOrdenCompra")    // ⭐ NUEVO: OCs hijas (Blanca y Negra)
   
   // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
@@ -7141,8 +7140,7 @@ model OrdenCompra {
   repuestosContratistasOT   DetRepuestosContratistaOT[]
   asientosContables         AsientoContable[]  // Relación inversa - Asientos generados
   periodoContable           PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
-  tipoAfectacionIGV         TipoAfectacionIGV?  @relation(fields: [tipoAfectacionIGVId], references: [id])
-
+  tipoOperacionSunat        TipoOperacionSunat?  @relation(fields: [tipoOperacionSunatId], references: [id])
   
   // ========================================
   // ÍNDICES EXISTENTES
@@ -7162,8 +7160,51 @@ model OrdenCompra {
   @@index([ordenCompraOrigenId])                                         // ⭐ NUEVO: Trazabilidad de particiones
   @@index([esParticionada])                                              // ⭐ NUEVO: Filtrar OCs particionadas
   @@index([unidadNegocioId])
-  @@index([tipoAfectacionIGVId])
+  @@index([tipoOperacionSunatId])
+}
 
+
+
+model DetalleOrdenCompra {
+  id                          BigInt      @id @default(autoincrement())
+  ordenCompraId               BigInt                                         // Orden a la que pertenece
+  productoId                  BigInt                                         // Producto a comprar
+// DATOS ALMACÉN (Calculados automáticamente desde cantidadCompra y precioUnitarioCompra)
+  cantidad                    Decimal                                        // Cantidad en unidad base (ej: 75 Sacos) - CALCULADO
+  precioUnitario              Decimal                                        // Precio en unidad base (ej: $50/Saco) - CALCULADO
+
+  cantidadRecibida            Decimal?    @default(0)                        // Cantidad realmente recibida
+  subtotal                    Decimal?                                     // cantidad * precioUnitario
+  centroCostoId               BigInt?                                      // Centro de costo específico
+  observaciones               String?     @db.Text                         // Notas del item
+// Auditoría
+  fechaCreacion               DateTime    @default(now())
+  fechaActualizacion          DateTime?   @updatedAt
+  creadoPor                   BigInt?
+  actualizadoPor              BigInt?
+
+    // ⭐ NUEVOS CAMPOS - DATOS COMERCIALES (Lo que ingresa el usuario)
+  cantidadCompra              Decimal?    @db.Decimal(18, 3)      // Cantidad en unidad comercial (ej: 1.5 TN)
+  precioUnitarioCompra        Decimal?    @db.Decimal(18, 6)      // Precio en unidad comercial (ej: $2,500/TN)
+
+  // ========================================
+  // ⚖️ TRIPLETA TRIBUTARIA POR ÍTEM (AÑADIDOS)
+  // Guarda el cálculo exacto de cada línea para el libro contable
+  // ========================================
+  tipoAfectacionIGVId   BigInt?                                         // 10=Gravado, 20=Exonerado, etc.
+  tipoDetraccionId      BigInt?                                        // Detracción si el ítem la tiene (ej: flete)
+  porcentajeDetraccion  Decimal?  @db.Decimal(5, 2)                    // Tasa congelada al comprar
+
+
+  ordenCompra           OrdenCompra        @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+  producto              Producto           @relation(fields: [productoId], references: [id])
+  tipoAfectacionIGV     TipoAfectacionIGV?  @relation(fields: [tipoAfectacionIGVId], references: [id]) // ✅ NUEVO
+  tipoDetraccion        TipoDetraccion?    @relation(fields: [tipoDetraccionId], references: [id])    // ✅ NUEVO
+
+  @@index([ordenCompraId])
+  @@index([productoId])
+  @@index([tipoAfectacionIGVId]) // ✅ NUEVO
+  @@index([tipoDetraccionId])    // ✅ NUEVO
 }
 
 
@@ -7560,6 +7601,8 @@ model TipoDetraccion {
   // Relaciones inversas
   detracciones          Detraccion[]
   productos             Producto[]                              // 🆕 AGREGAR ESTA LÍNEA
+  detallePrefacturas    DetallePreFactura[]
+  detalleOrdenCompra    DetalleOrdenCompra[]
 
   @@index([activo])
 }
