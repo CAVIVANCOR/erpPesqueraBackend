@@ -55,10 +55,10 @@ router.put(
 );
 
 router.delete(
-  '/:id',
+  '/:id/asiento/:asientoId',
   autenticarJWT,
-  checkPermission('ordenCompra', 'eliminar'),
-  ordenCompraController.eliminar
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.eliminarAsientoContable
 );
 
 // ========================================

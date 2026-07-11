@@ -157,6 +157,9 @@ router.post(
   preFacturaController.crear
 );
 
+router.put("/actualizar-tipo-operacion-sunat-masivo", preFacturaController.actualizarTipoOperacionSunatMasivo);
+router.put("/actualizar-tipo-afectacion-igv-masivo", preFacturaController.actualizarTipoAfectacionIGVMasivo);
+
 router.put(
   '/:id',
   autenticarJWT,
@@ -184,5 +187,6 @@ router.put(
   checkPermission('preFactura', 'editar'),
   preFacturaController.reactivarDocumento
 );
+
 
 export default router;

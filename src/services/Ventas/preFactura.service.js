@@ -181,6 +181,8 @@ const listar = async () => {
         formaPago: true,
         incoterm: true,
         tipoContenedor: true,
+        tipoOperacionSunat: true,
+        tipoAfectacionIGV: true,
         periodoContable: true, // ✅ AGREGADO
         detalles: {
           include: {
@@ -2710,33 +2712,66 @@ const generarBorradorAsiento = async (preFacturaId) => {
       );
     }
 
-    // ⭐ DETECTAR SI ES SALDO INICIAL (SI-CXC)
-    const esSaldoInicial = preFactura.tipoDocumento?.codigo === "SI-CXC";
+    // ⭐ DETECTAR SI ES SALDO INICIAL (código empieza con "SI")
+    const esSaldoInicial = preFactura.tipoDocumento?.codigo?.startsWith("SI");
 
-    // ⭐ Si es Saldo Inicial, usar cuenta 59 (Resultados Acumulados) en lugar de 70 (Ventas)
+    // ⭐ Si es Saldo Inicial, usar cuentas específicas según moneda
+    let cuentaDebe = cuentaCxC; // Por defecto: 12.1 (CxC)
     let cuentaHaber = cuentaVentas; // Por defecto: 70 (Ventas)
 
     if (esSaldoInicial) {
-      const cuentaResultadosAcumulados = await prisma.planCuentasContable.findFirst({
+      // Determinar cuenta de Saldos Iniciales según moneda
+      const codigoCuentaSI = Number(preFactura.monedaId) === 1 ? "121201" : "121202";
+
+      const cuentaSaldoInicial = await prisma.planCuentasContable.findFirst({
         where: {
-          codigoCuenta: { startsWith: "59" },
+          codigoCuenta: codigoCuentaSI,
           activo: true,
         },
       });
 
-      if (!cuentaResultadosAcumulados) {
+      if (!cuentaSaldoInicial) {
         throw new ValidationError(
-          "No se encontró la cuenta 59 (Resultados Acumulados). " +
+          `No se encontró la cuenta ${codigoCuentaSI} (Saldos Iniciales CxC ${Number(preFactura.monedaId) === 1 ? 'PEN' : 'USD'}). ` +
           "Configure el plan de cuentas antes de generar el asiento para Saldos Iniciales.",
         );
       }
 
-      cuentaHaber = cuentaResultadosAcumulados;
+      // Para SI: HABER debe ser 5911101 (Utilidades Acumuladas)
+      const cuentaUtilidades = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: "5911101",
+          activo: true,
+        },
+      });
+
+      if (!cuentaUtilidades) {
+        throw new ValidationError(
+          "No se encontró la cuenta 5911101 (Utilidades Acumuladas). " +
+          "Configure el plan de cuentas antes de generar el asiento para Saldos Iniciales.",
+        );
+      }
+
+      cuentaDebe = cuentaSaldoInicial;
+      cuentaHaber = cuentaUtilidades;
     }
 
-    const subtotal = Number(preFactura.subtotal);
-    const totalIGV = Number(preFactura.totalIGV);
-    const total = Number(preFactura.total);
+    let subtotal = Number(preFactura.subtotal);
+    let totalIGV = Number(preFactura.totalIGV);
+    let total = Number(preFactura.total);
+
+    // ⭐ SI ES SALDO INICIAL EN MONEDA EXTRANJERA: Convertir a SOLES
+    if (esSaldoInicial && Number(preFactura.monedaId) !== 1) {
+      const tipoCambio = Number(preFactura.tipoCambio);
+      if (!tipoCambio || tipoCambio === 0) {
+        throw new ValidationError(
+          "El tipo de cambio es requerido para Saldos Iniciales en moneda extranjera."
+        );
+      }
+      subtotal = subtotal * tipoCambio;
+      totalIGV = totalIGV * tipoCambio;
+      total = total * tipoCambio;
+    }
     // Determinar tipo de libro según esGerencial
     const tipoLibro = preFactura.esGerencial ? "GERENCIAL" : "FISCAL";
 
@@ -2749,7 +2784,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
         : `Venta según PreFactura ${preFactura.codigo}`,
       tipoLibro: tipoLibro,
       origenAsiento: "AUTOMATICO",
-      monedaId: preFactura.monedaId,
+      monedaId: esSaldoInicial ? 1 : preFactura.monedaId, // SI siempre en SOLES
       tipoCambio: preFactura.tipoCambio,
       detalles: [],
     };
@@ -2759,7 +2794,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
       borrador.detalles = [
         {
           numeroLinea: 1,
-          planCuentaId: cuentaCxC.id,
+          planCuentaId: cuentaDebe.id,
           glosa: esSaldoInicial
             ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta según PreFactura ${preFactura.codigo}`,
@@ -2787,7 +2822,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
       borrador.detalles = [
         {
           numeroLinea: 1,
-          planCuentaId: cuentaCxC.id,
+          planCuentaId: cuentaDebe.id,
           glosa: esSaldoInicial
             ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta exonerada según PreFactura ${preFactura.codigo}`,
@@ -2828,7 +2863,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
       borrador.detalles = [
         {
           numeroLinea: 1,
-          planCuentaId: cuentaCxC.id,
+          planCuentaId: cuentaDebe.id,
           glosa: esSaldoInicial
             ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta según PreFactura ${preFactura.codigo}`,
@@ -3533,6 +3568,67 @@ const regenerarKardex = async (id, usuarioId) => {
   }
 };
 
+/**
+ * Actualiza masivamente el tipoOperacionSunatId de múltiples PreFacturas
+ * @param {Array<BigInt>} ids - Array de IDs de PreFacturas a actualizar
+ * @param {BigInt} tipoOperacionSunatId - ID del tipo de operación SUNAT
+ * @param {BigInt} usuarioId - ID del usuario que realiza la actualización
+ * @returns {Object} Resultado de la actualización masiva
+ */
+async function actualizarTipoOperacionSunatMasivo(ids, tipoOperacionSunatId, usuarioId) {
+  if (!ids || ids.length === 0) {
+    throw new ValidationError("Debe proporcionar al menos un ID de PreFactura");
+  }
+
+  if (!tipoOperacionSunatId) {
+    throw new ValidationError("Debe proporcionar un tipo de operación SUNAT");
+  }
+
+  const resultado = await prisma.preFactura.updateMany({
+    where: {
+      id: {
+        in: ids.map(id => BigInt(id))
+      }
+    },
+    data: {
+      tipoOperacionSunatId: BigInt(tipoOperacionSunatId),
+      actualizadoPor: usuarioId ? BigInt(usuarioId) : null
+    }
+  });
+
+  return {
+    actualizados: Number(resultado.count),
+    mensaje: `Se actualizaron ${resultado.count} registro(s) exitosamente`
+  };
+}
+
+async function actualizarTipoAfectacionIGVMasivo(ids, tipoAfectacionIGVId, usuarioId) {
+  if (!ids || ids.length === 0) {
+    throw new ValidationError("Debe proporcionar al menos un ID de PreFactura");
+  }
+
+  if (!tipoAfectacionIGVId) {
+    throw new ValidationError("Debe proporcionar un tipo de afectación IGV");
+  }
+
+  const resultado = await prisma.preFactura.updateMany({
+    where: {
+      id: {
+        in: ids.map(id => BigInt(id))
+      }
+    },
+    data: {
+      tipoAfectacionIGVId: BigInt(tipoAfectacionIGVId),
+      actualizadoPor: usuarioId ? BigInt(usuarioId) : null
+    }
+  });
+
+  return {
+    actualizados: Number(resultado.count),
+    mensaje: `Se actualizaron ${resultado.count} registro(s) exitosamente`
+  };
+}
+
 export default {
   listar,
   obtenerPorId,
@@ -3556,4 +3652,6 @@ export default {
   eliminarAsientoContable,
   generarKardex,
   regenerarKardex,
+  actualizarTipoOperacionSunatMasivo,
+  actualizarTipoAfectacionIGVMasivo
 };

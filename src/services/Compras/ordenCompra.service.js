@@ -2256,8 +2256,6 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       );
     }
 
-    // INSERTAR DESPUÉS DE LA LÍNEA 2270 (después de validar totales):
-
     // ========================================
     // FUNCIÓN HELPER: Buscar cuenta de compras
     // ========================================
@@ -2272,9 +2270,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       }
 
       // 2. Buscar cuenta fallback por familia del producto
-      // Mapeo de familias a códigos de cuenta
       const mapeoFamilias = {
-        // Puedes ajustar estos nombres según tus familias reales
         "MERCADERIAS": "601",
         "MERCADERIA": "601",
         "MATERIAS PRIMAS": "602",
@@ -2286,11 +2282,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         "REPUESTO": "6033",
       };
 
-      let codigoBuscar = "60"; // Cuenta genérica por defecto
+      let codigoBuscar = "60";
 
       if (producto.familia?.nombre) {
         const nombreFamilia = producto.familia.nombre.toUpperCase();
-        // Buscar coincidencia exacta o parcial
         for (const [key, codigo] of Object.entries(mapeoFamilias)) {
           if (nombreFamilia.includes(key)) {
             codigoBuscar = codigo;
@@ -2336,39 +2331,12 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         );
       }
 
-      if (!cuentaFallback) {
-        // Si no se encuentra cuenta específica, buscar cuenta genérica "60"
-        const cuentaGenerica = await prisma.planCuentasContable.findFirst({
-          where: {
-            codigoCuenta: { startsWith: "60" },
-            activo: true,
-            esImputable: true,
-          },
-        });
-
-        if (!cuentaGenerica) {
-          throw new ValidationError(
-            `No se encontró ninguna cuenta contable de compras (60*) activa e imputable. ` +
-            `Verifique el plan de cuentas.`
-          );
-        }
-
-        return {
-          cuenta: cuentaGenerica,
-          usaFallback: true,
-          mensaje: `⚠️ Producto "${producto.descripcionBase}": No tiene cuenta asignada ni familia configurada. Se usó cuenta genérica ${cuentaGenerica.codigoCuenta} - ${cuentaGenerica.descripcion}.`,
-        };
-      }
-
       return {
         cuenta: cuentaFallback,
         usaFallback: true,
         mensaje: `⚠️ Producto "${producto.descripcionBase}" (ID: ${producto.id}) no tiene cuenta contable asignada. Se usó cuenta genérica ${cuentaFallback.codigoCuenta} - ${cuentaFallback.nombreCuenta}.`,
       };
     };
-
-
-
 
     // ========================================
     // BUSCAR CUENTAS CONTABLES NECESARIAS
@@ -2382,7 +2350,6 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       },
     });
 
-    // ✅ REEMPLAZAR (LÍNEA 2369):
     if (!cuentaCxP) {
       throw new ValidationError(
         "No se encontró la cuenta de Cuentas por Pagar (42.1). " +
@@ -2390,10 +2357,67 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       );
     }
 
-    const subtotal = Number(ordenCompra.subtotal);
-    const totalIGV = Number(ordenCompra.totalIGV);
-    const total = Number(ordenCompra.total);
+    // ⭐ DETECTAR SI ES SALDO INICIAL (código empieza con "SI")
+    const esSaldoInicial = ordenCompra.tipoDocumento?.codigo?.startsWith("SI");
 
+    // ⭐ Declarar variables FUERA del if
+    let cuentaDebe = null;
+    let cuentaHaber = cuentaCxP;
+
+    if (esSaldoInicial) {
+      // Determinar cuenta de Saldos Iniciales según moneda
+      const codigoCuentaSI = Number(ordenCompra.monedaId) === 1 ? "421101" : "421102";
+
+      const cuentaSaldoInicial = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: codigoCuentaSI,
+          activo: true,
+        },
+      });
+
+      if (!cuentaSaldoInicial) {
+        throw new ValidationError(
+          `No se encontró la cuenta ${codigoCuentaSI} (Saldos Iniciales CxP ${Number(ordenCompra.monedaId) === 1 ? 'PEN' : 'USD'}). ` +
+          "Configure el plan de cuentas antes de generar el asiento para Saldos Iniciales.",
+        );
+      }
+
+      cuentaDebe = cuentaSaldoInicial;
+
+      // Para SI: HABER debe ser 5911101 (Utilidades Acumuladas)
+      const cuentaUtilidades = await prisma.planCuentasContable.findFirst({
+        where: {
+          codigoCuenta: "5911101",
+          activo: true,
+        },
+      });
+
+      if (!cuentaUtilidades) {
+        throw new ValidationError(
+          "No se encontró la cuenta 5911101 (Utilidades Acumuladas). " +
+          "Configure el plan de cuentas antes de generar el asiento para Saldos Iniciales.",
+        );
+      }
+
+      cuentaHaber = cuentaUtilidades;
+    }
+
+    let subtotal = Number(ordenCompra.subtotal);
+    let totalIGV = Number(ordenCompra.totalIGV);
+    let total = Number(ordenCompra.total);
+
+    // ⭐ SI ES SALDO INICIAL EN MONEDA EXTRANJERA: Convertir a SOLES
+    if (esSaldoInicial && Number(ordenCompra.monedaId) !== 1) {
+      const tipoCambio = Number(ordenCompra.tipoCambio);
+      if (!tipoCambio || tipoCambio === 0) {
+        throw new ValidationError(
+          "El tipo de cambio es requerido para Saldos Iniciales en moneda extranjera."
+        );
+      }
+      subtotal = subtotal * tipoCambio;
+      totalIGV = totalIGV * tipoCambio;
+      total = total * tipoCambio;
+    }
     // Determinar tipo de libro según esGerencial
     const tipoLibro = ordenCompra.esGerencial ? "GERENCIAL" : "FISCAL";
 
@@ -2401,10 +2425,12 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       empresaId: ordenCompra.empresaId,
       periodoContableId: ordenCompra.periodoContableId,
       fechaAsiento: ordenCompra.fechaContable,
-      glosa: `Compra según OrdenCompra ${ordenCompra.numeroDocumento}`,
+      glosa: esSaldoInicial
+        ? `Saldo Inicial CxP según OrdenCompra ${ordenCompra.numeroDocumento}`
+        : `Compra según OrdenCompra ${ordenCompra.numeroDocumento}`,
       tipoLibro: tipoLibro,
       origenAsiento: "AUTOMATICO",
-      monedaId: ordenCompra.monedaId,
+      monedaId: esSaldoInicial ? 1 : ordenCompra.monedaId, // SI siempre en SOLES
       tipoCambio: ordenCompra.tipoCambio,
       detalles: [],
     };
@@ -2419,77 +2445,121 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     // CASO 1: GERENCIAL (sin IGV)
     // ========================================
     if (ordenCompra.esGerencial) {
-      // Recorrer detalles de la orden
-      for (const detalle of ordenCompra.detalles) {
-        const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+      if (esSaldoInicial && cuentaDebe) {
+        // SALDO INICIAL: DEBE con 421101/421102
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuentaDebe.id,
+          glosa: `Saldo Inicial CxP según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: total,
+          haber: 0,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+        });
 
-        if (usaFallback && mensaje) {
-          warnings.push(mensaje);
+        // HABER: 5911101 (Utilidades Acumuladas)
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuentaHaber.id,
+          glosa: `Saldo Inicial CxP según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: 0,
+          haber: total,
+        });
+      } else {
+        // COMPRA NORMAL: DEBE=60x, HABER=42.1
+        for (const detalle of ordenCompra.detalles) {
+          const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+
+          if (usaFallback && mensaje) {
+            warnings.push(mensaje);
+          }
+
+          borrador.detalles.push({
+            numeroLinea: numeroLinea++,
+            planCuentaId: cuenta.id,
+            glosa: `Compra ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
+            debe: Number(detalle.subtotal),
+            haber: 0,
+            centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+          });
         }
 
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
-          planCuentaId: cuenta.id,
-          glosa: `Compra ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
-          debe: Number(detalle.subtotal),
-          haber: 0,
-          centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+          planCuentaId: cuentaHaber.id,
+          glosa: `Compra según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: 0,
+          haber: total,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
       }
-
-      // Agregar CxP (HABER)
-      borrador.detalles.push({
-        numeroLinea: numeroLinea++,
-        planCuentaId: cuentaCxP.id,
-        glosa: `Compra según OrdenCompra ${ordenCompra.numeroDocumento}`,
-        debe: 0,
-        haber: total,
-        entidadComercialId: ordenCompra.proveedorId,
-        tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
-        numeroDocumentoOrigen: ordenCompra.numeroDocumento,
-        fechaDocumentoOrigen: ordenCompra.fechaDocumento,
-      });
     }
     // ========================================
     // CASO 2: FISCAL EXONERADA (sin IGV)
     // ========================================
     else if (ordenCompra.esExoneradoAlIGV) {
-      // Recorrer detalles de la orden
-      for (const detalle of ordenCompra.detalles) {
-        const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+      if (esSaldoInicial && cuentaDebe) {
+        // SALDO INICIAL
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuentaDebe.id,
+          glosa: `Saldo Inicial CxP según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: total,
+          haber: 0,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+        });
 
-        if (usaFallback && mensaje) {
-          warnings.push(mensaje);
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuentaHaber.id,
+          glosa: `Saldo Inicial CxP según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: 0,
+          haber: total,
+        });
+      } else {
+        // COMPRA NORMAL
+        for (const detalle of ordenCompra.detalles) {
+          const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+
+          if (usaFallback && mensaje) {
+            warnings.push(mensaje);
+          }
+
+          borrador.detalles.push({
+            numeroLinea: numeroLinea++,
+            planCuentaId: cuenta.id,
+            glosa: `Compra exonerada ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
+            debe: Number(detalle.subtotal),
+            haber: 0,
+            centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+          });
         }
 
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
-          planCuentaId: cuenta.id,
-          glosa: `Compra exonerada ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
-          debe: Number(detalle.subtotal),
-          haber: 0,
-          centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+          planCuentaId: cuentaHaber.id,
+          glosa: `Compra exonerada según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: 0,
+          haber: total,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
       }
-
-      // Agregar CxP (HABER)
-      borrador.detalles.push({
-        numeroLinea: numeroLinea++,
-        planCuentaId: cuentaCxP.id,
-        glosa: `Compra exonerada según OrdenCompra ${ordenCompra.numeroDocumento}`,
-        debe: 0,
-        haber: total,
-        entidadComercialId: ordenCompra.proveedorId,
-        tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
-        numeroDocumentoOrigen: ordenCompra.numeroDocumento,
-        fechaDocumentoOrigen: ordenCompra.fechaDocumento,
-      });
     }
     // ========================================
     // CASO 3: FISCAL CON IGV
     // ========================================
     else {
-      // Cuenta IGV (40.1 - IGV)
       const cuentaIGV = await prisma.planCuentasContable.findFirst({
         where: {
           codigoCuenta: { startsWith: "401" },
@@ -2503,45 +2573,66 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         );
       }
 
-      // Recorrer detalles de la orden
-      for (const detalle of ordenCompra.detalles) {
-        const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+      if (esSaldoInicial && cuentaDebe) {
+        // SALDO INICIAL
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuentaDebe.id,
+          glosa: `Saldo Inicial CxP según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: total,
+          haber: 0,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+        });
 
-        if (usaFallback && mensaje) {
-          warnings.push(mensaje);
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuentaHaber.id,
+          glosa: `Saldo Inicial CxP según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: 0,
+          haber: total,
+        });
+      } else {
+        // COMPRA NORMAL
+        for (const detalle of ordenCompra.detalles) {
+          const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+
+          if (usaFallback && mensaje) {
+            warnings.push(mensaje);
+          }
+
+          borrador.detalles.push({
+            numeroLinea: numeroLinea++,
+            planCuentaId: cuenta.id,
+            glosa: `Compra ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
+            debe: Number(detalle.subtotal),
+            haber: 0,
+            centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+          });
         }
 
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
-          planCuentaId: cuenta.id,
-          glosa: `Compra ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
-          debe: Number(detalle.subtotal), // Sin IGV
+          planCuentaId: cuentaIGV.id,
+          glosa: `IGV 18% según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: totalIGV,
           haber: 0,
-          centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+        });
+
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuentaHaber.id,
+          glosa: `Compra según OrdenCompra ${ordenCompra.numeroDocumento}`,
+          debe: 0,
+          haber: total,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
       }
-
-      // Agregar IGV (DEBE)
-      borrador.detalles.push({
-        numeroLinea: numeroLinea++,
-        planCuentaId: cuentaIGV.id,
-        glosa: `IGV 18% según OrdenCompra ${ordenCompra.numeroDocumento}`,
-        debe: totalIGV,
-        haber: 0,
-      });
-
-      // Agregar CxP (HABER)
-      borrador.detalles.push({
-        numeroLinea: numeroLinea++,
-        planCuentaId: cuentaCxP.id,
-        glosa: `Compra según OrdenCompra ${ordenCompra.numeroDocumento}`,
-        debe: 0,
-        haber: total, // Con IGV
-        entidadComercialId: ordenCompra.proveedorId,
-        tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
-        numeroDocumentoOrigen: ordenCompra.numeroDocumento,
-        fechaDocumentoOrigen: ordenCompra.fechaDocumento,
-      });
     }
 
     // ========================================
@@ -2561,7 +2652,6 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     throw err;
   }
 };
-
 /**
  * Guarda el asiento contable editado por el usuario y lo vincula a la OrdenCompra
  * Patrón: Igual a PreFactura.guardarAsientoContable

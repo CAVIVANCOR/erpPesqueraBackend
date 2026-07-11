@@ -400,3 +400,37 @@ export const obtenerPreFacturasPorCliente = async (req, res, next) => {
     next(err);
   }
 };
+
+export async function actualizarTipoOperacionSunatMasivo(req, res, next) {
+  try {
+    const { ids, tipoOperacionSunatId } = req.body;
+    const usuarioId = req.usuario?.id;
+
+    const resultado = await preFacturaService.actualizarTipoOperacionSunatMasivo(
+      ids,
+      tipoOperacionSunatId,
+      usuarioId
+    );
+
+    res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function actualizarTipoAfectacionIGVMasivo(req, res, next) {
+  try {
+    const { ids, tipoAfectacionIGVId } = req.body;
+    const usuarioId = req.usuario?.id;
+
+    const resultado = await preFacturaService.actualizarTipoAfectacionIGVMasivo(
+      ids,
+      tipoAfectacionIGVId,
+      usuarioId
+    );
+
+    res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+}
