@@ -67,16 +67,30 @@ const listar = async () => {
         tipoDocumento: true,
         serieDoc: true,
         requerimientoCompra: true,
-        proveedor: true,
+        proveedor: {
+          include: {
+            tipoDocumento: true
+          }
+        },
         formaPago: true,
         moneda: true,
-        unidadNegocio: true,
-        periodoContable: true,
-        tipoDocumentoFinal: true, // ✅ AGREGAR
         estado: true,
+        periodoContable: true,
+        tipoDocumentoFinal: true,
+        ordenCompraOrigen: true,
+        unidadNegocio: true,
+        motivoNotaCreditoDebito: true,
+        tipoOperacionSunat: true,
+        tipoDetraccion: true,
         detalles: {
           include: {
-            producto: true,
+            producto: {
+              include: {
+                unidadMedida: true
+              }
+            },
+            tipoAfectacionIGV: true,
+            tipoDetraccion: true
           },
         },
       },

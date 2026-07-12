@@ -174,16 +174,36 @@ const listar = async () => {
     return await prisma.preFactura.findMany({
       include: {
         empresa: true,
-        cliente: true,
         tipoDocumento: true,
         serieDoc: true,
-        moneda: true,
+        cliente: {
+          include: {
+            tipoDocumento: true
+          }
+        },
+        contactoCliente: true,
+        dirEntrega: true,
+        dirFiscal: true,
+        respVentas: true,
+        autorizaVenta: true,
+        tipoProducto: true,
         formaPago: true,
+        banco: true,
+        moneda: true,
         incoterm: true,
         tipoContenedor: true,
-        tipoOperacionSunat: true,
+        cotizacionVenta: true,
+        contratoServicio: true,
+        movSalidaAlmacen: true,
+        unidadNegocio: true,
+        periodoContable: true,
+        motivoNotaCreditoDebito: true,
+        tipoDocumentoFinal: true,
+        serieDocFinal: true,
+        preFacturaOrigen: true,
         tipoAfectacionIGV: true,
-        periodoContable: true, // ✅ AGREGADO
+        tipoOperacionSunat: true,
+        tipoDetraccion: true,
         detalles: {
           include: {
             producto: {
@@ -192,6 +212,8 @@ const listar = async () => {
                 unidadMedidaComercial: true
               }
             },
+            tipoAfectacionIGV: true,
+            tipoDetraccion: true
           },
         },
       },
