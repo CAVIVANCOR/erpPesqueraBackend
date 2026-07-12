@@ -7599,7 +7599,8 @@ model TipoDetraccion {
   nombre                String      @db.VarChar(200)            // "Azúcar", "Transporte de bienes", "Arrendamiento", "Intermediación laboral"
   tasa                  Decimal     @db.Decimal(5, 2)           // 4.00, 10.00, 12.00
   activo                Boolean     @default(true)
-  
+  montoMinimo           Decimal?    // ⚠️ ESTE CAMPO ES CRÍTICO
+
   // Relaciones inversas
   detracciones          Detraccion[]
   productos             Producto[]                              // 🆕 AGREGAR ESTA LÍNEA
