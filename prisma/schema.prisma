@@ -4535,6 +4535,8 @@ model Producto {
   cuentaInventarioId                BigInt?                             // Cuenta 20 - MERCADERÍAS (stock en almacén)
   cuentaCostoVentasId               BigInt?                             // Cuenta 69 - COSTO DE VENTAS (costo al vender)
   cuentaVariacionId                 BigInt?                             // Cuenta 61 - VARIACIÓN DE EXISTENCIAS (contrapartida)
+  cuentaVentasId                    BigInt?                             // Cuenta 70 - VENTAS (subcuenta específica por producto)
+
   tipoDetraccionId                  BigInt?                             // 🆕 AGREGAR ESTE
   tipoAfectacionIGVId               BigInt?
 
@@ -4581,6 +4583,8 @@ model Producto {
   cuentaInventario      PlanCuentasContable?  @relation("ProductoCuentaInventario", fields: [cuentaInventarioId], references: [id])
   cuentaCostoVentas     PlanCuentasContable?  @relation("ProductoCuentaCostoVentas", fields: [cuentaCostoVentasId], references: [id])
   cuentaVariacion       PlanCuentasContable?  @relation("ProductoCuentaVariacion", fields: [cuentaVariacionId], references: [id])
+  cuentaVentas          PlanCuentasContable?  @relation("ProductoCuentaVentas", fields: [cuentaVentasId], references: [id])
+
   tipoDetraccion        TipoDetraccion?       @relation(fields: [tipoDetraccionId], references: [id])  // 🆕 AGREGAR ESTA
   tipoAfectacionIGV     TipoAfectacionIGV?    @relation(fields: [tipoAfectacionIGVId], references: [id])
 
@@ -5835,16 +5839,16 @@ model PlanCuentasContable {
   detallesAsientos              DetalleAsientoContable[]
   lineasPresupuesto             LineaPresupuesto[]
   ejecucionesPresupuestales     EjecucionPresupuestal[]
-  configuracionesDebe           ConfiguracionCuentaContable[]  @relation("CuentaDebe")
-  configuracionesHaber          ConfiguracionCuentaContable[]  @relation("CuentaHaber")
-  cuentasCorrientes             CuentaCorriente[]       @relation("CuentaCorrientePlanContable")
+  configuracionesDebe           ConfiguracionCuentaContable[]   @relation("CuentaDebe")
+  configuracionesHaber          ConfiguracionCuentaContable[]   @relation("CuentaHaber")
+  cuentasCorrientes             CuentaCorriente[]               @relation("CuentaCorrientePlanContable")
   // 🆕 RELACIONES CON TIPO ACTIVO
-  tiposActivoActivo               TipoActivo[]  @relation("TipoActivoCuentaActivo")
-  tiposActivoDepreciacion         TipoActivo[]  @relation("TipoActivoCuentaDepreciacion")
-  tiposActivoDepreciacionAcum     TipoActivo[]  @relation("TipoActivoCuentaDepAcum")
+  tiposActivoActivo               TipoActivo[]              @relation("TipoActivoCuentaActivo")
+  tiposActivoDepreciacion         TipoActivo[]              @relation("TipoActivoCuentaDepreciacion")
+  tiposActivoDepreciacionAcum     TipoActivo[]              @relation("TipoActivoCuentaDepAcum")
   tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR ESTA LÍNEA
-  tiposDeudaPersonal    TipoDeudaPersonal[]     @relation("TipoDeudaPersonalToCuentaContable")  // ⭐ NUEVO: Tipos de deuda personal que usan esta cuenta
-  centrosCosto          CentroCosto[]           @relation("CentroCostoToCuentaContable")        // ⭐ NUEVO
+  tiposDeudaPersonal              TipoDeudaPersonal[]       @relation("TipoDeudaPersonalToCuentaContable")  // ⭐ NUEVO: Tipos de deuda personal que usan esta cuenta
+  centrosCosto                    CentroCosto[]             @relation("CentroCostoToCuentaContable")        // ⭐ NUEVO
 // ========================================
 // 🆕 RELACIONES CON PRODUCTOS (INVENTARIO)
 // ========================================
@@ -5852,6 +5856,7 @@ productosCompras      Producto[]              @relation("ProductoCuentaCompras")
 productosInventario   Producto[]              @relation("ProductoCuentaInventario")           // Productos que usan esta cuenta para INVENTARIO (20)
 productosCostoVentas  Producto[]              @relation("ProductoCuentaCostoVentas")          // Productos que usan esta cuenta para COSTO VENTAS (69)
 productosVariacion    Producto[]              @relation("ProductoCuentaVariacion")            // Productos que usan esta cuenta para VARIACIÓN (61)
+productosVentas       Producto[]              @relation("ProductoCuentaVentas")            // Productos que usan esta cuenta para VARIACIÓN (61)
 
   // ========================================
   // ÍNDICES
