@@ -739,7 +739,7 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
     const montoImpuestoRenta = aplicaImpuestoRenta
       ? subtotal * (porcentajeImpuestoRenta / 100)
       : 0;
-s
+
     // PASO 4: CALCULAR TOTAL
     const total = subtotal + totalIGV - montoImpuestoRenta;
 
@@ -774,9 +774,9 @@ s
           aplicaDetraccion = true;
           tipoDetraccionId = tipoDetraccionMax.id;
           porcentajeDetraccion = porcentajeMax;
-          montoDetraccion = total * (porcentajeMax / 100);
+          montoDetraccion = Math.round(total * (porcentajeMax / 100));
         }
-      } 
+      }
     }
 
     // PASO 6: EVALUAR RETENCIÓN (Solo si NO hay detracción)

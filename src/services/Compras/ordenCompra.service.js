@@ -615,7 +615,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
           aplicaDetraccion = true;
           tipoDetraccionId = tipoDetraccionMax.id;
           porcentajeDetraccion = porcentajeMax;
-          montoDetraccion = total * (porcentajeMax / 100);
+          montoDetraccion = Math.round(total * (porcentajeMax / 100));
         }
       }
     }
