@@ -501,10 +501,6 @@ const crear = async (data) => {
         bancoId: data.bancoId,
         monedaId: data.monedaId,
         tipoCambio: tipoCambioFinal, // ✅ Usar valor validado
-        subtotal: data.subtotal,
-        totalDescuentos: data.totalDescuentos,
-        totalIGV: data.totalIGV,
-        total: data.total,
         montoAdelantadoCliente: data.montoAdelantadoCliente,
         porcentajeAdelanto: data.porcentajeAdelanto,
         estadoId: data.estadoId,
@@ -527,7 +523,6 @@ const crear = async (data) => {
         porcentajeIgv: data.porcentajeIgv,
         aplicaImpuestoRenta: data.aplicaImpuestoRenta || false,
         porcentajeImpuestoRenta: data.porcentajeImpuestoRenta || null,
-        montoImpuestoRenta: data.montoImpuestoRenta || null,
         factorExportacion: data.factorExportacion,
         factorExportacionReal: data.factorExportacionReal,
         observaciones: data.observaciones,
@@ -567,8 +562,26 @@ const crear = async (data) => {
           periodoContable: true, // ✅ AGREGADO - Consistencia con obtenerPorId
         },
       });
+      // ✅ Calcular totales e impuestos en backend
+      const totales = await calcularTotalesEImpuestos(preFacturaCreada.id, tx);
 
-      return preFacturaCreada;
+      // ✅ Actualizar preFactura con totales calculados
+      const preFacturaConTotales = await tx.preFactura.update({
+        where: { id: preFacturaCreada.id },
+        data: totales,
+        include: {
+          empresa: true,
+          cliente: true,
+          tipoDocumento: true,
+          serieDoc: true,
+          moneda: true,
+          formaPago: true,
+          incoterm: true,
+          periodoContable: true,
+        },
+      });
+
+      return preFacturaConTotales;
     });
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError)
@@ -578,6 +591,7 @@ const crear = async (data) => {
     throw err;
   }
 };
+
 
 const actualizar = async (id, data) => {
   try {
@@ -636,27 +650,33 @@ const actualizar = async (id, data) => {
       nroLiquidacionFacturacion: data.hasOwnProperty('nroLiquidacionFacturacion')
         ? (data.nroLiquidacionFacturacion?.trim() || null)
         : existente.nroLiquidacionFacturacion,
-      aplicaImpuestoRenta: data.hasOwnProperty('aplicaImpuestoRenta')
-        ? data.aplicaImpuestoRenta
-        : existente.aplicaImpuestoRenta,
-      porcentajeImpuestoRenta: data.hasOwnProperty('porcentajeImpuestoRenta')
-        ? data.porcentajeImpuestoRenta
-        : existente.porcentajeImpuestoRenta,
-      montoImpuestoRenta: data.hasOwnProperty('montoImpuestoRenta')
-        ? data.montoImpuestoRenta
-        : existente.montoImpuestoRenta,
     };
 
-    return await prisma.preFactura.update({
-      where: { id },
-      data: datosConAuditoria,
-      include: {
-        empresa: true,
-        cliente: true,
-        tipoDocumento: true,
-        moneda: true,
-        incoterm: true,
-      },
+    return await prisma.$transaction(async (tx) => {
+      const actualizado = await tx.preFactura.update({
+        where: { id },
+        data: datosConAuditoria,
+      });
+
+      // ✅ Calcular totales e impuestos en backend
+      const totales = await calcularTotalesEImpuestos(id, tx);
+
+      // ✅ Actualizar preFactura con totales calculados
+      await tx.preFactura.update({
+        where: { id },
+        data: totales,
+      });
+
+      return await tx.preFactura.findUnique({
+        where: { id },
+        include: {
+          empresa: true,
+          cliente: true,
+          tipoDocumento: true,
+          moneda: true,
+          incoterm: true,
+        },
+      });
     });
   } catch (err) {
     if (
@@ -670,6 +690,147 @@ const actualizar = async (id, data) => {
     throw err;
   }
 };
+
+/**
+ * Calcula TODOS los totales e impuestos de una PreFactura
+ * Subtotal, IGV, Total, Detracción, Retención, Percepción
+ * @param {BigInt} preFacturaId - ID de la PreFactura
+ * @param {Object} tx - Transacción de Prisma (opcional)
+ * @returns {Object} - Campos calculados para actualizar
+ */
+const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
+  try {
+    const preFactura = await tx.preFactura.findUnique({
+      where: { id: preFacturaId },
+      include: {
+        empresa: true,
+        cliente: true,
+        detalles: {
+          include: {
+            producto: {
+              include: {
+                tipoDetraccion: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!preFactura) {
+      throw new NotFoundError("PreFactura no encontrada");
+    }
+
+    // PASO 1: CALCULAR SUBTOTAL
+    const subtotal = preFactura.detalles.reduce((sum, detalle) => {
+      // Calcular subtotal desde cantidad * precioUnitario (DetallePreFactura NO tiene campo subtotal)
+      const subtotalDetalle = Number(detalle.cantidad || 0) * Number(detalle.precioUnitario || 0);
+      return sum + subtotalDetalle;
+    }, 0);
+
+    // PASO 2: CALCULAR IGV
+    const esExonerado = preFactura.exoneradoIgv || false;
+    const porcentajeIGV = Number(preFactura.porcentajeIgv || preFactura.empresa.porcentajeIgv || 18);
+    const totalIGV = esExonerado ? 0 : subtotal * (porcentajeIGV / 100);
+
+    // PASO 3: CALCULAR IMPUESTO A LA RENTA
+    const aplicaImpuestoRenta = preFactura.aplicaImpuestoRenta || false;
+    const porcentajeImpuestoRenta = Number(preFactura.porcentajeImpuestoRenta || 0);
+    const montoImpuestoRenta = aplicaImpuestoRenta
+      ? subtotal * (porcentajeImpuestoRenta / 100)
+      : 0;
+s
+    // PASO 4: CALCULAR TOTAL
+    const total = subtotal + totalIGV - montoImpuestoRenta;
+
+    // PASO 5: EVALUAR DETRACCIÓN
+    let aplicaDetraccion = false;
+    let tipoDetraccionId = null;
+    let porcentajeDetraccion = null;
+    let montoDetraccion = null;
+
+    const detallesConDetraccion = preFactura.detalles.filter(
+      (d) => d.producto?.tipoDetraccionId
+    );
+
+    if (detallesConDetraccion.length > 0) {
+      let porcentajeMax = 0;
+      let tipoDetraccionMax = null;
+
+      for (const detalle of detallesConDetraccion) {
+        const porcentaje = Number(detalle.producto.porcentajeDetraccion || 0);
+        if (porcentaje > porcentajeMax) {
+          porcentajeMax = porcentaje;
+          tipoDetraccionMax = detalle.producto.tipoDetraccion;
+        }
+      }
+
+      if (porcentajeMax > 0 && tipoDetraccionMax) {
+        const umbralMinimo = Number(
+          tipoDetraccionMax.montoMinimo || preFactura.empresa.montoMinimoDetraccion || 700
+        );
+
+        if (total > umbralMinimo) {
+          aplicaDetraccion = true;
+          tipoDetraccionId = tipoDetraccionMax.id;
+          porcentajeDetraccion = porcentajeMax;
+          montoDetraccion = total * (porcentajeMax / 100);
+        }
+      } 
+    }
+
+    // PASO 6: EVALUAR RETENCIÓN (Solo si NO hay detracción)
+    let aplicaRetencion = false;
+    let porcentajeRetencion = null;
+    let montoRetencion = null;
+
+    if (!aplicaDetraccion) {
+      const clienteEsAgente = preFactura.cliente.esAgenteRetencion || false;
+      const umbralRetencion = Number(preFactura.empresa.montoMinimoRetencion || 700);
+
+      if (clienteEsAgente && total > umbralRetencion) {
+        aplicaRetencion = true;
+        porcentajeRetencion = Number(preFactura.empresa.porcentajeRetencion || 3);
+        montoRetencion = total * (porcentajeRetencion / 100);
+      }
+    }
+
+    // PASO 7: EVALUAR PERCEPCIÓN
+    let aplicaPercepcion = false;
+    let porcentajePercepcion = null;
+    let montoPercepcion = null;
+
+    const empresaEsAgente = preFactura.empresa.soyAgentePercepcion || false;
+
+    if (empresaEsAgente) {
+      aplicaPercepcion = true;
+      porcentajePercepcion = Number(preFactura.empresa.porcentajePercepcion || 1);
+      montoPercepcion = total * (porcentajePercepcion / 100);
+    }
+
+    return {
+      subtotal,
+      totalDescuentos: 0,
+      totalIGV,
+      total,
+      montoImpuestoRenta,
+      aplicaDetraccion,
+      tipoDetraccionId,
+      porcentajeDetraccion,
+      montoDetraccion,
+      aplicaRetencion,
+      porcentajeRetencion,
+      montoRetencion,
+      aplicaPercepcion,
+      porcentajePercepcion,
+      montoPercepcion,
+    };
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    throw new DatabaseError("Error al calcular totales e impuestos", err.message);
+  }
+};
+
 
 /**
  * ============================================================================
@@ -3675,5 +3836,6 @@ export default {
   generarKardex,
   regenerarKardex,
   actualizarTipoOperacionSunatMasivo,
-  actualizarTipoAfectacionIGVMasivo
+  actualizarTipoAfectacionIGVMasivo,
+  calcularTotalesEImpuestos, // ⭐ AGREGAR
 };

@@ -343,13 +343,8 @@ const crear = async (data) => {
           porcentajeIGV: data.porcentajeIGV !== undefined ? data.porcentajeIGV : empresa.porcentajeIgv,
           aplicaImpuestoRenta: data.aplicaImpuestoRenta || false,
           porcentajeImpuestoRenta: data.porcentajeImpuestoRenta || null,
-          montoImpuestoRenta: data.montoImpuestoRenta || null,
           esExoneradoAlIGV: data.esExoneradoAlIGV !== undefined ? data.esExoneradoAlIGV : false,
           pagosPreviosSI: data.pagosPreviosSI !== undefined ? data.pagosPreviosSI : null,
-          subtotal: data.subtotal,
-          totalDescuentos: data.totalDescuentos,
-          totalIGV: data.totalIGV,
-          total: data.total,
           tipoDocumentoFinalId: data.tipoDocumentoFinalId,
           numeroDocumentoFinal: data.numeroDocumentoFinal,
           numSerieDocFinal: data.numSerieDocFinal,
@@ -374,7 +369,24 @@ const crear = async (data) => {
         },
       });
 
-      return ordenCreada;
+      // ✅ Calcular totales e impuestos en backend
+      const totales = await calcularTotalesEImpuestos(ordenCreada.id, tx);
+
+      // ✅ Actualizar orden con totales calculados
+      const ordenConTotales = await tx.ordenCompra.update({
+        where: { id: ordenCreada.id },
+        data: totales,
+        include: {
+          empresa: true,
+          tipoDocumento: true,
+          serieDoc: true,
+          proveedor: true,
+          moneda: true,
+          unidadNegocio: true,
+        },
+      });
+
+      return ordenConTotales;
     });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
@@ -438,11 +450,6 @@ const actualizar = async (id, data) => {
           pagosPreviosSI: data.pagosPreviosSI !== undefined ? data.pagosPreviosSI : null,
           aplicaImpuestoRenta: data.aplicaImpuestoRenta,
           porcentajeImpuestoRenta: data.porcentajeImpuestoRenta,
-          montoImpuestoRenta: data.montoImpuestoRenta,
-          subtotal: data.subtotal,
-          totalDescuentos: data.totalDescuentos,
-          totalIGV: data.totalIGV,
-          total: data.total,
           tipoDocumentoFinalId: data.tipoDocumentoFinalId,
           numeroDocumentoFinal: data.numeroDocumentoFinal,
           numSerieDocFinal: data.numSerieDocFinal,
@@ -479,6 +486,15 @@ const actualizar = async (id, data) => {
         );
       }
 
+      // ✅ Calcular totales e impuestos en backend
+      const totales = await calcularTotalesEImpuestos(id, tx);
+
+      // ✅ Actualizar orden con totales calculados
+      await tx.ordenCompra.update({
+        where: { id },
+        data: totales,
+      });
+
       // ✅ Retornar orden actualizada con relaciones
       return await tx.ordenCompra.findUnique({
         where: { id },
@@ -507,6 +523,163 @@ const actualizar = async (id, data) => {
     throw err;
   }
 };
+
+/**
+ * Calcula TODOS los totales e impuestos de una OrdenCompra
+ * Subtotal, IGV, Total, Detracción, Retención, Percepción
+ * @param {BigInt} ordenCompraId - ID de la OrdenCompra
+ * @param {Object} tx - Transacción de Prisma (opcional)
+ * @returns {Object} - Campos calculados para actualizar
+ */
+const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
+  try {
+    const orden = await tx.ordenCompra.findUnique({
+      where: { id: ordenCompraId },
+      include: {
+        empresa: true,
+        proveedor: true,
+        detalles: {
+          include: {
+            producto: {
+              include: {
+                tipoDetraccion: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundError("OrdenCompra no encontrada");
+    }
+
+    // ========================================
+    // PASO 1: CALCULAR SUBTOTAL (suma de detalles)
+    // ========================================
+    const subtotal = orden.detalles.reduce((sum, detalle) => {
+      return sum + Number(detalle.subtotal || 0);
+    }, 0);
+
+    // ========================================
+    // PASO 2: CALCULAR IGV
+    // ========================================
+    const esExonerado = orden.esExoneradoAlIGV || false;
+    const porcentajeIGV = Number(orden.porcentajeIGV || orden.empresa.porcentajeIgv || 18);
+    const totalIGV = esExonerado ? 0 : subtotal * (porcentajeIGV / 100);
+
+    // ========================================
+    // PASO 3: CALCULAR IMPUESTO A LA RENTA (si aplica)
+    // ========================================
+    const aplicaImpuestoRenta = orden.aplicaImpuestoRenta || false;
+    const porcentajeImpuestoRenta = Number(orden.porcentajeImpuestoRenta || 0);
+    const montoImpuestoRenta = aplicaImpuestoRenta
+      ? subtotal * (porcentajeImpuestoRenta / 100)
+      : 0;
+
+    // ========================================
+    // PASO 4: CALCULAR TOTAL
+    // ========================================
+    const total = subtotal + totalIGV - montoImpuestoRenta;
+
+    // ========================================
+    // PASO 5: EVALUAR DETRACCIÓN
+    // ========================================
+    let aplicaDetraccion = false;
+    let tipoDetraccionId = null;
+    let porcentajeDetraccion = null;
+    let montoDetraccion = null;
+
+    const detallesConDetraccion = orden.detalles.filter(
+      (d) => d.producto?.tipoDetraccionId
+    );
+
+    if (detallesConDetraccion.length > 0) {
+      let porcentajeMax = 0;
+      let tipoDetraccionMax = null;
+
+      for (const detalle of detallesConDetraccion) {
+        const porcentaje = Number(detalle.producto.porcentajeDetraccion || 0);
+        if (porcentaje > porcentajeMax) {
+          porcentajeMax = porcentaje;
+          tipoDetraccionMax = detalle.producto.tipoDetraccion;
+        }
+      }
+
+      if (porcentajeMax > 0 && tipoDetraccionMax) {
+        const umbralMinimo = Number(
+          tipoDetraccionMax.montoMinimo || orden.empresa.montoMinimoDetraccion || 700
+        );
+
+        if (total > umbralMinimo) {
+          aplicaDetraccion = true;
+          tipoDetraccionId = tipoDetraccionMax.id;
+          porcentajeDetraccion = porcentajeMax;
+          montoDetraccion = total * (porcentajeMax / 100);
+        }
+      }
+    }
+
+    // ========================================
+    // PASO 6: EVALUAR RETENCIÓN (Solo si NO hay detracción)
+    // ========================================
+    let aplicaRetencion = false;
+    let porcentajeRetencion = null;
+    let montoRetencion = null;
+
+    if (!aplicaDetraccion) {
+      const empresaEsAgente = orden.empresa.soyAgenteRetencion || false;
+      const proveedorSujeto = orden.proveedor.sujetoRetencion || false;
+      const umbralRetencion = Number(orden.empresa.montoMinimoRetencion || 700);
+
+      if (empresaEsAgente && proveedorSujeto && total > umbralRetencion) {
+        aplicaRetencion = true;
+        porcentajeRetencion = Number(orden.empresa.porcentajeRetencion || 3);
+        montoRetencion = total * (porcentajeRetencion / 100);
+      }
+    }
+
+    // ========================================
+    // PASO 7: EVALUAR PERCEPCIÓN (Independiente)
+    // ========================================
+    let aplicaPercepcion = false;
+    let porcentajePercepcion = null;
+    let montoPercepcion = null;
+
+    const proveedorEsAgente = orden.proveedor.sujetoPercepcion || false;
+
+    if (proveedorEsAgente) {
+      aplicaPercepcion = true;
+      porcentajePercepcion = Number(orden.empresa.porcentajePercepcion || 1);
+      montoPercepcion = total * (porcentajePercepcion / 100);
+    }
+
+    // ========================================
+    // RETORNAR TODOS LOS CAMPOS CALCULADOS
+    // ========================================
+    return {
+      subtotal,
+      totalDescuentos: 0,
+      totalIGV,
+      total,
+      montoImpuestoRenta,
+      aplicaDetraccion,
+      tipoDetraccionId,
+      porcentajeDetraccion,
+      montoDetraccion,
+      aplicaRetencion,
+      porcentajeRetencion,
+      montoRetencion,
+      aplicaPercepcion,
+      porcentajePercepcion,
+      montoPercepcion,
+    };
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    throw new DatabaseError("Error al calcular totales e impuestos", err.message);
+  }
+};
+
 
 const eliminar = async (id) => {
   try {
@@ -2963,4 +3136,6 @@ export default {
   generarBorradorAsiento,
   guardarAsientoContable, // ⭐ NUEVO
   eliminarAsientoContable, // ⭐ NUEVO
+  calcularTotalesEImpuestos, // ⭐ AGREGAR
+
 };
