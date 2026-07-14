@@ -538,6 +538,8 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       include: {
         empresa: true,
         proveedor: true,
+        moneda: true,
+        tipoDocumento: true,
         detalles: {
           include: {
             producto: {
@@ -553,7 +555,6 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     if (!orden) {
       throw new NotFoundError("OrdenCompra no encontrada");
     }
-
     // ========================================
     // PASO 1: CALCULAR SUBTOTAL (suma de detalles)
     // ========================================
@@ -582,8 +583,11 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     // ========================================
     const total = subtotal + totalIGV - montoImpuestoRenta;
 
+    // VALIDAR: Solo calcular impuestos para Facturas (01) y Boletas (03)
+    const codigoDoc = orden.tipoDocumento?.codigo || '';
+    const aplicaImpuestos = codigoDoc === '01' || codigoDoc === '03';
     // ========================================
-    // PASO 5: EVALUAR DETRACCIÓN
+    // PASO 5: EVALUAR DETRACCIÓN (solo Facturas y Boletas)
     // ========================================
     let aplicaDetraccion = false;
     let tipoDetraccionId = null;
@@ -594,7 +598,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       (d) => d.producto?.tipoDetraccionId
     );
 
-    if (detallesConDetraccion.length > 0) {
+    if (aplicaImpuestos && detallesConDetraccion.length > 0) {
       let porcentajeMax = 0;
       let tipoDetraccionMax = null;
 
@@ -607,27 +611,31 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       }
 
       if (porcentajeMax > 0 && tipoDetraccionMax) {
+        // Convertir total a soles si es necesario
+        const esSoles = orden.moneda.codigo === 'PEN';
+        const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
+
         const umbralMinimo = Number(
           tipoDetraccionMax.montoMinimo || orden.empresa.montoMinimoDetraccion || 700
         );
 
-        if (total > umbralMinimo) {
+        if (totalEnSoles > umbralMinimo) {
           aplicaDetraccion = true;
           tipoDetraccionId = tipoDetraccionMax.id;
           porcentajeDetraccion = porcentajeMax;
-          montoDetraccion = Math.round(total * (porcentajeMax / 100));
+          montoDetraccion = Math.round(totalEnSoles * (porcentajeMax / 100));
         }
       }
     }
 
     // ========================================
-    // PASO 6: EVALUAR RETENCIÓN (Solo si NO hay detracción)
+    // PASO 6: EVALUAR RETENCIÓN (Solo si NO hay detracción y es Factura/Boleta)
     // ========================================
     let aplicaRetencion = false;
     let porcentajeRetencion = null;
     let montoRetencion = null;
 
-    if (!aplicaDetraccion) {
+    if (aplicaImpuestos && !aplicaDetraccion) {
       const empresaEsAgente = orden.empresa.soyAgenteRetencion || false;
       const proveedorSujeto = orden.proveedor.sujetoRetencion || false;
       const umbralRetencion = Number(orden.empresa.montoMinimoRetencion || 700);
@@ -635,12 +643,14 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       if (empresaEsAgente && proveedorSujeto && total > umbralRetencion) {
         aplicaRetencion = true;
         porcentajeRetencion = Number(orden.empresa.porcentajeRetencion || 3);
-        montoRetencion = total * (porcentajeRetencion / 100);
+        const esSoles = orden.moneda.codigo === 'PEN';
+        const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
+        montoRetencion = totalEnSoles * (porcentajeRetencion / 100);
       }
     }
 
     // ========================================
-    // PASO 7: EVALUAR PERCEPCIÓN (Independiente)
+    // PASO 7: EVALUAR PERCEPCIÓN (solo Facturas y Boletas)
     // ========================================
     let aplicaPercepcion = false;
     let porcentajePercepcion = null;
@@ -648,10 +658,12 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
 
     const proveedorEsAgente = orden.proveedor.sujetoPercepcion || false;
 
-    if (proveedorEsAgente) {
+    if (aplicaImpuestos && proveedorEsAgente) {
       aplicaPercepcion = true;
       porcentajePercepcion = Number(orden.empresa.porcentajePercepcion || 1);
-      montoPercepcion = total * (porcentajePercepcion / 100);
+      const esSoles = orden.moneda.codigo === 'PEN';
+      const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
+      montoPercepcion = totalEnSoles * (porcentajePercepcion / 100);
     }
 
     // ========================================

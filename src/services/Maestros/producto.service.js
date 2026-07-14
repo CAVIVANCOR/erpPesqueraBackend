@@ -145,20 +145,26 @@ async function validarProducto(data, excluirId = null) {
   }
 
   // Validar tipoDetraccionId si se envía
-  if (data.tipoDetraccionId !== undefined && data.tipoDetraccionId !== null) {
-    const tipoDetraccion = await prisma.tipoDetraccion.findUnique({
-      where: { id: data.tipoDetraccionId }
-    });
-    if (!tipoDetraccion) {
-      throw new ValidationError('Tipo de detracción no existente.');
+  if (data.tipoDetraccionId !== undefined) {
+    if (data.tipoDetraccionId !== null) {
+      const tipoDetraccion = await prisma.tipoDetraccion.findUnique({
+        where: { id: data.tipoDetraccionId }
+      });
+      if (!tipoDetraccion) {
+        throw new ValidationError('Tipo de detracción no existente.');
+      }
+      // Auto-llenar porcentajeDetraccion desde TipoDetraccion.tasa
+      data.porcentajeDetraccion = tipoDetraccion.tasa;
+      // Auto-marcar sujetoDetraccion = true
+      data.sujetoDetraccion = true;
+    } else {
+      // Si tipoDetraccionId es null, limpiar porcentajeDetraccion y sujetoDetraccion
+      data.porcentajeDetraccion = 0;
+      data.sujetoDetraccion = false;
     }
-    // Auto-llenar porcentajeDetraccion desde TipoDetraccion.tasa
-    data.porcentajeDetraccion = tipoDetraccion.tasa;
-    // Auto-marcar sujetoDetraccion = true
-    data.sujetoDetraccion = true;
   }
 
-  
+
   // Validar tipoAfectacionIGVId si se envía
   if (data.tipoAfectacionIGVId !== undefined && data.tipoAfectacionIGVId !== null) {
     const tipoAfectacionIGV = await prisma.tipoAfectacionIGV.findUnique({
@@ -168,7 +174,7 @@ async function validarProducto(data, excluirId = null) {
       throw new ValidationError('Tipo de afectación IGV no existente.');
     }
   }
-  
+
   // Validar unidadMedidaComercialId si se envía explícitamente
   // NOTA: Si es null/undefined, normalizarDatosProducto ya lo iguala a unidadMedidaId
   if (data.unidadMedidaComercialId !== undefined &&

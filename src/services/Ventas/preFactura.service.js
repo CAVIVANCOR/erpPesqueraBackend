@@ -543,6 +543,72 @@ const crear = async (data) => {
           data.nroLiquidacionFacturacion?.trim() || null,
       };
 
+      // ════════════════════════════════════════════════════════════
+      // VALIDACIÓN DOCUMENTO AFECTO (NC/ND)
+      // Si dcmtoAfectoNCNDId > 0, obtener datos actuales del documento
+      // ════════════════════════════════════════════════════════════
+      if (data.dcmtoAfectoNCNDId && Number(data.dcmtoAfectoNCNDId) > 0) {
+        const docAfecto = await tx.preFactura.findUnique({
+          where: { id: Number(data.dcmtoAfectoNCNDId) },
+          select: {
+            numeroDocumentoFinal: true,
+            fechaFacturacion: true,
+          },
+        });
+
+        if (docAfecto) {
+          datosLimpios.dcmtoAfectoNCNDId = Number(data.dcmtoAfectoNCNDId);
+          datosLimpios.numeroDcmtoAfectoNCND = docAfecto.numeroDocumentoFinal;
+          datosLimpios.fechaDcmtoAfectoNCND = docAfecto.fechaFacturacion;
+        }
+      } else {
+        // Respetar valores manuales para documentos antiguos (2025 o anteriores)
+        datosLimpios.dcmtoAfectoNCNDId = data.dcmtoAfectoNCNDId || null;
+        datosLimpios.numeroDcmtoAfectoNCND = data.numeroDcmtoAfectoNCND || null;
+        datosLimpios.fechaDcmtoAfectoNCND = data.fechaDcmtoAfectoNCND || null;
+      }
+      datosLimpios.motivoNotaCreditoDebitoId = data.motivoNotaCreditoDebitoId || null;
+
+      
+
+      // ════════════════════════════════════════════════════════════
+      // DOCUMENTO FINAL (COMPROBANTE ELECTRÓNICO)
+      // ════════════════════════════════════════════════════════════
+      datosLimpios.tipoDocumentoFinalId = data.tipoDocumentoFinalId || null;
+      datosLimpios.serieDocFinalId = data.serieDocFinalId || null;
+      datosLimpios.numeroDocumentoFinal = data.numeroDocumentoFinal || null;
+      datosLimpios.numSerieDocFinal = data.numSerieDocFinal || null;
+      datosLimpios.numCorreDocFinal = data.numCorreDocFinal || null;
+      datosLimpios.facturado = data.facturado !== undefined ? data.facturado : false;
+      datosLimpios.fechaFacturacion = data.fechaFacturacion || null;
+
+      // ════════════════════════════════════════════════════════════
+      // VALIDACIÓN DOCUMENTO AFECTO (NC/ND)
+      // Si dcmtoAfectoNCNDId > 0, obtener datos actuales del documento
+      // ════════════════════════════════════════════════════════════
+      if (data.dcmtoAfectoNCNDId && Number(data.dcmtoAfectoNCNDId) > 0) {
+        const docAfecto = await tx.preFactura.findUnique({
+          where: { id: Number(data.dcmtoAfectoNCNDId) },
+          select: {
+            numeroDocumentoFinal: true,
+            fechaFacturacion: true,
+          },
+        });
+        
+        if (docAfecto) {
+          datosLimpios.dcmtoAfectoNCNDId = Number(data.dcmtoAfectoNCNDId);
+          datosLimpios.numeroDcmtoAfectoNCND = docAfecto.numeroDocumentoFinal;
+          datosLimpios.fechaDcmtoAfectoNCND = docAfecto.fechaFacturacion;
+        }
+      } else {
+        datosLimpios.dcmtoAfectoNCNDId = data.dcmtoAfectoNCNDId || null;
+        datosLimpios.numeroDcmtoAfectoNCND = data.numeroDcmtoAfectoNCND || null;
+        datosLimpios.fechaDcmtoAfectoNCND = data.fechaDcmtoAfectoNCND || null;
+      }
+      datosLimpios.motivoNotaCreditoDebitoId = data.motivoNotaCreditoDebitoId || null;
+
+
+
       // 11. Limpiar campos undefined antes de crear (Prisma strict mode)
       const datosLimpiosSinUndefined = Object.fromEntries(
         Object.entries(datosLimpios).filter(([_, v]) => v !== undefined),
@@ -652,6 +718,55 @@ const actualizar = async (id, data) => {
         : existente.nroLiquidacionFacturacion,
     };
 
+
+    // ════════════════════════════════════════════════════════════
+    // VALIDACIÓN DOCUMENTO AFECTO (NC/ND)
+    // Si dcmtoAfectoNCNDId > 0, obtener datos actuales del documento
+    // ════════════════════════════════════════════════════════════
+    if (data.hasOwnProperty('dcmtoAfectoNCNDId')) {
+      if (data.dcmtoAfectoNCNDId && Number(data.dcmtoAfectoNCNDId) > 0) {
+        const docAfecto = await prisma.preFactura.findUnique({
+          where: { id: Number(data.dcmtoAfectoNCNDId) },
+          select: {
+            numeroDocumentoFinal: true,
+            fechaFacturacion: true,
+          },
+        });
+
+        if (docAfecto) {
+          datosConAuditoria.dcmtoAfectoNCNDId = Number(data.dcmtoAfectoNCNDId);
+          datosConAuditoria.numeroDcmtoAfectoNCND = docAfecto.numeroDocumentoFinal;
+          datosConAuditoria.fechaDcmtoAfectoNCND = docAfecto.fechaFacturacion;
+        }
+      }
+      // Si es null o 0, respetar valores manuales (no sobrescribir)
+    }
+
+
+
+    // ════════════════════════════════════════════════════════════
+    // VALIDACIÓN DOCUMENTO AFECTO (NC/ND)
+    // Si dcmtoAfectoNCNDId > 0, obtener datos actuales del documento
+    // ════════════════════════════════════════════════════════════
+    if (data.hasOwnProperty('dcmtoAfectoNCNDId')) {
+      if (data.dcmtoAfectoNCNDId && Number(data.dcmtoAfectoNCNDId) > 0) {
+        const docAfecto = await prisma.preFactura.findUnique({
+          where: { id: Number(data.dcmtoAfectoNCNDId) },
+          select: {
+            numeroDocumentoFinal: true,
+            fechaFacturacion: true,
+          },
+        });
+        
+        if (docAfecto) {
+          datosConAuditoria.dcmtoAfectoNCNDId = Number(data.dcmtoAfectoNCNDId);
+          datosConAuditoria.numeroDcmtoAfectoNCND = docAfecto.numeroDocumentoFinal;
+          datosConAuditoria.fechaDcmtoAfectoNCND = docAfecto.fechaFacturacion;
+        }
+      }
+    }
+
+
     return await prisma.$transaction(async (tx) => {
       const actualizado = await tx.preFactura.update({
         where: { id },
@@ -705,6 +820,8 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
       include: {
         empresa: true,
         cliente: true,
+        moneda: true,
+        tipoDocumento: true,
         detalles: {
           include: {
             producto: {
@@ -716,18 +833,15 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
         },
       },
     });
-
     if (!preFactura) {
       throw new NotFoundError("PreFactura no encontrada");
     }
-
     // PASO 1: CALCULAR SUBTOTAL
     const subtotal = preFactura.detalles.reduce((sum, detalle) => {
       // Calcular subtotal desde cantidad * precioUnitario (DetallePreFactura NO tiene campo subtotal)
       const subtotalDetalle = Number(detalle.cantidad || 0) * Number(detalle.precioUnitario || 0);
       return sum + subtotalDetalle;
     }, 0);
-
     // PASO 2: CALCULAR IGV
     const esExonerado = preFactura.exoneradoIgv || false;
     const porcentajeIGV = Number(preFactura.porcentajeIgv || preFactura.empresa.porcentajeIgv || 18);
@@ -743,69 +857,82 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
     // PASO 4: CALCULAR TOTAL
     const total = subtotal + totalIGV - montoImpuestoRenta;
 
-    // PASO 5: EVALUAR DETRACCIÓN
+    // VALIDAR: Solo calcular impuestos para Facturas (01) y Boletas (03)
+    const codigoDoc = preFactura.tipoDocumento?.codigo || '';
+    const aplicaImpuestos = codigoDoc === '01' || codigoDoc === '03';
+
+    // PASO 5: EVALUAR DETRACCIÓN (solo Facturas y Boletas)
     let aplicaDetraccion = false;
     let tipoDetraccionId = null;
     let porcentajeDetraccion = null;
     let montoDetraccion = null;
 
-    const detallesConDetraccion = preFactura.detalles.filter(
-      (d) => d.producto?.tipoDetraccionId
-    );
+    if (aplicaImpuestos) {
+      const detallesConDetraccion = preFactura.detalles.filter(
+        (d) => d.producto?.tipoDetraccionId
+      );
 
-    if (detallesConDetraccion.length > 0) {
-      let porcentajeMax = 0;
-      let tipoDetraccionMax = null;
+      if (detallesConDetraccion.length > 0) {
+        let porcentajeMax = 0;
+        let tipoDetraccionMax = null;
 
-      for (const detalle of detallesConDetraccion) {
-        const porcentaje = Number(detalle.producto.porcentajeDetraccion || 0);
-        if (porcentaje > porcentajeMax) {
-          porcentajeMax = porcentaje;
-          tipoDetraccionMax = detalle.producto.tipoDetraccion;
+        for (const detalle of detallesConDetraccion) {
+          const porcentaje = Number(detalle.producto.porcentajeDetraccion || 0);
+          if (porcentaje > porcentajeMax) {
+            porcentajeMax = porcentaje;
+            tipoDetraccionMax = detalle.producto.tipoDetraccion;
+          }
         }
-      }
 
-      if (porcentajeMax > 0 && tipoDetraccionMax) {
-        const umbralMinimo = Number(
-          tipoDetraccionMax.montoMinimo || preFactura.empresa.montoMinimoDetraccion || 700
-        );
+        if (porcentajeMax > 0 && tipoDetraccionMax) {
+          // Convertir total a soles si es necesario
+          const esSoles = preFactura.moneda.codigo === 'PEN';
+          const totalEnSoles = esSoles ? total : total * Number(preFactura.tipoCambio);
 
-        if (total > umbralMinimo) {
-          aplicaDetraccion = true;
-          tipoDetraccionId = tipoDetraccionMax.id;
-          porcentajeDetraccion = porcentajeMax;
-          montoDetraccion = Math.round(total * (porcentajeMax / 100));
+          const umbralMinimo = Number(
+            tipoDetraccionMax.montoMinimo || preFactura.empresa.montoMinimoDetraccion || 700
+          );
+
+          if (totalEnSoles > umbralMinimo) {
+            aplicaDetraccion = true;
+            tipoDetraccionId = tipoDetraccionMax.id;
+            porcentajeDetraccion = porcentajeMax;
+            montoDetraccion = Math.round(totalEnSoles * (porcentajeMax / 100));
+          }
         }
       }
     }
-
-    // PASO 6: EVALUAR RETENCIÓN (Solo si NO hay detracción)
+    // PASO 6: EVALUAR RETENCIÓN (Solo si NO hay detracción y es Factura/Boleta)
     let aplicaRetencion = false;
     let porcentajeRetencion = null;
     let montoRetencion = null;
 
-    if (!aplicaDetraccion) {
+    if (aplicaImpuestos && !aplicaDetraccion) {
       const clienteEsAgente = preFactura.cliente.esAgenteRetencion || false;
       const umbralRetencion = Number(preFactura.empresa.montoMinimoRetencion || 700);
 
       if (clienteEsAgente && total > umbralRetencion) {
         aplicaRetencion = true;
         porcentajeRetencion = Number(preFactura.empresa.porcentajeRetencion || 3);
-        montoRetencion = total * (porcentajeRetencion / 100);
+        const esSoles = preFactura.moneda.codigo === 'PEN';
+        const totalEnSoles = esSoles ? total : total * Number(preFactura.tipoCambio);
+        montoRetencion = totalEnSoles * (porcentajeRetencion / 100);
       }
     }
 
-    // PASO 7: EVALUAR PERCEPCIÓN
+    // PASO 7: EVALUAR PERCEPCIÓN (solo Facturas y Boletas)
     let aplicaPercepcion = false;
     let porcentajePercepcion = null;
     let montoPercepcion = null;
 
     const empresaEsAgente = preFactura.empresa.soyAgentePercepcion || false;
 
-    if (empresaEsAgente) {
+    if (aplicaImpuestos && empresaEsAgente) {
       aplicaPercepcion = true;
       porcentajePercepcion = Number(preFactura.empresa.porcentajePercepcion || 1);
-      montoPercepcion = total * (porcentajePercepcion / 100);
+      const esSoles = preFactura.moneda.codigo === 'PEN';
+      const totalEnSoles = esSoles ? total : total * Number(preFactura.tipoCambio);
+      montoPercepcion = totalEnSoles * (porcentajePercepcion / 100);
     }
 
     return {
