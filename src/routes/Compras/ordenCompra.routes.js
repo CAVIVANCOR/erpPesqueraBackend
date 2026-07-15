@@ -47,6 +47,17 @@ router.post(
   ordenCompraController.crear
 );
 
+// ========================================
+// RUTA DE ASIGNACIÓN MASIVA CENTRO COSTO
+// (Operación propia del modelo)
+// ========================================
+router.put(
+  '/asignar-centro-costo-masivo',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'editar'),
+  ordenCompraController.asignarCentroCostoMasivo
+);
+
 router.put(
   '/:id',
   autenticarJWT,
@@ -171,5 +182,8 @@ router.delete(
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.eliminarAsientoContable
 );
+
+
+
 
 export default router;

@@ -64,6 +64,11 @@ const listar = async () => {
     return await prisma.ordenCompra.findMany({
       include: {
         empresa: true,
+        centroCosto: {
+          include: {
+            categoria: true
+          }
+        },
         tipoDocumento: true,
         serieDoc: true,
         requerimientoCompra: true,
@@ -111,6 +116,11 @@ const obtenerPorId = async (id) => {
       where: { id },
       include: {
         empresa: true,
+        centroCosto: {
+          include: {
+            categoria: true
+          }
+        },
         tipoDocumento: true,
         serieDoc: true,
         requerimientoCompra: {
@@ -500,6 +510,11 @@ const actualizar = async (id, data) => {
         where: { id },
         include: {
           empresa: true,
+          centroCosto: {
+            include: {
+              categoria: true
+            }
+          },
           tipoDocumento: true,
           serieDoc: true,
           proveedor: true,
@@ -3130,6 +3145,31 @@ const eliminarAsientoContable = async (asientoId) => {
   }
 };
 
+const asignarCentroCostoMasivo = async (centroCostoId, ordenesIds) => {
+  try {
+    const resultado = await prisma.ordenCompra.updateMany({
+      where: {
+        id: {
+          in: ordenesIds.map(id => BigInt(id))
+        }
+      },
+      data: {
+        centroCostoId: BigInt(centroCostoId)
+      }
+    });
+
+    return {
+      success: true,
+      count: resultado.count,
+      message: `${resultado.count} órdenes actualizadas correctamente`
+    };
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -3149,5 +3189,6 @@ export default {
   guardarAsientoContable, // ⭐ NUEVO
   eliminarAsientoContable, // ⭐ NUEVO
   calcularTotalesEImpuestos, // ⭐ AGREGAR
+  asignarCentroCostoMasivo,
 
 };

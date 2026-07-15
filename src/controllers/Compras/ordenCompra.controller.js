@@ -283,3 +283,22 @@ export async function eliminarAsientoContable(req, res, next) {
     next(err);
   }
 }
+
+
+export async function asignarCentroCostoMasivo(req, res, next) {
+  try {
+    const { centroCostoId, ordenesIds } = req.body;
+
+    if (!centroCostoId || !ordenesIds || !Array.isArray(ordenesIds) || ordenesIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "centroCostoId y ordenesIds son requeridos"
+      });
+    }
+
+    const resultado = await ordenCompraService.asignarCentroCostoMasivo(centroCostoId, ordenesIds);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
