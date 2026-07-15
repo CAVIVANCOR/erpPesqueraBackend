@@ -462,8 +462,9 @@ model CentroCosto {
   movimientosActivoFijo           MovimientoActivoFijo[]  // 🆕 NUEVA RELACIÓN
   detMovsEntregaRendir            DetMovsEntregaRendir[]
   personal                        Personal[]          // ⭐ NUEVO - Relación inversa
+  ordenesCompra                   OrdenCompra[]       // ⭐ NUEVO
 
-  @@index([cuentaContableId])                                                      // ⭐ NUEVO
+  @@index([cuentaContableId])     // ⭐ NUEVO
 }
 
 model Color {
@@ -7137,8 +7138,8 @@ model OrdenCompra {
   // ========================================
   // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
   // ========================================
-  cuentaPorPagar       CuentaPorPagar?        // ⭐ NUEVO: 1:1 - Cuenta por pagar generada
-  unidadNegocio        UnidadNegocio?         @relation(fields: [unidadNegocioId], references: [id])
+  cuentaPorPagar            CuentaPorPagar?        // ⭐ NUEVO: 1:1 - Cuenta por pagar generada
+  unidadNegocio             UnidadNegocio?         @relation(fields: [unidadNegocioId], references: [id])
 
   percepciones              Percepcion[]
   datosAdicionales          DetDatosAdicionalesOrdenCompra[]
@@ -7148,6 +7149,7 @@ model OrdenCompra {
   periodoContable           PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
   tipoOperacionSunat        TipoOperacionSunat?  @relation(fields: [tipoOperacionSunatId], references: [id])
   tipoDetraccion            TipoDetraccion?  @relation("OrdenCompraTipoDetraccion", fields: [tipoDetraccionId], references: [id])
+  centroCosto               CentroCosto?                @relation(fields: [centroCostoId], references: [id])  // ⭐ NUEVO
 
   // ========================================
   // ÍNDICES EXISTENTES
