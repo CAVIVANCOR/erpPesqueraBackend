@@ -83,7 +83,7 @@ export async function obtenerTodasAsignacionesNoLiquidadas(req, res, next) {
 export async function obtenerValoresIniciales(req, res, next) {
   try {
     const { moduloOrigen, entregaARendirId } = req.query;
-    
+
     if (!moduloOrigen || !entregaARendirId) {
       return res.status(400).json({
         error: 'Se requieren moduloOrigen y entregaARendirId',
@@ -115,7 +115,7 @@ export async function liquidarAsignacion(req, res, next) {
     const id = Number(req.params.id);
     const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
     const { permitirRegeneracion, urlLiquidacionPdf } = req.body;
-    
+
     const asignacionLiquidada = await detMovsEntregaRendirService.liquidarAsignacion(
       id,
       usuarioId,
@@ -162,7 +162,7 @@ export async function liquidarAsignacion(req, res, next) {
 export async function obtenerSaldoInicial(req, res, next) {
   try {
     const { empresaId, moduloOrigenId, documentoOrigenId, responsableId, fechaMovimiento } = req.query;
-    
+
     if (!empresaId || !moduloOrigenId || !documentoOrigenId || !responsableId || !fechaMovimiento) {
       return res.status(400).json({
         error: 'Se requieren empresaId, moduloOrigenId, documentoOrigenId, responsableId y fechaMovimiento',
@@ -192,6 +192,47 @@ export async function calcularSaldoFinal(req, res, next) {
   }
 }
 
+
+export async function recalcularSaldosResponsable(req, res, next) {
+  try {
+    const responsableId = Number(req.params.responsableId);
+
+    if (!responsableId) {
+      return res.status(400).json({
+        error: 'responsableId es requerido'
+      });
+    }
+
+    await detMovsEntregaRendirService.recalcularSaldosAutomatico(BigInt(responsableId));
+
+    res.json({
+      success: true,
+      message: `Saldos recalculados para responsable ${responsableId}`
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+
+export async function asignarCentroCostoMasivo(req, res, next) {
+  try {
+    const { centroCostoId, movimientosIds } = req.body;
+
+    if (!centroCostoId || !movimientosIds || !Array.isArray(movimientosIds) || movimientosIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "centroCostoId y movimientosIds son requeridos"
+      });
+    }
+
+    const resultado = await detMovsEntregaRendirService.asignarCentroCostoMasivo(centroCostoId, movimientosIds);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   listar,
   obtenerPorId,
@@ -204,5 +245,7 @@ export default {
   obtenerLabelEnlacePorId,
   liquidarAsignacion,
   obtenerSaldoInicial,
-  calcularSaldoFinal
+  calcularSaldoFinal,
+  recalcularSaldosResponsable,
+  asignarCentroCostoMasivo
 };

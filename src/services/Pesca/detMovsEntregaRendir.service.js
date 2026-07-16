@@ -83,14 +83,20 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    const movimientos = await prisma.detMovsEntregaRendir.findMany({
+       const movimientos = await prisma.detMovsEntregaRendir.findMany({
       include: {
         tipoMovimiento: {
           include: {
             categoria: true,
           },
         },
+        responsable: true,
         entidadComercial: true,
+        centroCosto: {
+          include: {
+            categoria: true,
+          }
+        },
         moneda: true,
         producto: true,
         tipoDocumento: true,
@@ -1368,6 +1374,34 @@ const liquidarAsignacion = async (
   }
 };
 
+
+
+const asignarCentroCostoMasivo = async (centroCostoId, movimientosIds) => {
+  try {
+    const resultado = await prisma.detMovsEntregaRendir.updateMany({
+      where: {
+        id: {
+          in: movimientosIds.map(id => BigInt(id))
+        }
+      },
+      data: {
+        centroCostoId: BigInt(centroCostoId)
+      }
+    });
+
+    return {
+      success: true,
+      count: resultado.count,
+      message: `${resultado.count} movimientos actualizados correctamente`
+    };
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+
 export default {
   listar,
   obtenerPorId,
@@ -1383,4 +1417,5 @@ export default {
   recalcularSaldosResponsable,
   recalcularSaldosAutomatico,
   liquidarAsignacion,
+  asignarCentroCostoMasivo,
 };

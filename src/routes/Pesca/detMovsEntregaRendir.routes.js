@@ -111,7 +111,8 @@ router.delete('/:id', detMovsEntregaRendirController.eliminar);
 router.post('/:id/liquidar', autenticarJWT, detMovsEntregaRendirController.liquidarAsignacion);
 router.get('/saldo-inicial', autenticarJWT, detMovsEntregaRendirController.obtenerSaldoInicial);
 router.get('/:id/saldo-final', autenticarJWT, detMovsEntregaRendirController.calcularSaldoFinal);
-
+router.post('/asignar-centro-costo-masivo', autenticarJWT, detMovsEntregaRendirController.asignarCentroCostoMasivo);
+router.post('/recalcular-saldos/:responsableId', autenticarJWT, detMovsEntregaRendirController.recalcularSaldosResponsable);
 /**
  * POST /api/det-movs-entrega-rendir/upload
  * Sube un PDF generado a partir de fotos de comprobantes de movimientos.
