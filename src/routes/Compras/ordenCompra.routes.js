@@ -65,11 +65,12 @@ router.put(
   ordenCompraController.actualizar
 );
 
+
 router.delete(
-  '/:id/asiento/:asientoId',
+  '/:id',
   autenticarJWT,
-  checkPermission('ordenCompra', 'ver'),
-  ordenCompraController.eliminarAsientoContable
+  checkPermission('ordenCompra', 'eliminar'),
+  ordenCompraController.eliminar
 );
 
 // ========================================

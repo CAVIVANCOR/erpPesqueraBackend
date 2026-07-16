@@ -671,7 +671,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       if (empresaEsAgente && proveedorSujeto && total > umbralRetencion) {
         aplicaRetencion = true;
         porcentajeRetencion = Number(orden.empresa.porcentajeRetencion || 3);
-        const esSoles = orden.moneda.codigoSunat  === 'PEN';
+        const esSoles = orden.moneda.codigoSunat === 'PEN';
         const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
         montoRetencion = totalEnSoles * (porcentajeRetencion / 100);
       }
@@ -689,7 +689,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     if (aplicaImpuestos && proveedorEsAgente) {
       aplicaPercepcion = true;
       porcentajePercepcion = Number(orden.empresa.porcentajePercepcion || 1);
-      const esSoles = orden.moneda.codigoSunat  === 'PEN';
+      const esSoles = orden.moneda.codigoSunat === 'PEN';
       const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
       montoPercepcion = totalEnSoles * (porcentajePercepcion / 100);
     }
@@ -716,22 +716,195 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
 };
 
 
-const eliminar = async (id) => {
+const eliminar = async (id, usuarioId, transaccion = null) => {
   try {
-    const existe = await prisma.ordenCompra.findUnique({ where: { id } });
-    if (!existe) throw new NotFoundError("OrdenCompra no encontrada");
+    const ejecutarEnTransaccion = async (tx) => {
+      // PASO 1: VALIDACIONES PREVIAS
+      if (!id) {
+        throw new ValidationError("El ID de la OrdenCompra es obligatorio");
+      }
 
-    if (Number(existe.estadoId) === ESTADO_ORDEN_COMPRA.ANULADO) {
-      throw new ValidationError("No se puede eliminar una orden anulada.");
+      if (!usuarioId) {
+        throw new ValidationError("El ID del usuario es obligatorio");
+      }
+
+      const usuario = await tx.usuario.findUnique({
+        where: { id: usuarioId },
+        select: { esSuperUsuario: true },
+      });
+
+      if (!usuario?.esSuperUsuario) {
+        throw new ValidationError(
+          "Solo SuperUsuarios pueden eliminar Órdenes de Compra completas"
+        );
+      }
+      const ordenCompra = await tx.ordenCompra.findUnique({
+        where: { id },
+        include: {
+          detalles: true,
+        },
+      });
+
+      if (!ordenCompra) {
+        throw new NotFoundError("OrdenCompra no encontrada");
+      }
+
+      if (Number(ordenCompra.estadoId) === ESTADO_ORDEN_COMPRA.ANULADO) {
+        throw new ValidationError("No se puede eliminar una orden anulada");
+      }
+
+      const resultados = {
+        ordenesCompra: 0,
+        detallesOrdenCompra: 0,
+        cuentasPorPagar: 0,
+        pagos: 0,
+        movimientosAlmacen: 0,
+        detallesMovAlmacen: 0,
+        kardexEliminados: 0,
+        saldosDetRegenerados: 0,
+        saldosGenRegenerados: 0,
+        asientosContables: 0,
+        percepciones: 0,
+        datosAdicionales: 0,
+        repuestosContratistas: 0,
+        ordenesCompraHijas: 0,
+      };
+
+      // PASO 2: ELIMINAR ORDENES COMPRA HIJAS (PARTICIONADAS)
+      const ordenesHijas = await tx.ordenCompra.findMany({
+        where: { ordenCompraOrigenId: id },
+        select: { id: true },
+      });
+
+      if (ordenesHijas.length > 0) {
+        for (const hija of ordenesHijas) {
+          const resultadoHija = await eliminar(hija.id, usuarioId, tx);
+          resultados.ordenesCompraHijas += resultadoHija.resultados.ordenesCompra;
+        }
+      }
+
+      // PASO 3: ELIMINAR ASIENTOS CONTABLES
+      const asientosContables = await tx.asientoContable.findMany({
+        where: {
+          ordenesCompra: {
+            some: {
+              id: id
+            }
+          },
+        },
+      });
+
+      if (asientosContables && asientosContables.length > 0) {
+        // Eliminar detalles de asientos
+        for (const asiento of asientosContables) {
+          await tx.detalleAsientoContable.deleteMany({
+            where: { asientoContableId: asiento.id },
+          });
+        }
+
+        // Eliminar asientos
+        await tx.asientoContable.deleteMany({
+          where: {
+            id: { in: asientosContables.map(a => a.id) },
+          },
+        });
+
+        resultados.asientosContables = asientosContables.length;
+      } 
+
+      // PASO 4: ELIMINAR PERCEPCIONES
+      const percepcionesResult = await tx.percepcion.deleteMany({
+        where: { ordenCompraId: id },
+      });
+      resultados.percepciones = Number(percepcionesResult.count);
+
+      // PASO 5: DESVINCULAR REPUESTOS CONTRATISTAS OT
+      const repuestosResult = await tx.detRepuestosContratistaOT.updateMany({
+        where: { ordenCompraId: id },
+        data: { ordenCompraId: null },
+      });
+      resultados.repuestosContratistas = Number(repuestosResult.count);
+
+      // PASO 6: ELIMINAR DATOS ADICIONALES
+      const datosResult = await tx.detDatosAdicionalesOrdenCompra.deleteMany({
+        where: { ordenCompraId: id },
+      });
+      resultados.datosAdicionales = Number(datosResult.count);
+
+      // PASO 7: ELIMINAR CUENTA POR PAGAR Y PAGOS
+      const cuentaPorPagar = await tx.cuentaPorPagar.findFirst({
+        where: { ordenCompraId: id },
+        include: { pagos: true },
+      });
+
+      if (cuentaPorPagar) {
+        if (cuentaPorPagar.pagos?.length > 0) {
+          const pagosResult = await tx.pagoCuentaPorPagar.deleteMany({
+            where: { cuentaPorPagarId: cuentaPorPagar.id },
+          });
+          resultados.pagos = Number(pagosResult.count);
+        }
+
+        await tx.cuentaPorPagar.delete({
+          where: { id: cuentaPorPagar.id },
+        });
+        resultados.cuentasPorPagar = 1;
+      } 
+
+      // PASO 8: ELIMINAR MOVIMIENTO DE ALMACÉN
+      if (ordenCompra.movIngresoAlmacenId) {
+        const { default: eliminarMovimientoAlmacenService } =
+          await import("../Almacen/eliminarMovimientoAlmacen.service.js");
+        const resultadoMov = await eliminarMovimientoAlmacenService
+          .eliminarMovimientoAlmacenCompleto(
+            ordenCompra.movIngresoAlmacenId,
+            tx
+          );
+
+        resultados.movimientosAlmacen = 1;
+        resultados.detallesMovAlmacen = resultadoMov.resultados.detallesEliminados;
+        resultados.kardexEliminados = resultadoMov.resultados.kardexEliminados;
+        resultados.saldosDetRegenerados = resultadoMov.resultados.saldosDetRegenerados;
+        resultados.saldosGenRegenerados = resultadoMov.resultados.saldosGenRegenerados;
+      } 
+      // PASO 9: ELIMINAR DETALLES DE ORDEN COMPRA
+      const detallesResult = await tx.detalleOrdenCompra.deleteMany({
+        where: { ordenCompraId: id },
+      });
+      resultados.detallesOrdenCompra = Number(detallesResult.count);
+
+      // PASO 10: ELIMINAR ORDEN COMPRA
+      await tx.ordenCompra.delete({
+        where: { id },
+      });
+      resultados.ordenesCompra = 1;
+      return {
+        success: true,
+        mensaje: "OrdenCompra eliminada exitosamente con todos sus registros relacionados",
+        resultados: resultados,
+      };
+    };
+
+    let resultado;
+    if (transaccion) {
+      resultado = await ejecutarEnTransaccion(transaccion);
+    } else {
+      resultado = await prisma.$transaction(ejecutarEnTransaccion);
     }
 
-    await prisma.ordenCompra.delete({ where: { id } });
-  } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError)
-      throw err;
-    if (err.code && err.code.startsWith("P"))
-      throw new DatabaseError("Error de base de datos", err.message);
-    throw err;
+    return resultado;
+
+  } catch (error) {
+    if (
+      error instanceof ValidationError ||
+      error instanceof NotFoundError
+    ) {
+      throw error;
+    }
+    console.error("Error al eliminar OrdenCompra completa:", error);
+    throw new DatabaseError(
+      "Error al eliminar OrdenCompra: " + error.message
+    );
   }
 };
 

@@ -47,8 +47,9 @@ export async function actualizar(req, res, next) {
 export async function eliminar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    await ordenCompraService.eliminar(id);
-    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+    const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
+    const resultado = await ordenCompraService.eliminar(id, usuarioId);
+    res.status(200).json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }
