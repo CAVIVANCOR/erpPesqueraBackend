@@ -112,9 +112,7 @@ async function validarClavesForaneas(data) {
     data.monedaId
       ? prisma.moneda.findUnique({ where: { id: data.monedaId } })
       : Promise.resolve(true),
-    data.centroCostoId
-      ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } })
-      : Promise.resolve(true),
+    Promise.resolve(true),
   ];
   const [
     empresa,
@@ -134,7 +132,6 @@ async function validarClavesForaneas(data) {
     agenteAduana,
     banco,
     moneda,
-    centroCosto,
   ] = await Promise.all(checks);
   if (!empresa) throw new ValidationError("El empresaId no existe.");
   if (!cliente) throw new ValidationError("El clienteId no existe.");
@@ -165,8 +162,6 @@ async function validarClavesForaneas(data) {
     throw new ValidationError("El bancoId no existe.");
   if (data.monedaId && !moneda)
     throw new ValidationError("El monedaId no existe.");
-  if (data.centroCostoId && !centroCosto)
-    throw new ValidationError("El centroCostoId no existe.");
 }
 
 const listar = async () => {

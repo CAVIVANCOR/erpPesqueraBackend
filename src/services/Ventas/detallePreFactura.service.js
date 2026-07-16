@@ -42,14 +42,12 @@ function calcularDatosAlmacen(producto, cantidadVenta, precioUnitarioVenta) {
 }
 
 async function validarClavesForaneas(data) {
-  const [preFactura, producto, centroCosto] = await Promise.all([
+  const [preFactura, producto] = await Promise.all([
     prisma.preFactura.findUnique({ where: { id: data.preFacturaId } }),
-    prisma.producto.findUnique({ where: { id: data.productoId } }),
-    prisma.centroCosto ? (data.centroCostoId ? prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }) : Promise.resolve(true)) : Promise.resolve(true)
+    prisma.producto.findUnique({ where: { id: data.productoId } })
   ]);
   if (!preFactura) throw new ValidationError('El preFacturaId no existe.');
   if (!producto) throw new ValidationError('El productoId no existe.');
-  if (data.centroCostoId && prisma.centroCosto && !centroCosto) throw new ValidationError('El centroCostoId no existe.');
 }
 
 const listar = async () => {
