@@ -555,6 +555,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
         proveedor: true,
         moneda: true,
         tipoDocumento: true,
+        tipoDocumentoFinal: true,
         detalles: {
           include: {
             producto: {
@@ -599,8 +600,8 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     const total = subtotal + totalIGV - montoImpuestoRenta;
 
     // VALIDAR: Solo calcular impuestos para Facturas (01) y Boletas (03)
-    const codigoDoc = orden.tipoDocumento?.codigo || '';
-    const aplicaImpuestos = codigoDoc === '01' || codigoDoc === '03';
+    const codigoSunat = orden.tipoDocumentoFinal?.codigoSunat || orden.tipoDocumento?.codigoSunat || '';
+    const aplicaImpuestos = codigoSunat === '01' || codigoSunat === '03';
     // ========================================
     // PASO 5: EVALUAR DETRACCIÓN (solo Facturas y Boletas)
     // ========================================
@@ -608,6 +609,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     let tipoDetraccionId = null;
     let porcentajeDetraccion = null;
     let montoDetraccion = null;
+    let mensajeDetraccion = null;
 
     const detallesConDetraccion = orden.detalles.filter(
       (d) => d.producto?.tipoDetraccionId
@@ -627,7 +629,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
 
       if (porcentajeMax > 0 && tipoDetraccionMax) {
         // Convertir total a soles si es necesario
-        const esSoles = orden.moneda.codigo === 'PEN';
+        const esSoles = orden.moneda.codigoSunat === 'PEN';
         const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
 
         const umbralMinimo = Number(
@@ -639,7 +641,18 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
           tipoDetraccionId = tipoDetraccionMax.id;
           porcentajeDetraccion = porcentajeMax;
           montoDetraccion = Math.round(totalEnSoles * (porcentajeMax / 100));
+          mensajeDetraccion = `✅ Detracción aplicada: ${porcentajeMax}% (S/ ${montoDetraccion}) - Total: S/ ${totalEnSoles.toFixed(2)} > Umbral: S/ ${umbralMinimo}`;
+        } else {
+          mensajeDetraccion = `⚠️ No aplica detracción: Total S/ ${totalEnSoles.toFixed(2)} ≤ Umbral S/ ${umbralMinimo}`;
         }
+      } else {
+        mensajeDetraccion = '⚠️ No aplica detracción: Producto sin porcentaje o tipo de detracción configurado';
+      }
+    } else {
+      if (!aplicaImpuestos) {
+        mensajeDetraccion = '⚠️ No aplica detracción: Documento no es Factura/Boleta';
+      } else if (detallesConDetraccion.length === 0) {
+        mensajeDetraccion = '⚠️ No aplica detracción: Ningún producto tiene detracción configurada';
       }
     }
 
@@ -658,7 +671,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       if (empresaEsAgente && proveedorSujeto && total > umbralRetencion) {
         aplicaRetencion = true;
         porcentajeRetencion = Number(orden.empresa.porcentajeRetencion || 3);
-        const esSoles = orden.moneda.codigo === 'PEN';
+        const esSoles = orden.moneda.codigoSunat  === 'PEN';
         const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
         montoRetencion = totalEnSoles * (porcentajeRetencion / 100);
       }
@@ -676,7 +689,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     if (aplicaImpuestos && proveedorEsAgente) {
       aplicaPercepcion = true;
       porcentajePercepcion = Number(orden.empresa.porcentajePercepcion || 1);
-      const esSoles = orden.moneda.codigo === 'PEN';
+      const esSoles = orden.moneda.codigoSunat  === 'PEN';
       const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
       montoPercepcion = totalEnSoles * (porcentajePercepcion / 100);
     }
@@ -686,20 +699,15 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     // ========================================
     return {
       subtotal,
-      totalDescuentos: 0,
       totalIGV,
       total,
       montoImpuestoRenta,
       aplicaDetraccion,
-      tipoDetraccionId,
       porcentajeDetraccion,
       montoDetraccion,
       aplicaRetencion,
       porcentajeRetencion,
       montoRetencion,
-      aplicaPercepcion,
-      porcentajePercepcion,
-      montoPercepcion,
     };
   } catch (err) {
     if (err instanceof NotFoundError) throw err;

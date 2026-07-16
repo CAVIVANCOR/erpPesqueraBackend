@@ -569,7 +569,7 @@ const crear = async (data) => {
       }
       datosLimpios.motivoNotaCreditoDebitoId = data.motivoNotaCreditoDebitoId || null;
 
-      
+
 
       // ════════════════════════════════════════════════════════════
       // DOCUMENTO FINAL (COMPROBANTE ELECTRÓNICO)
@@ -594,7 +594,7 @@ const crear = async (data) => {
             fechaFacturacion: true,
           },
         });
-        
+
         if (docAfecto) {
           datosLimpios.dcmtoAfectoNCNDId = Number(data.dcmtoAfectoNCNDId);
           datosLimpios.numeroDcmtoAfectoNCND = docAfecto.numeroDocumentoFinal;
@@ -757,7 +757,7 @@ const actualizar = async (id, data) => {
             fechaFacturacion: true,
           },
         });
-        
+
         if (docAfecto) {
           datosConAuditoria.dcmtoAfectoNCNDId = Number(data.dcmtoAfectoNCNDId);
           datosConAuditoria.numeroDcmtoAfectoNCND = docAfecto.numeroDocumentoFinal;
@@ -822,6 +822,7 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
         cliente: true,
         moneda: true,
         tipoDocumento: true,
+        tipoDocumentoFinal: true,
         detalles: {
           include: {
             producto: {
@@ -858,8 +859,8 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
     const total = subtotal + totalIGV - montoImpuestoRenta;
 
     // VALIDAR: Solo calcular impuestos para Facturas (01) y Boletas (03)
-    const codigoDoc = preFactura.tipoDocumento?.codigo || '';
-    const aplicaImpuestos = codigoDoc === '01' || codigoDoc === '03';
+    const codigoSunat = preFactura.tipoDocumentoFinal?.codigoSunat || preFactura.tipoDocumento?.codigoSunat || '';
+    const aplicaImpuestos = codigoSunat === '01' || codigoSunat === '03';
 
     // PASO 5: EVALUAR DETRACCIÓN (solo Facturas y Boletas)
     let aplicaDetraccion = false;
@@ -886,7 +887,7 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
 
         if (porcentajeMax > 0 && tipoDetraccionMax) {
           // Convertir total a soles si es necesario
-          const esSoles = preFactura.moneda.codigo === 'PEN';
+          const esSoles = preFactura.moneda.codigoSunat === 'PEN';
           const totalEnSoles = esSoles ? total : total * Number(preFactura.tipoCambio);
 
           const umbralMinimo = Number(
@@ -914,7 +915,7 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
       if (clienteEsAgente && total > umbralRetencion) {
         aplicaRetencion = true;
         porcentajeRetencion = Number(preFactura.empresa.porcentajeRetencion || 3);
-        const esSoles = preFactura.moneda.codigo === 'PEN';
+        const esSoles = preFactura.moneda.codigoSunat === 'PEN';
         const totalEnSoles = esSoles ? total : total * Number(preFactura.tipoCambio);
         montoRetencion = totalEnSoles * (porcentajeRetencion / 100);
       }
@@ -930,7 +931,7 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
     if (aplicaImpuestos && empresaEsAgente) {
       aplicaPercepcion = true;
       porcentajePercepcion = Number(preFactura.empresa.porcentajePercepcion || 1);
-      const esSoles = preFactura.moneda.codigo === 'PEN';
+      const esSoles = preFactura.moneda.codigoSunat === 'PEN';
       const totalEnSoles = esSoles ? total : total * Number(preFactura.tipoCambio);
       montoPercepcion = totalEnSoles * (porcentajePercepcion / 100);
     }

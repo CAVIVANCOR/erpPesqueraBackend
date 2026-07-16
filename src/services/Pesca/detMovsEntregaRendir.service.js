@@ -105,15 +105,6 @@ const listar = async () => {
       },
     });
 
-    // 🔍 DEBUG - VER QUÉ DEVUELVE LISTAR PARA ID 28
-    const mov28 = movimientos.find(m => Number(m.id) === 28);
-    if (mov28) {
-      console.log('🔥 BACKEND listar() - Movimiento ID 28:');
-      console.log('🔥 saldoInicialAsignacion:', mov28.saldoInicialAsignacion);
-      console.log('🔥 saldoFinalAsignacion:', mov28.saldoFinalAsignacion);
-      console.log('🔥 actualizadoEn:', mov28.actualizadoEn);
-    }
-
     return movimientos;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -142,11 +133,6 @@ const obtenerPorId = async (id) => {
     });
 
     if (!mov) throw new NotFoundError("DetMovsEntregaRendir no encontrado");
-   // 🔍 DEBUG - VER QUÉ DEVUELVE EL BACKEND
-    console.log('🔥 BACKEND obtenerPorId - ID:', id);
-    console.log('🔥 saldoInicialAsignacion:', mov.saldoInicialAsignacion);
-    console.log('🔥 saldoFinalAsignacion:', mov.saldoFinalAsignacion);
-    console.log('🔥 actualizadoEn:', mov.actualizadoEn);
  
     return mov;
   } catch (err) {
