@@ -133,7 +133,7 @@ const obtenerPorId = async (id) => {
     });
 
     if (!mov) throw new NotFoundError("DetMovsEntregaRendir no encontrado");
- 
+
     return mov;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -222,7 +222,14 @@ const crear = async (data, usuarioId = null) => {
       data.asignacionOrigenId = null;
     }
 
-    return await prisma.detMovsEntregaRendir.create({ data });
+    const movimientoCreado = await prisma.detMovsEntregaRendir.create({ data });
+
+    // Recalcular saldos automáticamente si forma parte del cálculo
+    if (data.formaParteCalculoEntregaARendir === true && data.responsableId) {
+      await recalcularSaldosAutomatico(data.responsableId);
+    }
+
+    return movimientoCreado;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith("P"))
@@ -359,10 +366,20 @@ const actualizar = async (id, data, usuarioId = null) => {
     if (datosActualizacion.asignacionOrigenId === 0) {
       datosActualizacion.asignacionOrigenId = null;
     }
-    return await prisma.detMovsEntregaRendir.update({
+    const movimientoActualizado = await prisma.detMovsEntregaRendir.update({
       where: { id },
       data: datosActualizacion,
     });
+
+    // Recalcular saldos automáticamente si forma parte del cálculo
+    const responsableId = movimientoActualizado.responsableId || existente.responsableId;
+    const formaParteFinal = movimientoActualizado.formaParteCalculoEntregaARendir ?? existente.formaParteCalculoEntregaARendir;
+
+    if (formaParteFinal === true && responsableId) {
+      await recalcularSaldosAutomatico(responsableId);
+    }
+
+    return movimientoActualizado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
@@ -379,7 +396,18 @@ const eliminar = async (id) => {
     });
     if (!existente)
       throw new NotFoundError("DetMovsEntregaRendir no encontrado");
+
+    // Guardar datos antes de eliminar
+    const responsableId = existente.responsableId;
+    const formaParteCalculo = existente.formaParteCalculoEntregaARendir;
+
     await prisma.detMovsEntregaRendir.delete({ where: { id } });
+
+    // Recalcular saldos automáticamente si formaba parte del cálculo
+    if (formaParteCalculo === true && responsableId) {
+      await recalcularSaldosAutomatico(responsableId);
+    }
+
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
@@ -1084,6 +1112,85 @@ const recalcularSaldosResponsable = async (responsableId) => {
   }
 };
 
+
+/**
+ * Recalcular saldos de un responsable automáticamente
+ * Se ejecuta después de crear/editar/eliminar movimientos
+ */
+const recalcularSaldosAutomatico = async (responsableId) => {
+  try {
+    // Obtener todos los movimientos del responsable que forman parte del cálculo
+    const movimientos = await prisma.detMovsEntregaRendir.findMany({
+      where: {
+        responsableId: BigInt(responsableId),
+        formaParteCalculoEntregaARendir: true,
+      },
+      orderBy: [
+        { fechaMovimiento: 'asc' },
+        { id: 'asc' }
+      ],
+    });
+
+    if (movimientos.length === 0) return;
+
+    // Separar asignaciones y gastos/devoluciones
+    const asignaciones = movimientos.filter(
+      m => m.asignacionOrigenId === null || Number(m.asignacionOrigenId) === 0
+    );
+
+    let SaldoInicial = 0;
+    let SaldoFinal = 0;
+
+    // Procesar cada asignación con sus gastos
+    for (const asignacion of asignaciones) {
+      const asignacionId = Number(asignacion.id);
+
+      // Calcular saldos de la asignación
+      SaldoFinal = SaldoInicial + Number(asignacion.monto || 0);
+
+      await prisma.detMovsEntregaRendir.update({
+        where: { id: BigInt(asignacionId) },
+        data: {
+          saldoInicialAsignacion: SaldoInicial,
+          saldoFinalAsignacion: SaldoFinal,
+        },
+      });
+
+      SaldoInicial = SaldoFinal;
+
+      // Obtener gastos/devoluciones de esta asignación
+      const gastosAsignacion = movimientos.filter(
+        m => Number(m.asignacionOrigenId) === asignacionId
+      );
+
+      // Procesar cada gasto/devolución
+      for (const gasto of gastosAsignacion) {
+        const esDevolucion = Number(gasto.tipoMovimientoId) === 28;
+
+        if (esDevolucion) {
+          SaldoFinal = SaldoInicial + Number(gasto.monto || 0);
+        } else {
+          SaldoFinal = SaldoInicial - Number(gasto.monto || 0);
+        }
+
+        await prisma.detMovsEntregaRendir.update({
+          where: { id: BigInt(gasto.id) },
+          data: {
+            saldoInicialAsignacion: SaldoInicial,
+            saldoFinalAsignacion: SaldoFinal,
+          },
+        });
+
+        SaldoInicial = SaldoFinal;
+      }
+    }
+  } catch (error) {
+    console.error('Error en recalcularSaldosAutomatico:', error);
+    // No lanzar error para no bloquear la operación principal
+  }
+};
+
+
 /**
  * Liquidar una asignación (marcarla como liquidada y calcular saldo final)
  */
@@ -1274,5 +1381,6 @@ export default {
   obtenerSaldoInicialAsignacion,
   calcularSaldoFinalAsignacion,
   recalcularSaldosResponsable,
+  recalcularSaldosAutomatico,
   liquidarAsignacion,
 };
