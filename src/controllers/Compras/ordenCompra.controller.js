@@ -303,3 +303,40 @@ export async function asignarCentroCostoMasivo(req, res, next) {
     next(err);
   }
 }
+
+
+/**
+ * Obtener Órdenes de Compra por empresa, proveedor y fecha límite
+ * GET /api/ordenes-compra/por-proveedor
+ * Para selector de documento afectado en NC/ND
+ */
+export async function obtenerOrdenesCompraPorProveedor(req, res, next) {
+  try {
+    const { empresaId, proveedorId, fechaLimite } = req.query;
+
+    const where = {
+      tipoDocumentoId: {
+        notIn: [8, 9] // Excluir NC y ND
+      }
+    };
+
+    if (empresaId) {
+      where.empresaId = BigInt(empresaId);
+    }
+
+    if (proveedorId) {
+      where.proveedorId = BigInt(proveedorId);
+    }
+
+    if (fechaLimite) {
+      where.fechaDocumento = {
+        lte: new Date(fechaLimite),
+      };
+    }
+
+    const ordenesCompra = await ordenCompraService.obtenerTodos(where);
+    res.json(toJSONBigInt(ordenesCompra));
+  } catch (err) {
+    next(err);
+  }
+}

@@ -110,6 +110,34 @@ const listar = async () => {
   }
 };
 
+/**
+ * Obtener todas las órdenes de compra con filtros personalizados
+ * @param {Object} where - Condiciones de filtrado Prisma
+ * @returns {Promise<Array>} Lista de órdenes de compra
+ */
+const obtenerTodos = async (where = {}) => {
+  try {
+    const ordenes = await prisma.ordenCompra.findMany({
+      where,
+      include: {
+        empresa: { select: { razonSocial: true } },
+        proveedor: { select: { razonSocial: true } },
+        tipoDocumento: { select: { descripcion: true, codigo: true } },
+        estado: { select: { descripcion: true } },
+        moneda: { select: { codigoSunat: true, simbolo: true } },
+      },
+      orderBy: [
+        { fechaDocumento: 'desc' },
+        { id: 'desc' }
+      ],
+    });
+    return ordenes;
+  } catch (error) {
+    console.error("Error al obtener órdenes de compra:", error);
+    throw new DatabaseError("Error al obtener órdenes de compra: " + error.message);
+  }
+};
+
 const obtenerPorId = async (id) => {
   try {
     const orden = await prisma.ordenCompra.findUnique({
@@ -368,6 +396,10 @@ const crear = async (data) => {
           esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
           ordenCompraOrigenId: data.ordenCompraOrigenId,
           esParticionada: data.esParticionada !== undefined ? data.esParticionada : false,
+          motivoNotaCreditoDebitoId: data.motivoNotaCreditoDebitoId,
+          fechaDcmtoAfectoNCND: data.fechaDcmtoAfectoNCND,
+          dcmtoAfectoNCNDId: data.dcmtoAfectoNCNDId,
+          numeroDcmtoAfectoNCND: data.numeroDcmtoAfectoNCND,
         },
         include: {
           empresa: true,
@@ -473,6 +505,10 @@ const actualizar = async (id, data) => {
           esGerencial: data.esGerencial,
           ordenCompraOrigenId: data.ordenCompraOrigenId,
           esParticionada: data.esParticionada,
+          motivoNotaCreditoDebitoId: data.motivoNotaCreditoDebitoId,
+          fechaDcmtoAfectoNCND: data.fechaDcmtoAfectoNCND,
+          dcmtoAfectoNCNDId: data.dcmtoAfectoNCNDId,
+          numeroDcmtoAfectoNCND: data.numeroDcmtoAfectoNCND,
           actualizadoEn: new Date(),
           actualizadoPor: data.actualizadoPor,
         },
@@ -810,7 +846,7 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
         });
 
         resultados.asientosContables = asientosContables.length;
-      } 
+      }
 
       // PASO 4: ELIMINAR PERCEPCIONES
       const percepcionesResult = await tx.percepcion.deleteMany({
@@ -849,7 +885,7 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
           where: { id: cuentaPorPagar.id },
         });
         resultados.cuentasPorPagar = 1;
-      } 
+      }
 
       // PASO 8: ELIMINAR MOVIMIENTO DE ALMACÉN
       if (ordenCompra.movIngresoAlmacenId) {
@@ -866,7 +902,7 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
         resultados.kardexEliminados = resultadoMov.resultados.kardexEliminados;
         resultados.saldosDetRegenerados = resultadoMov.resultados.saldosDetRegenerados;
         resultados.saldosGenRegenerados = resultadoMov.resultados.saldosGenRegenerados;
-      } 
+      }
       // PASO 9: ELIMINAR DETALLES DE ORDEN COMPRA
       const detallesResult = await tx.detalleOrdenCompra.deleteMany({
         where: { ordenCompraId: id },
@@ -3371,5 +3407,6 @@ export default {
   eliminarAsientoContable, // ⭐ NUEVO
   calcularTotalesEImpuestos, // ⭐ AGREGAR
   asignarCentroCostoMasivo,
+  obtenerTodos, // ← AGREGAR ESTA LÍNEA
 
 };

@@ -22,6 +22,17 @@ router.post(
   ordenCompraController.generarDesdeRequerimiento
 );
 
+
+
+// Ruta específica para selector de documento afectado (NC/ND)
+router.get(
+  '/por-proveedor',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.obtenerOrdenesCompraPorProveedor
+);
+
+
 // ========================================
 // RUTAS CRUD PARA ORDENCOMPRA
 // (Operaciones propias del modelo)
