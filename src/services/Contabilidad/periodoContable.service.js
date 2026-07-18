@@ -475,6 +475,45 @@ const obtenerPeriodoActivo = async (empresaId) => {
   }
 };
 
+/**
+ * Obtiene el período contable que corresponde a una fecha específica.
+ * @param {BigInt} empresaId - ID de la empresa
+ * @param {Date} fecha - Fecha para buscar el período
+ * @returns {Promise<Object>} - Período contable encontrado
+ */
+const obtenerPeriodoPorFecha = async (empresaId, fecha) => {
+  try {
+    const fechaObj = new Date(fecha);
+    const anio = fechaObj.getFullYear();
+    const mes = fechaObj.getMonth() + 1; // getMonth() retorna 0-11
+
+    const periodo = await prisma.periodoContable.findFirst({
+      where: {
+        empresaId,
+        anio,
+        mes
+      },
+      include: {
+        empresa: true,
+        estado: true
+      }
+    });
+
+    if (!periodo) {
+      throw new NotFoundError(`No se encontró período contable para ${mes}/${anio} en esta empresa.`);
+    }
+
+    return periodo;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
+
 export default {
   listar,
   obtenerPorId,
@@ -485,5 +524,7 @@ export default {
   cerrarPeriodo,
   reabrirPeriodo,
   bloquearPeriodo,
-  obtenerPeriodoActivo
+  obtenerPeriodoActivo,
+  obtenerPeriodoPorFecha
+
 };

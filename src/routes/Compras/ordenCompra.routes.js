@@ -189,12 +189,11 @@ router.put(
 // (Elimina recurso derivado - solo requiere 'ver')
 // ========================================
 router.delete(
-  '/asiento/:asientoId',
+  '/:id/asiento/:asientoId',
   autenticarJWT,
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.eliminarAsientoContable
 );
-
 
 
 

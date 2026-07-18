@@ -186,6 +186,24 @@ const guardarAsientoContable = async (req, res, next) => {
   }
 };
 
+
+/**
+ * Elimina un asiento contable específico
+ * DELETE /api/saldos-cuenta-corriente/:id/asiento/:asientoId
+ */
+const eliminarAsientoContable = async (req, res, next) => {
+  try {
+    const asientoId = Number(req.params.asientoId);
+    await saldoCuentaCorrienteService.eliminarAsientoContable(asientoId);
+    res.status(200).json({
+      success: true,
+      message: "Asiento contable eliminado correctamente",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -196,5 +214,6 @@ export default {
   eliminar,
   listarPorMovimiento,
   generarBorradorAsiento,
-  guardarAsientoContable
+  guardarAsientoContable,
+  eliminarAsientoContable
 };

@@ -120,39 +120,18 @@ const generarBorradorAsiento = async (saldoId) => {
     }
 
     // Obtener período contable activo o el más reciente
+    // Obtener período contable según la fecha del saldo
     let periodoContable = null;
     try {
-      periodoContable = await periodoContableService.obtenerPeriodoActivo(
+      periodoContable = await periodoContableService.obtenerPeriodoPorFecha(
         saldo.empresaId,
+        saldo.fecha
       );
     } catch (error) {
-      // Si no hay período activo, buscar el período más reciente (estado ABIERTO = 50)
-      const periodos = await prisma.periodoContable.findMany({
-        where: {
-          empresaId: saldo.empresaId,
-          estadoId: 50n, // Estado ABIERTO
-        },
-        orderBy: { fechaInicio: "desc" },
-        take: 1,
-      });
-
-      if (periodos.length > 0) {
-        periodoContable = periodos[0];
-      } else {
-        // Si no hay períodos abiertos, buscar cualquier período de la empresa
-        const cualquierPeriodo = await prisma.periodoContable.findFirst({
-          where: { empresaId: saldo.empresaId },
-          orderBy: { fechaInicio: "desc" },
-        });
-
-        if (!cualquierPeriodo) {
-          throw new ValidationError(
-            "No hay períodos contables configurados para esta empresa. " +
-            "Por favor, cree un período contable antes de generar asientos.",
-          );
-        }
-        periodoContable = cualquierPeriodo;
-      }
+      throw new ValidationError(
+        `No se encontró período contable para la fecha ${saldo.fecha.toLocaleDateString()}. ` +
+        "Por favor, cree el período contable correspondiente antes de generar asientos."
+      );
     }
 
     // Buscar cuenta de Resultados Acumulados
@@ -313,7 +292,7 @@ const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
       const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
       const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, "0")}`;
 
-      // Crear nuevo asiento vinculado al saldo mediante procesoOrigenId
+      // Crear nuevo asiento vinculado al saldo mediante procesoOrigenId Y relación N:M
       const asiento = await tx.asientoContable.create({
         data: {
           empresaId: asientoData.empresaId,
@@ -335,6 +314,9 @@ const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
           tipoCambio: asientoData.tipoCambio,
           creadoPor,
           actualizadoPor: creadoPor,
+          saldosCuentaCorriente: {
+            connect: { id: saldoId }
+          },
         },
       });
 
@@ -856,6 +838,44 @@ const listarPorMovimiento = async (movimientoCajaId) => {
   }
 };
 
+
+/**
+ * Elimina un asiento contable específico
+ * Patrón: Igual a PreFactura.eliminarAsientoContable
+ * 
+ * @param {Number} asientoId - ID del asiento a eliminar
+ * @returns {Promise<boolean>} - true si se eliminó correctamente
+ */
+const eliminarAsientoContable = async (asientoId) => {
+  try {
+    const asiento = await prisma.asientoContable.findUnique({
+      where: { id: asientoId },
+    });
+
+    if (!asiento) {
+      throw new NotFoundError("Asiento contable no encontrado");
+    }
+
+    // Validar que NO esté aprobado (estadoId != 77)
+    if (Number(asiento.estadoId) === ESTADO_ASIENTO_CONTABLE.APROBADO) {
+      throw new ValidationError(
+        "No se puede eliminar un asiento contable aprobado. Debe desaprobarlo primero.",
+      );
+    }
+
+    await prisma.asientoContable.delete({ where: { id: asientoId } });
+    return true;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError)
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
+
 export default {
   listar,
   obtenerPorId,
@@ -867,4 +887,5 @@ export default {
   listarPorMovimiento,
   generarBorradorAsiento,
   guardarAsientoContable,
+  eliminarAsientoContable
 };

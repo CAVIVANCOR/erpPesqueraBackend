@@ -106,3 +106,20 @@ export async function obtenerPeriodoActivo(req, res, next) {
     next(err);
   }
 }
+
+
+export async function obtenerPeriodoPorFecha(req, res, next) {
+  try {
+    const empresaId = Number(req.query.empresaId);
+    const anio = Number(req.query.anio);
+    const mes = Number(req.query.mes);
+
+    // Construir fecha del primer día del mes
+    const fecha = new Date(anio, mes - 1, 1);
+
+    const periodo = await periodoContableService.obtenerPeriodoPorFecha(empresaId, fecha);
+    res.json(toJSONBigInt(periodo));
+  } catch (err) {
+    next(err);
+  }
+}

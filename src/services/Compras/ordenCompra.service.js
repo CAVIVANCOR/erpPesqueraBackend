@@ -2652,6 +2652,9 @@ const generarBorradorAsiento = async (ordenCompraId) => {
             producto: {
               include: {
                 cuentaCompras: true,
+                cuentaInventario: true,
+                cuentaCostoVentas: true,
+                cuentaVariacion: true,
                 familia: true,
               },
             },
@@ -2899,7 +2902,9 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           haber: total,
         });
       } else {
-        // COMPRA NORMAL: DEBE=60x, HABER=42.1
+        // COMPRA NORMAL: Orden: 60→42→20→61
+        let totalInventario = 0;
+
         for (const detalle of ordenCompra.detalles) {
           const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
 
@@ -2907,14 +2912,20 @@ const generarBorradorAsiento = async (ordenCompraId) => {
             warnings.push(mensaje);
           }
 
+          const subtotalDetalle = Number(detalle.subtotal);
+
           borrador.detalles.push({
             numeroLinea: numeroLinea++,
             planCuentaId: cuenta.id,
             glosa: `Compra ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
-            debe: Number(detalle.subtotal),
+            debe: subtotalDetalle,
             haber: 0,
             centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
           });
+
+          if (detalle.producto.cuentaInventarioId) {
+            totalInventario += subtotalDetalle;
+          }
         }
 
         borrador.detalles.push({
@@ -2928,6 +2939,31 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
           fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
+
+        if (totalInventario > 0) {
+          const productoConInventario = ordenCompra.detalles.find(d => d.producto.cuentaInventarioId);
+
+          if (productoConInventario) {
+            borrador.detalles.push({
+              numeroLinea: numeroLinea++,
+              planCuentaId: productoConInventario.producto.cuentaInventarioId,
+              glosa: `Inventario - OC ${ordenCompra.numeroDocumento}`,
+              debe: totalInventario,
+              haber: 0,
+              centroCostoId: ordenCompra.centroCostoId,
+            });
+
+            if (productoConInventario.producto.cuentaVariacionId) {
+              borrador.detalles.push({
+                numeroLinea: numeroLinea++,
+                planCuentaId: productoConInventario.producto.cuentaVariacionId,
+                glosa: `Variación de Existencias - OC ${ordenCompra.numeroDocumento}`,
+                debe: 0,
+                haber: totalInventario,
+              });
+            }
+          }
+        }
       }
     }
     // ========================================
@@ -2956,7 +2992,9 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           haber: total,
         });
       } else {
-        // COMPRA NORMAL
+        // COMPRA NORMAL: Orden: 60→42→20→61
+        let totalInventario = 0;
+
         for (const detalle of ordenCompra.detalles) {
           const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
 
@@ -2964,14 +3002,20 @@ const generarBorradorAsiento = async (ordenCompraId) => {
             warnings.push(mensaje);
           }
 
+          const subtotalDetalle = Number(detalle.subtotal);
+
           borrador.detalles.push({
             numeroLinea: numeroLinea++,
             planCuentaId: cuenta.id,
             glosa: `Compra exonerada ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
-            debe: Number(detalle.subtotal),
+            debe: subtotalDetalle,
             haber: 0,
             centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
           });
+
+          if (detalle.producto.cuentaInventarioId) {
+            totalInventario += subtotalDetalle;
+          }
         }
 
         borrador.detalles.push({
@@ -2985,6 +3029,31 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
           fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
+
+        if (totalInventario > 0) {
+          const productoConInventario = ordenCompra.detalles.find(d => d.producto.cuentaInventarioId);
+
+          if (productoConInventario) {
+            borrador.detalles.push({
+              numeroLinea: numeroLinea++,
+              planCuentaId: productoConInventario.producto.cuentaInventarioId,
+              glosa: `Inventario - OC ${ordenCompra.numeroDocumento}`,
+              debe: totalInventario,
+              haber: 0,
+              centroCostoId: ordenCompra.centroCostoId,
+            });
+
+            if (productoConInventario.producto.cuentaVariacionId) {
+              borrador.detalles.push({
+                numeroLinea: numeroLinea++,
+                planCuentaId: productoConInventario.producto.cuentaVariacionId,
+                glosa: `Variación de Existencias - OC ${ordenCompra.numeroDocumento}`,
+                debe: 0,
+                haber: totalInventario,
+              });
+            }
+          }
+        }
       }
     }
     // ========================================
@@ -3026,7 +3095,9 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           haber: total,
         });
       } else {
-        // COMPRA NORMAL
+        // COMPRA NORMAL: Orden: 60→40→42→20→61
+        let totalInventario = 0;
+
         for (const detalle of ordenCompra.detalles) {
           const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
 
@@ -3034,14 +3105,20 @@ const generarBorradorAsiento = async (ordenCompraId) => {
             warnings.push(mensaje);
           }
 
+          const subtotalDetalle = Number(detalle.subtotal);
+
           borrador.detalles.push({
             numeroLinea: numeroLinea++,
             planCuentaId: cuenta.id,
             glosa: `Compra ${detalle.producto.descripcionBase} - OC ${ordenCompra.numeroDocumento}`,
-            debe: Number(detalle.subtotal),
+            debe: subtotalDetalle,
             haber: 0,
             centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
           });
+
+          if (detalle.producto.cuentaInventarioId) {
+            totalInventario += subtotalDetalle;
+          }
         }
 
         borrador.detalles.push({
@@ -3063,6 +3140,31 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
           fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
+
+        if (totalInventario > 0) {
+          const productoConInventario = ordenCompra.detalles.find(d => d.producto.cuentaInventarioId);
+
+          if (productoConInventario) {
+            borrador.detalles.push({
+              numeroLinea: numeroLinea++,
+              planCuentaId: productoConInventario.producto.cuentaInventarioId,
+              glosa: `Inventario - OC ${ordenCompra.numeroDocumento}`,
+              debe: totalInventario,
+              haber: 0,
+              centroCostoId: ordenCompra.centroCostoId,
+            });
+
+            if (productoConInventario.producto.cuentaVariacionId) {
+              borrador.detalles.push({
+                numeroLinea: numeroLinea++,
+                planCuentaId: productoConInventario.producto.cuentaVariacionId,
+                glosa: `Variación de Existencias - OC ${ordenCompra.numeroDocumento}`,
+                debe: 0,
+                haber: totalInventario,
+              });
+            }
+          }
+        }
       }
     }
 

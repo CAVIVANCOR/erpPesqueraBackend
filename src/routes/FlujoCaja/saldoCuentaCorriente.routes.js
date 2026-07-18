@@ -16,5 +16,5 @@ router.delete('/:id', saldoCuentaCorrienteController.eliminar);
 // Rutas para generación de asientos contables
 router.get('/:id/generar-borrador-asiento', saldoCuentaCorrienteController.generarBorradorAsiento);
 router.post('/:id/guardar-asiento', saldoCuentaCorrienteController.guardarAsientoContable);
-
+router.delete('/:id/asiento/:asientoId', saldoCuentaCorrienteController.eliminarAsientoContable);
 export default router;

@@ -241,9 +241,12 @@ const obtenerPorId = async (id) => {
         serieDocFinal: true,
         asientosContables: {
           include: {
+            estado: true,
+            moneda: true,
             detalles: {
               include: {
                 planCuenta: true,
+                entidadComercial: true,
               },
               orderBy: { numeroLinea: "asc" },
             },
@@ -2976,6 +2979,11 @@ const generarBorradorAsiento = async (preFacturaId) => {
         moneda: true,
         periodoContable: true,
         tipoDocumento: true,
+        detalles: {
+          include: {
+            producto: true,
+          },
+        },
       },
     });
 
@@ -3097,6 +3105,20 @@ const generarBorradorAsiento = async (preFacturaId) => {
 
     // CASO 1: GERENCIAL (sin IGV)
     if (preFactura.esGerencial) {
+      const detallesVentas = esSaldoInicial
+        ? [{ planCuentaId: cuentaHaber.id, monto: total }]
+        : preFactura.detalles.reduce((acc, det) => {
+          const cuentaId = det.producto?.cuentaVentasId || cuentaHaber.id;
+          const existing = acc.find(a => a.planCuentaId === cuentaId);
+          const montoDetalle = Number(det.cantidad) * Number(det.precioUnitario);
+          if (existing) {
+            existing.monto += montoDetalle;
+          } else {
+            acc.push({ planCuentaId: cuentaId, monto: montoDetalle });
+          }
+          return acc;
+        }, []);
+
       borrador.detalles = [
         {
           numeroLinea: 1,
@@ -3111,20 +3133,34 @@ const generarBorradorAsiento = async (preFacturaId) => {
           numeroDocumentoOrigen: preFactura.numeroDocumento,
           fechaDocumentoOrigen: preFactura.fechaDocumento,
         },
-        {
-          numeroLinea: 2,
-          planCuentaId: cuentaHaber.id,
+        ...detallesVentas.map((dv, idx) => ({
+          numeroLinea: idx + 2,
+          planCuentaId: dv.planCuentaId,
           glosa: esSaldoInicial
             ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta según PreFactura ${preFactura.codigo}`,
           debe: 0,
-          haber: total,
+          haber: dv.monto,
           centroCostoId: esSaldoInicial ? null : preFactura.centroCostoId,
-        },
+        })),
       ];
     }
     // CASO 2: FISCAL EXONERADA (sin IGV)
     else if (preFactura.exoneradoIgv) {
+      const detallesVentas = esSaldoInicial
+        ? [{ planCuentaId: cuentaHaber.id, monto: total }]
+        : preFactura.detalles.reduce((acc, det) => {
+          const cuentaId = det.producto?.cuentaVentasId || cuentaHaber.id;
+          const existing = acc.find(a => a.planCuentaId === cuentaId);
+          const montoDetalle = Number(det.cantidad) * Number(det.precioUnitario);
+          if (existing) {
+            existing.monto += montoDetalle;
+          } else {
+            acc.push({ planCuentaId: cuentaId, monto: montoDetalle });
+          }
+          return acc;
+        }, []);
+
       borrador.detalles = [
         {
           numeroLinea: 1,
@@ -3139,16 +3175,16 @@ const generarBorradorAsiento = async (preFacturaId) => {
           numeroDocumentoOrigen: preFactura.numeroDocumento,
           fechaDocumentoOrigen: preFactura.fechaDocumento,
         },
-        {
-          numeroLinea: 2,
-          planCuentaId: cuentaHaber.id,
+        ...detallesVentas.map((dv, idx) => ({
+          numeroLinea: idx + 2,
+          planCuentaId: dv.planCuentaId,
           glosa: esSaldoInicial
             ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta exonerada según PreFactura ${preFactura.codigo}`,
           debe: 0,
-          haber: total,
+          haber: dv.monto,
           centroCostoId: esSaldoInicial ? null : preFactura.centroCostoId,
-        },
+        })),
       ];
     }
     // CASO 3: FISCAL CON IGV
@@ -3166,6 +3202,20 @@ const generarBorradorAsiento = async (preFacturaId) => {
         );
       }
 
+      const detallesVentas = esSaldoInicial
+        ? [{ planCuentaId: cuentaHaber.id, monto: subtotal }]
+        : preFactura.detalles.reduce((acc, det) => {
+          const cuentaId = det.producto?.cuentaVentasId || cuentaHaber.id;
+          const existing = acc.find(a => a.planCuentaId === cuentaId);
+          const montoDetalle = Number(det.cantidad) * Number(det.precioUnitario);
+          if (existing) {
+            existing.monto += montoDetalle;
+          } else {
+            acc.push({ planCuentaId: cuentaId, monto: montoDetalle });
+          }
+          return acc;
+        }, []);
+
       borrador.detalles = [
         {
           numeroLinea: 1,
@@ -3173,31 +3223,47 @@ const generarBorradorAsiento = async (preFacturaId) => {
           glosa: esSaldoInicial
             ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta según PreFactura ${preFactura.codigo}`,
-          debe: total, // Con IGV
+          debe: total,
           haber: 0,
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
           numeroDocumentoOrigen: preFactura.numeroDocumento,
           fechaDocumentoOrigen: preFactura.fechaDocumento,
         },
-        {
-          numeroLinea: 2,
-          planCuentaId: cuentaHaber.id,
+        ...detallesVentas.map((dv, idx) => ({
+          numeroLinea: idx + 2,
+          planCuentaId: dv.planCuentaId,
           glosa: esSaldoInicial
             ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
             : `Venta según PreFactura ${preFactura.codigo}`,
           debe: 0,
-          haber: subtotal, // Sin IGV
+          haber: dv.monto,
           centroCostoId: esSaldoInicial ? null : preFactura.centroCostoId,
-        },
+        })),
         {
-          numeroLinea: 3,
+          numeroLinea: detallesVentas.length + 2,
           planCuentaId: cuentaIGV.id,
           glosa: `IGV 18% según PreFactura ${preFactura.codigo}`,
           debe: 0,
           haber: totalIGV,
         },
       ];
+    }
+    // Validar que el borrador esté cuadrado
+    const totalDebeCalculado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+    const totalHaberCalculado = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
+    const diferenciaCalculada = totalDebeCalculado - totalHaberCalculado;
+
+    if (Math.abs(diferenciaCalculada) > 0.01) {
+      console.error('❌ Borrador descuadrado:', {
+        totalDebeCalculado,
+        totalHaberCalculado,
+        diferenciaCalculada,
+        detalles: borrador.detalles
+      });
+      throw new ValidationError(
+        `Error al generar borrador: asiento descuadrado. Diferencia: ${diferenciaCalculada.toFixed(2)}`
+      );
     }
 
     return borrador;
@@ -3240,6 +3306,7 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
     }
 
     // Calcular totales
+
     const totalDebe = asientoData.detalles.reduce(
       (sum, d) => sum + Number(d.debe),
       0,
@@ -3252,6 +3319,12 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
 
     // Validar que esté cuadrado
     if (Math.abs(diferencia) > 0.01) {
+      console.error('❌ ASIENTO DESCUADRADO:', {
+        totalDebe,
+        totalHaber,
+        diferencia,
+        detalles: asientoData.detalles
+      });
       throw new ValidationError(
         `El asiento no está cuadrado. Diferencia: ${diferencia}`,
       );
