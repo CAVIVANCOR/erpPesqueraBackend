@@ -168,6 +168,13 @@ router.get(
   ordenCompraController.generarBorradorAsiento
 );
 
+router.get(
+  '/:id/asiento-destino-centro-costo',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.generarAsientoDestinoCentroCosto
+);
+
 router.post(
   '/:id/guardar-asiento',
   autenticarJWT,

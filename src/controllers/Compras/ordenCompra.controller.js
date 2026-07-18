@@ -236,6 +236,31 @@ export async function generarBorradorAsiento(req, res, next) {
 }
 
 /**
+ * Generar asiento de destino centro de costo para OrdenCompra
+ * GET /api/ordenes-compra/:id/asiento-destino-centro-costo
+ */
+export async function generarAsientoDestinoCentroCosto(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const borrador = await ordenCompraService.generarAsientoDestinoCentroCosto(id);
+
+    if (!borrador) {
+      return res.status(200).json(toJSONBigInt({
+        success: false,
+        message: "No se generó asiento de destino (NC, SI o sin centro de costo)"
+      }));
+    }
+
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      data: borrador
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Guardar asiento contable editado para OrdenCompra
  * POST /api/ordenes-compra/:id/guardar-asiento
  */
