@@ -274,32 +274,33 @@ model AsientoContableInterfaz {
 }
 
 model Banco {
-  id              BigInt            @id @default(autoincrement())
-  nombre          String
-  codigoSwift     String?
-  codigoBcrp      String?
-  paisId          BigInt?
-  activo          Boolean           @default(true)
-  billeteraDigital Boolean @default(false)
-  nroBilleteraDigital String?
-
-  cuentas     CuentaCorriente[]
-  ctaCteEntidad CtaCteEntidad[]
+  id                    BigInt            @id @default(autoincrement())
+  nombre                String
+  codigoSwift           String?
+  codigoBcrp            String?
+  paisId                BigInt?
+  activo                Boolean           @default(true)
+  billeteraDigital      Boolean @default(false)
+  nroBilleteraDigital   String?
+  cuentaContableId      BigInt?        // 🆕 NUEVO CAMPO
 
   // ========================================
-  // ⭐ RELACIONES NUEVAS - MÓDULO FINANCIERO
+  // ⭐ RELACIONES NUEVAS
   // ========================================
-  ubicacionesLetra                UbicacionLetra[]
-  letrasDescuento                 LetraCambio[]
-  pagosCobrar                     PagoCuentaPorCobrar[]
-  pagosPagar                      PagoCuentaPorPagar[]
-  pagosLetra                      PagoLetraCambio[]
-  preFacturas                     PreFactura[]
+  cuentaContable        PlanCuentasContable?    @relation("BancoCuentaContable", fields: [cuentaContableId], references: [id])  // 🆕 RELACIÓN
+  cuentas               CuentaCorriente[]
+  ctaCteEntidad         CtaCteEntidad[]
+  ubicacionesLetra      UbicacionLetra[]
+  letrasDescuento       LetraCambio[]
+  pagosCobrar           PagoCuentaPorCobrar[]
+  pagosPagar            PagoCuentaPorPagar[]
+  pagosLetra            PagoLetraCambio[]
+  preFacturas           PreFactura[]
 
   // Nuevas relaciones con Tesorería Avanzada
-prestamos             PrestamoBancario[]
-lineasCredito         LineaCredito[]
-inversiones           InversionFinanciera[]
+  prestamos             PrestamoBancario[]
+  lineasCredito         LineaCredito[]
+  inversiones           InversionFinanciera[]
 
 }
 
@@ -5850,14 +5851,15 @@ model PlanCuentasContable {
   tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR ESTA LÍNEA
   tiposDeudaPersonal              TipoDeudaPersonal[]       @relation("TipoDeudaPersonalToCuentaContable")  // ⭐ NUEVO: Tipos de deuda personal que usan esta cuenta
   centrosCosto                    CentroCosto[]             @relation("CentroCostoToCuentaContable")        // ⭐ NUEVO
-// ========================================
-// 🆕 RELACIONES CON PRODUCTOS (INVENTARIO)
-// ========================================
-productosCompras      Producto[]              @relation("ProductoCuentaCompras")              // Productos que usan esta cuenta para COMPRAS (60)
-productosInventario   Producto[]              @relation("ProductoCuentaInventario")           // Productos que usan esta cuenta para INVENTARIO (20)
-productosCostoVentas  Producto[]              @relation("ProductoCuentaCostoVentas")          // Productos que usan esta cuenta para COSTO VENTAS (69)
-productosVariacion    Producto[]              @relation("ProductoCuentaVariacion")            // Productos que usan esta cuenta para VARIACIÓN (61)
-productosVentas       Producto[]              @relation("ProductoCuentaVentas")            // Productos que usan esta cuenta para VARIACIÓN (61)
+  // ========================================
+  // 🆕 RELACIONES CON PRODUCTOS (INVENTARIO)
+  // ========================================
+  productosCompras      Producto[]              @relation("ProductoCuentaCompras")              // Productos que usan esta cuenta para COMPRAS (60)
+  productosInventario   Producto[]              @relation("ProductoCuentaInventario")           // Productos que usan esta cuenta para INVENTARIO (20)
+  productosCostoVentas  Producto[]              @relation("ProductoCuentaCostoVentas")          // Productos que usan esta cuenta para COSTO VENTAS (69)
+  productosVariacion    Producto[]              @relation("ProductoCuentaVariacion")            // Productos que usan esta cuenta para VARIACIÓN (61)
+  productosVentas       Producto[]              @relation("ProductoCuentaVentas")            // Productos que usan esta cuenta para VARIACIÓN (61)
+  bancos                Banco[]                 @relation("BancoCuentaContable")    // 🆕 AGREGAR ESTA LÍNEA
 
   // ========================================
   // ÍNDICES
@@ -5973,7 +5975,8 @@ model AsientoContable {
   fechaAsiento          DateTime                                     // Fecha contable
   glosa                 String                  @db.Text             // Descripción del asiento
   tipoLibro             TipoLibroContable                            // FISCAL | GERENCIAL
-  
+  esSaldoInicial        Boolean                 @default(false)      // 🆕 NUEVO CAMPO
+
   // FISCAL = Operaciones blancas (visible para SUNAT)
   // GERENCIAL = Todas las operaciones (solo gerencia)
   
@@ -8161,6 +8164,9 @@ model PrestamoBancario {
   // INTEGRACIÓN FINANCIERA (migrado de UtilizacionLineaCredito)
   // ========================================
   movimientoCajaDesembolsoId  BigInt?           // Movimiento de caja del desembolso
+  fechaContable               DateTime?    @default(now())
+  esSaldoInicial              Boolean      @default(false)                      // 🆕 NUEVO CAMPO
+
   
     // ========================================
   // CAMPOS ESPECÍFICOS PARA GARANTÍAS/CARTAS (NUEVOS)
