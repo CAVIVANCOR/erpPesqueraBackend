@@ -164,7 +164,7 @@ async function actualizarSaldosPrestamo(prestamoBancarioId) {
 
   const saldoCapital = parseFloat(prestamo.montoDesembolsado) - capitalPagado;
   const saldoInteres = cuotas
-    .filter((c) => c.estadoPago === "VENCIDO")
+    .filter((c) => c.estadoPago === "PENDIENTE" || c.estadoPago === "VENCIDO")
     .reduce((sum, c) => sum + parseFloat(c.montoInteres), 0);
 
   await prisma.prestamoBancario.update({

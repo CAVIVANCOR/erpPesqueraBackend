@@ -321,7 +321,112 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
   }
 }
 
+
+/**
+ * Genera asiento de saldo inicial de préstamo
+ * DEBE: 5911101 (Utilidades Acumuladas) = Capital
+ * HABER: 451101/451102 (Instituciones Financieras) = Capital
+ */
+async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
+  try {
+    const submodulo = await tx.submoduloSistema.findFirst({
+      where: { nombreModeloOrigen: "PrestamoBancario", activo: true },
+    });
+    if (!submodulo) throw new ValidationError('Submódulo "PrestamoBancario" no encontrado');
+
+    const periodoActivo = await periodoContableService.obtenerPeriodoActivo(prestamo.empresaId);
+    if (!periodoActivo) return null;
+
+    const estadoPendiente = await tx.estadoMultiFuncion.findUnique({
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
+    });
+    if (!estadoPendiente) throw new ValidationError("Estado PENDIENTE no encontrado");
+
+    // Determinar cuenta según moneda (1=MN, otro=ME)
+    const codigoPrestamo = prestamo.monedaId === 1 ? "451101" : "451102";
+    
+    const cuentaPrestamo = await tx.planCuentasContable.findFirst({
+      where: { codigoCuenta: codigoPrestamo, activo: true },
+    });
+
+    const cuentaUtilidades = await tx.planCuentasContable.findFirst({
+      where: { codigoCuenta: "5911101", activo: true },
+    });
+
+    if (!cuentaPrestamo || !cuentaUtilidades) return null;
+
+    const ultimoAsiento = await tx.asientoContable.findFirst({
+      where: { empresaId: prestamo.empresaId, periodoContableId: periodoActivo.id },
+      orderBy: { correlativo: "desc" },
+    });
+    const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
+    const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, "0")}`;
+
+    const montoCapital = Number(prestamo.saldoCapital);
+
+    const asiento = await tx.asientoContable.create({
+      data: {
+        empresaId: prestamo.empresaId,
+        periodoContableId: periodoActivo.id,
+        numeroAsiento,
+        correlativo,
+        fechaAsiento: prestamo.fechaDesembolso,
+        glosa: `Saldo Inicial préstamo ${prestamo.numeroPrestamo}`,
+        tipoLibro: "FISCAL",
+        origenAsiento: "AUTOMATICO",
+        submoduloOrigenId: submodulo.id,
+        procesoOrigenId: prestamo.id,
+        estadoId: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE),
+        totalDebe: montoCapital,
+        totalHaber: montoCapital,
+        diferencia: 0,
+        estaCuadrado: true,
+        monedaId: prestamo.monedaId,
+        tipoCambio: prestamo.tipoCambioAplicado,
+        creadoPor,
+      },
+    });
+
+    await Promise.all([
+      tx.detalleAsientoContable.create({
+        data: {
+          asientoContableId: asiento.id,
+          numeroLinea: 1,
+          planCuentaId: cuentaUtilidades.id,
+          glosa: `Saldo Inicial préstamo ${prestamo.numeroPrestamo}`,
+          debe: montoCapital,
+          haber: 0,
+          monedaId: prestamo.monedaId,
+          tipoCambio: prestamo.tipoCambioAplicado,
+          creadoPor,
+        },
+      }),
+      tx.detalleAsientoContable.create({
+        data: {
+          asientoContableId: asiento.id,
+          numeroLinea: 2,
+          planCuentaId: cuentaPrestamo.id,
+          glosa: `Saldo Inicial préstamo ${prestamo.numeroPrestamo}`,
+          debe: 0,
+          haber: montoCapital,
+          monedaId: prestamo.monedaId,
+          tipoCambio: prestamo.tipoCambioAplicado,
+          creadoPor,
+        },
+      }),
+    ]);
+
+    return asiento;
+  } catch (err) {
+    console.error("Error al generar asiento saldo inicial:", err);
+    throw err;
+  }
+}
+
+
+
 export default {
   generarAsientoDesembolso,
   generarAsientoPagoCuota,
+  generarAsientoSaldoInicial
 };

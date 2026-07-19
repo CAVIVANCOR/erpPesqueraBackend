@@ -156,3 +156,69 @@ export async function desvincularPrestamoDeSublinea(req, res, next){
     next(error);
   }
 };
+
+
+/**
+ * Genera borrador de asiento contable para saldo inicial
+ */
+export async function generarBorradorAsiento(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const integracionService = (await import('../../services/Tesoreria/integracionContablePrestamo.service.js')).default;
+    const prestamo = await prestamoBancarioService.obtenerPorId(id);
+    
+    const borrador = {
+      prestamo,
+      mensaje: "Borrador generado para saldo inicial de préstamo"
+    };
+    
+    res.json(toJSONBigInt(borrador));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Guarda asiento contable de saldo inicial
+ */
+export async function guardarAsientoContable(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const { creadoPor } = req.body;
+    const integracionService = (await import('../../services/Tesoreria/integracionContablePrestamo.service.js')).default;
+    const prisma = (await import('../../config/prismaClient.js')).default;
+    
+    const prestamo = await prestamoBancarioService.obtenerPorId(id);
+    
+    const asiento = await prisma.$transaction(async (tx) => {
+      return await integracionService.generarAsientoSaldoInicial(prestamo, tx, creadoPor);
+    });
+    
+    res.json(toJSONBigInt(asiento));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Elimina asiento contable
+ */
+export async function eliminarAsientoContable(req, res, next) {
+  try {
+    const asientoId = Number(req.params.asientoId);
+    const prisma = (await import('../../config/prismaClient.js')).default;
+    
+    await prisma.$transaction(async (tx) => {
+      await tx.detalleAsientoContable.deleteMany({
+        where: { asientoContableId: asientoId }
+      });
+      await tx.asientoContable.delete({
+        where: { id: asientoId }
+      });
+    });
+    
+    res.json(toJSONBigInt({ eliminado: true, id: asientoId }));
+  } catch (err) {
+    next(err);
+  }
+}

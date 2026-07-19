@@ -445,4 +445,27 @@ router.post(
   },
 );
 
+
+// Rutas de asientos contables
+router.get(
+  "/:id/generar-borrador-asiento",
+  autenticarJWT,
+  checkPermission("prestamoBancario", "ver"),
+  prestamoBancarioController.generarBorradorAsiento,
+);
+
+router.post(
+  "/:id/guardar-asiento",
+  autenticarJWT,
+  checkPermission("prestamoBancario", "crear"),
+  prestamoBancarioController.guardarAsientoContable,
+);
+
+router.delete(
+  "/:id/asiento/:asientoId",
+  autenticarJWT,
+  checkPermission("prestamoBancario", "eliminar"),
+  prestamoBancarioController.eliminarAsientoContable,
+);
+
 export default router;

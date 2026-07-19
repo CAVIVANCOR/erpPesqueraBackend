@@ -5,6 +5,7 @@ import hpp from "hpp";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import { errorHandler } from "./middlewares/errorHandler.js";
+import { inicializarCronJobs } from "./config/cronJobs.js";
 
 // Load environment variables
 dotenv.config();
@@ -138,4 +139,6 @@ app.listen(PORT, HOST, () => {
   console.info(`Servidor ERP escuchando en ${HOST}:${PORT}`);
   console.info(`Red local: http://192.168.1.36:${PORT}`);
   console.info(`Localhost: http://localhost:${PORT}`);
+    // Inicializar tareas programadas (CRON Jobs)
+  inicializarCronJobs();
 });

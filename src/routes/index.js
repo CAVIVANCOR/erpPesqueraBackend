@@ -265,6 +265,7 @@ import categoriaTipoDeudaTributariaRoutes from './Tesoreria/categoriaTipoDeudaTr
 import deudaTributariaRoutes from './Tesoreria/deudaTributaria.routes.js';
 import pagoDeudaTributariaRoutes from './Tesoreria/pagoDeudaTributaria.routes.js';
 import pagoEspecializadoCxCRoutes from './CuentasPorCobrarPagar/pagoEspecializadoCuentaPorCobrar.routes.js';
+import tareasAutomaticasRoutes from './Tesoreria/tareasAutomaticas.routes.js';
 
 
 
@@ -693,6 +694,7 @@ router.use('/tesoreria/flujo-caja', flujoCajaRoutes);
 router.use('/tesoreria/conciliacion-bancaria', conciliacionBancariaRoutes);
 router.use('/tesoreria/prestamos-bancarios', prestamoBancarioRoutes);
 router.use('/tesoreria/cuotas-prestamo', cuotaPrestamoRoutes);
+router.use('/tesoreria/tareas-automaticas', tareasAutomaticasRoutes);
 router.use('/tesoreria/garantias-prestamo', garantiaPrestamoRoutes);
 router.use('/tesoreria/lineas-credito', lineaCreditoRoutes);
 router.use('/tesoreria/sublineas-credito', sublineaCreditoRoutes);
