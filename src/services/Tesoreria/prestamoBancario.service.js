@@ -331,7 +331,15 @@ const obtenerPorId = async (id) => {
       include: {
         empresa: true,
         banco: true,
-        cuentaCorriente: true,
+        cuentaCorriente: {
+          include: {
+            empresa: true,
+            banco: true,
+            moneda: true,
+            tipoCuentaCorriente: true,
+            cuentaContable: true
+          }
+        },
         moneda: true,
         estado: true,
         lineaCredito: true,
@@ -344,6 +352,22 @@ const obtenerPorId = async (id) => {
         garantias: true,
         prestamoRefinanciado: true,
         prestamosRefinanciadores: true,
+        asientosContables: {
+          include: {
+            detalles: {
+              include: {
+                planCuenta: true,
+                moneda: true,
+              }
+            },
+            estado: true,
+            moneda: true,
+            periodoContable: true
+          },
+          orderBy: {
+            fechaAsiento: 'desc'
+          }
+        }
       },
     });
     if (!prestamo) throw new NotFoundError("Préstamo bancario no encontrado");
@@ -459,6 +483,8 @@ const crear = async (data) => {
           saldoInteres,
           capitalPagado,
           interesPagado,
+          fechaContable: data.fechaContable ? new Date(data.fechaContable) : new Date(),
+          esSaldoInicial: data.esSaldoInicial || false,
         },
         include: {
           banco: true,
@@ -613,6 +639,8 @@ const actualizar = async (id, data) => {
       data: {
         ...datosNormalizados,
         tipoCambioAplicado: tipoCambioAplicado,
+        fechaContable: data.fechaContable ? new Date(data.fechaContable) : undefined,
+        esSaldoInicial: data.esSaldoInicial !== undefined ? data.esSaldoInicial : undefined,
       },
       include: {
         empresa: true,

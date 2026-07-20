@@ -9,7 +9,11 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 
 async function listar() {
   try {
-    return await prisma.banco.findMany();
+    return await prisma.banco.findMany({
+      include: {
+        cuentaContable: true,
+      },
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -18,7 +22,12 @@ async function listar() {
 
 async function obtenerPorId(id) {
   try {
-    const banco = await prisma.banco.findUnique({ where: { id } });
+    const banco = await prisma.banco.findUnique({
+      where: { id },
+      include: {
+        cuentaContable: true,
+      },
+    });
     if (!banco) throw new NotFoundError('Banco no encontrado');
     return banco;
   } catch (err) {

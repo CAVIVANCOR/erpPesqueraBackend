@@ -12,8 +12,6 @@ import cuotaPrestamoService from "./cuotaPrestamo.service.js";
  */
 export async function procesarCuotasVencidas() {
   try {
-    console.log("[TAREA AUTOMÁTICA] Iniciando actualización de cuotas vencidas...");
-    
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
@@ -27,8 +25,6 @@ export async function procesarCuotasVencidas() {
         estadoPago: "VENCIDO",
       },
     });
-
-    console.log(`[TAREA AUTOMÁTICA] ${cuotasActualizadas.count} cuotas actualizadas a VENCIDO`);
 
     // 2. Obtener préstamos afectados
     const cuotasVencidas = await prisma.cuotaPrestamo.findMany({
@@ -44,12 +40,10 @@ export async function procesarCuotasVencidas() {
 
     // 3. Recalcular saldos de cada préstamo afectado
     const prestamosAfectados = [...new Set(cuotasVencidas.map(c => c.prestamoBancarioId))];
-    
+
     for (const prestamoBancarioId of prestamosAfectados) {
       await cuotaPrestamoService.actualizarSaldosPrestamo(prestamoBancarioId);
     }
-
-    console.log(`[TAREA AUTOMÁTICA] ${prestamosAfectados.length} préstamos actualizados`);
 
     // 4. Actualizar estados de préstamos según cuotas vencidas
     await actualizarEstadosPrestamos(prestamosAfectados);
@@ -109,15 +103,10 @@ async function actualizarEstadosPrestamos(prestamosIds) {
  * Punto de entrada principal para el CRON job
  */
 export async function ejecutarTareasAutomaticas() {
-  console.log("=".repeat(60));
-  console.log("[TESORERÍA] Iniciando tareas automáticas diarias");
-  console.log("=".repeat(60));
-
   const resultados = {
     fechaEjecucion: new Date(),
     tareas: [],
   };
-
   try {
     // Tarea 1: Procesar cuotas vencidas
     const resultadoCuotas = await procesarCuotasVencidas();
@@ -131,10 +120,6 @@ export async function ejecutarTareasAutomaticas() {
     // - Enviar notificaciones de vencimiento
     // - Generar reportes automáticos
     // - etc.
-
-    console.log("=".repeat(60));
-    console.log("[TESORERÍA] Tareas automáticas completadas exitosamente");
-    console.log("=".repeat(60));
 
     return resultados;
   } catch (error) {

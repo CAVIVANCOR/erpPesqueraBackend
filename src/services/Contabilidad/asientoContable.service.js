@@ -350,6 +350,7 @@ const crear = async (data) => {
           estaCuadrado: data.estaCuadrado || false,
           monedaId: data.monedaId,
           tipoCambio: data.tipoCambio,
+          esSaldoInicial: data.esSaldoInicial || false,
           creadoPor: data.creadoPor,
         },
       });
@@ -501,6 +502,7 @@ const actualizar = async (id, data) => {
           origenAsiento: data.origenAsiento,
           monedaId: data.monedaId,
           tipoCambio: data.tipoCambio,
+          esSaldoInicial: data.esSaldoInicial,
           totalDebe: data.totalDebe,
           totalHaber: data.totalHaber,
           diferencia: data.diferencia,

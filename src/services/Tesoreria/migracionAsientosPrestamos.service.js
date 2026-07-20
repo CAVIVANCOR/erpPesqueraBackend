@@ -43,7 +43,7 @@ async function migrarAsientosPrestamos(empresaId = null, creadoPor = null) {
     for (const prestamo of prestamos) {
       try {
         await prisma.$transaction(async (tx) => {
-          await integracionContablePrestamo.generarAsientoDesembolso(
+          await integracionContablePrestamo.generarAsientoPrestamoNuevo(
             prestamo,
             tx,
             creadoPor
