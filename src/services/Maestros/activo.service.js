@@ -44,6 +44,14 @@ async function validarActivo(data) {
     if (!existeMoneda)
       throw new ValidationError("Moneda no existente para el campo monedaId.");
   }
+  // Validar cuentaContableId (opcional - para cuenta clase 33)
+  if (data.cuentaContableId !== undefined && data.cuentaContableId !== null) {
+    const existeCuenta = await prisma.planCuentasContable.findUnique({
+      where: { id: data.cuentaContableId },
+    });
+    if (!existeCuenta)
+      throw new ValidationError("Cuenta contable no existente para el campo cuentaContableId.");
+  }
 }
 
 /**
@@ -52,7 +60,12 @@ async function validarActivo(data) {
 const listar = async () => {
   try {
     return await prisma.activo.findMany({
-      include: { tipo: true, moneda: true, permisos: true },
+      include: { 
+        tipo: true, 
+        moneda: true, 
+        permisos: true,
+        cuentaContable: true,
+      },
     });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -73,6 +86,7 @@ const obtenerPorId = async (id) => {
         moneda: true,
         permisos: true,
         movimientosActivoFijo: true,
+        cuentaContable: true,
       },
     });
     if (!activo) throw new NotFoundError("Activo no encontrado");
@@ -138,6 +152,7 @@ const obtenerPorEmpresaYTipo = async (empresaId, tipoId) => {
         tipo: true,
         moneda: true,
         embarcacion: true,
+        cuentaContable: true,
       },
       orderBy: {
         nombre: "asc",
@@ -149,7 +164,6 @@ const obtenerPorEmpresaYTipo = async (empresaId, tipoId) => {
     throw err;
   }
 };
-
 /**
  * Crea un activo validando empresaId y tipoId.
  */
