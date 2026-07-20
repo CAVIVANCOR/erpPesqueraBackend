@@ -12,6 +12,7 @@ import {
   eliminarKardexDeMovimiento,
   recalcularSaldosAfectados,
 } from "../Almacen/kardexGenerico.service.js";
+import { aplicarSignoMonto } from '../../utils/tiposDocumento.constants.js';
 
 async function validarForaneas(data) {
   if (data.empresaId) {
@@ -731,12 +732,20 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     }
 
     // ========================================
+    // APLICAR SIGNO NEGATIVO SI ES NOTA DE CRÉDITO
+    // ========================================
+    const tipoDocFinalId = orden.tipoDocumentoFinalId || orden.tipoDocumentoId;
+    const subtotalFinal = aplicarSignoMonto(subtotal, tipoDocFinalId);
+    const totalIGVFinal = aplicarSignoMonto(totalIGV, tipoDocFinalId);
+    const totalFinal = aplicarSignoMonto(total, tipoDocFinalId);
+
+    // ========================================
     // RETORNAR TODOS LOS CAMPOS CALCULADOS
     // ========================================
     return {
-      subtotal,
-      totalIGV,
-      total,
+      subtotal: subtotalFinal,
+      totalIGV: totalIGVFinal,
+      total: totalFinal,
       montoImpuestoRenta,
       aplicaDetraccion,
       porcentajeDetraccion,

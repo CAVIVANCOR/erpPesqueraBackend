@@ -13,7 +13,7 @@ import {
   recalcularSaldosAfectados,
 } from '../Almacen/kardexGenerico.service.js';
 import { ESTADO_PERIODO_CONTABLE, ESTADO_PREFACTURA, ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
-
+import { aplicarSignoMonto, TIPO_DOC_ID } from '../../utils/tiposDocumento.constants.js';
 // ========================================
 // CONSTANTES DE ESTADOS PREFACTURA
 // ========================================
@@ -366,6 +366,8 @@ const obtenerPorCotizacion = async (cotizacionVentaId) => {
     throw err;
   }
 };
+
+
 
 const crear = async (data) => {
   try {
@@ -934,11 +936,17 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
       montoPercepcion = totalEnSoles * (porcentajePercepcion / 100);
     }
 
+        // Aplicar signo negativo si es Nota de Crédito
+    const tipoDocFinalId = preFactura.tipoDocumentoFinalId || preFactura.tipoDocumentoId;
+    const subtotalFinal = aplicarSignoMonto(subtotal, tipoDocFinalId);
+    const totalIGVFinal = aplicarSignoMonto(totalIGV, tipoDocFinalId);
+    const totalFinal = aplicarSignoMonto(total, tipoDocFinalId);
+
     return {
-      subtotal,
+      subtotal: subtotalFinal,
       totalDescuentos: 0,
-      totalIGV,
-      total,
+      totalIGV: totalIGVFinal,
+      total: totalFinal,
       montoImpuestoRenta,
       aplicaDetraccion,
       tipoDetraccionId,
