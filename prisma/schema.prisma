@@ -107,30 +107,43 @@ model Activo {
   descripcion          String?
   cesado               Boolean                @default(false)
   
-  // ========================================
-  // 🆕 CAMPOS PARA SALDOS INICIALES
-  // ========================================
-  fechaAdquisicion         DateTime?              // Fecha de compra del activo
-  costoOriginal            Decimal?               @db.Decimal(18, 2)  // Costo de adquisición
-  depreciacionAcumulada    Decimal?               @db.Decimal(18, 2)  // Depreciación acumulada al 31/12/2025
-  vidaUtilAnios            Int?                   // Vida útil en años
-  monedaId                 BigInt?                // Moneda del costo
-  cuentaContableId         BigInt?                // 🆕 Cuenta contable 33 (Inmuebles, Maquinaria y Equipo)
+  // SALDOS INICIALES
+  fechaAdquisicion         DateTime?
+  costoOriginal            Decimal?               @db.Decimal(18, 2)
+  depreciacionAcumulada    Decimal?               @db.Decimal(18, 2)
+  vidaUtilAnios            Int?
+  monedaId                 BigInt?
+  
+  // 🔗 ENLACE CON PRODUCTO
+  productoId               BigInt?
+  
+  // 💰 CUENTAS CONTABLES
+  cuentaContableId         BigInt?                // 33xxx - MANTENER NOMBRE ORIGINAL
+  cuentaDepreciacionId     BigInt?                // 39xxx - NUEVO
+  cuentaGastoDepId         BigInt?                // 68xxx - NUEVO
 
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime
+  // AUDITORÍA (MANTENER NOMBRES ORIGINALES)
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  creadoPor                BigInt?                // NUEVO
+  actualizadoPor           BigInt?                // NUEVO
 
-  tipo                          TipoActivo @relation(fields: [tipoId], references: [id])
-  moneda                        Moneda?    @relation(fields: [monedaId], references: [id])  // 🆕 RELACIÓN
-  permisos                      DetallePermisoActivo[]
-  embarcacion                   Embarcacion?
-  ordenesMantenimiento          OTMantenimiento[]
-  contratosServicio             ContratoServicio[]    @relation("ContratoServicioActivo")
-  detallesAsientosContables     DetalleAsientoContable[]
-  contratistasOT                DetContratistasOT[] @relation("ActivoContratistaOT")
-  movimientosActivoFijo         MovimientoActivoFijo[]  // 🆕 RELACIÓN
-  cuentaContable                PlanCuentasContable? @relation("ActivoCuentaContable", fields: [cuentaContableId], references: [id])  // 🆕 RELACIÓN
-
+  // RELACIONES
+  tipo                     TipoActivo             @relation(fields: [tipoId], references: [id])
+  moneda                   Moneda?                @relation(fields: [monedaId], references: [id])
+  producto                 Producto?              @relation("ActivoProducto", fields: [productoId], references: [id])
+  cuentaContable           PlanCuentasContable?   @relation("ActivoCuentaActivo", fields: [cuentaContableId], references: [id])
+  cuentaDepreciacion       PlanCuentasContable?   @relation("ActivoCuentaDepreciacion", fields: [cuentaDepreciacionId], references: [id])
+  cuentaGastoDep           PlanCuentasContable?   @relation("ActivoCuentaGastoDep", fields: [cuentaGastoDepId], references: [id])
+  
+  // Relaciones existentes
+  permisos                 DetallePermisoActivo[]
+  embarcacion              Embarcacion?
+  ordenesMantenimiento     OTMantenimiento[]
+  contratosServicio        ContratoServicio[]     @relation("ContratoServicioActivo")
+  detallesAsientosContables DetalleAsientoContable[]
+  contratistasOT           DetContratistasOT[]    @relation("ActivoContratistaOT")
+  movimientosActivoFijo    MovimientoActivoFijo[]
 }
 
 model AgrupacionEntidad {
@@ -143,14 +156,47 @@ model AgrupacionEntidad {
   entidades   EntidadComercial[]
 }
 
+
 model TipoMovimientoActivoFijo {
   id                    BigInt                  @id @default(autoincrement())
   nombre                String                  @db.VarChar(50)
   descripcion           String?
   activo                Boolean                 @default(true)
   
-  movimientos           MovimientoActivoFijo[]
+  // ========================================
+  // 🎯 CONFIGURACIÓN DE COMPORTAMIENTO
+  // ========================================
+  afectaValorActivo         Boolean             @default(false)  // Incrementa/reduce valor del activo
+  afectaDepreciacion        Boolean             @default(false)  // Genera depreciación
+  generaAsientoAutomatico   Boolean             @default(true)   // Crea asiento contable automático
+  requiereProducto          Boolean             @default(false)  // Necesita producto enlazado
+  dasDeBajaActivo           Boolean             @default(false)  // Marca activo como cesado
+  
+  // ========================================
+  // 💰 CUENTAS CONTABLES ESPECÍFICAS
+  // ========================================
+  cuentaDebeId              BigInt?                              // Cuenta DEBE principal (opcional)
+  cuentaHaberId             BigInt?                              // Cuenta HABER principal (opcional)
+  usaCuentasActivo          Boolean             @default(true)   // Usa cuentas del activo (33, 39, 68)
+  usaCuentasProducto        Boolean             @default(false)  // Usa cuentas del producto (60, 20, 70, 69, 61)
+  
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  fechaCreacion             DateTime            @default(now())  // Fecha de creación del registro
+  fechaActualizacion        DateTime?           @updatedAt       // Fecha de última actualización
+  creadoPor                 BigInt?                              // Usuario que creó el registro
+  actualizadoPor            BigInt?                              // Usuario que actualizó el registro
+  
+  // ========================================
+  // RELACIONES
+  // ========================================
+  cuentaDebe                PlanCuentasContable? @relation("TipoMovActivoCuentaDebe", fields: [cuentaDebeId], references: [id])
+  cuentaHaber               PlanCuentasContable? @relation("TipoMovActivoCuentaHaber", fields: [cuentaHaberId], references: [id])
+  movimientos               MovimientoActivoFijo[]
 }
+
+
 
 model MovimientoActivoFijo {
   id                    BigInt    @id @default(autoincrement())
@@ -4592,6 +4638,7 @@ model Producto {
 
   tipoDetraccion        TipoDetraccion?       @relation(fields: [tipoDetraccionId], references: [id])  // 🆕 AGREGAR ESTA
   tipoAfectacionIGV     TipoAfectacionIGV?    @relation(fields: [tipoAfectacionIGVId], references: [id])
+  activos               Activo[]              @relation("ActivoProducto")
 
   @@index([tipoAfectacionIGVId])
 
@@ -5863,8 +5910,12 @@ model PlanCuentasContable {
   productosVariacion    Producto[]              @relation("ProductoCuentaVariacion")            // Productos que usan esta cuenta para VARIACIÓN (61)
   productosVentas       Producto[]              @relation("ProductoCuentaVentas")            // Productos que usan esta cuenta para VARIACIÓN (61)
   bancos                Banco[]                 @relation("BancoCuentaContable")    // 🆕 AGREGAR ESTA LÍNEA
-  activos               Activo[]                @relation("ActivoCuentaContable")  // 🆕 RELACIÓN INVERSA: Activos que usan esta cuenta
-
+  // 🆕 AGREGAR AL FINAL
+  activosCuentaActivo       Activo[]                    @relation("ActivoCuentaActivo")
+  activosCuentaDepreciacion Activo[]                    @relation("ActivoCuentaDepreciacion")
+  activosCuentaGastoDep     Activo[]                    @relation("ActivoCuentaGastoDep")
+  tiposMovActivoDebe        TipoMovimientoActivoFijo[]  @relation("TipoMovActivoCuentaDebe")
+  tiposMovActivoHaber       TipoMovimientoActivoFijo[]  @relation("TipoMovActivoCuentaHaber")
   // ========================================
   // ÍNDICES
   // ========================================
