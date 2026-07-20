@@ -296,7 +296,7 @@ const listar = async () => {
           include: {
             tipoMovimiento: true,
             moneda: true,
-            estado: true
+            estadoMovimientoCaja: true
           }
         }
       },
@@ -512,7 +512,7 @@ const eliminar = async (id) => {
  */
 const listarPorDeuda = async (deudaConPersonalId) => {
   try {
-    return await prisma.pagoDeudaPersonal.findMany({
+       return await prisma.pagoDeudaPersonal.findMany({
       where: { deudaConPersonalId },
       include: {
         medioPago: true,
@@ -520,7 +520,7 @@ const listarPorDeuda = async (deudaConPersonalId) => {
           include: {
             tipoMovimiento: true,
             moneda: true,
-            estado: true
+            estadoMovimientoCaja: true
           }
         }
       },

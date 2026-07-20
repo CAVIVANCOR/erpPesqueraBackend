@@ -1,6 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
-import asientoContableService from '../Contabilidad/asientoContable.service.js';  // ⭐ NUEVO
+import asientoContableService from '../Contabilidad/asientoContable.service.js';
 
 /**
  * Servicio CRUD para DeudaConPersonal
@@ -80,6 +80,16 @@ const obtenerPorId = async (id) => {
         moneda: true,
         estado: true,
         periodoContable: true,
+        asientosContables: {
+          include: {
+            estado: true,
+            detalles: {
+              include: {
+                planCuenta: true
+              }
+            }
+          }
+        },
         pagos: {
           include: {
             medioPago: true,
@@ -139,7 +149,6 @@ const actualizar = async (id, data) => {
 
     await validarDeudaConPersonal({ ...data, id });
 
-    // ✅ RECALCULAR montoPagado desde los pagos reales
     const pagos = await prisma.pagoDeudaPersonal.findMany({
       where: { deudaConPersonalId: id }
     });
@@ -149,14 +158,13 @@ const actualizar = async (id, data) => {
       0
     );
 
-    // Calcular saldo pendiente
     const montoOriginal = data.montoOriginal !== undefined ? data.montoOriginal : existente.montoOriginal;
     const montoPagado = montoPagadoRecalculado;
     const saldoPendiente = Number(montoOriginal) - Number(montoPagado);
 
     const deudaData = {
       ...data,
-      montoPagado, // ✅ Forzar el montoPagado recalculado
+      montoPagado,
       saldoPendiente,
       actualizadoPor: data.actualizadoPor || null
     };
@@ -310,7 +318,7 @@ const listarPorTipo = async (tipoDeudaId) => {
 };
 
 /**
- * Genera borrador de asiento contable para una deuda CTS
+ * Genera borrador de asiento contable para una deuda con personal
  * Retorna la estructura del asiento SIN guardarlo en BD
  * @param {BigInt} deudaId - ID de la deuda
  * @returns {Promise<Object>} Borrador del asiento
@@ -326,14 +334,14 @@ const generarBorradorAsientoCTS = async (deudaId) => {
           include: {
             centroCosto: {
               include: {
-                cuentaContable: true  // Cuenta 94.x
+                cuentaContable: true
               }
             }
           }
         },
         tipoDeuda: {
           include: {
-            cuentaContable: true  // Cuenta 41.x
+            cuentaContable: true
           }
         },
         moneda: true,
@@ -375,20 +383,14 @@ const generarBorradorAsientoCTS = async (deudaId) => {
       periodoContableId = periodoAbierto.id;
     }
 
-    // 4. Obtener cuentas hardcodeadas del sistema
-    const cuenta391 = await prisma.planCuentasContable.findFirst({
-      where: { codigo: '39.1', empresaId: deuda.empresaId }
-    });
-    const cuenta621 = await prisma.planCuentasContable.findFirst({
-      where: { codigo: '62.1', empresaId: deuda.empresaId }
-    });
-    const cuenta791 = await prisma.planCuentasContable.findFirst({
-      where: { codigo: '79.1', empresaId: deuda.empresaId }
+    // 4. Obtener cuenta de Utilidades Acumuladas
+    const cuenta5911101 = await prisma.planCuentasContable.findFirst({
+      where: { codigoCuenta: '5911101' }
     });
 
-    if (!cuenta391 || !cuenta621 || !cuenta791) {
+    if (!cuenta5911101) {
       throw new ValidationError(
-        'Faltan cuentas contables del sistema. Debe configurar: 39.1 (Saldos Iniciales), 62.1 (Gastos de Personal), 79.1 (Cargas Imputables)'
+        'Falta cuenta contable del sistema. Debe configurar: 5911101 (Utilidades Acumuladas)'
       );
     }
 
@@ -396,16 +398,16 @@ const generarBorradorAsientoCTS = async (deudaId) => {
     const monto = Number(deuda.montoOriginal);
     const borradores = [];
 
-    // 5. CASO 1: SALDO INICIAL
+    // 5. GENERAR ASIENTO DE SALDO INICIAL
     if (deuda.esSaldoInicial) {
-      const glosaAsiento = `SALDO INICIAL CTS - ${deuda.personal.nombres} ${deuda.personal.apellidos} - ${deuda.tipoDeuda.nombre}`;
-      
+      const glosaAsiento = `SALDO INICIAL - ${deuda.tipoDeuda.nombre} - ${deuda.personal.nombres} ${deuda.personal.apellidos}`;
+
       borradores.push({
         empresaId: deuda.empresaId,
         periodoContableId: periodoContableId,
         fechaAsiento: fechaAsiento,
         glosa: glosaAsiento,
-        tipoLibro: deuda.esGerencial ? 'GERENCIAL' : 'FISCAL',
+        tipoLibro: 'GERENCIAL',
         origenAsiento: 'AUTOMATICO',
         monedaId: deuda.monedaId,
         totalDebe: monto,
@@ -415,8 +417,8 @@ const generarBorradorAsientoCTS = async (deudaId) => {
         detalles: [
           {
             numeroLinea: 1,
-            planCuentaId: cuenta391.id,
-            planCuenta: cuenta391,
+            planCuentaId: deuda.tipoDeuda.cuentaContable.id,
+            planCuenta: deuda.tipoDeuda.cuentaContable,
             glosa: glosaAsiento,
             debe: monto,
             haber: 0,
@@ -424,8 +426,8 @@ const generarBorradorAsientoCTS = async (deudaId) => {
           },
           {
             numeroLinea: 2,
-            planCuentaId: deuda.tipoDeuda.cuentaContable.id,
-            planCuenta: deuda.tipoDeuda.cuentaContable,
+            planCuentaId: cuenta5911101.id,
+            planCuenta: cuenta5911101,
             glosa: glosaAsiento,
             debe: 0,
             haber: monto,
@@ -435,89 +437,10 @@ const generarBorradorAsientoCTS = async (deudaId) => {
       });
 
     } else {
-      // 6. CASO 2: PROVISIÓN MENSUAL
-
-      // ASIENTO 1: Provisión (62.1 vs 41.x)
-      const glosaProvision = `PROVISIÓN CTS ${new Date(fechaAsiento).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' }).toUpperCase()} - ${deuda.personal.nombres} ${deuda.personal.apellidos}`;
-      
-      borradores.push({
-        empresaId: deuda.empresaId,
-        periodoContableId: periodoContableId,
-        fechaAsiento: fechaAsiento,
-        glosa: glosaProvision,
-        tipoLibro: deuda.esGerencial ? 'GERENCIAL' : 'FISCAL',
-        origenAsiento: 'AUTOMATICO',
-        monedaId: deuda.monedaId,
-        totalDebe: monto,
-        totalHaber: monto,
-        diferencia: 0,
-        estaCuadrado: true,
-        detalles: [
-          {
-            numeroLinea: 1,
-            planCuentaId: cuenta621.id,
-            planCuenta: cuenta621,
-            glosa: glosaProvision,
-            debe: monto,
-            haber: 0,
-            monedaId: deuda.monedaId
-          },
-          {
-            numeroLinea: 2,
-            planCuentaId: deuda.tipoDeuda.cuentaContable.id,
-            planCuenta: deuda.tipoDeuda.cuentaContable,
-            glosa: glosaProvision,
-            debe: 0,
-            haber: monto,
-            monedaId: deuda.monedaId
-          }
-        ]
-      });
-
-      // ASIENTO 2: Destino (94.x vs 79.1)
-      if (!deuda.personal.centroCostoId || !deuda.personal.centroCosto?.cuentaContable) {
-        throw new ValidationError(
-          `El personal "${deuda.personal.nombres} ${deuda.personal.apellidos}" no tiene centro de costo configurado o el centro de costo no tiene cuenta contable (94.x) asignada.`
-        );
-      }
-
-      const glosaDestino = `DESTINO CTS ${new Date(fechaAsiento).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' }).toUpperCase()} - ${deuda.personal.centroCosto.Nombre}`;
-      
-      borradores.push({
-        empresaId: deuda.empresaId,
-        periodoContableId: periodoContableId,
-        fechaAsiento: fechaAsiento,
-        glosa: glosaDestino,
-        tipoLibro: deuda.esGerencial ? 'GERENCIAL' : 'FISCAL',
-        origenAsiento: 'AUTOMATICO',
-        monedaId: deuda.monedaId,
-        totalDebe: monto,
-        totalHaber: monto,
-        diferencia: 0,
-        estaCuadrado: true,
-        detalles: [
-          {
-            numeroLinea: 1,
-            planCuentaId: deuda.personal.centroCosto.cuentaContable.id,
-            planCuenta: deuda.personal.centroCosto.cuentaContable,
-            glosa: glosaDestino,
-            debe: monto,
-            haber: 0,
-            monedaId: deuda.monedaId,
-            centroCostoId: deuda.personal.centroCostoId,
-            centroCosto: deuda.personal.centroCosto
-          },
-          {
-            numeroLinea: 2,
-            planCuentaId: cuenta791.id,
-            planCuenta: cuenta791,
-            glosa: glosaDestino,
-            debe: 0,
-            haber: monto,
-            monedaId: deuda.monedaId
-          }
-        ]
-      });
+      // 6. CASO 2: PROVISIÓN MENSUAL (PENDIENTE DE IMPLEMENTAR)
+      throw new ValidationError(
+        'Las provisiones mensuales aún no están implementadas. Use solo "Saldo Inicial" por ahora.'
+      );
     }
 
     return {
@@ -535,7 +458,7 @@ const generarBorradorAsientoCTS = async (deudaId) => {
 };
 
 /**
- * Guarda asiento(s) contable(s) para una deuda CTS
+ * Guarda asiento(s) contable(s) para una deuda con personal
  * @param {BigInt} deudaId - ID de la deuda
  * @param {Array} asientosData - Array de asientos a guardar
  * @param {BigInt} usuarioId - ID del usuario
@@ -548,9 +471,12 @@ const guardarAsientosCTS = async (deudaId, asientosData, usuarioId) => {
     for (const asientoData of asientosData) {
       const asiento = await asientoContableService.crear({
         ...asientoData,
-        submoduloOrigenId: null, // TODO: ID del submódulo "Deudas Personal"
+        submoduloOrigenId: BigInt(136),
         procesoOrigenId: deudaId,
         creadoPor: usuarioId,
+        deudas: {
+          connect: { id: deudaId }
+        },
         detalles: asientoData.detalles.map(d => ({
           ...d,
           creadoPor: usuarioId
@@ -559,7 +485,6 @@ const guardarAsientosCTS = async (deudaId, asientosData, usuarioId) => {
       asientosGuardados.push(asiento);
     }
 
-    // Vincular asientos a la deuda
     await prisma.deudaConPersonal.update({
       where: { id: deudaId },
       data: {
@@ -594,7 +519,6 @@ const guardarAsientosCTS = async (deudaId, asientosData, usuarioId) => {
  */
 const eliminarAsientoCTS = async (deudaId, asientoId) => {
   try {
-    // Verificar que el asiento pertenece a la deuda
     const asiento = await prisma.asientoContable.findFirst({
       where: {
         id: asientoId,
@@ -606,7 +530,6 @@ const eliminarAsientoCTS = async (deudaId, asientoId) => {
       throw new NotFoundError('Asiento contable no encontrado o no pertenece a esta deuda');
     }
 
-    // Eliminar el asiento (los detalles se eliminan en cascada)
     await prisma.asientoContable.delete({
       where: { id: asientoId }
     });
@@ -636,7 +559,7 @@ export default {
   listarPendientes,
   listarVencidas,
   listarPorTipo,
-  generarBorradorAsientoCTS,  // ⭐ NUEVO
-  guardarAsientosCTS,          // ⭐ NUEVO
-  eliminarAsientoCTS           // ⭐ NUEVO
+  generarBorradorAsientoCTS,
+  guardarAsientosCTS,
+  eliminarAsientoCTS
 };
