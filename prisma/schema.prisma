@@ -115,7 +115,8 @@ model Activo {
   depreciacionAcumulada    Decimal?               @db.Decimal(18, 2)  // Depreciación acumulada al 31/12/2025
   vidaUtilAnios            Int?                   // Vida útil en años
   monedaId                 BigInt?                // Moneda del costo
-  
+  cuentaContableId         BigInt?                // 🆕 Cuenta contable 33 (Inmuebles, Maquinaria y Equipo)
+
   createdAt            DateTime               @default(now())
   updatedAt            DateTime
 
@@ -128,6 +129,8 @@ model Activo {
   detallesAsientosContables     DetalleAsientoContable[]
   contratistasOT                DetContratistasOT[] @relation("ActivoContratistaOT")
   movimientosActivoFijo         MovimientoActivoFijo[]  // 🆕 RELACIÓN
+  cuentaContable                PlanCuentasContable? @relation("ActivoCuentaContable", fields: [cuentaContableId], references: [id])  // 🆕 RELACIÓN
+
 }
 
 model AgrupacionEntidad {
@@ -5860,6 +5863,7 @@ model PlanCuentasContable {
   productosVariacion    Producto[]              @relation("ProductoCuentaVariacion")            // Productos que usan esta cuenta para VARIACIÓN (61)
   productosVentas       Producto[]              @relation("ProductoCuentaVentas")            // Productos que usan esta cuenta para VARIACIÓN (61)
   bancos                Banco[]                 @relation("BancoCuentaContable")    // 🆕 AGREGAR ESTA LÍNEA
+  activos               Activo[]                @relation("ActivoCuentaContable")  // 🆕 RELACIÓN INVERSA: Activos que usan esta cuenta
 
   // ========================================
   // ÍNDICES
