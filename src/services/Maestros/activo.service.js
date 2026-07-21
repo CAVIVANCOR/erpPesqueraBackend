@@ -52,6 +52,33 @@ async function validarActivo(data) {
     if (!existeCuenta)
       throw new ValidationError("Cuenta contable no existente para el campo cuentaContableId.");
   }
+
+  // Validar productoId (opcional)
+  if (data.productoId !== undefined && data.productoId !== null) {
+    const existeProducto = await prisma.producto.findUnique({
+      where: { id: data.productoId },
+    });
+    if (!existeProducto)
+      throw new ValidationError("Producto no existente para el campo productoId.");
+  }
+
+  // Validar cuentaDepreciacionId (opcional - para cuenta clase 39)
+  if (data.cuentaDepreciacionId !== undefined && data.cuentaDepreciacionId !== null) {
+    const existeCuentaDep = await prisma.planCuentasContable.findUnique({
+      where: { id: data.cuentaDepreciacionId },
+    });
+    if (!existeCuentaDep)
+      throw new ValidationError("Cuenta contable no existente para el campo cuentaDepreciacionId.");
+  }
+
+  // Validar cuentaGastoDepId (opcional - para cuenta clase 68)
+  if (data.cuentaGastoDepId !== undefined && data.cuentaGastoDepId !== null) {
+    const existeCuentaGasto = await prisma.planCuentasContable.findUnique({
+      where: { id: data.cuentaGastoDepId },
+    });
+    if (!existeCuentaGasto)
+      throw new ValidationError("Cuenta contable no existente para el campo cuentaGastoDepId.");
+  }
 }
 
 /**
@@ -60,11 +87,14 @@ async function validarActivo(data) {
 const listar = async () => {
   try {
     return await prisma.activo.findMany({
-      include: { 
-        tipo: true, 
-        moneda: true, 
+      include: {
+        tipo: true,
+        moneda: true,
         permisos: true,
         cuentaContable: true,
+        producto: true,
+        cuentaDepreciacion: true,
+        cuentaGastoDep: true,
       },
     });
   } catch (err) {
@@ -87,6 +117,9 @@ const obtenerPorId = async (id) => {
         permisos: true,
         movimientosActivoFijo: true,
         cuentaContable: true,
+        producto: true,
+        cuentaDepreciacion: true,
+        cuentaGastoDep: true,
       },
     });
     if (!activo) throw new NotFoundError("Activo no encontrado");
@@ -153,6 +186,9 @@ const obtenerPorEmpresaYTipo = async (empresaId, tipoId) => {
         moneda: true,
         embarcacion: true,
         cuentaContable: true,
+        producto: true,
+        cuentaDepreciacion: true,
+        cuentaGastoDep: true,
       },
       orderBy: {
         nombre: "asc",

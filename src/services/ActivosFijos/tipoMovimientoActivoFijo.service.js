@@ -19,6 +19,24 @@ async function validarTipoMovimientoActivoFijo(data, id = null) {
     const existe = await prisma.tipoMovimientoActivoFijo.findFirst({ where });
     if (existe) throw new ValidationError('El nombre ya está registrado para otro tipo de movimiento de activo fijo.');
   }
+
+  // Validar cuentaDebeId (opcional)
+  if (data.cuentaDebeId !== undefined && data.cuentaDebeId !== null) {
+    const existeCuentaDebe = await prisma.planCuentasContable.findUnique({
+      where: { id: data.cuentaDebeId },
+    });
+    if (!existeCuentaDebe)
+      throw new ValidationError('Cuenta contable no existente para el campo cuentaDebeId.');
+  }
+
+  // Validar cuentaHaberId (opcional)
+  if (data.cuentaHaberId !== undefined && data.cuentaHaberId !== null) {
+    const existeCuentaHaber = await prisma.planCuentasContable.findUnique({
+      where: { id: data.cuentaHaberId },
+    });
+    if (!existeCuentaHaber)
+      throw new ValidationError('Cuenta contable no existente para el campo cuentaHaberId.');
+  }
 }
 
 /**
@@ -26,7 +44,13 @@ async function validarTipoMovimientoActivoFijo(data, id = null) {
  */
 const listar = async () => {
   try {
-    return await prisma.tipoMovimientoActivoFijo.findMany({ include: { movimientos: true } });
+    return await prisma.tipoMovimientoActivoFijo.findMany({
+      include: {
+        movimientos: true,
+        cuentaDebe: true,
+        cuentaHaber: true,
+      }
+    });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -38,7 +62,14 @@ const listar = async () => {
  */
 const obtenerPorId = async (id) => {
   try {
-    const tipo = await prisma.tipoMovimientoActivoFijo.findUnique({ where: { id }, include: { movimientos: true } });
+    const tipo = await prisma.tipoMovimientoActivoFijo.findUnique({
+      where: { id },
+      include: {
+        movimientos: true,
+        cuentaDebe: true,
+        cuentaHaber: true,
+      }
+    });
     if (!tipo) throw new NotFoundError('TipoMovimientoActivoFijo no encontrado');
     return tipo;
   } catch (err) {
