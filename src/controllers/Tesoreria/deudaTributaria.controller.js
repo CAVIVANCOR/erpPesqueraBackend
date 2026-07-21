@@ -99,3 +99,25 @@ export async function listarPorPeriodo(req, res, next) {
     next(err);
   }
 }
+
+
+export async function generarBorradorAsiento(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const borrador = await deudaTributariaService.generarBorradorAsiento(id);
+    res.json(toJSONBigInt(borrador));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function generarAsientoContable(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const usuarioId = Number(req.user.id);
+    const asiento = await deudaTributariaService.generarAsientoContable(id, usuarioId);
+    res.status(201).json(toJSONBigInt(asiento));
+  } catch (err) {
+    next(err);
+  }
+}

@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
-
+import asientoContableService from '../Contabilidad/asientoContable.service.js';
+import { SUBMODULO_ORIGEN } from '../../utils/submodulos.constants.js';
 /**
  * Servicio CRUD para DeudaTributaria
  * Gestiona las deudas tributarias con SUNAT, ESSALUD, ONP, etc.
@@ -345,6 +346,195 @@ const listarPorPeriodo = async (empresaId, periodo) => {
   }
 };
 
+
+/**
+ * Genera un borrador de asiento contable para una Deuda Tributaria (solo Saldos Iniciales)
+ * NO lo guarda en BD, solo retorna la estructura para edición
+ * 
+ * ASIENTO SALDO INICIAL:
+ * DEBE: Cuenta del Tipo de Deuda (40.1.1, 40.2.1, etc.)
+ * HABER: 591101 (Utilidades Acumuladas)
+ * 
+ * @param {BigInt} deudaTributariaId - ID de la Deuda Tributaria
+ * @returns {Promise<Object>} - Borrador del asiento contable
+ */
+const generarBorradorAsiento = async (deudaTributariaId) => {
+  try {
+    const deuda = await prisma.deudaTributaria.findUnique({
+      where: { id: deudaTributariaId },
+      include: {
+        empresa: true,
+        tipoDeuda: {
+          include: {
+            cuentaContable: true,
+          },
+        },
+        moneda: true,
+        periodoContable: true,
+      },
+    });
+
+    if (!deuda) {
+      throw new NotFoundError('Deuda Tributaria no encontrada');
+    }
+
+    if (!deuda.periodoContable) {
+      throw new ValidationError(
+        'La Deuda Tributaria no tiene un período contable asignado.'
+      );
+    }
+
+    // ⭐ Solo generar asientos para Saldos Iniciales
+    if (!deuda.esSaldoInicial) {
+      throw new ValidationError(
+        'Solo se pueden generar asientos para Saldos Iniciales. Las deudas normales se contabilizan automáticamente desde su origen.'
+      );
+    }
+
+    // Validar cuenta contable del tipo de deuda
+    if (!deuda.tipoDeuda?.cuentaContableId || !deuda.tipoDeuda?.cuentaContable) {
+      throw new ValidationError(
+        `El tipo de deuda "${deuda.tipoDeuda?.nombre || 'desconocido'}" no tiene una cuenta contable asociada. ` +
+        'Configure el tipo de deuda antes de generar el asiento.'
+      );
+    }
+
+    // Buscar cuenta de Utilidades Acumuladas (591101)
+    const cuentaUtilidades = await prisma.planCuentasContable.findFirst({
+      where: {
+        codigoCuenta: '591101',
+        activo: true,
+      },
+    });
+
+    if (!cuentaUtilidades) {
+      throw new ValidationError(
+        'No se encontró la cuenta 591101 (Utilidades Acumuladas). ' +
+        'Configure el plan de cuentas antes de generar el asiento para Saldos Iniciales.'
+      );
+    }
+
+    const montoOriginal = Number(deuda.montoOriginal);
+
+    if (montoOriginal === 0) {
+      throw new ValidationError(
+        'El monto de la deuda está en cero. Verifique los datos antes de generar el asiento.'
+      );
+    }
+
+    // Generar glosa descriptiva
+    const tipoDeudaNombre = deuda.tipoDeuda?.nombre || 'Deuda Tributaria';
+    const periodo = deuda.periodo || '';
+    const glosa = `Saldo Inicial ${tipoDeudaNombre} ${periodo}`.trim();
+
+    // Crear borrador del asiento
+    const borrador = {
+      empresaId: deuda.empresaId,
+      periodoContableId: deuda.periodoContableId,
+      fechaAsiento: deuda.fechaContable || deuda.fechaGeneracion,
+      glosa: glosa,
+      tipoLibro: 'FISCAL',
+      origenAsiento: 'AUTOMATICO',
+      monedaId: deuda.monedaId,
+      tipoCambio: 1, // Las deudas tributarias normalmente son en soles
+      detalles: [
+        {
+          numeroLinea: 1,
+          planCuentaId: deuda.tipoDeuda.cuentaContableId,
+          planCuenta: deuda.tipoDeuda.cuentaContable,
+          glosa: glosa,
+          debe: montoOriginal,
+          haber: 0,
+          monedaId: 1, // Soles
+          tipoCambio: 1,
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: cuentaUtilidades.id,
+          planCuenta: cuentaUtilidades,
+          glosa: glosa,
+          debe: 0,
+          haber: montoOriginal,
+          monedaId: 1, // Soles
+          tipoCambio: 1,
+        },
+      ],
+    };
+
+    // Validar que el borrador esté cuadrado
+    const totalDebe = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+    const totalHaber = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
+    const diferencia = totalDebe - totalHaber;
+
+    if (Math.abs(diferencia) > 0.01) {
+      throw new ValidationError(
+        `Error al generar borrador: asiento descuadrado. Diferencia: ${diferencia.toFixed(2)}`
+      );
+    }
+
+    return borrador;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) {
+      throw err;
+    }
+    console.error('Error al generar borrador de asiento:', err);
+    throw new DatabaseError('Error al generar borrador de asiento para Deuda Tributaria');
+  }
+};
+
+/**
+ * Genera y guarda el asiento contable para una Deuda Tributaria (solo Saldos Iniciales)
+ * 
+ * @param {BigInt} deudaTributariaId - ID de la Deuda Tributaria
+ * @param {BigInt} usuarioId - ID del usuario que genera el asiento
+ * @returns {Promise<Object>} - Asiento contable generado
+ */
+const generarAsientoContable = async (deudaTributariaId, usuarioId) => {
+  try {
+    const deuda = await obtenerPorId(deudaTributariaId);
+
+    if (!deuda) {
+      throw new NotFoundError('Deuda Tributaria no encontrada');
+    }
+
+    // Validar que sea saldo inicial
+    if (!deuda.esSaldoInicial) {
+      throw new ValidationError(
+        'Solo se pueden generar asientos para Saldos Iniciales.'
+      );
+    }
+
+    // Validar que no tenga asiento previo
+    if (deuda.asientosContables && deuda.asientosContables.length > 0) {
+      throw new ValidationError(
+        'Esta Deuda Tributaria ya tiene un asiento contable asociado.'
+      );
+    }
+
+    // Generar borrador
+    const borrador = await generarBorradorAsiento(deudaTributariaId);
+
+    // Crear el asiento usando el servicio de asientos
+    const asiento = await asientoContableService.crear({
+      ...borrador,
+      submoduloOrigenId: BigInt(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
+      procesoOrigenId: deudaTributariaId,
+      creadoPor: usuarioId,
+      deudasTributarias: {
+        connect: { id: deudaTributariaId },
+      },
+    });
+
+    return asiento;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) {
+      throw err;
+    }
+    console.error('Error al generar asiento contable:', err);
+    throw new DatabaseError('Error al generar asiento contable para Deuda Tributaria');
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
@@ -355,5 +545,7 @@ export default {
   listarPendientes,
   listarVencidas,
   listarPorTipo,
-  listarPorPeriodo
+  listarPorPeriodo,
+  generarBorradorAsiento,
+  generarAsientoContable,
 };

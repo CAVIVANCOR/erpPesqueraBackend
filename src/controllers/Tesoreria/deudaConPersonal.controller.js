@@ -106,7 +106,7 @@ export async function listarPorTipo(req, res, next) {
  */
 export async function generarBorradorAsiento(req, res, next) {
   try {
-    const deudaId = BigInt(req.params.id);
+    const deudaId = Number(req.params.id);
     const borrador = await deudaConPersonalService.generarBorradorAsientoCTS(deudaId);
     res.json(toJSONBigInt(borrador));
   } catch (err) {
@@ -121,9 +121,9 @@ export async function generarBorradorAsiento(req, res, next) {
  */
 export async function guardarAsiento(req, res, next) {
   try {
-    const deudaId = BigInt(req.params.id);
+    const deudaId = Number(req.params.id);
     const { asientos } = req.body;
-    const usuarioId = req.usuario?.id ? BigInt(req.usuario.id) : null;
+    const usuarioId = req.usuario?.id ? Number(req.usuario.id) : null;
     
     const resultado = await deudaConPersonalService.guardarAsientosCTS(
       deudaId,
@@ -143,8 +143,8 @@ export async function guardarAsiento(req, res, next) {
  */
 export async function eliminarAsiento(req, res, next) {
   try {
-    const deudaId = BigInt(req.params.id);
-    const asientoId = BigInt(req.params.asientoId);
+    const deudaId = Number(req.params.id);
+    const asientoId = Number(req.params.asientoId);
     
     const resultado = await deudaConPersonalService.eliminarAsientoCTS(deudaId, asientoId);
     res.json(toJSONBigInt(resultado));

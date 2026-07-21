@@ -177,6 +177,7 @@ const obtenerPorId = async (id) => {
         asientosContables: {
           include: {
             estado: true,
+            moneda: true,
             detalles: {
               include: {
                 planCuenta: true,
@@ -2639,6 +2640,46 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
 };
 
 /**
+ * Convierte un monto a soles si la orden está en moneda extranjera
+ * Redondea a 2 decimales para evitar descuadres
+ * 
+ * @param {number} monto - Monto a convertir
+ * @param {Object} ordenCompra - Orden de compra con monedaId y tipoCambio
+ * @returns {number} - Monto en soles redondeado a 2 decimales
+ */
+const convertirMontoASoles = (monto, ordenCompra) => {
+  const MONEDA_USD_ID = 2;
+  if (Number(ordenCompra.monedaId) === MONEDA_USD_ID) {
+    const montoConvertido = Number(monto) * Number(ordenCompra.tipoCambio);
+    return Math.round(montoConvertido * 100) / 100;
+  }
+  return Math.round(Number(monto) * 100) / 100;
+};
+
+/**
+ * Invierte debe/haber para Notas de Crédito
+ * Las NC revierten el asiento original intercambiando debe y haber
+ * 
+ * @param {number} debe - Valor del debe
+ * @param {number} haber - Valor del haber
+ * @param {boolean} esNotaCredito - Si es NC
+ * @returns {Object} - { debe, haber } invertidos si es NC
+ */
+const invertirSiEsNC = (debe, haber, esNotaCredito) => {
+  if (esNotaCredito) {
+    return {
+      debe: Math.abs(haber),
+      haber: Math.abs(debe),
+    };
+  }
+  return {
+    debe: Math.abs(debe),
+    haber: Math.abs(haber),
+  };
+};
+
+
+/**
  * Genera un borrador de asiento contable para una OrdenCompra
  * NO lo guarda en BD, solo retorna la estructura para edición
  * Patrón: Igual a PreFactura.generarBorradorAsiento
@@ -2652,29 +2693,18 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       where: { id: ordenCompraId },
       include: {
         empresa: true,
+        tipoDocumento: true,
+        tipoDocumentoFinal: true,
         proveedor: true,
         moneda: true,
         periodoContable: true,
-        tipoDocumento: true,
-        tipoDocumentoFinal: true,
-        centroCosto: {
-          include: {
-            cuentaContable: {
-              include: {
-                cuentaPadre: true,
-              },
-            },
-          },
-        },
         detalles: {
           include: {
             producto: {
               include: {
                 cuentaCompras: true,
                 cuentaInventario: true,
-                cuentaCostoVentas: true,
                 cuentaVariacion: true,
-                familia: true,
               },
             },
           },
@@ -2692,25 +2722,8 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       );
     }
 
-    // Validar que el período esté ABIERTO
-    if (Number(ordenCompra.periodoContable.estadoId) !== ESTADO_PERIODO_CONTABLE.ABIERTO) {
-      throw new ValidationError(
-        "El período contable debe estar ABIERTO para generar asientos."
-      );
-    }
-
     // ========================================
-    // VALIDAR TOTALES
-    // ========================================
-    if (!ordenCompra.total || Number(ordenCompra.total) === 0) {
-      throw new ValidationError(
-        "La OrdenCompra no tiene totales calculados. " +
-        "Guarde la orden con detalles antes de generar el asiento."
-      );
-    }
-
-    // ========================================
-    // FUNCIÓN HELPER: Buscar cuenta de compras
+    // FUNCIÓN HELPER: Buscar cuenta contable de compras
     // ========================================
     const buscarCuentaCompras = async (producto) => {
       // 1. Si el producto tiene cuenta asignada, usarla
@@ -2718,55 +2731,25 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         return {
           cuenta: producto.cuentaCompras,
           usaFallback: false,
-          mensaje: null,
         };
       }
 
-      // 2. Buscar cuenta fallback por familia del producto
-      const mapeoFamilias = {
-        "MERCADERIAS": "601",
-        "MERCADERIA": "601",
-        "MATERIAS PRIMAS": "602",
-        "MATERIA PRIMA": "602",
-        "SUMINISTROS": "6032",
-        "SUMINISTRO": "6032",
-        "MATERIALES AUXILIARES": "6031",
-        "REPUESTOS": "6033",
-        "REPUESTO": "6033",
-      };
+      // 2. Si no tiene cuenta, buscar cuenta genérica según código del producto
+      let cuentaFallback = null;
 
-      let codigoBuscar = "60";
+      if (producto.codigo) {
+        const primerDigito = producto.codigo.charAt(0);
+        const codigoCuenta = `60${primerDigito}`;
 
-      if (producto.familia?.nombre) {
-        const nombreFamilia = producto.familia.nombre.toUpperCase();
-        for (const [key, codigo] of Object.entries(mapeoFamilias)) {
-          if (nombreFamilia.includes(key)) {
-            codigoBuscar = codigo;
-            break;
-          }
-        }
-      }
-
-      // 3. Buscar cuenta en BD (PRIMERO intentar con imputables)
-      let cuentaFallback = await prisma.planCuentasContable.findFirst({
-        where: {
-          codigoCuenta: { startsWith: codigoBuscar },
-          activo: true,
-          esImputable: true,
-        },
-      });
-
-      // 4. Si no encuentra imputable, buscar SIN filtro de esImputable
-      if (!cuentaFallback) {
         cuentaFallback = await prisma.planCuentasContable.findFirst({
           where: {
-            codigoCuenta: { startsWith: codigoBuscar },
+            codigoCuenta: { startsWith: codigoCuenta },
             activo: true,
           },
         });
       }
 
-      // 5. Si tampoco encuentra con código específico, intentar con "60"
+      // 3. Si no encuentra con código específico, buscar cuenta genérica 60
       if (!cuentaFallback) {
         cuentaFallback = await prisma.planCuentasContable.findFirst({
           where: {
@@ -2776,7 +2759,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         });
       }
 
-      // 6. Si definitivamente no hay ninguna cuenta, lanzar error
+      // 4. Si no hay ninguna cuenta, lanzar error
       if (!cuentaFallback) {
         throw new ValidationError(
           `No se encontró ninguna cuenta contable de compras (60*) activa. ` +
@@ -2790,22 +2773,23 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         mensaje: `⚠️ Producto "${producto.descripcionBase}" (ID: ${producto.id}) no tiene cuenta contable asignada. Se usó cuenta genérica ${cuentaFallback.codigoCuenta} - ${cuentaFallback.nombreCuenta}.`,
       };
     };
-
     // ========================================
     // BUSCAR CUENTAS CONTABLES NECESARIAS
     // ========================================
 
-    // Cuenta CxP (42.1 - Cuentas por Pagar Comerciales)
+    // ⭐ Determinar cuenta CxP según moneda del documento
+    const codigoCuentaCxP = Number(ordenCompra.monedaId) === 1 ? "421101" : "421102";
+
     const cuentaCxP = await prisma.planCuentasContable.findFirst({
       where: {
-        codigoCuenta: { startsWith: "421" },
+        codigoCuenta: codigoCuentaCxP,
         activo: true,
       },
     });
 
     if (!cuentaCxP) {
       throw new ValidationError(
-        "No se encontró la cuenta de Cuentas por Pagar (42.1). " +
+        `No se encontró la cuenta ${codigoCuentaCxP} (Cuentas por Pagar ${Number(ordenCompra.monedaId) === 1 ? 'PEN' : 'USD'}). ` +
         "Configure el plan de cuentas antes de generar el asiento."
       );
     }
@@ -2814,17 +2798,21 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     const esSaldoInicial = ordenCompra.tipoDocumento?.codigo?.startsWith("SI");
 
     // ⭐ DETECTAR SI ES NOTA DE CRÉDITO (tipoDocumentoFinalId = 8)
-    const esNotaCredito = ordenCompra.tipoDocumentoFinalId === 8;
+    const esNotaCredito = Number(ordenCompra.tipoDocumentoFinalId) === 8;
 
     // ⭐ Función helper para formatear referencia del documento
     const obtenerReferenciaDocumento = () => {
+      const proveedor = ordenCompra.proveedor?.razonSocial || 'Proveedor';
+      const moneda = ordenCompra.moneda?.simbolo || '';
+      const monto = Math.abs(Number(ordenCompra.total)).toFixed(2);
+
       if (ordenCompra.tipoDocumentoFinal && ordenCompra.numeroDocumentoFinal && ordenCompra.fechaFacturacion) {
         const fecha = new Date(ordenCompra.fechaFacturacion);
         const fechaFormateada = `${String(fecha.getDate()).padStart(2, '0')}/${String(fecha.getMonth() + 1).padStart(2, '0')}/${fecha.getFullYear()}`;
-        return `${ordenCompra.tipoDocumentoFinal.codigo} ${ordenCompra.numeroDocumentoFinal} ${fechaFormateada}`;
+        return `${proveedor} - ${ordenCompra.tipoDocumentoFinal.codigo} ${ordenCompra.numeroDocumentoFinal} ${fechaFormateada} - ${moneda} ${monto}`;
       }
       // Fallback a número de OC si no hay documento final
-      return `OC ${ordenCompra.numeroDocumento}`;
+      return `OC ${ordenCompra.numeroDocumento} - ${proveedor} - ${moneda} ${monto}`;
     };
     const referenciaDoc = obtenerReferenciaDocumento();
 
@@ -2852,17 +2840,17 @@ const generarBorradorAsiento = async (ordenCompraId) => {
 
       cuentaDebe = cuentaSaldoInicial;
 
-      // Para SI: HABER debe ser 5911101 (Utilidades Acumuladas)
+      // Para SI: HABER debe ser 591101 (Utilidades Acumuladas)
       const cuentaUtilidades = await prisma.planCuentasContable.findFirst({
         where: {
-          codigoCuenta: "5911101",
+          codigoCuenta: "591101",
           activo: true,
         },
       });
 
       if (!cuentaUtilidades) {
         throw new ValidationError(
-          "No se encontró la cuenta 5911101 (Utilidades Acumuladas). " +
+          "No se encontró la cuenta 591101 (Utilidades Acumuladas). " +
           "Configure el plan de cuentas antes de generar el asiento para Saldos Iniciales.",
         );
       }
@@ -2870,22 +2858,11 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       cuentaHaber = cuentaUtilidades;
     }
 
-    let subtotal = Number(ordenCompra.subtotal);
-    let totalIGV = Number(ordenCompra.totalIGV);
-    let total = Number(ordenCompra.total);
+    const subtotal = Number(ordenCompra.subtotal);
+    const totalIGV = Number(ordenCompra.totalIGV);
+    const total = Number(ordenCompra.total);
 
-    // ⭐ SI ES SALDO INICIAL EN MONEDA EXTRANJERA: Convertir a SOLES
-    if (esSaldoInicial && Number(ordenCompra.monedaId) !== 1) {
-      const tipoCambio = Number(ordenCompra.tipoCambio);
-      if (!tipoCambio || tipoCambio === 0) {
-        throw new ValidationError(
-          "El tipo de cambio es requerido para Saldos Iniciales en moneda extranjera."
-        );
-      }
-      subtotal = subtotal * tipoCambio;
-      totalIGV = totalIGV * tipoCambio;
-      total = total * tipoCambio;
-    }
+    // ⭐ NO convertir aquí, la conversión se hace en cada detalle con convertirMontoASoles()
     // Determinar tipo de libro según esGerencial
     const tipoLibro = ordenCompra.esGerencial ? "GERENCIAL" : "FISCAL";
 
@@ -2898,7 +2875,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         : `Compra según ${referenciaDoc}`,
       tipoLibro: tipoLibro,
       origenAsiento: "AUTOMATICO",
-      monedaId: esSaldoInicial ? 1 : ordenCompra.monedaId, // SI siempre en SOLES
+      monedaId: ordenCompra.monedaId, // ⭐ Siempre moneda original del documento
       tipoCambio: ordenCompra.tipoCambio,
       detalles: [],
     };
@@ -2915,25 +2892,33 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     if (ordenCompra.esGerencial) {
       if (esSaldoInicial && cuentaDebe) {
         // SALDO INICIAL: DEBE con 421101/421102
+        const montoConvertido = convertirMontoASoles(total, ordenCompra);
+        const { debe: debe1, haber: haber1 } = invertirSiEsNC(montoConvertido, 0, esNotaCredito);
+        const { debe: debe2, haber: haber2 } = invertirSiEsNC(0, montoConvertido, esNotaCredito);
+
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaDebe.id,
           glosa: `Saldo Inicial CxP según ${referenciaDoc}`,
-          debe: total,
-          haber: 0,
+          debe: debe1,
+          haber: haber1,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
           entidadComercialId: ordenCompra.proveedorId,
           tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
           fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
 
-        // HABER: 5911101 (Utilidades Acumuladas)
+        // HABER: 591101 (Utilidades Acumuladas)
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaHaber.id,
           glosa: `Saldo Inicial CxP según ${referenciaDoc}`,
-          debe: 0,
-          haber: total,
+          debe: debe2,
+          haber: haber2,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
         });
       } else {
         // COMPRA NORMAL: Orden: 60→42→20→61
@@ -2947,13 +2932,17 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
 
           const subtotalDetalle = Number(detalle.subtotal);
+          const montoDetalle = convertirMontoASoles(subtotalDetalle, ordenCompra);
+          const { debe, haber } = invertirSiEsNC(montoDetalle, 0, esNotaCredito);
 
           borrador.detalles.push({
             numeroLinea: numeroLinea++,
             planCuentaId: cuenta.id,
             glosa: `Compra ${detalle.producto.descripcionBase} - ${referenciaDoc}`,
-            debe: subtotalDetalle,
-            haber: 0,
+            debe: debe,
+            haber: haber,
+            monedaId: 1, // ⭐ SIEMPRE SOLES
+            tipoCambio: ordenCompra.tipoCambio,
             centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
           });
 
@@ -2962,12 +2951,17 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
         }
 
+        const montoTotal = convertirMontoASoles(total, ordenCompra);
+        const { debe, haber } = invertirSiEsNC(0, montoTotal, esNotaCredito);
+
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaHaber.id,
           glosa: `Compra según ${referenciaDoc}`,
-          debe: 0,
-          haber: total,
+          debe: debe,
+          haber: haber,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
           entidadComercialId: ordenCompra.proveedorId,
           tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
@@ -2978,12 +2972,18 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           const productoConInventario = ordenCompra.detalles.find(d => d.producto.cuentaInventarioId);
 
           if (productoConInventario) {
+            const montoInventario = convertirMontoASoles(totalInventario, ordenCompra);
+            const { debe: debeInv, haber: haberInv } = invertirSiEsNC(montoInventario, 0, esNotaCredito);
+            const { debe: debeVar, haber: haberVar } = invertirSiEsNC(0, montoInventario, esNotaCredito);
+
             borrador.detalles.push({
               numeroLinea: numeroLinea++,
               planCuentaId: productoConInventario.producto.cuentaInventarioId,
               glosa: `Inventario - ${referenciaDoc}`,
-              debe: totalInventario,
-              haber: 0,
+              debe: debeInv,
+              haber: haberInv,
+              monedaId: 1, // ⭐ SIEMPRE SOLES
+              tipoCambio: ordenCompra.tipoCambio,
               centroCostoId: ordenCompra.centroCostoId,
             });
 
@@ -2992,8 +2992,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
                 numeroLinea: numeroLinea++,
                 planCuentaId: productoConInventario.producto.cuentaVariacionId,
                 glosa: `Variación de Existencias - ${referenciaDoc}`,
-                debe: 0,
-                haber: totalInventario,
+                debe: debeVar,
+                haber: haberVar,
+                monedaId: 1, // ⭐ SIEMPRE SOLES
+                tipoCambio: ordenCompra.tipoCambio,
               });
             }
           }
@@ -3006,12 +3008,18 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     else if (ordenCompra.esExoneradoAlIGV) {
       if (esSaldoInicial && cuentaDebe) {
         // SALDO INICIAL
+        const montoConvertido = convertirMontoASoles(total, ordenCompra);
+        const { debe: debe1, haber: haber1 } = invertirSiEsNC(montoConvertido, 0, esNotaCredito);
+        const { debe: debe2, haber: haber2 } = invertirSiEsNC(0, montoConvertido, esNotaCredito);
+
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaDebe.id,
           glosa: `Saldo Inicial CxP según ${referenciaDoc}`,
-          debe: total,
-          haber: 0,
+          debe: debe1,
+          haber: haber1,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
           entidadComercialId: ordenCompra.proveedorId,
           tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
@@ -3022,8 +3030,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaHaber.id,
           glosa: `Saldo Inicial CxP según ${referenciaDoc}`,
-          debe: 0,
-          haber: total,
+          debe: debe2,
+          haber: haber2,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
         });
       } else {
         // COMPRA NORMAL: Orden: 60→42→20→61
@@ -3037,13 +3047,17 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
 
           const subtotalDetalle = Number(detalle.subtotal);
+          const montoDetalle = convertirMontoASoles(subtotalDetalle, ordenCompra);
+          const { debe, haber } = invertirSiEsNC(montoDetalle, 0, esNotaCredito);
 
           borrador.detalles.push({
             numeroLinea: numeroLinea++,
             planCuentaId: cuenta.id,
             glosa: `Compra exonerada ${detalle.producto.descripcionBase} - ${referenciaDoc}`,
-            debe: subtotalDetalle,
-            haber: 0,
+            debe: debe,
+            haber: haber,
+            monedaId: 1, // ⭐ SIEMPRE SOLES
+            tipoCambio: ordenCompra.tipoCambio,
             centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
           });
 
@@ -3052,12 +3066,17 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
         }
 
+        const montoTotal = convertirMontoASoles(total, ordenCompra);
+        const { debe, haber } = invertirSiEsNC(0, montoTotal, esNotaCredito);
+
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaHaber.id,
           glosa: `Compra exonerada según ${referenciaDoc}`,
-          debe: 0,
-          haber: total,
+          debe: debe,
+          haber: haber,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
           entidadComercialId: ordenCompra.proveedorId,
           tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
@@ -3068,12 +3087,18 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           const productoConInventario = ordenCompra.detalles.find(d => d.producto.cuentaInventarioId);
 
           if (productoConInventario) {
+            const montoInventario = convertirMontoASoles(totalInventario, ordenCompra);
+            const { debe: debeInv, haber: haberInv } = invertirSiEsNC(montoInventario, 0, esNotaCredito);
+            const { debe: debeVar, haber: haberVar } = invertirSiEsNC(0, montoInventario, esNotaCredito);
+
             borrador.detalles.push({
               numeroLinea: numeroLinea++,
               planCuentaId: productoConInventario.producto.cuentaInventarioId,
               glosa: `Inventario - ${referenciaDoc}`,
-              debe: totalInventario,
-              haber: 0,
+              debe: debeInv,
+              haber: haberInv,
+              monedaId: 1, // ⭐ SIEMPRE SOLES
+              tipoCambio: ordenCompra.tipoCambio,
               centroCostoId: ordenCompra.centroCostoId,
             });
 
@@ -3082,8 +3107,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
                 numeroLinea: numeroLinea++,
                 planCuentaId: productoConInventario.producto.cuentaVariacionId,
                 glosa: `Variación de Existencias - ${referenciaDoc}`,
-                debe: 0,
-                haber: totalInventario,
+                debe: debeVar,
+                haber: haberVar,
+                monedaId: 1, // ⭐ SIEMPRE SOLES
+                tipoCambio: ordenCompra.tipoCambio,
               });
             }
           }
@@ -3112,12 +3139,18 @@ const generarBorradorAsiento = async (ordenCompraId) => {
 
       if (esSaldoInicial && cuentaDebe) {
         // SALDO INICIAL
+        const montoConvertido = convertirMontoASoles(total, ordenCompra);
+        const { debe: debe1, haber: haber1 } = invertirSiEsNC(montoConvertido, 0, esNotaCredito);
+        const { debe: debe2, haber: haber2 } = invertirSiEsNC(0, montoConvertido, esNotaCredito);
+
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaDebe.id,
           glosa: `Saldo Inicial CxP según ${referenciaDoc}`,
-          debe: total,
-          haber: 0,
+          debe: debe1,
+          haber: haber1,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
           entidadComercialId: ordenCompra.proveedorId,
           tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
@@ -3128,8 +3161,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaHaber.id,
           glosa: `Saldo Inicial CxP según ${referenciaDoc}`,
-          debe: 0,
-          haber: total,
+          debe: debe2,
+          haber: haber2,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
         });
       } else {
         // COMPRA NORMAL: Orden: 60→40→42→20→61
@@ -3143,13 +3178,17 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
 
           const subtotalDetalle = Number(detalle.subtotal);
+          const montoDetalle = convertirMontoASoles(subtotalDetalle, ordenCompra);
+          const { debe, haber } = invertirSiEsNC(montoDetalle, 0, esNotaCredito);
 
           borrador.detalles.push({
             numeroLinea: numeroLinea++,
             planCuentaId: cuenta.id,
             glosa: `Compra ${detalle.producto.descripcionBase} - ${referenciaDoc}`,
-            debe: subtotalDetalle,
-            haber: 0,
+            debe: debe,
+            haber: haber,
+            monedaId: 1, // ⭐ SIEMPRE SOLES
+            tipoCambio: ordenCompra.tipoCambio,
             centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
           });
 
@@ -3158,20 +3197,30 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
         }
 
+        const montoIGV = convertirMontoASoles(totalIGV, ordenCompra);
+        const { debe: debeIGV, haber: haberIGV } = invertirSiEsNC(montoIGV, 0, esNotaCredito);
+
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaIGV.id,
           glosa: `IGV 18% según ${referenciaDoc}`,
-          debe: totalIGV,
-          haber: 0,
+          debe: debeIGV,
+          haber: haberIGV,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
         });
+
+        const montoTotal = convertirMontoASoles(total, ordenCompra);
+        const { debe, haber } = invertirSiEsNC(0, montoTotal, esNotaCredito);
 
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaHaber.id,
           glosa: `Inventario - ${referenciaDoc}`,
-          debe: 0,
-          haber: total,
+          debe: debe,
+          haber: haber,
+          monedaId: 1, // ⭐ SIEMPRE SOLES
+          tipoCambio: ordenCompra.tipoCambio,
           entidadComercialId: ordenCompra.proveedorId,
           tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
@@ -3182,12 +3231,18 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           const productoConInventario = ordenCompra.detalles.find(d => d.producto.cuentaInventarioId);
 
           if (productoConInventario) {
+            const montoInventario = convertirMontoASoles(totalInventario, ordenCompra);
+            const { debe: debeInv, haber: haberInv } = invertirSiEsNC(montoInventario, 0, esNotaCredito);
+            const { debe: debeVar, haber: haberVar } = invertirSiEsNC(0, montoInventario, esNotaCredito);
+
             borrador.detalles.push({
               numeroLinea: numeroLinea++,
               planCuentaId: productoConInventario.producto.cuentaInventarioId,
               glosa: `Inventario - ${referenciaDoc}`,
-              debe: totalInventario,
-              haber: 0,
+              debe: debeInv,
+              haber: haberInv,
+              monedaId: 1, // ⭐ SIEMPRE SOLES
+              tipoCambio: ordenCompra.tipoCambio,
               centroCostoId: ordenCompra.centroCostoId,
             });
 
@@ -3196,8 +3251,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
                 numeroLinea: numeroLinea++,
                 planCuentaId: productoConInventario.producto.cuentaVariacionId,
                 glosa: `Variación de Existencias - ${referenciaDoc}`,
-                debe: 0,
-                haber: totalInventario,
+                debe: debeVar,
+                haber: haberVar,
+                monedaId: 1, // ⭐ SIEMPRE SOLES
+                tipoCambio: ordenCompra.tipoCambio,
               });
             }
           }
@@ -3222,7 +3279,6 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     throw err;
   }
 };
-
 /**
  * Genera asiento de destino para centro de costo (92xxxx / 791101)
  * Solo aplica para Facturas, Boletas y Notas de Débito
@@ -3237,6 +3293,8 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
         periodoContable: true,
         tipoDocumento: true,
         tipoDocumentoFinal: true,
+        proveedor: true,
+        moneda: true,
         centroCosto: {
           include: {
             cuentaContable: {
@@ -3255,10 +3313,11 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
 
     // Validar condiciones para generar el asiento
     const esSaldoInicial = ordenCompra.tipoDocumento?.codigo?.startsWith("SI");
-    const esNotaCredito = ordenCompra.tipoDocumentoFinalId === 8;
+    const esNotaCredito = Number(ordenCompra.tipoDocumentoFinalId) === 8;
 
     // NO generar asiento si es NC o SI
     if (esNotaCredito || esSaldoInicial) {
+      console.log('⚠️ No se genera asiento destino para NC o SI');
       return null;
     }
 
@@ -3269,13 +3328,17 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
 
     // ⭐ Función helper para formatear referencia del documento
     const obtenerReferenciaDocumento = () => {
+      const proveedor = ordenCompra.proveedor?.razonSocial || 'Proveedor';
+      const moneda = ordenCompra.moneda?.simbolo || '';
+      const monto = Math.abs(Number(ordenCompra.subtotal)).toFixed(2);
+
       if (ordenCompra.tipoDocumentoFinal && ordenCompra.numeroDocumentoFinal && ordenCompra.fechaFacturacion) {
         const fecha = new Date(ordenCompra.fechaFacturacion);
         const fechaFormateada = `${String(fecha.getDate()).padStart(2, '0')}/${String(fecha.getMonth() + 1).padStart(2, '0')}/${fecha.getFullYear()}`;
-        return `${ordenCompra.tipoDocumentoFinal.codigo} ${ordenCompra.numeroDocumentoFinal} ${fechaFormateada}`;
+        return `${proveedor} - ${ordenCompra.tipoDocumentoFinal.codigo} ${ordenCompra.numeroDocumentoFinal} ${fechaFormateada} - ${moneda} ${monto}`;
       }
       // Fallback a número de OC si no hay documento final
-      return `OC ${ordenCompra.numeroDocumento}`;
+      return `OC ${ordenCompra.numeroDocumento} - ${proveedor} - ${moneda} ${monto}`;
     };
     const referenciaDoc = obtenerReferenciaDocumento();
 
@@ -3293,12 +3356,15 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
       );
     }
 
-    // Calcular subtotal (sin IGV)
+    // Calcular subtotal (sin IGV) y convertir a soles
     const subtotal = Number(ordenCompra.subtotal) || 0;
 
     if (subtotal === 0) {
       return null;
     }
+
+    // ⭐ Convertir subtotal a soles
+    const subtotalEnSoles = convertirMontoASoles(subtotal, ordenCompra);
 
     // Determinar tipo de libro según esGerencial de la orden
     const tipoLibro = ordenCompra.esGerencial ? "GERENCIAL" : "FISCAL";
@@ -3308,23 +3374,26 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
       empresaId: ordenCompra.empresaId,
       periodoContableId: ordenCompra.periodoContableId,
       fechaAsiento: ordenCompra.fechaContable,
-      glosa: `Destino: ${ordenCompra.centroCosto.cuentaContable.cuentaPadre?.nombreCuenta || ordenCompra.centroCosto.cuentaContable.nombreCuenta} - C.C: ${ordenCompra.centroCosto.Nombre} - ${referenciaDoc}`,
+      glosa: `COSTO DE PRODUCCION - C.C: ${ordenCompra.centroCosto.Nombre} - ${referenciaDoc}`,
       tipoLibro: tipoLibro,
       origenAsiento: "AUTOMATICO",
-      monedaId: ordenCompra.monedaId,
+      monedaId: ordenCompra.monedaId, // ⭐ Moneda original
       tipoCambio: ordenCompra.tipoCambio,
       detalles: [],
     };
 
     let numeroLinea = 1;
 
+    // ⭐ Usar valores absolutos (NC no invierte este asiento, simplemente no se genera)
     // Línea DEBE: Centro de Costo (92xxxx)
     borrador.detalles.push({
       numeroLinea: numeroLinea++,
       planCuentaId: ordenCompra.centroCosto.cuentaContableId,
-      glosa: `${ordenCompra.centroCosto.cuentaContable.cuentaPadre?.nombreCuenta || ordenCompra.centroCosto.cuentaContable.nombreCuenta} - C.C: ${ordenCompra.centroCosto.Nombre} - ${referenciaDoc}`,
-      debe: subtotal,
+      glosa: `COSTO DE PRODUCCION - C.C: ${ordenCompra.centroCosto.Nombre} - ${referenciaDoc}`,
+      debe: Math.abs(subtotalEnSoles),
       haber: 0,
+      monedaId: 1, // ⭐ SIEMPRE SOLES
+      tipoCambio: ordenCompra.tipoCambio,
     });
 
     // Línea HABER: 791101 (Cargas Imputables)
@@ -3333,7 +3402,9 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
       planCuentaId: cuenta791101.id,
       glosa: `Transferencia cargas imputables - ${referenciaDoc}`,
       debe: 0,
-      haber: subtotal,
+      haber: Math.abs(subtotalEnSoles),
+      monedaId: 1, // ⭐ SIEMPRE SOLES
+      tipoCambio: ordenCompra.tipoCambio,
     });
 
     return borrador;
@@ -3346,7 +3417,6 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
     throw err;
   }
 };
-
 /**
  * Guarda el asiento contable editado por el usuario y lo vincula a la OrdenCompra
  * Patrón: Igual a PreFactura.guardarAsientoContable
@@ -3391,23 +3461,58 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
       );
     }
 
-    // Calcular totales
-    const totalDebe = asientoData.detalles.reduce(
-      (sum, d) => sum + Number(d.debe || 0),
-      0
-    );
-    const totalHaber = asientoData.detalles.reduce(
-      (sum, d) => sum + Number(d.haber || 0),
-      0
-    );
-    const diferencia = totalDebe - totalHaber;
+    // ⭐ Calcular totales EN MONEDA ORIGINAL del documento
+    // Los detalles están en soles, pero el encabezado debe mostrar el total original
+    const MONEDA_SOLES_ID = 1;
+    const tipoCambio = Number(asientoData.tipoCambio) || 1;
 
-    // Validar que esté cuadrado
-    if (Math.abs(diferencia) > 0.01) {
+    // Calcular totales en soles (de los detalles)
+    // ⭐ Usar Math.abs() para manejar valores negativos (NC)
+    const totalDebeEnSoles = asientoData.detalles.reduce(
+      (sum, d) => sum + Math.abs(Number(d.debe || 0)),
+      0
+    );
+    const totalHaberEnSoles = asientoData.detalles.reduce(
+      (sum, d) => sum + Math.abs(Number(d.haber || 0)),
+      0
+    );
+
+    // Convertir a moneda original si es necesario
+    const totalDebe = Number(asientoData.monedaId) === MONEDA_SOLES_ID
+      ? totalDebeEnSoles
+      : Math.round((totalDebeEnSoles / tipoCambio) * 100) / 100;
+
+    const totalHaber = Number(asientoData.monedaId) === MONEDA_SOLES_ID
+      ? totalHaberEnSoles
+      : Math.round((totalHaberEnSoles / tipoCambio) * 100) / 100;
+
+
+
+    // ⭐ Validar cuadratura en SOLES (detalles), NO en moneda original
+    const diferenciaEnSoles = totalDebeEnSoles - totalHaberEnSoles;
+
+    // ⭐ DEBUG TEMPORAL - ELIMINAR DESPUÉS
+    console.log('=== DEBUG ASIENTO ===');
+    console.log('Orden Compra ID:', ordenCompraId);
+    console.log('Moneda ID:', asientoData.monedaId);
+    console.log('Tipo Cambio:', tipoCambio);
+    console.log('Total Debe en Soles:', totalDebeEnSoles);
+    console.log('Total Haber en Soles:', totalHaberEnSoles);
+    console.log('Diferencia en Soles:', diferenciaEnSoles);
+    console.log('Detalles:');
+    asientoData.detalles.forEach((d, idx) => {
+      console.log(`  ${idx + 1}. Cuenta: ${d.planCuentaId}, Debe: ${d.debe}, Haber: ${d.haber}, MonedaId: ${d.monedaId}`);
+    });
+    console.log('===================');
+
+    if (Math.abs(diferenciaEnSoles) > 0.01) {
       throw new ValidationError(
-        `El asiento no está cuadrado. Diferencia: ${diferencia}`
+        `El asiento no está cuadrado. Diferencia en soles: ${diferenciaEnSoles.toFixed(2)}`
       );
     }
+
+    // Calcular diferencia en moneda original solo para registro
+    const diferencia = totalDebe - totalHaber;
 
     // Buscar estado "PENDIENTE" para Asientos Contables
     const estadoPendiente = await prisma.estadoMultiFuncion.findFirst({

@@ -15,4 +15,8 @@ router.get('/empresa/:empresaId/vencidas', deudaTributariaController.listarVenci
 router.get('/empresa/:empresaId/periodo/:periodo', deudaTributariaController.listarPorPeriodo);
 router.get('/tipo/:tipoDeudaId', deudaTributariaController.listarPorTipo);
 
+// Rutas para asientos contables
+router.get('/:id/borrador-asiento', deudaTributariaController.generarBorradorAsiento);
+router.post('/:id/generar-asiento', deudaTributariaController.generarAsientoContable);
+
 export default router;
