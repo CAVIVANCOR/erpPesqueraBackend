@@ -936,7 +936,7 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
       montoPercepcion = totalEnSoles * (porcentajePercepcion / 100);
     }
 
-        // Aplicar signo negativo si es Nota de Crédito
+    // Aplicar signo negativo si es Nota de Crédito
     const tipoDocFinalId = preFactura.tipoDocumentoFinalId || preFactura.tipoDocumentoId;
     const subtotalFinal = aplicarSignoMonto(subtotal, tipoDocFinalId);
     const totalIGVFinal = aplicarSignoMonto(totalIGV, tipoDocFinalId);
@@ -2968,6 +2968,40 @@ const aprobar = async (id) => {
     }
   });
 };
+/**
+ * Formatea fecha a DD/MM/YYYY
+ */
+const formatearFechaAsiento = (fecha) => {
+  if (!fecha) return '';
+  const d = new Date(fecha);
+  const dia = String(d.getDate()).padStart(2, '0');
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const anio = d.getFullYear();
+  return `${dia}/${mes}/${anio}`;
+};
+
+/**
+ * Genera glosa descriptiva para asiento de PreFactura
+ */
+const generarGlosaAsiento = (preFactura, tipoOperacion = 'Venta') => {
+  const cliente = preFactura.cliente?.razonSocial || 'Cliente';
+  const tipoDoc = preFactura.tipoDocumentoFinal?.codigo || preFactura.tipoDocumento?.codigo || '';
+  const numeroDoc = preFactura.numeroDocumentoFinal || preFactura.numeroDocumento || '';
+  const fecha = formatearFechaAsiento(preFactura.fechaFacturacion || preFactura.fechaDocumento);
+  
+  return `${tipoOperacion} según ${cliente} ${tipoDoc} ${numeroDoc} ${fecha}`;
+};
+
+/**
+ * Convierte monto a soles si la PreFactura está en dólares
+ */
+const convertirMontoASoles = (monto, preFactura) => {
+  const MONEDA_USD_ID = 2;
+  if (Number(preFactura.monedaId) === MONEDA_USD_ID) {
+    return Number(monto) * Number(preFactura.tipoCambio);
+  }
+  return Number(monto);
+};
 
 /**
  * Genera un borrador de asiento contable para una PreFactura
@@ -2987,6 +3021,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
         moneda: true,
         periodoContable: true,
         tipoDocumento: true,
+        tipoDocumentoFinal: true,
         detalles: {
           include: {
             producto: true,
@@ -3101,15 +3136,15 @@ const generarBorradorAsiento = async (preFacturaId) => {
       empresaId: preFactura.empresaId,
       periodoContableId: preFactura.periodoContableId,
       fechaAsiento: preFactura.fechaContable,
-      glosa: esSaldoInicial
-        ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
-        : `Venta según PreFactura ${preFactura.codigo}`,
+      glosa: generarGlosaAsiento(preFactura, esSaldoInicial ? 'Saldo Inicial CxC' : 'Venta'),
       tipoLibro: tipoLibro,
       origenAsiento: "AUTOMATICO",
-      monedaId: esSaldoInicial ? 1 : preFactura.monedaId, // SI siempre en SOLES
+      monedaId: esSaldoInicial ? 1 : preFactura.monedaId,
       tipoCambio: preFactura.tipoCambio,
       detalles: [],
     };
+
+    const MONEDA_SOLES_ID = 1;
 
     // CASO 1: GERENCIAL (sin IGV)
     if (preFactura.esGerencial) {
@@ -3127,15 +3162,17 @@ const generarBorradorAsiento = async (preFacturaId) => {
           return acc;
         }, []);
 
+      const glosaDescriptiva = generarGlosaAsiento(preFactura, esSaldoInicial ? 'Saldo Inicial CxC' : 'Venta');
+
       borrador.detalles = [
         {
           numeroLinea: 1,
           planCuentaId: cuentaDebe.id,
-          glosa: esSaldoInicial
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
-            : `Venta según PreFactura ${preFactura.codigo}`,
-          debe: total,
+          glosa: glosaDescriptiva,
+          debe: convertirMontoASoles(total, preFactura),
           haber: 0,
+          monedaId: MONEDA_SOLES_ID,
+          tipoCambio: preFactura.tipoCambio,
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
           numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3144,12 +3181,12 @@ const generarBorradorAsiento = async (preFacturaId) => {
         ...detallesVentas.map((dv, idx) => ({
           numeroLinea: idx + 2,
           planCuentaId: dv.planCuentaId,
-          glosa: esSaldoInicial
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
-            : `Venta según PreFactura ${preFactura.codigo}`,
+          glosa: glosaDescriptiva,
           debe: 0,
-          haber: dv.monto,
-          centroCostoId: esSaldoInicial ? null : preFactura.centroCostoId,
+          haber: convertirMontoASoles(dv.monto, preFactura),
+          monedaId: MONEDA_SOLES_ID,
+          tipoCambio: preFactura.tipoCambio,
+          centroCostoId: null,
         })),
       ];
     }
@@ -3169,15 +3206,17 @@ const generarBorradorAsiento = async (preFacturaId) => {
           return acc;
         }, []);
 
+      const glosaDescriptiva = generarGlosaAsiento(preFactura, esSaldoInicial ? 'Saldo Inicial CxC' : 'Venta exonerada');
+
       borrador.detalles = [
         {
           numeroLinea: 1,
           planCuentaId: cuentaDebe.id,
-          glosa: esSaldoInicial
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
-            : `Venta exonerada según PreFactura ${preFactura.codigo}`,
-          debe: total,
+          glosa: glosaDescriptiva,
+          debe: convertirMontoASoles(total, preFactura),
           haber: 0,
+          monedaId: MONEDA_SOLES_ID,
+          tipoCambio: preFactura.tipoCambio,
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
           numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3186,12 +3225,12 @@ const generarBorradorAsiento = async (preFacturaId) => {
         ...detallesVentas.map((dv, idx) => ({
           numeroLinea: idx + 2,
           planCuentaId: dv.planCuentaId,
-          glosa: esSaldoInicial
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
-            : `Venta exonerada según PreFactura ${preFactura.codigo}`,
+          glosa: glosaDescriptiva,
           debe: 0,
-          haber: dv.monto,
-          centroCostoId: esSaldoInicial ? null : preFactura.centroCostoId,
+          haber: convertirMontoASoles(dv.monto, preFactura),
+          monedaId: MONEDA_SOLES_ID,
+          tipoCambio: preFactura.tipoCambio,
+          centroCostoId: null,
         })),
       ];
     }
@@ -3224,15 +3263,17 @@ const generarBorradorAsiento = async (preFacturaId) => {
           return acc;
         }, []);
 
+      const glosaDescriptiva = generarGlosaAsiento(preFactura, esSaldoInicial ? 'Saldo Inicial CxC' : 'Venta');
+
       borrador.detalles = [
         {
           numeroLinea: 1,
           planCuentaId: cuentaDebe.id,
-          glosa: esSaldoInicial
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
-            : `Venta según PreFactura ${preFactura.codigo}`,
-          debe: total,
+          glosa: glosaDescriptiva,
+          debe: convertirMontoASoles(total, preFactura),
           haber: 0,
+          monedaId: MONEDA_SOLES_ID,
+          tipoCambio: preFactura.tipoCambio,
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
           numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3241,31 +3282,33 @@ const generarBorradorAsiento = async (preFacturaId) => {
         ...detallesVentas.map((dv, idx) => ({
           numeroLinea: idx + 2,
           planCuentaId: dv.planCuentaId,
-          glosa: esSaldoInicial
-            ? `Saldo Inicial CxC según PreFactura ${preFactura.codigo}`
-            : `Venta según PreFactura ${preFactura.codigo}`,
+          glosa: glosaDescriptiva,
           debe: 0,
-          haber: dv.monto,
-          centroCostoId: esSaldoInicial ? null : preFactura.centroCostoId,
+          haber: convertirMontoASoles(dv.monto, preFactura),
+          monedaId: MONEDA_SOLES_ID,
+          tipoCambio: preFactura.tipoCambio,
+          centroCostoId: null,
         })),
         {
           numeroLinea: detallesVentas.length + 2,
           planCuentaId: cuentaIGV.id,
-          glosa: `IGV 18% según PreFactura ${preFactura.codigo}`,
+          glosa: `IGV 18% ${glosaDescriptiva}`,
           debe: 0,
-          haber: totalIGV,
+          haber: convertirMontoASoles(totalIGV, preFactura),
+          monedaId: MONEDA_SOLES_ID,
+          tipoCambio: preFactura.tipoCambio,
         },
       ];
     }
-    // Validar que el borrador esté cuadrado
-    const totalDebeCalculado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
-    const totalHaberCalculado = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
-    const diferenciaCalculada = totalDebeCalculado - totalHaberCalculado;
+    // Validar que el borrador esté cuadrado (detalles en PEN)
+    const totalDebePEN = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+    const totalHaberPEN = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
+    const diferenciaCalculada = totalDebePEN - totalHaberPEN;
 
     if (Math.abs(diferenciaCalculada) > 0.01) {
       console.error('❌ Borrador descuadrado:', {
-        totalDebeCalculado,
-        totalHaberCalculado,
+        totalDebePEN,
+        totalHaberPEN,
         diferenciaCalculada,
         detalles: borrador.detalles
       });
@@ -3313,16 +3356,36 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
       );
     }
 
-    // Calcular totales
+    // Obtener PreFactura para conocer su moneda original
+    const preFactura = await prisma.preFactura.findUnique({
+      where: { id: preFacturaId },
+      select: { monedaId: true, tipoCambio: true }
+    });
 
-    const totalDebe = asientoData.detalles.reduce(
+    if (!preFactura) {
+      throw new NotFoundError("PreFactura no encontrada");
+    }
+
+    // Calcular totales en SOLES (los detalles vienen en PEN)
+    const totalDebePEN = asientoData.detalles.reduce(
       (sum, d) => sum + Number(d.debe),
       0,
     );
-    const totalHaber = asientoData.detalles.reduce(
+    const totalHaberPEN = asientoData.detalles.reduce(
       (sum, d) => sum + Number(d.haber),
       0,
     );
+
+    // Convertir totales a moneda ORIGINAL de la PreFactura
+    const MONEDA_USD_ID = 2;
+    const totalDebe = Number(preFactura.monedaId) === MONEDA_USD_ID
+      ? totalDebePEN / Number(preFactura.tipoCambio)
+      : totalDebePEN;
+    
+    const totalHaber = Number(preFactura.monedaId) === MONEDA_USD_ID
+      ? totalHaberPEN / Number(preFactura.tipoCambio)
+      : totalHaberPEN;
+
     const diferencia = totalDebe - totalHaber;
 
     // Validar que esté cuadrado
@@ -3392,8 +3455,8 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
                 glosa: detalle.glosa,
                 debe: detalle.debe,
                 haber: detalle.haber,
-                monedaId: asientoData.monedaId,
-                tipoCambio: asientoData.tipoCambio,
+                monedaId: detalle.monedaId || 1,
+                tipoCambio: detalle.tipoCambio || asientoData.tipoCambio,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
                 tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
@@ -3411,8 +3474,8 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
                 glosa: detalle.glosa,
                 debe: detalle.debe,
                 haber: detalle.haber,
-                monedaId: asientoData.monedaId,
-                tipoCambio: asientoData.tipoCambio,
+                monedaId: detalle.monedaId || 1,
+                tipoCambio: detalle.tipoCambio || asientoData.tipoCambio,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
                 tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
@@ -3479,8 +3542,8 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
                 glosa: detalle.glosa,
                 debe: detalle.debe,
                 haber: detalle.haber,
-                monedaId: asientoData.monedaId,
-                tipoCambio: asientoData.tipoCambio,
+                monedaId: detalle.monedaId || 1,
+                tipoCambio: detalle.tipoCambio || asientoData.tipoCambio,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
                 tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
@@ -3511,8 +3574,18 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
     if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
+      console.error('❌ Error de Prisma al guardar asiento:', {
+        code: err.code,
+        message: err.message,
+        meta: err.meta,
+        stack: err.stack
+      });
+      throw new DatabaseError(
+        `Error de base de datos: ${err.message}`,
+        `Código Prisma: ${err.code}. Meta: ${JSON.stringify(err.meta)}`
+      );
     }
+    console.error('❌ Error desconocido al guardar asiento:', err);
     throw err;
   }
 };
