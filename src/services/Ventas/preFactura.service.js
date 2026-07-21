@@ -2988,7 +2988,7 @@ const generarGlosaAsiento = (preFactura, tipoOperacion = 'Venta') => {
   const tipoDoc = preFactura.tipoDocumentoFinal?.codigo || preFactura.tipoDocumento?.codigo || '';
   const numeroDoc = preFactura.numeroDocumentoFinal || preFactura.numeroDocumento || '';
   const fecha = formatearFechaAsiento(preFactura.fechaFacturacion || preFactura.fechaDocumento);
-  
+
   return `${tipoOperacion} según ${cliente} ${tipoDoc} ${numeroDoc} ${fecha}`;
 };
 
@@ -2998,11 +2998,11 @@ const generarGlosaAsiento = (preFactura, tipoOperacion = 'Venta') => {
 const convertirMontoASoles = (monto, preFactura) => {
   const MONEDA_USD_ID = 2;
   if (Number(preFactura.monedaId) === MONEDA_USD_ID) {
-    return Number(monto) * Number(preFactura.tipoCambio);
+    const montoConvertido = Number(monto) * Number(preFactura.tipoCambio);
+    return Math.round(montoConvertido * 100) / 100;
   }
-  return Number(monto);
+  return Math.round(Number(monto) * 100) / 100;
 };
-
 /**
  * Genera un borrador de asiento contable para una PreFactura
  * NO lo guarda en BD, solo retorna la estructura para edición
@@ -3047,10 +3047,12 @@ const generarBorradorAsiento = async (preFacturaId) => {
       );
     }
 
-    // Buscar cuentas contables necesarias
+    // ⭐ Determinar cuenta CxC según moneda del documento
+    const codigoCuentaCxC = Number(preFactura.monedaId) === 1 ? "121201" : "121202";
+
     const cuentaCxC = await prisma.planCuentasContable.findFirst({
       where: {
-        codigoCuenta: { startsWith: "121" },
+        codigoCuenta: codigoCuentaCxC,
         activo: true,
       },
     });
@@ -3064,13 +3066,16 @@ const generarBorradorAsiento = async (preFacturaId) => {
 
     if (!cuentaCxC || !cuentaVentas) {
       throw new ValidationError(
-        "No se encontraron las cuentas contables necesarias (12.1 Cuentas por Cobrar o 70 Ventas). " +
+        `No se encontraron las cuentas contables necesarias (${codigoCuentaCxC} Cuentas por Cobrar o 70 Ventas). ` +
         "Configure el plan de cuentas antes de generar el asiento.",
       );
     }
 
     // ⭐ DETECTAR SI ES SALDO INICIAL (código empieza con "SI")
     const esSaldoInicial = preFactura.tipoDocumento?.codigo?.startsWith("SI");
+
+    // ⭐ DETECTAR SI ES NOTA DE CRÉDITO
+    const esNotaCredito = Number(preFactura.tipoDocumentoFinalId || preFactura.tipoDocumentoId) === Number(TIPO_DOC_ID.NOTA_CREDITO);
 
     // ⭐ Si es Saldo Inicial, usar cuentas específicas según moneda
     let cuentaDebe = cuentaCxC; // Por defecto: 12.1 (CxC)
@@ -3094,17 +3099,17 @@ const generarBorradorAsiento = async (preFacturaId) => {
         );
       }
 
-      // Para SI: HABER debe ser 5911101 (Utilidades Acumuladas)
+      // Para SI: HABER debe ser 591101 (Utilidades Acumuladas)
       const cuentaUtilidades = await prisma.planCuentasContable.findFirst({
         where: {
-          codigoCuenta: "5911101",
+          codigoCuenta: "591101",
           activo: true,
         },
       });
 
       if (!cuentaUtilidades) {
         throw new ValidationError(
-          "No se encontró la cuenta 5911101 (Utilidades Acumuladas). " +
+          "No se encontró la cuenta 591101 (Utilidades Acumuladas). " +
           "Configure el plan de cuentas antes de generar el asiento para Saldos Iniciales.",
         );
       }
@@ -3117,17 +3122,14 @@ const generarBorradorAsiento = async (preFacturaId) => {
     let totalIGV = Number(preFactura.totalIGV);
     let total = Number(preFactura.total);
 
-    // ⭐ SI ES SALDO INICIAL EN MONEDA EXTRANJERA: Convertir a SOLES
-    if (esSaldoInicial && Number(preFactura.monedaId) !== 1) {
+    // ⭐ Validar tipo de cambio para moneda extranjera
+    if (Number(preFactura.monedaId) !== 1) {
       const tipoCambio = Number(preFactura.tipoCambio);
       if (!tipoCambio || tipoCambio === 0) {
         throw new ValidationError(
-          "El tipo de cambio es requerido para Saldos Iniciales en moneda extranjera."
+          "El tipo de cambio es requerido para documentos en moneda extranjera."
         );
       }
-      subtotal = subtotal * tipoCambio;
-      totalIGV = totalIGV * tipoCambio;
-      total = total * tipoCambio;
     }
     // Determinar tipo de libro según esGerencial
     const tipoLibro = preFactura.esGerencial ? "GERENCIAL" : "FISCAL";
@@ -3139,7 +3141,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
       glosa: generarGlosaAsiento(preFactura, esSaldoInicial ? 'Saldo Inicial CxC' : 'Venta'),
       tipoLibro: tipoLibro,
       origenAsiento: "AUTOMATICO",
-      monedaId: esSaldoInicial ? 1 : preFactura.monedaId,
+      monedaId: preFactura.monedaId,
       tipoCambio: preFactura.tipoCambio,
       detalles: [],
     };
@@ -3208,31 +3210,60 @@ const generarBorradorAsiento = async (preFacturaId) => {
 
       const glosaDescriptiva = generarGlosaAsiento(preFactura, esSaldoInicial ? 'Saldo Inicial CxC' : 'Venta exonerada');
 
-      borrador.detalles = [
-        {
-          numeroLinea: 1,
-          planCuentaId: cuentaDebe.id,
-          glosa: glosaDescriptiva,
-          debe: convertirMontoASoles(total, preFactura),
-          haber: 0,
-          monedaId: MONEDA_SOLES_ID,
-          tipoCambio: preFactura.tipoCambio,
-          entidadComercialId: preFactura.clienteId,
-          tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
-          numeroDocumentoOrigen: preFactura.numeroDocumento,
-          fechaDocumentoOrigen: preFactura.fechaDocumento,
-        },
-        ...detallesVentas.map((dv, idx) => ({
-          numeroLinea: idx + 2,
-          planCuentaId: dv.planCuentaId,
-          glosa: glosaDescriptiva,
-          debe: 0,
-          haber: convertirMontoASoles(dv.monto, preFactura),
-          monedaId: MONEDA_SOLES_ID,
-          tipoCambio: preFactura.tipoCambio,
-          centroCostoId: null,
-        })),
-      ];
+      // ⭐ Si es NC: invertir DEBE y HABER
+      if (esNotaCredito) {
+        borrador.detalles = [
+          ...detallesVentas.map((dv, idx) => ({
+            numeroLinea: idx + 1,
+            planCuentaId: dv.planCuentaId,
+            glosa: glosaDescriptiva,
+            debe: convertirMontoASoles(dv.monto, preFactura),
+            haber: 0,
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+            centroCostoId: null,
+          })),
+          {
+            numeroLinea: detallesVentas.length + 1,
+            planCuentaId: cuentaDebe.id,
+            glosa: glosaDescriptiva,
+            debe: 0,
+            haber: convertirMontoASoles(total, preFactura),
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento,
+          },
+        ];
+      } else {
+        borrador.detalles = [
+          {
+            numeroLinea: 1,
+            planCuentaId: cuentaDebe.id,
+            glosa: glosaDescriptiva,
+            debe: convertirMontoASoles(total, preFactura),
+            haber: 0,
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento,
+          },
+          ...detallesVentas.map((dv, idx) => ({
+            numeroLinea: idx + 2,
+            planCuentaId: dv.planCuentaId,
+            glosa: glosaDescriptiva,
+            debe: 0,
+            haber: convertirMontoASoles(dv.monto, preFactura),
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+            centroCostoId: null,
+          })),
+        ];
+      }
     }
     // CASO 3: FISCAL CON IGV
     else {
@@ -3265,40 +3296,78 @@ const generarBorradorAsiento = async (preFacturaId) => {
 
       const glosaDescriptiva = generarGlosaAsiento(preFactura, esSaldoInicial ? 'Saldo Inicial CxC' : 'Venta');
 
-      borrador.detalles = [
-        {
-          numeroLinea: 1,
-          planCuentaId: cuentaDebe.id,
-          glosa: glosaDescriptiva,
-          debe: convertirMontoASoles(total, preFactura),
-          haber: 0,
-          monedaId: MONEDA_SOLES_ID,
-          tipoCambio: preFactura.tipoCambio,
-          entidadComercialId: preFactura.clienteId,
-          tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
-          numeroDocumentoOrigen: preFactura.numeroDocumento,
-          fechaDocumentoOrigen: preFactura.fechaDocumento,
-        },
-        ...detallesVentas.map((dv, idx) => ({
-          numeroLinea: idx + 2,
-          planCuentaId: dv.planCuentaId,
-          glosa: glosaDescriptiva,
-          debe: 0,
-          haber: convertirMontoASoles(dv.monto, preFactura),
-          monedaId: MONEDA_SOLES_ID,
-          tipoCambio: preFactura.tipoCambio,
-          centroCostoId: null,
-        })),
-        {
-          numeroLinea: detallesVentas.length + 2,
-          planCuentaId: cuentaIGV.id,
-          glosa: `IGV 18% ${glosaDescriptiva}`,
-          debe: 0,
-          haber: convertirMontoASoles(totalIGV, preFactura),
-          monedaId: MONEDA_SOLES_ID,
-          tipoCambio: preFactura.tipoCambio,
-        },
-      ];
+      // ⭐ Si es NC: invertir DEBE y HABER
+      if (esNotaCredito) {
+        borrador.detalles = [
+          ...detallesVentas.map((dv, idx) => ({
+            numeroLinea: idx + 1,
+            planCuentaId: dv.planCuentaId,
+            glosa: glosaDescriptiva,
+            debe: convertirMontoASoles(dv.monto, preFactura),
+            haber: 0,
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+            centroCostoId: null,
+          })),
+          {
+            numeroLinea: detallesVentas.length + 1,
+            planCuentaId: cuentaIGV.id,
+            glosa: `IGV 18% ${glosaDescriptiva}`,
+            debe: convertirMontoASoles(totalIGV, preFactura),
+            haber: 0,
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+          },
+          {
+            numeroLinea: detallesVentas.length + 2,
+            planCuentaId: cuentaDebe.id,
+            glosa: glosaDescriptiva,
+            debe: 0,
+            haber: convertirMontoASoles(total, preFactura),
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento,
+          },
+        ];
+      } else {
+        borrador.detalles = [
+          {
+            numeroLinea: 1,
+            planCuentaId: cuentaDebe.id,
+            glosa: glosaDescriptiva,
+            debe: convertirMontoASoles(total, preFactura),
+            haber: 0,
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento,
+          },
+          ...detallesVentas.map((dv, idx) => ({
+            numeroLinea: idx + 2,
+            planCuentaId: dv.planCuentaId,
+            glosa: glosaDescriptiva,
+            debe: 0,
+            haber: convertirMontoASoles(dv.monto, preFactura),
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+            centroCostoId: null,
+          })),
+          {
+            numeroLinea: detallesVentas.length + 2,
+            planCuentaId: cuentaIGV.id,
+            glosa: `IGV 18% ${glosaDescriptiva}`,
+            debe: 0,
+            haber: convertirMontoASoles(totalIGV, preFactura),
+            monedaId: MONEDA_SOLES_ID,
+            tipoCambio: preFactura.tipoCambio,
+          },
+        ];
+      }
     }
     // Validar que el borrador esté cuadrado (detalles en PEN)
     const totalDebePEN = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
@@ -3381,7 +3450,7 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
     const totalDebe = Number(preFactura.monedaId) === MONEDA_USD_ID
       ? totalDebePEN / Number(preFactura.tipoCambio)
       : totalDebePEN;
-    
+
     const totalHaber = Number(preFactura.monedaId) === MONEDA_USD_ID
       ? totalHaberPEN / Number(preFactura.tipoCambio)
       : totalHaberPEN;
