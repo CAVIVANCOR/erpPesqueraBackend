@@ -541,6 +541,10 @@ const crear = async (data) => {
         actualizadoPor: data.actualizadoPor || data.creadoPor || null, // En creación, copiar de creadoPor
         nroLiquidacionFacturacion:
           data.nroLiquidacionFacturacion?.trim() || null,
+        // ✅ CAMPOS DE TOTALES - Inicializar en 0
+        subtotal: 0,
+        totalIGV: 0,
+        total: 0,
       };
 
       // ════════════════════════════════════════════════════════════
@@ -3269,14 +3273,14 @@ const generarBorradorAsiento = async (preFacturaId) => {
     else {
       const cuentaIGV = await prisma.planCuentasContable.findFirst({
         where: {
-          codigoCuenta: { startsWith: "401" },
+          codigoCuenta: "401111",  // ⭐ CUENTA EXACTA IGV
           activo: true,
         },
       });
 
       if (!cuentaIGV) {
         throw new ValidationError(
-          "No se encontró la cuenta de IGV (40.1). Configure el plan de cuentas antes de generar el asiento.",
+          "No se encontró la cuenta de IGV (401111). Configure el plan de cuentas antes de generar el asiento.",
         );
       }
 

@@ -9,6 +9,7 @@ import tipoCuentaCorrienteRoutes from './FlujoCaja/tipoCuentaCorriente.routes.js
 import planCuentasContableRoutes from './Contabilidad/planCuentasContable.routes.js';
 import periodoContableRoutes from './Contabilidad/periodoContable.routes.js';
 import asientoContableRoutes from './Contabilidad/asientoContable.routes.js';
+import diarioContableRoutes from './Contabilidad/diarioContable.routes.js';
 import configuracionCuentaContableContabilidadRoutes from './Contabilidad/configuracionCuentaContable.routes.js';
 import enumsContabilidadRoutes from './Contabilidad/enumsContabilidad.routes.js';
 import documentosOrigenRoutes from './Contabilidad/documentosOrigen.routes.js';
@@ -679,6 +680,7 @@ router.use('/contabilidad/asiento-contable', asientoContableRoutes);
 router.use('/contabilidad/configuracion-cuenta-contable', configuracionCuentaContableContabilidadRoutes);
 router.use('/contabilidad/documentos-origen', documentosOrigenRoutes);
 router.use('/contabilidad/enums', enumsContabilidadRoutes);
+router.use('/contabilidad/diario-contable', diarioContableRoutes);
 // Rutas para Facturación Electrónica
 router.use('/facturacion-electronica/tipo-operacion-sunat', tipoOperacionSunatRoutes);
 router.use('/facturacion-electronica/tipo-afectacion-igv', tipoAfectacionIGVRoutes);
