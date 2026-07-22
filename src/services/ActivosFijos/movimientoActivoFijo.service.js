@@ -338,7 +338,13 @@ const eliminar = async (id) => {
     // ✅ AGREGAR NUEVA VALIDACIÓN:
     // Verificar si tiene asientos contables generados
     const asientosCount = await prisma.asientoContable.count({
-      where: { movimientoActivoFijoId: id },
+      where: {
+        movimientosActivoFijo: {
+          some: {
+            id: id
+          }
+        }
+      }
     });
 
     if (asientosCount > 0) {
