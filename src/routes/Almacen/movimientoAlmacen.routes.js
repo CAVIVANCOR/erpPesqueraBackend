@@ -90,4 +90,38 @@ router.post(
   movimientoAlmacenController.reactivarDocumento
 );
 
+// ========================================
+// RUTAS PARA ASIENTOS CONTABLES
+// (Generan recursos derivados - solo requieren 'ver')
+// ========================================
+router.get(
+  '/:id/borrador-asiento-saldo-inicial',
+  autenticarJWT,
+  checkPermission('movimientoAlmacen', 'ver'),
+  movimientoAlmacenController.generarBorradorAsientoSaldoInicial
+);
+
+router.post(
+  '/:id/guardar-asiento',
+  autenticarJWT,
+  checkPermission('movimientoAlmacen', 'ver'),
+  movimientoAlmacenController.guardarAsientoContable
+);
+
+// ⭐ NUEVO: Ruta PUT para actualizar asiento existente
+router.put(
+  '/:id/guardar-asiento',
+  autenticarJWT,
+  checkPermission('movimientoAlmacen', 'ver'),
+  movimientoAlmacenController.guardarAsientoContable
+);
+
+router.delete(
+  '/asiento/:asientoId',
+  autenticarJWT,
+  checkPermission('movimientoAlmacen', 'ver'),
+  movimientoAlmacenController.eliminarAsientoContable
+);
+
+
 export default router;

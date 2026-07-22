@@ -218,3 +218,71 @@ export async function reactivarDocumento(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Generar borrador de asiento contable de Saldo Inicial para MovimientoAlmacen
+ * GET /api/movimientos-almacen/:id/borrador-asiento-saldo-inicial
+ */
+export async function generarBorradorAsientoSaldoInicial(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const borrador = await movimientoAlmacenService.generarBorradorAsientoSaldoInicial(id);
+
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      data: borrador
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Guardar asiento contable editado para MovimientoAlmacen
+ * POST /api/movimientos-almacen/:id/guardar-asiento
+ */
+export async function guardarAsientoContable(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    // Extraer asientoData correctamente
+    let asientoData = req.body.asientoData || req.body;
+
+    // Si viene envuelto en { success: true, data: {...} }, extraer data
+    if (asientoData.success && asientoData.data) {
+      asientoData = asientoData.data;
+    }
+    const creadoPor = req.usuario?.id ? Number(req.usuario.id) : null;
+
+    const asiento = await movimientoAlmacenService.guardarAsientoContable(
+      id,
+      asientoData,
+      creadoPor
+    );
+
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "Asiento contable guardado exitosamente",
+      data: asiento
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Eliminar asiento contable de MovimientoAlmacen
+ * DELETE /api/movimientos-almacen/asiento/:asientoId
+ */
+export async function eliminarAsientoContable(req, res, next) {
+  try {
+    const asientoId = Number(req.params.asientoId);
+    await movimientoAlmacenService.eliminarAsientoContable(asientoId);
+
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "Asiento contable eliminado exitosamente"
+    }));
+  } catch (err) {
+    next(err);
+  }
+}

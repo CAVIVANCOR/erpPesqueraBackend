@@ -92,7 +92,18 @@ const obtenerPorId = async (id) => {
             ubicacionFisicaDestino: true
           }
         },
-        preFacturas: true
+        preFacturas: true,
+        asientosContables: {
+          include: {
+            estado: true,
+            detalles: {
+              include: {
+                planCuenta: true
+              }
+            }
+          },
+          orderBy: { fechaAsiento: 'desc' }
+        }
       }
     });
     if (!mov) throw new NotFoundError('MovimientoAlmacen no encontrado');
@@ -434,7 +445,7 @@ const anularMovimiento = async (id, empresaId) => {
         }
       }
     });
-    
+
     if (!existente) {
       throw new NotFoundError('MovimientoAlmacen no encontrado');
     }
@@ -454,7 +465,7 @@ const anularMovimiento = async (id, empresaId) => {
       // ========================================
       // PASO 3: RECALCULAR SALDOS AFECTADOS
       // ========================================
-      const { saldosDetActualizados, saldosGenActualizados } = 
+      const { saldosDetActualizados, saldosGenActualizados } =
         await recalcularSaldosAfectados(combinaciones, tx);
 
       // ========================================
@@ -536,7 +547,7 @@ const reactivarDocumentoAlmacen = async (id, usuarioId) => {
       // ========================================
       // PASO 3: RECALCULAR SALDOS AFECTADOS
       // ========================================
-      const { saldosDetActualizados, saldosGenActualizados } = 
+      const { saldosDetActualizados, saldosGenActualizados } =
         await recalcularSaldosAfectados(combinaciones, tx);
 
       // ========================================
@@ -582,6 +593,415 @@ const reactivarDocumentoAlmacen = async (id, usuarioId) => {
   }
 };
 
+/**
+ * Genera un borrador de asiento contable de Saldo Inicial para MovimientoAlmacen
+ * Solo aplica cuando el concepto es INVENTARIO INICIAL
+ * NO lo guarda en BD, solo retorna la estructura para edición
+ * Patrón: Igual a OrdenCompra.generarBorradorAsiento
+ * 
+ * @param {BigInt} movimientoAlmacenId - ID del MovimientoAlmacen
+ * @returns {Promise<Object>} - Borrador del asiento contable
+ */
+const generarBorradorAsientoSaldoInicial = async (movimientoAlmacenId) => {
+  try {
+    const movimiento = await prisma.movimientoAlmacen.findUnique({
+      where: { id: movimientoAlmacenId },
+      include: {
+        empresa: true,
+        conceptoMovAlmacen: true,
+        detalles: {
+          include: {
+            producto: {
+              include: {
+                cuentaInventario: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!movimiento) {
+      throw new NotFoundError("MovimientoAlmacen no encontrado");
+    }
+
+    // Validar que es INVENTARIO INICIAL
+    if (
+      Number(movimiento.conceptoMovAlmacen.tipoConceptoId) !== 4 ||
+      Number(movimiento.conceptoMovAlmacen.tipoMovimientoId) !== 2 ||
+      movimiento.conceptoMovAlmacen.descripcion !== "INVENTARIO INICIAL"
+    ) {
+      throw new ValidationError(
+        "Este movimiento no es un INVENTARIO INICIAL. Solo se pueden generar asientos de saldo inicial para movimientos con concepto de Inventario Inicial."
+      );
+    }
+
+    // Obtener periodo contable de la fecha del documento
+    const mes = new Date(movimiento.fechaDocumento).getMonth() + 1;
+    const anio = new Date(movimiento.fechaDocumento).getFullYear();
+
+    const periodoContable = await prisma.periodoContable.findFirst({
+      where: {
+        empresaId: movimiento.empresaId,
+        mes: mes,
+        anio: anio,
+      },
+    });
+
+    if (!periodoContable) {
+      throw new ValidationError(
+        `No se encontró un período contable para ${mes}/${anio}. ` +
+        "Cree el período contable antes de generar el asiento."
+      );
+    }
+
+    // ========================================
+    // BUSCAR CUENTA 591101 (Resultados Acumulados)
+    // ========================================
+    const cuentaResultados = await prisma.planCuentasContable.findFirst({
+      where: {
+        codigoCuenta: "591101",
+        activo: true,
+      },
+    });
+
+    if (!cuentaResultados) {
+      throw new ValidationError(
+        "No se encontró la cuenta 591101 (Resultados Acumulados). " +
+        "Configure el plan de cuentas antes de generar el asiento."
+      );
+    }
+
+    // Determinar tipo de libro según esGerencial
+    const tipoLibro = movimiento.esGerencial ? "GERENCIAL" : "FISCAL";
+
+    const borrador = {
+      empresaId: movimiento.empresaId,
+      periodoContableId: periodoContable.id,
+      fechaAsiento: movimiento.fechaDocumento,
+      glosa: `Saldo Inicial Inventario según ${movimiento.numeroDocumento}`,
+      tipoLibro: tipoLibro,
+      origenAsiento: "AUTOMATICO",
+      monedaId: 1, // Siempre en soles
+      tipoCambio: null,
+      detalles: [],
+    };
+
+    // ========================================
+    // GENERAR DETALLES DEL ASIENTO
+    // ========================================
+    let numeroLinea = 1;
+    let totalDebe = 0;
+
+    // DEBE: Por cada producto con su cuenta de inventario
+    for (const detalle of movimiento.detalles) {
+      if (!detalle.producto.cuentaInventarioId) {
+        throw new ValidationError(
+          `El producto "${detalle.producto.descripcionBase}" (ID: ${detalle.producto.id}) no tiene cuenta de inventario configurada. ` +
+          "Configure las cuentas contables antes de generar el asiento."
+        );
+      }
+
+      const montoDebe = Number(detalle.cantidad) * Number(detalle.costoUnitario);
+      totalDebe += montoDebe;
+
+      borrador.detalles.push({
+        numeroLinea: numeroLinea++,
+        planCuentaId: detalle.producto.cuentaInventarioId,
+        glosa: `Saldo Inicial ${detalle.producto.descripcionBase}`,
+        debe: montoDebe,
+        haber: 0,
+        monedaId: 1,
+        tipoCambio: null,
+      });
+    }
+
+    // HABER: Cuenta 591101 (Resultados Acumulados) con el total
+    borrador.detalles.push({
+      numeroLinea: numeroLinea++,
+      planCuentaId: cuentaResultados.id,
+      glosa: `Saldo Inicial Inventario según ${movimiento.numeroDocumento}`,
+      debe: 0,
+      haber: totalDebe,
+      monedaId: 1,
+      tipoCambio: null,
+    });
+
+    return borrador;
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Guarda un asiento contable editado para MovimientoAlmacen
+ * Patrón: Igual a OrdenCompra.guardarAsientoContable
+ * 
+ * @param {BigInt} movimientoAlmacenId - ID del MovimientoAlmacen
+ * @param {Object} asientoData - Datos del asiento contable
+ * @param {BigInt} creadoPor - ID del usuario que crea el asiento
+ * @returns {Promise<Object>} - Asiento contable creado
+ */
+const guardarAsientoContable = async (movimientoAlmacenId, asientoData, creadoPor) => {
+  try {
+    // ⭐ VALIDAR QUE asientoData TENGA LA ESTRUCTURA CORRECTA
+    if (!asientoData) {
+      throw new ValidationError("No se recibieron datos del asiento contable");
+    }
+
+    if (!asientoData.detalles || !Array.isArray(asientoData.detalles)) {
+      throw new ValidationError(
+        `Estructura de asiento inválida. Se esperaba 'detalles' como array, se recibió: ${typeof asientoData.detalles}`
+      );
+    }
+
+    if (asientoData.detalles.length === 0) {
+      throw new ValidationError("El asiento debe tener al menos un detalle");
+    }
+
+    // ✅ DETECTAR SI ES EDICIÓN O CREACIÓN
+    const esEdicion = asientoData.id !== undefined && asientoData.id !== null;
+
+    // Buscar submódulo "MovimientoAlmacen" dinámicamente
+    const submodulo = await prisma.submoduloSistema.findFirst({
+      where: {
+        nombreModeloOrigen: "MovimientoAlmacen",
+        activo: true,
+      },
+    });
+
+    if (!submodulo) {
+      throw new ValidationError(
+        'No se encontró el submódulo "MovimientoAlmacen" en el sistema.'
+      );
+    }
+
+    // ⭐ Calcular totales EN SOLES
+    const totalDebe = asientoData.detalles.reduce(
+      (sum, d) => sum + Math.abs(Number(d.debe || 0)),
+      0
+    );
+    const totalHaber = asientoData.detalles.reduce(
+      (sum, d) => sum + Math.abs(Number(d.haber || 0)),
+      0
+    );
+
+    // ⭐ Validar cuadratura
+    const diferencia = totalDebe - totalHaber;
+
+    if (Math.abs(diferencia) > 0.01) {
+      throw new ValidationError(
+        `El asiento no está cuadrado. Diferencia: ${diferencia.toFixed(2)}`
+      );
+    }
+
+    // Buscar estado "PENDIENTE" para Asientos Contables
+    const ESTADO_ASIENTO_CONTABLE = { PENDIENTE: 76 };
+    const estadoPendiente = await prisma.estadoMultiFuncion.findFirst({
+      where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
+    });
+
+    if (!estadoPendiente) {
+      throw new ValidationError(
+        "No se encontró el estado 'PENDIENTE' para asientos contables."
+      );
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      let asiento;
+
+      if (esEdicion) {
+        // ✅ EDITAR: Actualizar asiento existente
+        const detallesExistentes = await tx.detalleAsientoContable.findMany({
+          where: { asientoContableId: Number(asientoData.id) },
+          select: { id: true },
+        });
+
+        asiento = await tx.asientoContable.update({
+          where: { id: Number(asientoData.id) },
+          data: {
+            fechaAsiento: asientoData.fechaAsiento,
+            glosa: asientoData.glosa,
+            tipoLibro: asientoData.tipoLibro,
+            estadoId: estadoPendiente.id,
+            totalDebe: totalDebe,
+            totalHaber: totalHaber,
+            diferencia: diferencia,
+            estaCuadrado: Math.abs(diferencia) < 0.01,
+            monedaId: asientoData.monedaId,
+            tipoCambio: asientoData.tipoCambio,
+          },
+        });
+
+        // Actualizar detalles
+        for (let i = 0; i < asientoData.detalles.length; i++) {
+          const detalle = asientoData.detalles[i];
+          const detalleExistente = detallesExistentes[i];
+
+          if (detalleExistente) {
+            await tx.detalleAsientoContable.update({
+              where: { id: detalleExistente.id },
+              data: {
+                numeroLinea: detalle.numeroLinea,
+                planCuentaId: detalle.planCuentaId,
+                glosa: detalle.glosa,
+                debe: detalle.debe,
+                haber: detalle.haber,
+                monedaId: asientoData.monedaId,
+                tipoCambio: asientoData.tipoCambio,
+                centroCostoId: detalle.centroCostoId || null,
+                entidadComercialId: detalle.entidadComercialId || null,
+              },
+            });
+          } else {
+            await tx.detalleAsientoContable.create({
+              data: {
+                asientoContableId: Number(asientoData.id),
+                numeroLinea: detalle.numeroLinea,
+                planCuentaId: detalle.planCuentaId,
+                glosa: detalle.glosa,
+                debe: detalle.debe,
+                haber: detalle.haber,
+                monedaId: asientoData.monedaId,
+                tipoCambio: asientoData.tipoCambio,
+                centroCostoId: detalle.centroCostoId || null,
+                entidadComercialId: detalle.entidadComercialId || null,
+                submoduloOrigenLineaId: submodulo.id,
+                procesoOrigenLineaId: movimientoAlmacenId,
+                creadoPor: creadoPor,
+              },
+            });
+          }
+        }
+      } else {
+        // ✅ CREAR: Nuevo asiento
+        const ultimoAsiento = await tx.asientoContable.findFirst({
+          where: {
+            empresaId: asientoData.empresaId,
+            periodoContableId: asientoData.periodoContableId,
+          },
+          orderBy: { correlativo: "desc" },
+        });
+
+        const nuevoCorrelativo = ultimoAsiento
+          ? ultimoAsiento.correlativo + 1
+          : 1;
+        const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(nuevoCorrelativo).padStart(5, "0")}`;
+
+        asiento = await tx.asientoContable.create({
+          data: {
+            empresaId: asientoData.empresaId,
+            periodoContableId: asientoData.periodoContableId,
+            numeroAsiento: numeroAsiento,
+            correlativo: nuevoCorrelativo,
+            fechaAsiento: asientoData.fechaAsiento,
+            glosa: asientoData.glosa,
+            tipoLibro: asientoData.tipoLibro,
+            origenAsiento: "AUTOMATICO",
+            submoduloOrigenId: submodulo.id,
+            procesoOrigenId: movimientoAlmacenId,
+            estadoId: estadoPendiente.id,
+            totalDebe: totalDebe,
+            totalHaber: totalHaber,
+            diferencia: diferencia,
+            estaCuadrado: Math.abs(diferencia) < 0.01,
+            monedaId: asientoData.monedaId,
+            tipoCambio: asientoData.tipoCambio,
+            esSaldoInicial: true, // ⭐ IMPORTANTE: Marcar como saldo inicial
+            creadoPor: creadoPor,
+            movimientosAlmacen: {
+              connect: { id: movimientoAlmacenId },
+            },
+            detalles: {
+              create: asientoData.detalles.map((detalle) => ({
+                numeroLinea: detalle.numeroLinea,
+                planCuentaId: detalle.planCuentaId,
+                glosa: detalle.glosa,
+                debe: detalle.debe,
+                haber: detalle.haber,
+                monedaId: asientoData.monedaId,
+                tipoCambio: asientoData.tipoCambio,
+                centroCostoId: detalle.centroCostoId || null,
+                entidadComercialId: detalle.entidadComercialId || null,
+                submoduloOrigenLineaId: submodulo.id,
+                procesoOrigenLineaId: movimientoAlmacenId,
+                creadoPor: creadoPor,
+              })),
+            },
+          },
+        });
+      }
+
+      // Retornar asiento con detalles incluidos
+      return await tx.asientoContable.findUnique({
+        where: { id: asiento.id },
+        include: {
+          estado: true,
+          detalles: {
+            include: {
+              planCuenta: true,
+            },
+          },
+        },
+      });
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Elimina un asiento contable de MovimientoAlmacen
+ * Patrón: Igual a OrdenCompra.eliminarAsientoContable
+ * 
+ * @param {BigInt} asientoId - ID del asiento a eliminar
+ * @returns {Promise<boolean>} - true si se eliminó correctamente
+ */
+const eliminarAsientoContable = async (asientoId) => {
+  try {
+    const asiento = await prisma.asientoContable.findUnique({
+      where: { id: asientoId },
+      include: {
+        estado: true,
+      },
+    });
+
+    if (!asiento) {
+      throw new NotFoundError("Asiento contable no encontrado");
+    }
+
+    // Solo permitir eliminar si está en estado PENDIENTE (76)
+    if (Number(asiento.estadoId) !== 76) {
+      throw new ValidationError(
+        `No se puede eliminar el asiento. Solo se pueden eliminar asientos en estado PENDIENTE. Estado actual: ${asiento.estado.descripcion}`
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Eliminar detalles primero
+      await tx.detalleAsientoContable.deleteMany({
+        where: { asientoContableId: asientoId },
+      });
+
+      // Eliminar asiento
+      await tx.asientoContable.delete({
+        where: { id: asientoId },
+      });
+    });
+
+    return true;
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+
 export default {
   listar,
   obtenerPorId,
@@ -592,5 +1012,8 @@ export default {
   generarNumeroDocumento,
   cerrarMovimiento,
   anularMovimiento,
-  reactivarDocumentoAlmacen
+  reactivarDocumentoAlmacen,
+  generarBorradorAsientoSaldoInicial,
+  guardarAsientoContable,
+  eliminarAsientoContable,
 };
