@@ -117,7 +117,7 @@ router.put(
 );
 
 router.delete(
-  '/asiento/:asientoId',
+  '/:id/asiento/:asientoId',
   autenticarJWT,
   checkPermission('movimientoAlmacen', 'ver'),
   movimientoAlmacenController.eliminarAsientoContable

@@ -65,9 +65,13 @@ export async function listarPorActivo(req, res, next) {
 
 export async function generarBorradorAsiento(req, res, next) {
   try {
-    const movimientoId = Number(req.params.id);
-    const borrador = await movimientoActivoFijoService.generarBorradorAsiento(movimientoId);
-    res.json(toJSONBigInt(borrador));
+    const id = Number(req.params.id);
+    const borrador = await movimientoActivoFijoService.generarBorradorAsiento(id);
+
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      data: borrador
+    }));
   } catch (err) {
     next(err);
   }
@@ -75,32 +79,39 @@ export async function generarBorradorAsiento(req, res, next) {
 
 export async function guardarAsientoContable(req, res, next) {
   try {
-    const movimientoId = Number(req.params.id);
-    const { asientoData } = req.body;
-    const creadoPor = req.user?.id || null;
+    const id = Number(req.params.id);
+    let asientoData = req.body.asientoData || req.body;
+
+    if (asientoData.success && asientoData.data) {
+      asientoData = asientoData.data;
+    }
+    const creadoPor = req.usuario?.id ? Number(req.usuario.id) : null;
+
     const asiento = await movimientoActivoFijoService.guardarAsientoContable(
-      movimientoId,
+      id,
       asientoData,
       creadoPor
     );
-    res.status(201).json(toJSONBigInt(asiento));
+
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "Asiento contable guardado exitosamente",
+      data: asiento
+    }));
   } catch (err) {
     next(err);
   }
 }
 
-/**
- * Elimina el asiento contable asociado a un movimiento
- */
 export async function eliminarAsientoContable(req, res, next) {
   try {
-    const movimientoId = Number(req.params.id);
     const asientoId = Number(req.params.asientoId);
-    await movimientoActivoFijoService.eliminarAsientoContable(movimientoId, asientoId);
-    res.status(200).json({
+    await movimientoActivoFijoService.eliminarAsientoContable(asientoId);
+
+    res.status(200).json(toJSONBigInt({
       success: true,
-      message: "Asiento contable eliminado correctamente",
-    });
+      mensaje: "Asiento contable eliminado exitosamente"
+    }));
   } catch (err) {
     next(err);
   }

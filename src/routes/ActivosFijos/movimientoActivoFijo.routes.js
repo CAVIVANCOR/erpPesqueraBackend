@@ -38,23 +38,24 @@ router.post(
   movimientoActivoFijoController.crear
 );
 
-router.post(
-  '/:id/generar-borrador-asiento',
+router.get(
+  '/:id/borrador-asiento',
   autenticarJWT,
-  checkPermission('movActivoFijo', 'ver'),
+  checkPermission('movimientoActivoFijo', 'ver'),
   movimientoActivoFijoController.generarBorradorAsiento
 );
-
+ 
 router.post(
   '/:id/guardar-asiento',
   autenticarJWT,
-  checkPermission('movActivoFijo', 'crear'),
+  checkPermission('movimientoActivoFijo', 'ver'),
   movimientoActivoFijoController.guardarAsientoContable
 );
+ 
 router.put(
   '/:id/guardar-asiento',
   autenticarJWT,
-  checkPermission('movActivoFijo', 'editar'),
+  checkPermission('movimientoActivoFijo', 'ver'),
   movimientoActivoFijoController.guardarAsientoContable
 );
 router.put(
@@ -73,9 +74,9 @@ router.delete(
 
 // Eliminar asiento contable de un movimiento
 router.delete(
-  "/:id/asiento-contable/:asientoId",
+  '/:id/asiento/:asientoId',
   autenticarJWT,
-  checkPermission('movActivoFijo', 'eliminar'),
+  checkPermission('movActivoFijo', 'ver'),
   movimientoActivoFijoController.eliminarAsientoContable
 );
 
