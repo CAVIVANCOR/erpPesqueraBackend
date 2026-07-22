@@ -18,5 +18,7 @@ router.get('/tipo/:tipoDeudaId', deudaTributariaController.listarPorTipo);
 // Rutas para asientos contables
 router.get('/:id/borrador-asiento', deudaTributariaController.generarBorradorAsiento);
 router.post('/:id/generar-asiento', deudaTributariaController.generarAsientoContable);
+router.post('/:id/guardar-asiento', deudaTributariaController.guardarAsiento);
+router.delete('/:id/asiento/:asientoId', deudaTributariaController.eliminarAsiento);
 
 export default router;

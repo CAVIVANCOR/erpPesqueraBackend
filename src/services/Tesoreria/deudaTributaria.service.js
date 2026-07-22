@@ -109,6 +109,18 @@ const obtenerPorId = async (id) => {
             movimientoCaja: true
           },
           orderBy: { fechaPago: 'desc' }
+        },
+        asientosContables: {
+          include: {
+            estado: true,
+            moneda: true,
+            detalles: {
+              include: {
+                planCuenta: true
+              }
+            }
+          },
+          orderBy: { fechaAsiento: 'desc' }
         }
       }
     });
@@ -181,6 +193,7 @@ const actualizar = async (id, data) => {
       ...data,
       montoPagado, // ✅ Forzar el montoPagado recalculado
       saldoPendiente,
+      fechaContable: data.fechaContable !== undefined ? data.fechaContable : existente.fechaContable,
       actualizadoPor: data.actualizadoPor || null
     };
 
@@ -437,6 +450,11 @@ const generarBorradorAsiento = async (deudaTributariaId) => {
       origenAsiento: 'AUTOMATICO',
       monedaId: deuda.monedaId,
       tipoCambio: 1, // Las deudas tributarias normalmente son en soles
+      totalDebe: montoOriginal,
+      totalHaber: montoOriginal,
+      diferencia: 0,
+      estaCuadrado: true,
+      esSaldoInicial: deuda.esSaldoInicial || false,
       detalles: [
         {
           numeroLinea: 1,
@@ -472,7 +490,10 @@ const generarBorradorAsiento = async (deudaTributariaId) => {
       );
     }
 
-    return borrador;
+    return {
+      deudaId: deudaTributariaId,
+      asientos: [borrador]
+    };
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) {
       throw err;
@@ -512,17 +533,21 @@ const generarAsientoContable = async (deudaTributariaId, usuarioId) => {
     }
 
     // Generar borrador
-    const borrador = await generarBorradorAsiento(deudaTributariaId);
+    const { asientos } = await generarBorradorAsiento(deudaTributariaId);
 
     // Crear el asiento usando el servicio de asientos
     const asiento = await asientoContableService.crear({
-      ...borrador,
+      ...asientos[0],
       submoduloOrigenId: BigInt(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
       procesoOrigenId: deudaTributariaId,
       creadoPor: usuarioId,
       deudasTributarias: {
         connect: { id: deudaTributariaId },
       },
+      detalles: asientos[0].detalles.map(d => ({
+        ...d,
+        creadoPor: usuarioId
+      }))
     });
 
     return asiento;
@@ -532,6 +557,108 @@ const generarAsientoContable = async (deudaTributariaId, usuarioId) => {
     }
     console.error('Error al generar asiento contable:', err);
     throw new DatabaseError('Error al generar asiento contable para Deuda Tributaria');
+  }
+};
+
+
+/**
+ * Guarda asiento(s) contable(s) para una deuda tributaria
+ * @param {BigInt} deudaId - ID de la deuda tributaria
+ * @param {Array} asientosData - Array de asientos a guardar
+ * @param {BigInt} usuarioId - ID del usuario
+ * @returns {Promise<Object>} Asientos guardados
+ */
+const guardarAsientosTributarios = async (deudaId, asientosData, usuarioId) => {
+  try {
+    const asientosGuardados = [];
+    for (const asientoData of asientosData) {
+      const dataParaCrear = {
+        ...asientoData,
+        empresaId: BigInt(asientoData.empresaId),
+        periodoContableId: BigInt(asientoData.periodoContableId),
+        monedaId: BigInt(asientoData.monedaId),
+        submoduloOrigenId: BigInt(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
+        procesoOrigenId: BigInt(deudaId),
+        creadoPor: BigInt(usuarioId),
+        deudasTributarias: {
+          connect: { id: BigInt(deudaId) }
+        },
+        detalles: asientoData.detalles.map(d => ({
+          ...d,
+          planCuentaId: BigInt(d.planCuentaId),
+          monedaId: BigInt(d.monedaId),
+          creadoPor: BigInt(usuarioId)
+        }))
+      };
+
+      const asiento = await asientoContableService.crear(dataParaCrear);
+      asientosGuardados.push(asiento);
+    }
+
+    await prisma.deudaTributaria.update({
+      where: { id: BigInt(deudaId) },
+      data: {
+        periodoContableId: BigInt(asientosData[0].periodoContableId),
+        fechaContable: asientosData[0].fechaAsiento,
+        asientosContables: {
+          connect: asientosGuardados.map(a => ({ id: a.id }))
+        }
+      }
+    });
+
+    const resultado = {
+      success: true,
+      asientosGenerados: asientosGuardados.length,
+      asientos: asientosGuardados
+    };
+
+    return resultado;
+
+  } catch (err) {
+    console.error('❌ ERROR en guardarAsientosTributarios:', err);
+    if (err instanceof ValidationError || err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al guardar asientos', err.message);
+    }
+    throw err;
+  }
+};
+
+
+/**
+ * Elimina un asiento contable de una deuda tributaria
+ * @param {BigInt} deudaId - ID de la deuda tributaria
+ * @param {BigInt} asientoId - ID del asiento a eliminar
+ * @returns {Promise<Object>} Resultado de la eliminación
+ */
+const eliminarAsientoTributario = async (deudaId, asientoId) => {
+  try {
+    const asiento = await prisma.asientoContable.findFirst({
+      where: {
+        id: asientoId,
+        procesoOrigenId: deudaId
+      }
+    });
+
+    if (!asiento) {
+      throw new NotFoundError('Asiento contable no encontrado o no pertenece a esta deuda');
+    }
+
+    await prisma.asientoContable.delete({
+      where: { id: asientoId }
+    });
+
+    return {
+      success: true,
+      message: 'Asiento eliminado correctamente'
+    };
+
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al eliminar asiento', err.message);
+    }
+    throw err;
   }
 };
 
@@ -548,4 +675,6 @@ export default {
   listarPorPeriodo,
   generarBorradorAsiento,
   generarAsientoContable,
+  guardarAsientosTributarios,
+  eliminarAsientoTributario
 };

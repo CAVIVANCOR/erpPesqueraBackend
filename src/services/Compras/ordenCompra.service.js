@@ -3317,7 +3317,6 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
 
     // NO generar asiento si es NC o SI
     if (esNotaCredito || esSaldoInicial) {
-      console.log('⚠️ No se genera asiento destino para NC o SI');
       return null;
     }
 
@@ -3490,20 +3489,6 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
 
     // ⭐ Validar cuadratura en SOLES (detalles), NO en moneda original
     const diferenciaEnSoles = totalDebeEnSoles - totalHaberEnSoles;
-
-    // ⭐ DEBUG TEMPORAL - ELIMINAR DESPUÉS
-    console.log('=== DEBUG ASIENTO ===');
-    console.log('Orden Compra ID:', ordenCompraId);
-    console.log('Moneda ID:', asientoData.monedaId);
-    console.log('Tipo Cambio:', tipoCambio);
-    console.log('Total Debe en Soles:', totalDebeEnSoles);
-    console.log('Total Haber en Soles:', totalHaberEnSoles);
-    console.log('Diferencia en Soles:', diferenciaEnSoles);
-    console.log('Detalles:');
-    asientoData.detalles.forEach((d, idx) => {
-      console.log(`  ${idx + 1}. Cuenta: ${d.planCuentaId}, Debe: ${d.debe}, Haber: ${d.haber}, MonedaId: ${d.monedaId}`);
-    });
-    console.log('===================');
 
     if (Math.abs(diferenciaEnSoles) > 0.01) {
       throw new ValidationError(

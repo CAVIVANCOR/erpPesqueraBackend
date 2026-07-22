@@ -343,6 +343,8 @@ const crear = async (data) => {
           glosa: data.glosa || "",
           tipoLibro: data.tipoLibro || "FISCAL",
           origenAsiento: data.origenAsiento || "MANUAL",
+          submoduloOrigenId: data.submoduloOrigenId || null,
+          procesoOrigenId: data.procesoOrigenId || null,
           estadoId: data.estadoId,
           totalDebe: data.totalDebe || 0,
           totalHaber: data.totalHaber || 0,

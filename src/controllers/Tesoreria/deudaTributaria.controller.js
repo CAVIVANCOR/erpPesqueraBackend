@@ -121,3 +121,46 @@ export async function generarAsientoContable(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Guarda asiento(s) contable(s) para una deuda tributaria
+ * POST /api/deudas-tributarias/:id/guardar-asiento
+ * Body: { asientos: [...] }
+ */
+export async function guardarAsiento(req, res, next) {
+  try {
+    
+    const deudaId = Number(req.params.id);
+    const { asientos } = req.body;
+    const usuarioId = req.user?.id ? Number(req.user.id) : null;
+    
+    const resultado = await deudaTributariaService.guardarAsientosTributarios(
+      deudaId,
+      asientos,
+      usuarioId
+    );
+    
+    res.status(201).json(toJSONBigInt(resultado));
+  } catch (err) {
+    console.error('❌ ERROR en guardarAsiento:', err);
+    next(err);
+  }
+}
+
+
+
+/**
+ * Elimina un asiento contable de una deuda tributaria
+ * DELETE /api/deudas-tributarias/:id/asiento/:asientoId
+ */
+export async function eliminarAsiento(req, res, next) {
+  try {
+    const deudaId = Number(req.params.id);
+    const asientoId = Number(req.params.asientoId);
+    
+    const resultado = await deudaTributariaService.eliminarAsientoTributario(deudaId, asientoId);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
