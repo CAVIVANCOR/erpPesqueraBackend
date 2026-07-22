@@ -3689,7 +3689,7 @@ model DetalleMovimientoAlmacen {
   productoId                BigInt
   cantidad                  Decimal
   peso                      Decimal?
-  lote                      String?           @db.VarChar(40)
+  lote                      String?           @db.VarChar(80)
   fechaProduccion           DateTime?
   fechaVencimiento          DateTime?
   fechaIngreso              DateTime?
@@ -3709,6 +3709,8 @@ model DetalleMovimientoAlmacen {
   costoUnitario             Decimal?          @db.Decimal(18, 4)
   ubicacionFisicaOrigenId   BigInt?
   ubicacionFisicaDestinoId  BigInt?
+  cantidadComercial         Decimal?          @db.Decimal(18, 4)
+  costoComercial            Decimal?          @db.Decimal(18, 4)
 
   movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
   producto              Producto @relation(fields: [productoId], references: [id])
