@@ -2249,65 +2249,7 @@ model DetalleDocTripulantes {
   faenaPesca     FaenaPesca @relation(fields: [faenaPescaId], references: [id])
 }
 
-model DetalleMovimientoAlmacen {
-  id                  BigInt            @id @default(autoincrement())
-  movimientoAlmacenId BigInt
-  productoId          BigInt
-  cantidad            Decimal
-  peso            Decimal?
-  lote                String?           @db.VarChar(40)
-  fechaProduccion     DateTime?
-  fechaVencimiento    DateTime?
-  fechaIngreso        DateTime?
-  nroSerie            String?           @db.VarChar(40)
-  nroContenedor       String?           @db.VarChar(40)
-  estadoMercaderiaId  BigInt?
-  estadoCalidadId     BigInt?
-  entidadComercialId  BigInt?
-  esCustodia          Boolean           @default(false)
-  empresaId           BigInt
-  observaciones       String?
-  creadoEn            DateTime          @default(now())
-  actualizadoEn       DateTime
-  creadoPor           BigInt?
-  actualizadoPor      BigInt?
-  detalleReqCompraId  BigInt?
-  costoUnitario       Decimal?
- ubicacionFisicaOrigenId   BigInt?
- ubicacionFisicaDestinoId  BigInt?
 
-  movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
-  producto              Producto @relation(fields: [productoId], references: [id])
-  detalleReqCompra      DetalleReqCompra? @relation(fields: [detalleReqCompraId], references: [id])
-  ubicacionFisicaOrigen   UbicacionFisica? @relation("DetMovAlmacenUbicacionOrigen", fields: [ubicacionFisicaOrigenId], references: [id])
-  ubicacionFisicaDestino  UbicacionFisica? @relation("DetMovAlmacenUbicacionDestino", fields: [ubicacionFisicaDestinoId], references: [id])
- 
-  @@index([ubicacionFisicaOrigenId], name: "idx_det_mov_ubicacion_origen")
-  @@index([ubicacionFisicaDestinoId], name: "idx_det_mov_ubicacion_destino")
-
-}
-
-
-model UbicacionFisica {
-  id                BigInt   @id @default(autoincrement())
-  descripcion       String   @db.VarChar(200)
-  almacenId         BigInt
-  
-  // Auditoría
-  fechaCreacion     DateTime @default(now())
-  fechaActualizacion DateTime? @updatedAt
-  creadoPor         BigInt?
-  actualizadoPor    BigInt?
-  
-  // Relaciones
-  almacen           Almacen @relation(fields: [almacenId], references: [id])
-  detallesMovimientoOrigen   DetalleMovimientoAlmacen[] @relation("DetMovAlmacenUbicacionOrigen")
-  detallesMovimientoDestino  DetalleMovimientoAlmacen[] @relation("DetMovAlmacenUbicacionDestino")
-  kardex            KardexAlmacen[]
-  saldosDetalle     SaldosDetProductoCliente[]
-  
-  @@index([almacenId], name: "idx_ubicacion_almacen")
-}
 
 
 model RequerimientoCompra {
@@ -3740,6 +3682,67 @@ model MovimientoAlmacen {
 @@index([unidadNegocioId])
 
 }
+
+model DetalleMovimientoAlmacen {
+  id                        BigInt            @id @default(autoincrement())
+  movimientoAlmacenId       BigInt
+  productoId                BigInt
+  cantidad                  Decimal
+  peso                      Decimal?
+  lote                      String?           @db.VarChar(40)
+  fechaProduccion           DateTime?
+  fechaVencimiento          DateTime?
+  fechaIngreso              DateTime?
+  nroSerie                  String?           @db.VarChar(40)
+  nroContenedor             String?           @db.VarChar(40)
+  estadoMercaderiaId        BigInt?
+  estadoCalidadId           BigInt?
+  entidadComercialId        BigInt?
+  esCustodia                Boolean           @default(false)
+  empresaId                 BigInt
+  observaciones             String?
+  creadoEn                  DateTime          @default(now())
+  actualizadoEn             DateTime
+  creadoPor                 BigInt?
+  actualizadoPor            BigInt?
+  detalleReqCompraId        BigInt?
+  costoUnitario             Decimal?          @db.Decimal(18, 4)
+  ubicacionFisicaOrigenId   BigInt?
+  ubicacionFisicaDestinoId  BigInt?
+
+  movimientoAlmacen     MovimientoAlmacen  @relation(fields: [movimientoAlmacenId], references: [id])
+  producto              Producto @relation(fields: [productoId], references: [id])
+  detalleReqCompra      DetalleReqCompra? @relation(fields: [detalleReqCompraId], references: [id])
+  ubicacionFisicaOrigen   UbicacionFisica? @relation("DetMovAlmacenUbicacionOrigen", fields: [ubicacionFisicaOrigenId], references: [id])
+  ubicacionFisicaDestino  UbicacionFisica? @relation("DetMovAlmacenUbicacionDestino", fields: [ubicacionFisicaDestinoId], references: [id])
+ 
+  @@index([ubicacionFisicaOrigenId], name: "idx_det_mov_ubicacion_origen")
+  @@index([ubicacionFisicaDestinoId], name: "idx_det_mov_ubicacion_destino")
+
+}
+
+
+model UbicacionFisica {
+  id                BigInt   @id @default(autoincrement())
+  descripcion       String   @db.VarChar(200)
+  almacenId         BigInt
+  
+  // Auditoría
+  fechaCreacion     DateTime @default(now())
+  fechaActualizacion DateTime? @updatedAt
+  creadoPor         BigInt?
+  actualizadoPor    BigInt?
+  
+  // Relaciones
+  almacen           Almacen @relation(fields: [almacenId], references: [id])
+  detallesMovimientoOrigen   DetalleMovimientoAlmacen[] @relation("DetMovAlmacenUbicacionOrigen")
+  detallesMovimientoDestino  DetalleMovimientoAlmacen[] @relation("DetMovAlmacenUbicacionDestino")
+  kardex            KardexAlmacen[]
+  saldosDetalle     SaldosDetProductoCliente[]
+  
+  @@index([almacenId], name: "idx_ubicacion_almacen")
+}
+
 
 model MovimientoCaja {
   id                                      BigInt                        @id @default(autoincrement())
