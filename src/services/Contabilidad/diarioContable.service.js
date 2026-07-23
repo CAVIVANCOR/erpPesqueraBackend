@@ -3,7 +3,7 @@ import { DatabaseError, NotFoundError, ValidationError } from '../../utils/error
 
 /**
  * Servicio para Diario Contable
- * Consulta y exportación de líneas contables
+ * Agrupa líneas por asiento con subtotales y validación de cuadre
  */
 
 const listarLineas = async (filtros) => {
@@ -123,47 +123,81 @@ const listarLineas = async (filtros) => {
     }
 
     // ========================================
-    // PAGINACIÓN
+    // CONSULTA SIN PAGINACIÓN (para agrupar)
     // ========================================
-    const skip = (filtros.page - 1) * filtros.limit;
-    const take = filtros.limit;
-
-    // ========================================
-    // CONSULTA
-    // ========================================
-    const [lineas, total] = await Promise.all([
-      prisma.detalleAsientoContable.findMany({
-        where,
-        include: {
-          asientoContable: {
-            include: {
-              empresa: true,
-              periodoContable: true,
-              estado: true,
-              moneda: true,
-            }
-          },
-          planCuenta: true,
-          entidadComercial: true,
-          centroCosto: true,
-          tipoDocumentoOrigen: true,
-          moneda: true,
-          activo: true,
-          submoduloOrigenLinea: true,
+    const lineas = await prisma.detalleAsientoContable.findMany({
+      where,
+      include: {
+        asientoContable: {
+          include: {
+            empresa: true,
+            periodoContable: true,
+            estado: true,
+            moneda: true,
+          }
         },
-        orderBy: [
-          { asientoContable: { fechaAsiento: 'asc' } },
-          { asientoContable: { numeroAsiento: 'asc' } },
-          { numeroLinea: 'asc' }
-        ],
-        skip,
-        take,
-      }),
-      prisma.detalleAsientoContable.count({ where })
-    ]);
+        planCuenta: true,
+        entidadComercial: true,
+        centroCosto: true,
+        tipoDocumentoOrigen: true,
+        moneda: true,
+        activo: true,
+        submoduloOrigenLinea: true,
+      },
+      orderBy: [
+        { asientoContable: { fechaAsiento: 'asc' } },
+        { asientoContable: { numeroAsiento: 'asc' } },
+        { numeroLinea: 'asc' }
+      ],
+    });
 
     // ========================================
-    // CALCULAR TOTALES
+    // AGRUPAR POR ASIENTO
+    // ========================================
+    const asientosMap = new Map();
+
+    for (const linea of lineas) {
+      const asientoId = linea.asientoContableId.toString();
+      const numeroAsiento = linea.asientoContable?.numeroAsiento || '';
+      
+      if (!asientosMap.has(asientoId)) {
+        asientosMap.set(asientoId, {
+          asientoId,
+          numeroAsiento,
+          fechaAsiento: linea.asientoContable?.fechaAsiento,
+          glosaAsiento: linea.asientoContable?.glosa,
+          tipoLibro: linea.asientoContable?.tipoLibro,
+          estado: linea.asientoContable?.estado,
+          estaCuadrado: linea.asientoContable?.estaCuadrado,
+          esSaldoInicial: linea.asientoContable?.esSaldoInicial,
+          asientoContable: linea.asientoContable,
+          lineas: [],
+          totales: {
+            debe: 0,
+            haber: 0,
+            diferencia: 0
+          }
+        });
+      }
+
+      const asiento = asientosMap.get(asientoId);
+      
+      // Calcular totales del asiento
+      const debe = Number(linea.debe);
+      const haber = Number(linea.haber);
+      asiento.totales.debe += debe;
+      asiento.totales.haber += haber;
+      asiento.totales.diferencia = asiento.totales.debe - asiento.totales.haber;
+
+      // Agregar línea al asiento
+      asiento.lineas.push(linea);
+    }
+
+    // Convertir Map a Array
+    const asientos = Array.from(asientosMap.values());
+
+    // ========================================
+    // CALCULAR TOTALES GENERALES
     // ========================================
     const totales = await prisma.detalleAsientoContable.aggregate({
       where,
@@ -173,15 +207,16 @@ const listarLineas = async (filtros) => {
       }
     });
 
+    const totalDebe = Number(totales._sum.debe || 0);
+    const totalHaber = Number(totales._sum.haber || 0);
+
     return {
-      lineas,
-      total,
-      page: filtros.page,
-      limit: filtros.limit,
-      totalPages: Math.ceil(total / filtros.limit),
+      asientos,
+      totalAsientos: asientos.length,
+      totalLineas: lineas.length,
       totales: {
-        totalDebe: totales._sum.debe || 0,
-        totalHaber: totales._sum.haber || 0,
+        totalDebe,
+        totalHaber,
       }
     };
   } catch (err) {
