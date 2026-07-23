@@ -28,7 +28,7 @@ import inversionFinancieraRoutes from './Tesoreria/inversionFinanciera.routes.js
 import pendientesRoutes from './Tesoreria/pendientes.routes.js';
 import letraCambioRoutes from './LetrasCambio/letraCambio.routes.js';
 import retencionRoutes from './RetencionesPercepciones/retencion.routes.js';
-import mayorContableRoutes from './contabilidad/mayorContable.routes.js';
+import mayorContableRoutes from './Contabilidad/mayorContable.routes.js';
 import percepcionRoutes from './RetencionesPercepciones/percepcion.routes.js';
 import presupuestoRoutes from './Presupuestos/presupuesto.routes.js';
 import usuarioRoutes from './Usuarios/usuario.routes.js';
