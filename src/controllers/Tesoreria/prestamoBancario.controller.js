@@ -195,7 +195,6 @@ export async function guardarAsientoContable(req, res, next) {
         return await integracionService.generarAsientoPrestamoNuevo(prestamo, tx, creadoPor);
       }
     });
-
     res.json(toJSONBigInt(asiento));
   } catch (err) {
     next(err);

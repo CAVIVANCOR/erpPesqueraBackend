@@ -13,8 +13,8 @@ import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
  * Convierte monto a soles si el préstamo está en dólares
  */
 const convertirMontoASoles = (monto, prestamo) => {
-  const MONEDA_USD_ID = Number(2);
-  if (prestamo.monedaId === MONEDA_USD_ID) {
+  const MONEDA_USD_ID = 2;
+  if (Number(prestamo.monedaId) === MONEDA_USD_ID) {
     const montoConvertido = Number(monto) * Number(prestamo.tipoCambioAplicado);
     return Math.round(montoConvertido * 100) / 100;
   }
@@ -35,21 +35,17 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
       console.warn(`No hay período contable para la fecha ${fechaAsiento} en empresa ${prestamo.empresaId}. No se generará asiento.`);
       return null;
     }
-
     const estadoPendiente = await tx.estadoMultiFuncion.findUnique({
       where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
     });
     if (!estadoPendiente) {
       throw new ValidationError("Estado PENDIENTE (76) no encontrado.");
     }
-
     // Determinar cuenta según moneda (1=MN, 2=ME)
-    const codigoPrestamo = prestamo.monedaId === Number(1) ? "451101" : "451102";
-
+    const codigoPrestamo = Number(prestamo.monedaId) === 1 ? "451101" : "451102";
     const cuentaPrestamo = await tx.planCuentasContable.findFirst({
       where: { codigoCuenta: codigoPrestamo, activo: true },
     });
-
     // Obtener cuenta contable de la cuenta corriente
     let cuentaCorriente = null;
     if (prestamo.cuentaCorrienteId) {
@@ -101,7 +97,7 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         tipoLibro: "FISCAL",
         origenAsiento: "AUTOMATICO",
         submoduloOrigenId: SUBMODULO_ORIGEN.PRESTAMO_BANCARIO,
-        procesoOrigenId: prestamo.id,
+        procesoOrigenId: Number(prestamo.id),
         estadoId: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE),
         totalDebe: montoDesembolso,
         totalHaber: montoDesembolso,
@@ -112,12 +108,11 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         esSaldoInicial: prestamo.esSaldoInicial || false,
         creadoPor,
         prestamos: {
-          connect: { id: prestamo.id }
+          connect: { id: Number(prestamo.id) }
         },
       },
     });
-
-       const MONEDA_SOLES_ID = Number(1);
+    const MONEDA_SOLES_ID = 1;
 
     const detalles = [
       {
@@ -160,6 +155,7 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         tx.detalleAsientoContable.create({ data: detalle }),
       ),
     );
+
     return await tx.asientoContable.findUnique({
       where: { id: asiento.id },
       include: {
@@ -363,19 +359,16 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
       where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) },
     });
     if (!estadoPendiente) throw new ValidationError("Estado PENDIENTE no encontrado");
-
-    const codigoPrestamo = prestamo.monedaId === Number(1) ? "451101" : "451102";
-
+    const codigoPrestamo = Number(prestamo.monedaId) === 1 ? "451101" : "451102";
     const cuentaPrestamo = await tx.planCuentasContable.findFirst({
       where: { codigoCuenta: codigoPrestamo, activo: true },
     });
-
     const cuentaUtilidades = await tx.planCuentasContable.findFirst({
-      where: { codigoCuenta: "5911101", activo: true },
+      where: { codigoCuenta: "591101", activo: true },
     });
-
-    if (!cuentaPrestamo || !cuentaUtilidades) return null;
-
+    if (!cuentaPrestamo || !cuentaUtilidades) {
+      return null;
+    }
     const ultimoAsiento = await tx.asientoContable.findFirst({
       where: {
         empresaId: prestamo.empresaId,
@@ -385,9 +378,7 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
     });
     const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
     const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, "0")}`;
-
     const montoCapital = Number(prestamo.saldoCapital);
-
     const asiento = await tx.asientoContable.create({
       data: {
         empresaId: prestamo.empresaId,
@@ -399,7 +390,7 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
         tipoLibro: "FISCAL",
         origenAsiento: "AUTOMATICO",
         submoduloOrigenId: SUBMODULO_ORIGEN.PRESTAMO_BANCARIO,
-        procesoOrigenId: prestamo.id,
+        procesoOrigenId: Number(prestamo.id),
         estadoId: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE),
         totalDebe: montoCapital,
         totalHaber: montoCapital,
@@ -410,11 +401,14 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
         esSaldoInicial: prestamo.esSaldoInicial || false,
         creadoPor,
         prestamos: {
-          connect: { id: prestamo.id }
+          connect: { id: Number(prestamo.id) }
         },
       },
     });
-
+        // Convertir montos a SOLES para los detalles
+    const MONEDA_SOLES_ID = 1;
+    const montoCapitalSoles = convertirMontoASoles(montoCapital, prestamo);
+    
     await Promise.all([
       tx.detalleAsientoContable.create({
         data: {
@@ -422,10 +416,12 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
           numeroLinea: 1,
           planCuentaId: cuentaUtilidades.id,
           glosa: `Saldo Inicial Prestamo ${prestamo.cuentaCorriente.empresa.razonSocial} - ${prestamo.cuentaCorriente.banco.nombre} - ${prestamo.cuentaCorriente.numeroCuenta} - ${prestamo.cuentaCorriente.moneda.codigoSunat}${prestamo.cuentaCorriente.descripcion ? ' - ' + prestamo.cuentaCorriente.descripcion : ''}`,
-          debe: montoCapital,
+          debe: montoCapitalSoles,
           haber: 0,
-          monedaId: prestamo.monedaId,
+          monedaId: MONEDA_SOLES_ID,
           tipoCambio: prestamo.tipoCambioAplicado,
+          debeMonedaExtranjera: Number(prestamo.monedaId) === 2 ? montoCapital : null,
+          haberMonedaExtranjera: null,
           creadoPor,
         },
       }),
@@ -436,13 +432,16 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
           planCuentaId: cuentaPrestamo.id,
           glosa: `Saldo Inicial Prestamo ${prestamo.cuentaCorriente.empresa.razonSocial} - ${prestamo.cuentaCorriente.banco.nombre} - ${prestamo.cuentaCorriente.numeroCuenta} - ${prestamo.cuentaCorriente.moneda.codigoSunat}${prestamo.cuentaCorriente.descripcion ? ' - ' + prestamo.cuentaCorriente.descripcion : ''}`,
           debe: 0,
-          haber: montoCapital,
-          monedaId: prestamo.monedaId,
+          haber: montoCapitalSoles,
+          monedaId: MONEDA_SOLES_ID,
           tipoCambio: prestamo.tipoCambioAplicado,
+          debeMonedaExtranjera: null,
+          haberMonedaExtranjera: Number(prestamo.monedaId) === 2 ? montoCapital : null,
           creadoPor,
         },
       }),
     ]);
+
     return await tx.asientoContable.findUnique({
       where: { id: asiento.id },
       include: {
@@ -459,7 +458,11 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
       },
     });
   } catch (err) {
-    console.error("Error al generar asiento saldo inicial:", err);
+    console.error("❌ [generarAsientoSaldoInicial] ERROR:", {
+      mensaje: err.message,
+      stack: err.stack,
+      prestamoId: prestamo?.id
+    });
     throw err;
   }
 }
