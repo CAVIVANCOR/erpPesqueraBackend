@@ -9,12 +9,22 @@ import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
  * - Desembolso de préstamo
  * - Pago de cuota (capital + interés)
  */
-
+/**
+ * Convierte monto a soles si el préstamo está en dólares
+ */
+const convertirMontoASoles = (monto, prestamo) => {
+  const MONEDA_USD_ID = Number(2);
+  if (prestamo.monedaId === MONEDA_USD_ID) {
+    const montoConvertido = Number(monto) * Number(prestamo.tipoCambioAplicado);
+    return Math.round(montoConvertido * 100) / 100;
+  }
+  return Math.round(Number(monto) * 100) / 100;
+};
 /**
  * Genera asiento contable para desembolso de préstamo
  * @param {Object} prestamo - Datos del préstamo
  * @param {Object} tx - Transacción de Prisma
- * @param {BigInt} creadoPor - ID del usuario
+ * @param {Number} creadoPor - ID del usuario
  * @returns {Promise<Object>} - Asiento contable creado
  */
 async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
@@ -34,7 +44,7 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
     }
 
     // Determinar cuenta según moneda (1=MN, 2=ME)
-    const codigoPrestamo = prestamo.monedaId === BigInt(1) ? "451101" : "451102";
+    const codigoPrestamo = prestamo.monedaId === Number(1) ? "451101" : "451102";
 
     const cuentaPrestamo = await tx.planCuentasContable.findFirst({
       where: { codigoCuenta: codigoPrestamo, activo: true },
@@ -107,15 +117,17 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
       },
     });
 
+       const MONEDA_SOLES_ID = Number(1);
+
     const detalles = [
       {
         asientoContableId: asiento.id,
         numeroLinea: 1,
         planCuentaId: cuentaCorriente.cuentaContable.id,
         glosa: `Desembolso Prestamo ${prestamo.cuentaCorriente.empresa.razonSocial} - ${prestamo.cuentaCorriente.banco.nombre} - ${prestamo.cuentaCorriente.numeroCuenta} - ${prestamo.cuentaCorriente.moneda.codigoSunat}${prestamo.cuentaCorriente.descripcion ? ' - ' + prestamo.cuentaCorriente.descripcion : ''}`,
-        debe: montoNeto,
+        debe: convertirMontoASoles(montoNeto, prestamo),
         haber: 0,
-        monedaId: prestamo.monedaId,
+        monedaId: MONEDA_SOLES_ID,
         tipoCambio: prestamo.tipoCambioAplicado,
         creadoPor,
       },
@@ -124,9 +136,9 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         numeroLinea: 2,
         planCuentaId: cuentaInteresesNoDev.id,
         glosa: `Intereses no devengados Prestamo ${prestamo.cuentaCorriente.empresa.razonSocial} - ${prestamo.cuentaCorriente.banco.nombre} - ${prestamo.cuentaCorriente.numeroCuenta} - ${prestamo.cuentaCorriente.moneda.codigoSunat}${prestamo.cuentaCorriente.descripcion ? ' - ' + prestamo.cuentaCorriente.descripcion : ''}`,
-        debe: totalIntereses,
+        debe: convertirMontoASoles(totalIntereses, prestamo),
         haber: 0,
-        monedaId: prestamo.monedaId,
+        monedaId: MONEDA_SOLES_ID,
         tipoCambio: prestamo.tipoCambioAplicado,
         creadoPor,
       },
@@ -136,8 +148,8 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         planCuentaId: cuentaPrestamo.id,
         glosa: `Desembolso Prestamo ${prestamo.cuentaCorriente.empresa.razonSocial} - ${prestamo.cuentaCorriente.banco.nombre} - ${prestamo.cuentaCorriente.numeroCuenta} - ${prestamo.cuentaCorriente.moneda.codigoSunat}${prestamo.cuentaCorriente.descripcion ? ' - ' + prestamo.cuentaCorriente.descripcion : ''}`,
         debe: 0,
-        haber: montoDesembolso,
-        monedaId: prestamo.monedaId,
+        haber: convertirMontoASoles(montoDesembolso, prestamo),
+        monedaId: MONEDA_SOLES_ID,
         tipoCambio: prestamo.tipoCambioAplicado,
         creadoPor,
       },
@@ -175,7 +187,7 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
  * @param {Object} cuota - Datos de la cuota
  * @param {Object} prestamo - Datos del préstamo
  * @param {Object} tx - Transacción de Prisma
- * @param {BigInt} creadoPor - ID del usuario
+ * @param {Number} creadoPor - ID del usuario
  * @returns {Promise<Object>} - Asiento contable creado
  */
 async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
@@ -352,7 +364,7 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
     });
     if (!estadoPendiente) throw new ValidationError("Estado PENDIENTE no encontrado");
 
-    const codigoPrestamo = prestamo.monedaId === BigInt(1) ? "451101" : "451102";
+    const codigoPrestamo = prestamo.monedaId === Number(1) ? "451101" : "451102";
 
     const cuentaPrestamo = await tx.planCuentasContable.findFirst({
       where: { codigoCuenta: codigoPrestamo, activo: true },
