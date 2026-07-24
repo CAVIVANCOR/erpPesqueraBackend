@@ -80,6 +80,7 @@ const obtenerPorId = async (id) => {
             producto: {
               include: {
                 unidadMedida: true,
+                unidadMedidaComercial: true,
                 marca: true,
                 familia: true,
                 subfamilia: true,

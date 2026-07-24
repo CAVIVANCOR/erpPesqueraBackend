@@ -29,6 +29,7 @@ import pendientesRoutes from './Tesoreria/pendientes.routes.js';
 import letraCambioRoutes from './LetrasCambio/letraCambio.routes.js';
 import retencionRoutes from './RetencionesPercepciones/retencion.routes.js';
 import mayorContableRoutes from './Contabilidad/mayorContable.routes.js';
+import balanceComprobacionRoutes from './Contabilidad/balanceComprobacion.routes.js';
 import percepcionRoutes from './RetencionesPercepciones/percepcion.routes.js';
 import presupuestoRoutes from './Presupuestos/presupuesto.routes.js';
 import usuarioRoutes from './Usuarios/usuario.routes.js';
@@ -682,6 +683,7 @@ router.use('/contabilidad/configuracion-cuenta-contable', configuracionCuentaCon
 router.use('/contabilidad/documentos-origen', documentosOrigenRoutes);
 router.use('/contabilidad/enums', enumsContabilidadRoutes);
 router.use('/contabilidad/mayor-contable', mayorContableRoutes);
+router.use('/contabilidad/balance-comprobacion', balanceComprobacionRoutes);
 router.use('/contabilidad/diario-contable', diarioContableRoutes);
 
 // Rutas para Facturación Electrónica
