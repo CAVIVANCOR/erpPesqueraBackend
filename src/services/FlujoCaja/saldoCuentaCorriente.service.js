@@ -9,6 +9,7 @@ import {
 // Importa servicios necesarios para generación de asientos contables
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
+import { obtenerTipoCambioSunat } from "../../utils/tipoCambio.util.js";
 
 // Define las relaciones que se incluirán al consultar saldos
 const incluirRelaciones = {
@@ -134,22 +135,38 @@ const generarBorradorAsiento = async (saldoId) => {
       );
     }
 
-    // Buscar cuenta de Resultados Acumulados
+    // Buscar cuenta de Utilidades No Distribuidas
     const cuentaContrapartida = await prisma.planCuentasContable.findFirst({
       where: {
-        codigoCuenta: { startsWith: "591" },
+        codigoCuenta: "591101",
         activo: true,
       },
     });
 
     if (!cuentaContrapartida) {
       throw new ValidationError(
-        "No se encontró la cuenta de Resultados Acumulados (591)",
+        "No se encontró la cuenta de Utilidades No Distribuidas (591101)",
       );
     }
 
     const montoSaldo = Number(saldo.saldoActual);
     const esSaldoPositivo = montoSaldo > 0;
+
+    // Consultar tipo de cambio si la moneda no es PEN (id=1)
+    let tipoCambio = null;
+    let montoEnSoles = montoSaldo;
+
+    if (cuentaCorriente.monedaId && Number(cuentaCorriente.monedaId) !== 1) {
+      const tcData = await obtenerTipoCambioSunat(saldo.fecha);
+      if (tcData) {
+        tipoCambio = Number(tcData);
+        montoEnSoles = montoSaldo * tipoCambio;
+      } else {
+        throw new ValidationError(
+          `No se pudo obtener el tipo de cambio para la fecha ${saldo.fecha.toLocaleDateString()}`,
+        );
+      }
+    }
 
     // Generar estructura del borrador (SIN guardarlo)
     const borrador = {
@@ -160,6 +177,7 @@ const generarBorradorAsiento = async (saldoId) => {
       tipoLibro: "FISCAL",
       origenAsiento: "AUTOMATICO",
       monedaId: cuentaCorriente.monedaId,
+      tipoCambio: tipoCambio,
       detalles: [],
     };
 
@@ -170,8 +188,12 @@ const generarBorradorAsiento = async (saldoId) => {
           numeroLinea: 1,
           planCuentaId: cuentaCorriente.cuentaContableId,
           glosa: `Saldo inicial ${cuentaCorriente.numeroCuenta}`,
-          debe: montoSaldo,
+          debe: montoEnSoles,
           haber: 0,
+          monedaId: 1,
+          tipoCambio: tipoCambio,
+          debeMonedaExtranjera: tipoCambio ? montoSaldo : null,
+          haberMonedaExtranjera: null,
           centroCostoId: saldo.centroCostoId || null,
         },
         {
@@ -179,18 +201,29 @@ const generarBorradorAsiento = async (saldoId) => {
           planCuentaId: cuentaContrapartida.id,
           glosa: `Saldo inicial ${cuentaCorriente.numeroCuenta}`,
           debe: 0,
-          haber: montoSaldo,
+          haber: montoEnSoles,
+          monedaId: 1,
+          tipoCambio: tipoCambio,
+          debeMonedaExtranjera: null,
+          haberMonedaExtranjera: tipoCambio ? montoSaldo : null,
           centroCostoId: saldo.centroCostoId || null,
         },
       ];
     } else {
+      const montoAbsoluto = Math.abs(montoSaldo);
+      const montoAbsolutoSoles = Math.abs(montoEnSoles);
+
       borrador.detalles = [
         {
           numeroLinea: 1,
           planCuentaId: cuentaContrapartida.id,
           glosa: `Sobregiro inicial ${cuentaCorriente.numeroCuenta}`,
-          debe: Math.abs(montoSaldo),
+          debe: montoAbsolutoSoles,
           haber: 0,
+          monedaId: 1,
+          tipoCambio: tipoCambio,
+          debeMonedaExtranjera: tipoCambio ? montoAbsoluto : null,
+          haberMonedaExtranjera: null,
           centroCostoId: saldo.centroCostoId || null,
         },
         {
@@ -198,7 +231,11 @@ const generarBorradorAsiento = async (saldoId) => {
           planCuentaId: cuentaCorriente.cuentaContableId,
           glosa: `Sobregiro inicial ${cuentaCorriente.numeroCuenta}`,
           debe: 0,
-          haber: Math.abs(montoSaldo),
+          haber: montoAbsolutoSoles,
+          monedaId: 1,
+          tipoCambio: tipoCambio,
+          debeMonedaExtranjera: null,
+          haberMonedaExtranjera: tipoCambio ? montoAbsoluto : null,
           centroCostoId: saldo.centroCostoId || null,
         },
       ];
@@ -249,16 +286,34 @@ const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
       throw new NotFoundError("Saldo de cuenta corriente no encontrado");
     }
 
-    // Validar que el monto total cuadre
-    const totalDebe = asientoData.detalles.reduce(
+    // Validar que el monto total cuadre (en soles)
+    const totalDebeSoles = asientoData.detalles.reduce(
       (sum, d) => sum + Number(d.debe || 0),
       0,
     );
-    const totalHaber = asientoData.detalles.reduce(
+    const totalHaberSoles = asientoData.detalles.reduce(
       (sum, d) => sum + Number(d.haber || 0),
       0,
     );
-    const diferencia = totalDebe - totalHaber;
+    const diferencia = totalDebeSoles - totalHaberSoles;
+
+    // Calcular totales en moneda original para la cabecera
+    let totalDebe, totalHaber;
+    if (asientoData.tipoCambio) {
+      // Si hay tipo de cambio, calcular totales en moneda extranjera
+      totalDebe = asientoData.detalles.reduce(
+        (sum, d) => sum + Number(d.debeMonedaExtranjera || 0),
+        0,
+      );
+      totalHaber = asientoData.detalles.reduce(
+        (sum, d) => sum + Number(d.haberMonedaExtranjera || 0),
+        0,
+      );
+    } else {
+      // Si no hay tipo de cambio, usar los montos en soles
+      totalDebe = totalDebeSoles;
+      totalHaber = totalHaberSoles;
+    }
 
     if (Math.abs(diferencia) > 0.01) {
       throw new ValidationError(
@@ -349,6 +404,7 @@ const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
             include: {
               planCuenta: true,
               centroCosto: true,
+              moneda: true,
             },
           },
           empresa: true,
