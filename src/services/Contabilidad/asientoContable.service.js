@@ -637,11 +637,11 @@ const eliminar = async (id) => {
     if (!existente) throw new NotFoundError("Asiento contable no encontrado");
 
     // Solo se pueden eliminar asientos en estado PENDIENTE (76)
-    if (Number(existente.estadoId) !== ESTADO_ASIENTO_CONTABLE.PENDIENTE) {
-      throw new ConflictError(
-        "Solo se pueden eliminar asientos en estado PENDIENTE (76).",
-      );
-    }
+    //if (Number(existente.estadoId) !== ESTADO_ASIENTO_CONTABLE.PENDIENTE) {
+    //  throw new ConflictError(
+    //    "Solo se pueden eliminar asientos en estado PENDIENTE (76).",
+    //  );
+    //}
 
     const estadoPeriodoAbierto = await prisma.estadoMultiFuncion.findFirst({
       where: { tipoProvieneDeId: 19, descripcion: "ABIERTO" },

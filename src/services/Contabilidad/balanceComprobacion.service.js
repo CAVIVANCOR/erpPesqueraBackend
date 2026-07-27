@@ -59,23 +59,24 @@ const listarBalance = async (filtros) => {
     });
 
 
-    // Calcular saldos iniciales (antes del rango de fechas)
-    let lineasSaldoInicial = [];
-    if (filtros.tipoMovimiento !== 'SALDOS_INICIALES' && filtros.fechaDesde) {
-      const whereSaldoInicial = {
-        empresaId: Number(filtros.empresaId),
-        periodoContableId: Number(filtros.periodoContableId),
-        fechaAsiento: { lt: new Date(filtros.fechaDesde) },
-        estadoId: { in: [Number(76), Number(77)] },
-      };
-      if (filtros.tipoLibro === 'FISCAL') {
-        whereSaldoInicial.tipoLibro = 'FISCAL';
-      }
-      lineasSaldoInicial = await prisma.detalleAsientoContable.findMany({
-        where: { asientoContable: whereSaldoInicial },
-        include: { planCuenta: true },
-      });
-    }
+// Calcular saldos iniciales (antes del rango de fechas)
+let lineasSaldoInicial = [];
+if (filtros.tipoMovimiento !== 'SALDOS_INICIALES' && filtros.fechaDesde) {
+  const whereSaldoInicial = {
+    empresaId: Number(filtros.empresaId),
+    periodoContableId: Number(filtros.periodoContableId),
+    fechaAsiento: { lt: new Date(filtros.fechaDesde) },
+    estadoId: { in: [Number(76), Number(77)] },
+    esSaldoInicial: false, // AGREGADO: Solo movimientos normales, NO saldos iniciales
+  };
+  if (filtros.tipoLibro === 'FISCAL') {
+    whereSaldoInicial.tipoLibro = 'FISCAL';
+  }
+  lineasSaldoInicial = await prisma.detalleAsientoContable.findMany({
+    where: { asientoContable: whereSaldoInicial },
+    include: { planCuenta: true },
+  });
+}
 
     // Pre-cargar todas las cuentas padre necesarias
     const codigosAgrupacion = new Set();

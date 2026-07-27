@@ -200,7 +200,6 @@ const obtenerPorId = async (id) => {
                 subfamilia: true,
               },
             },
-            tipoAfectacionIGV: true,
           },
         },
         datosAdicionales: {
@@ -619,17 +618,11 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     }, 0);
 
     // ========================================
-    // PASO 2: CALCULAR IGV (según tipo de afectación por item)
+    // PASO 2: CALCULAR IGV
     // ========================================
+    const esExonerado = orden.esExoneradoAlIGV || false;
     const porcentajeIGV = Number(orden.porcentajeIGV || orden.empresa.porcentajeIgv || 18);
-    const subtotalGravado = orden.detalles.reduce((sum, detalle) => {
-      // Solo items gravados (código SUNAT 10) aplican IGV
-      const esGravado = detalle.tipoAfectacionIGV?.codigo === "10";
-      // Si no tiene tipo asignado, usar flag de orden (backward compatibility)
-      const aplicaIGV = esGravado || (!detalle.tipoAfectacionIGVId && !orden.esExoneradoAlIGV);
-      return aplicaIGV ? sum + Number(detalle.subtotal || 0) : sum;
-    }, 0);
-    const totalIGV = subtotalGravado * (porcentajeIGV / 100);
+    const totalIGV = esExonerado ? 0 : subtotal * (porcentajeIGV / 100);
 
     // ========================================
     // PASO 3: CALCULAR IMPUESTO A LA RENTA (si aplica)
