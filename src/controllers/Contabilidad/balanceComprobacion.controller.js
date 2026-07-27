@@ -12,9 +12,8 @@ export async function listarBalance(req, res, next) {
       nivelDetalle: req.query.nivelDetalle ? Number(req.query.nivelDetalle) : 1,
       codigoCuentaInicia: req.query.codigoCuentaInicia || null,
       soloConMovimiento: req.query.soloConMovimiento === 'true',
-      incluirSaldosIniciales: req.query.incluirSaldosIniciales === 'true',
+      soloSaldosIniciales: req.query.soloSaldosIniciales === 'true',
     };
-
     const resultado = await balanceComprobacionService.listarBalance(filtros);
     res.json(toJSONBigInt(resultado));
   } catch (err) {
