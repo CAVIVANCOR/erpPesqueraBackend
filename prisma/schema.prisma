@@ -6019,7 +6019,21 @@ model PeriodoContable {
   @@index([estadoId])
 }
 
+// ============================================
+// CATÁLOGO: Tipos de Libros Contables SUNAT
+// ============================================
+model TipoLibroContableSunat {
+  id              BigInt   @id @default(autoincrement())
+  codigoSunat     String   @unique @db.VarChar(2)      // "05", "08", "14", etc.
+  descripcion     String   @db.VarChar(250)            // Nombre oficial SUNAT
+  activo          Boolean  @default(true)
 
+  // Relaciones inversas
+  asientosContables  AsientoContable[]
+
+  @@index([codigoSunat])
+  @@index([activo])
+}
 
 // ============================================
 // MÓDULO FINANCIERO - CONTABILIDAD GENERAL
@@ -6034,8 +6048,10 @@ model AsientoContable {
   correlativo           Int                                          // 1, 2, 3, ...
   fechaAsiento          DateTime                                     // Fecha contable
   glosa                 String                  @db.Text             // Descripción del asiento
-  tipoLibro             TipoLibroContable                            // FISCAL | GERENCIAL
+  tipoLibro             TipoLibroContable                            // ⚠️ DEPRECADO - Usar tipoLibroId
   esSaldoInicial        Boolean                 @default(false)      // 🆕 NUEVO CAMPO
+  tipoLibroId           BigInt?                  // ✅ NUEVO: FK a TipoLibroContable
+  esGerencial           Boolean                 @default(false)  // ✅ NUEVO: false=FISCAL, true=GERENCIAL
 
   // FISCAL = Operaciones blancas (visible para SUNAT)
   // GERENCIAL = Todas las operaciones (solo gerencia)
@@ -6068,6 +6084,7 @@ model AsientoContable {
   submoduloOrigen       SubmoduloSistema?       @relation(fields: [submoduloOrigenId], references: [id])
   personalAprobador     Personal?               @relation("AsientoAprobadoPor", fields: [aprobadoPor], references: [id])
   personalAnulador      Personal?               @relation("AsientoAnuladoPor", fields: [anuladoPor], references: [id])
+  tipoLibroContableSunat     TipoLibroContableSunat?       @relation(fields: [tipoLibroId], references: [id])
 
   detalles              DetalleAsientoContable[]
 
@@ -6106,6 +6123,12 @@ model AsientoContable {
   @@index([origenAsiento])
   @@index([submoduloOrigenId, procesoOrigenId])
   @@index([empresaId, tipoLibro, estadoId])    // ⭐ Índice compuesto para reportes SUNAT
+  @@index([tipoLibroId])                                   // ✅ NUEVO
+  @@index([esGerencial])                                   // ✅ NUEVO
+  @@index([esSaldoInicial])                                // ✅ NUEVO
+  @@index([empresaId, tipoLibroId, estadoId])              // ✅ NUEVO: Reportes SUNAT
+  @@index([periodoContableId, tipoLibroId, esSaldoInicial]) // ✅ NUEVO: Libro Diario filtrado
+  @@index([periodoContableId, fechaAsiento])               // ✅ NUEVO: Orden cronológico
 }
 
 // ============================================
