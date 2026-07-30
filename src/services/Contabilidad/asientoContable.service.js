@@ -75,6 +75,47 @@ function manejarErrorPrisma(err, contexto = "operación") {
 }
 
 /**
+ * Obtiene el tipo de cambio SUNAT para una fecha específica
+ * Usa el endpoint interno /api/maestros/consulta-externa/sunat/tipo-cambio
+ * @param {Date} fecha - Fecha para consultar el tipo de cambio
+ * @returns {Promise<number>} Tipo de cambio venta
+ */
+async function obtenerTipoCambioSunat(fecha) {
+  try {
+    // Formatear fecha a YYYY-MM-DD
+    const fechaFormateada = fecha.toISOString().split('T')[0];
+
+    const token = process.env.TOKEN_API_DECOLETA_SUNAT_RENIEC_TC;
+
+    if (!token) {
+      console.warn('⚠️ Token de API no configurado, usando TC por defecto 0');
+      return 0;
+    }
+
+    // Usar el endpoint interno que ya existe
+    const url = `https://api.decolecta.com/v1/tipo-cambio/sunat?date=${fechaFormateada}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`⚠️ No se pudo obtener TC para ${fechaFormateada}, usando 0`);
+      return 0;
+    }
+
+    const data = await response.json();
+    return Number(data.sell_price) || 0;
+  } catch (error) {
+    console.error('Error obteniendo tipo de cambio:', error);
+    return 0;
+  }
+}
+/**
  * Servicio CRUD para AsientoContable con DetalleAsientoContable (maestro-detalle)
  * Gestiona los asientos contables con validación de partida doble.
  * Flujo: PENDIENTE (76) → APROBADO (77) → ANULADO (78)
@@ -232,6 +273,7 @@ const listar = async () => {
         },
         estado: true,
         moneda: true,
+        submoduloOrigen: true,
         personalAprobador: true,
         personalAnulador: true,
         detalles: {
@@ -242,6 +284,7 @@ const listar = async () => {
             centroCosto: true,
             moneda: true,
             tipoDocumentoOrigen: true,
+            submoduloOrigenLinea: true,
           },
           orderBy: { numeroLinea: "asc" },
         },
@@ -275,6 +318,7 @@ const obtenerPorId = async (id) => {
             centroCosto: true,
             moneda: true,
             tipoDocumentoOrigen: true,
+            submoduloOrigenLinea: true,
           },
           orderBy: { numeroLinea: "asc" },
         },
@@ -332,7 +376,11 @@ const crear = async (data) => {
       const numeroAsiento =
         data.numeroAsiento ||
         `ASI-${anioAsiento}-${String(correlativo).padStart(6, "0")}`;
-
+           // Obtener tipo de cambio si no viene en data o es inválido
+      let tipoCambio = data.tipoCambio;
+      if (!tipoCambio || tipoCambio === null || tipoCambio === 0 || tipoCambio < 1) {
+        tipoCambio = await obtenerTipoCambioSunat(new Date(data.fechaAsiento));
+      }
       const asiento = await tx.asientoContable.create({
         data: {
           empresaId: data.empresaId,
@@ -351,9 +399,10 @@ const crear = async (data) => {
           diferencia: data.diferencia || 0,
           estaCuadrado: data.estaCuadrado || false,
           monedaId: data.monedaId,
-          tipoCambio: data.tipoCambio,
+          tipoCambio: tipoCambio,
           esSaldoInicial: data.esSaldoInicial || false,
           creadoPor: data.creadoPor,
+          actualizadoPor: data.creadoPor,
         },
       });
 
@@ -391,6 +440,7 @@ const crear = async (data) => {
                   ? Number(detalle.procesoOrigenLineaId)
                   : null,
                 creadoPor: data.creadoPor,
+                actualizadoPor: data.creadoPor,
               },
             }),
           ),

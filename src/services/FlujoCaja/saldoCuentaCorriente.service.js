@@ -31,9 +31,14 @@ const incluirRelaciones = {
       detalles: {
         include: {
           planCuenta: true,
+          moneda: true,
+          submoduloOrigenLinea: true,
         },
         orderBy: { numeroLinea: "asc" },
       },
+      estado: true,
+      moneda: true,
+      submoduloOrigen: true,
     },
     orderBy: { fechaAsiento: "desc" },
   },
@@ -152,6 +157,10 @@ const generarBorradorAsiento = async (saldoId) => {
     const montoSaldo = Number(saldo.saldoActual);
     const esSaldoPositivo = montoSaldo > 0;
 
+    // Detectar si es saldo inicial (01/01/YYYY)
+    const fechaSaldo = new Date(saldo.fecha);
+    const esSaldoInicial = fechaSaldo.getDate() === 1 && fechaSaldo.getMonth() === 0;
+
     // Consultar tipo de cambio si la moneda no es PEN (id=1)
     let tipoCambio = null;
     let montoEnSoles = montoSaldo;
@@ -178,6 +187,7 @@ const generarBorradorAsiento = async (saldoId) => {
       origenAsiento: "AUTOMATICO",
       monedaId: cuentaCorriente.monedaId,
       tipoCambio: tipoCambio,
+      esSaldoInicial: esSaldoInicial,
       detalles: [],
     };
 
@@ -367,6 +377,7 @@ const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
           estaCuadrado: true,
           monedaId: asientoData.monedaId,
           tipoCambio: asientoData.tipoCambio,
+          esSaldoInicial: asientoData.esSaldoInicial || false,
           creadoPor,
           actualizadoPor: creadoPor,
           saldosCuentaCorriente: {
@@ -389,6 +400,8 @@ const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
               monedaId: asientoData.monedaId,
               tipoCambio: asientoData.tipoCambio,
               centroCostoId: detalle.centroCostoId || null,
+              submoduloOrigenLineaId: submodulo.id,
+              procesoOrigenLineaId: saldoId,
               creadoPor,
               actualizadoPor: creadoPor,
             },
@@ -405,12 +418,14 @@ const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
               planCuenta: true,
               centroCosto: true,
               moneda: true,
+              submoduloOrigenLinea: true,
             },
           },
           empresa: true,
           periodoContable: true,
           moneda: true,
           estado: true,
+          submoduloOrigen: true,
         },
       });
     });

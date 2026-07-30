@@ -449,7 +449,7 @@ const generarBorradorAsiento = async (deudaTributariaId) => {
       tipoLibro: 'FISCAL',
       origenAsiento: 'AUTOMATICO',
       monedaId: deuda.monedaId,
-      tipoCambio: 1, // Las deudas tributarias normalmente son en soles
+      tipoCambio: 0, // Las deudas tributarias normalmente son en soles
       totalDebe: montoOriginal,
       totalHaber: montoOriginal,
       diferencia: 0,
@@ -458,23 +458,23 @@ const generarBorradorAsiento = async (deudaTributariaId) => {
       detalles: [
         {
           numeroLinea: 1,
-          planCuentaId: deuda.tipoDeuda.cuentaContableId,
-          planCuenta: deuda.tipoDeuda.cuentaContable,
-          glosa: glosa,
-          debe: montoOriginal,
-          haber: 0,
-          monedaId: 1, // Soles
-          tipoCambio: 1,
-        },
-        {
-          numeroLinea: 2,
           planCuentaId: cuentaUtilidades.id,
           planCuenta: cuentaUtilidades,
           glosa: glosa,
+          debe: montoOriginal,
+          haber: 0,
+          monedaId: 1,
+          tipoCambio: 0,
+        },
+        {
+          numeroLinea: 2,
+          planCuentaId: deuda.tipoDeuda.cuentaContableId,
+          planCuenta: deuda.tipoDeuda.cuentaContable,
+          glosa: glosa,
           debe: 0,
           haber: montoOriginal,
-          monedaId: 1, // Soles
-          tipoCambio: 1,
+          monedaId: 1,
+          tipoCambio: 0,
         },
       ],
     };
@@ -538,7 +538,7 @@ const generarAsientoContable = async (deudaTributariaId, usuarioId) => {
     // Crear el asiento usando el servicio de asientos
     const asiento = await asientoContableService.crear({
       ...asientos[0],
-      submoduloOrigenId: BigInt(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
+      submoduloOrigenId: Number(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
       procesoOrigenId: deudaTributariaId,
       creadoPor: usuarioId,
       deudasTributarias: {
@@ -572,22 +572,27 @@ const guardarAsientosTributarios = async (deudaId, asientosData, usuarioId) => {
   try {
     const asientosGuardados = [];
     for (const asientoData of asientosData) {
+
       const dataParaCrear = {
         ...asientoData,
-        empresaId: BigInt(asientoData.empresaId),
-        periodoContableId: BigInt(asientoData.periodoContableId),
-        monedaId: BigInt(asientoData.monedaId),
-        submoduloOrigenId: BigInt(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
-        procesoOrigenId: BigInt(deudaId),
-        creadoPor: BigInt(usuarioId),
+        empresaId: Number(asientoData.empresaId),
+        periodoContableId: Number(asientoData.periodoContableId),
+        monedaId: Number(asientoData.monedaId),
+        submoduloOrigenId: Number(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
+        procesoOrigenId: Number(deudaId),
+        creadoPor: Number(usuarioId),
+        actualizadoPor: Number(usuarioId),
         deudasTributarias: {
-          connect: { id: BigInt(deudaId) }
+          connect: { id: Number(deudaId) }
         },
         detalles: asientoData.detalles.map(d => ({
           ...d,
-          planCuentaId: BigInt(d.planCuentaId),
-          monedaId: BigInt(d.monedaId),
-          creadoPor: BigInt(usuarioId)
+          planCuentaId: Number(d.planCuentaId),
+          monedaId: Number(d.monedaId),
+          submoduloOrigenLineaId: Number(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
+          procesoOrigenLineaId: Number(deudaId),
+          creadoPor: Number(usuarioId),
+          actualizadoPor: Number(usuarioId)
         }))
       };
 
@@ -596,9 +601,9 @@ const guardarAsientosTributarios = async (deudaId, asientosData, usuarioId) => {
     }
 
     await prisma.deudaTributaria.update({
-      where: { id: BigInt(deudaId) },
+      where: { id: Number(deudaId) },
       data: {
-        periodoContableId: BigInt(asientosData[0].periodoContableId),
+        periodoContableId: Number(asientosData[0].periodoContableId),
         fechaContable: asientosData[0].fechaAsiento,
         asientosContables: {
           connect: asientosGuardados.map(a => ({ id: a.id }))

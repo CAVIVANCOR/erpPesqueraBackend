@@ -384,13 +384,13 @@ const generarBorradorAsientoCTS = async (deudaId) => {
     }
 
     // 4. Obtener cuenta de Utilidades Acumuladas
-    const cuenta5911101 = await prisma.planCuentasContable.findFirst({
-      where: { codigoCuenta: '5911101' }
+    const cuenta591101 = await prisma.planCuentasContable.findFirst({
+      where: { codigoCuenta: '591101' }
     });
 
-    if (!cuenta5911101) {
+    if (!cuenta591101) {
       throw new ValidationError(
-        'Falta cuenta contable del sistema. Debe configurar: 5911101 (Utilidades Acumuladas)'
+        'Falta cuenta contable del sistema. Debe configurar: 591101 (Utilidades Acumuladas)'
       );
     }
 
@@ -417,8 +417,8 @@ const generarBorradorAsientoCTS = async (deudaId) => {
         detalles: [
           {
             numeroLinea: 1,
-            planCuentaId: deuda.tipoDeuda.cuentaContable.id,
-            planCuenta: deuda.tipoDeuda.cuentaContable,
+            planCuentaId: cuenta591101.id,
+            planCuenta: cuenta591101,
             glosa: glosaAsiento,
             debe: monto,
             haber: 0,
@@ -426,8 +426,8 @@ const generarBorradorAsientoCTS = async (deudaId) => {
           },
           {
             numeroLinea: 2,
-            planCuentaId: cuenta5911101.id,
-            planCuenta: cuenta5911101,
+            planCuentaId: deuda.tipoDeuda.cuentaContable.id,
+            planCuenta: deuda.tipoDeuda.cuentaContable,
             glosa: glosaAsiento,
             debe: 0,
             haber: monto,
@@ -473,13 +473,18 @@ const guardarAsientosCTS = async (deudaId, asientosData, usuarioId) => {
         ...asientoData,
         submoduloOrigenId: BigInt(136),
         procesoOrigenId: deudaId,
+        esSaldoInicial: true,
         creadoPor: usuarioId,
+        actualizadoPor: usuarioId,
         deudas: {
           connect: { id: deudaId }
         },
-        detalles: asientoData.detalles.map(d => ({
+        detalles: asientoData.detalles.map((d, index) => ({
           ...d,
-          creadoPor: usuarioId
+          submoduloOrigenLineaId: BigInt(136),
+          procesoOrigenLineaId: deudaId,
+          creadoPor: usuarioId,
+          actualizadoPor: usuarioId
         }))
       });
       asientosGuardados.push(asiento);

@@ -129,17 +129,14 @@ export async function generarAsientoContable(req, res, next) {
  */
 export async function guardarAsiento(req, res, next) {
   try {
-    
     const deudaId = Number(req.params.id);
-    const { asientos } = req.body;
-    const usuarioId = req.user?.id ? Number(req.user.id) : null;
-    
+    const { asientos, usuarioId: usuarioIdBody } = req.body;
+    const usuarioId = usuarioIdBody || (req.usuario?.personalId ? Number(req.usuario.personalId) : null);
     const resultado = await deudaTributariaService.guardarAsientosTributarios(
       deudaId,
       asientos,
       usuarioId
-    );
-    
+    );    
     res.status(201).json(toJSONBigInt(resultado));
   } catch (err) {
     console.error('❌ ERROR en guardarAsiento:', err);

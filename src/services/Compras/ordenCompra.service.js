@@ -2846,7 +2846,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         );
       }
 
-      cuentaDebe = cuentaSaldoInicial;
+      cuentaHaber = cuentaSaldoInicial;
 
       // Para SI: HABER debe ser 591101 (Utilidades Acumuladas)
       const cuentaUtilidades = await prisma.planCuentasContable.findFirst({
@@ -2863,7 +2863,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         );
       }
 
-      cuentaHaber = cuentaUtilidades;
+      cuentaDebe = cuentaUtilidades;
     }
 
     const subtotal = Number(ordenCompra.subtotal);
@@ -2885,6 +2885,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
       origenAsiento: "AUTOMATICO",
       monedaId: ordenCompra.monedaId, // ⭐ Siempre moneda original del documento
       tipoCambio: ordenCompra.tipoCambio,
+      esSaldoInicial: esSaldoInicial,
       detalles: [],
     };
 
@@ -2899,34 +2900,35 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     // ========================================
     if (ordenCompra.esGerencial) {
       if (esSaldoInicial && cuentaDebe) {
-        // SALDO INICIAL: DEBE con 421201/421202
+        // SALDO INICIAL: DEBE 591101, HABER 421201/421202
         const montoConvertido = convertirMontoASoles(total, ordenCompra);
         const { debe: debe1, haber: haber1 } = invertirSiEsNC(montoConvertido, 0, esNotaCredito);
         const { debe: debe2, haber: haber2 } = invertirSiEsNC(0, montoConvertido, esNotaCredito);
 
-        borrador.detalles.push({
-          numeroLinea: numeroLinea++,
-          planCuentaId: cuentaDebe.id,
-          glosa: `Saldo Inicial CxP según ${referenciaDoc}`,
-          debe: debe1,
-          haber: haber1,
-          monedaId: 1, // ⭐ SIEMPRE SOLES
-          tipoCambio: ordenCompra.tipoCambio,
-          entidadComercialId: ordenCompra.proveedorId,
-          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
-          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
-          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
-        });
-
-        // HABER: 591101 (Utilidades Acumuladas)
+        // DEBE: 591101 (Utilidades Acumuladas)
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaHaber.id,
           glosa: `Saldo Inicial CxP según ${referenciaDoc}`,
           debe: debe2,
           haber: haber2,
-          monedaId: 1, // ⭐ SIEMPRE SOLES
+          monedaId: 1,
           tipoCambio: ordenCompra.tipoCambio,
+        });
+
+        // HABER: 421201/421202 (Facturas por Pagar)
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuentaDebe.id,
+          glosa: `Saldo Inicial CxP según ${referenciaDoc}`,
+          debe: debe1,
+          haber: haber1,
+          monedaId: 1,
+          tipoCambio: ordenCompra.tipoCambio,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
       } else {
         // COMPRA NORMAL: Orden: 60→42→20→61
@@ -3619,7 +3621,6 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
           ? ultimoAsiento.correlativo + 1
           : 1;
         const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(nuevoCorrelativo).padStart(5, "0")}`;
-
         asiento = await tx.asientoContable.create({
           data: {
             empresaId: asientoData.empresaId,
@@ -3639,6 +3640,7 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
             estaCuadrado: Math.abs(diferencia) < 0.01,
             monedaId: asientoData.monedaId,
             tipoCambio: asientoData.tipoCambio,
+            esSaldoInicial: asientoData.esSaldoInicial || false,
             creadoPor: creadoPor,
             ordenesCompra: {
               connect: { id: ordenCompraId },

@@ -122,17 +122,18 @@ export async function generarBorradorAsiento(req, res, next) {
 export async function guardarAsiento(req, res, next) {
   try {
     const deudaId = Number(req.params.id);
-    const { asientos } = req.body;
-    const usuarioId = req.usuario?.id ? Number(req.usuario.id) : null;
-    
+    const { asientos, usuarioId: usuarioIdBody } = req.body;
+    const usuarioId = usuarioIdBody || (req.usuario?.personalId ? Number(req.usuario.personalId) : null);
+
     const resultado = await deudaConPersonalService.guardarAsientosCTS(
       deudaId,
       asientos,
       usuarioId
     );
-    
+
     res.status(201).json(toJSONBigInt(resultado));
   } catch (err) {
+    console.error('❌ BACKEND Controller - Error:', err);
     next(err);
   }
 }
@@ -145,7 +146,7 @@ export async function eliminarAsiento(req, res, next) {
   try {
     const deudaId = Number(req.params.id);
     const asientoId = Number(req.params.asientoId);
-    
+
     const resultado = await deudaConPersonalService.eliminarAsientoCTS(deudaId, asientoId);
     res.json(toJSONBigInt(resultado));
   } catch (err) {

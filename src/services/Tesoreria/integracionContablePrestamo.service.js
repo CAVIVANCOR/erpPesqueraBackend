@@ -344,7 +344,7 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
 
 /**
  * Genera asiento de saldo inicial de préstamo
- * DEBE: 5911101 (Utilidades Acumuladas) = Capital
+ * DEBE: 591101 (Utilidades Acumuladas) = Capital
  * HABER: 451101/451102 (Instituciones Financieras) = Capital
  */
 async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
