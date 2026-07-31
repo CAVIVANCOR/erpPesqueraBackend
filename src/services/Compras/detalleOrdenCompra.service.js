@@ -72,7 +72,8 @@ const listar = async (ordenCompraId) => {
             familia: true,
             subfamilia: true
           }
-        }
+        },
+        tipoAfectacionIGV: true
       },
       orderBy: {
         id: 'asc'

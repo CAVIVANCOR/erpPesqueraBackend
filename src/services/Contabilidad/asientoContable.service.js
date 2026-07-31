@@ -376,7 +376,7 @@ const crear = async (data) => {
       const numeroAsiento =
         data.numeroAsiento ||
         `ASI-${anioAsiento}-${String(correlativo).padStart(6, "0")}`;
-           // Obtener tipo de cambio si no viene en data o es inválido
+      // Obtener tipo de cambio si no viene en data o es inválido
       let tipoCambio = data.tipoCambio;
       if (!tipoCambio || tipoCambio === null || tipoCambio === 0 || tipoCambio < 1) {
         tipoCambio = await obtenerTipoCambioSunat(new Date(data.fechaAsiento));
@@ -390,6 +390,8 @@ const crear = async (data) => {
           fechaAsiento: new Date(data.fechaAsiento),
           glosa: data.glosa || "",
           tipoLibro: data.tipoLibro || "FISCAL",
+          tipoLibroId: data.tipoLibroId ? Number(data.tipoLibroId) : null,
+          esGerencial: data.esGerencial || false,
           origenAsiento: data.origenAsiento || "MANUAL",
           submoduloOrigenId: data.submoduloOrigenId || null,
           procesoOrigenId: data.procesoOrigenId || null,
@@ -551,6 +553,8 @@ const actualizar = async (id, data) => {
             : undefined,
           glosa: data.glosa,
           tipoLibro: data.tipoLibro,
+          tipoLibroId: data.tipoLibroId ? Number(data.tipoLibroId) : undefined,
+          esGerencial: data.esGerencial,
           origenAsiento: data.origenAsiento,
           monedaId: data.monedaId,
           tipoCambio: data.tipoCambio,

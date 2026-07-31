@@ -623,10 +623,8 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     // ========================================
     const porcentajeIGV = Number(orden.porcentajeIGV || orden.empresa.porcentajeIgv || 18);
     const subtotalGravado = orden.detalles.reduce((sum, detalle) => {
-      // Solo items gravados (código SUNAT 10) aplican IGV
-      const esGravado = detalle.tipoAfectacionIGV?.codigo === "10";
-      // Si no tiene tipo asignado, usar flag de orden (backward compatibility)
-      const aplicaIGV = esGravado || (!detalle.tipoAfectacionIGVId && !orden.esExoneradoAlIGV);
+      // Verificar si el tipo de afectación calcula IGV
+      const aplicaIGV = detalle.tipoAfectacionIGV?.calculaIGV || (!detalle.tipoAfectacionIGVId && !orden.esExoneradoAlIGV);
       return aplicaIGV ? sum + Number(detalle.subtotal || 0) : sum;
     }, 0);
     const totalIGV = subtotalGravado * (porcentajeIGV / 100);

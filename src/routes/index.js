@@ -36,6 +36,7 @@ import usuarioRoutes from './Usuarios/usuario.routes.js';
 import authRoutes from './Usuarios/auth.routes.js'; // Rutas de autenticación de usuarios
 import personalRoutes from './Usuarios/personal.routes.js';
 import cargosPersonalRoutes from './Usuarios/cargosPersonal.routes.js';
+import tipoLibroContableSunatRoutes from './Contabilidad/tipoLibroContableSunat.routes.js';
 import tipoContratoRoutes from './Usuarios/tipoContrato.routes.js'; // CRUD profesional de TipoContrato
 import accesosUsuarioRoutes from './Usuarios/accesosUsuario.routes.js';
 import moduloSistemaRoutes from './Usuarios/moduloSistema.routes.js';
@@ -685,7 +686,7 @@ router.use('/contabilidad/enums', enumsContabilidadRoutes);
 router.use('/contabilidad/mayor-contable', mayorContableRoutes);
 router.use('/contabilidad/balance-comprobacion', balanceComprobacionRoutes);
 router.use('/contabilidad/diario-contable', diarioContableRoutes);
-
+router.use('/contabilidad/tipo-libro-contable-sunat', tipoLibroContableSunatRoutes);
 // Rutas para Facturación Electrónica
 router.use('/facturacion-electronica/tipo-operacion-sunat', tipoOperacionSunatRoutes);
 router.use('/facturacion-electronica/tipo-afectacion-igv', tipoAfectacionIGVRoutes);
