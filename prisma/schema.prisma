@@ -4381,6 +4381,7 @@ model TipoDeudaTributaria {
   entidadRecaudadoraId  BigInt?                                               // Entidad recaudadora (FK a EntidadComercial: SUNAT, ESSALUD, ONP, Municipalidad)
   periodicidad          FrecuenciaPago                                        // Periodicidad del pago (MENSUAL, TRIMESTRAL, ANUAL, etc.)
   cuentaContableId      BigInt?                                               // Cuenta contable asociada (FK a PlanContable: 40.1.1, 40.2.1, etc.)
+  tipoLibroId           BigInt?                                               // ✅ NUEVO: FK a TipoLibroContableSunat
   activo                Boolean                 @default(true)                // Estado del tipo de deuda (true = activo, false = inactivo)
   
   // ========================================
@@ -4394,9 +4395,10 @@ model TipoDeudaTributaria {
   // ========================================
   // RELACIONES
   // ========================================
-  categoria             CategoriaTipoDeudaTributaria?  @relation(fields: [categoriaId], references: [id])
-  entidadRecaudadora    EntidadComercial?       @relation(fields: [entidadRecaudadoraId], references: [id])
-  cuentaContable        PlanCuentasContable?    @relation(fields: [cuentaContableId], references: [id])
+  categoria               CategoriaTipoDeudaTributaria?  @relation(fields: [categoriaId], references: [id])
+  entidadRecaudadora      EntidadComercial?       @relation(fields: [entidadRecaudadoraId], references: [id])
+  cuentaContable          PlanCuentasContable?    @relation(fields: [cuentaContableId], references: [id])
+  tipoLibroContableSunat  TipoLibroContableSunat? @relation(fields: [tipoLibroId], references: [id])
 
   // ========================================
   // RELACIONES INVERSAS
@@ -4411,6 +4413,7 @@ model TipoDeudaTributaria {
   @@index([cuentaContableId])                                                 // Búsqueda por cuenta contable
   @@index([periodicidad])                                                     // Filtro por periodicidad
   @@index([activo])                                                           // Filtro por estado activo/inactivo
+  @@index([tipoLibroId])                                                      // Búsqueda por tipo de libro contable
 }
 
 
@@ -6030,6 +6033,7 @@ model TipoLibroContableSunat {
 
   // Relaciones inversas
   asientosContables  AsientoContable[]
+  tiposDeudaTributaria    TipoDeudaTributaria[]
 
   @@index([codigoSunat])
   @@index([activo])
