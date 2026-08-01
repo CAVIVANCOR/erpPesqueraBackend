@@ -119,17 +119,27 @@ const crear = async (data) => {
     await validarDeudaConPersonal(data);
 
     const deudaData = {
-      ...data,
-      montoPagadoAnterior: data.montoPagadoAnterior || 0,
-      montoPagado: data.montoPagado || 0,
-      saldoPendiente: (data.montoOriginal || 0) - (data.montoPagadoAnterior || 0) - (data.montoPagado || 0),
-      esSaldoInicial: data.esSaldoInicial !== undefined ? data.esSaldoInicial : false,
-      esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
+      empresaId: Number(data.empresaId),
+      personalId: Number(data.personalId),
+      tipoDeudaId: Number(data.tipoDeudaId),
+      fecha: data.fecha,
+      fechaVencimiento: data.fechaVencimiento,
+      numeroDocumento: data.numeroDocumento || null,
+      montoPagadoAnterior: Number(data.montoPagadoAnterior || 0),
+      montoOriginal: Number(data.montoOriginal),
+      montoPagado: Number(data.montoPagado || 0),
+      saldoPendiente: Number(data.montoOriginal || 0) - Number(data.montoPagadoAnterior || 0) - Number(data.montoPagado || 0),
+      monedaId: Number(data.monedaId),
+      estadoId: Number(data.estadoId),
+      esGerencial: data.esGerencial !== undefined ? Boolean(data.esGerencial) : false,
+      esSaldoInicial: data.esSaldoInicial !== undefined ? Boolean(data.esSaldoInicial) : false,
       fechaContable: data.fechaContable || new Date(),
-      periodoContableId: data.periodoContableId || null,
-      moduloOrigenId: data.moduloOrigenId || null,
-      origenId: data.origenId || null,
-      creadoPor: data.creadoPor || null
+      periodoContableId: data.periodoContableId ? Number(data.periodoContableId) : null,
+      moduloOrigenId: data.moduloOrigenId ? Number(data.moduloOrigenId) : null,
+      origenId: data.origenId ? Number(data.origenId) : null,
+      observaciones: data.observaciones || null,
+      creadoPor: data.creadoPor ? Number(data.creadoPor) : null,
+      actualizadoPor: data.actualizadoPor ? Number(data.actualizadoPor) : null
     };
 
     return await prisma.deudaConPersonal.create({ data: deudaData });
@@ -466,14 +476,19 @@ const generarBorradorAsientoCTS = async (deudaId) => {
  */
 const guardarAsientosCTS = async (deudaId, asientosData, usuarioId) => {
   try {
+    const deuda = await prisma.deudaConPersonal.findUnique({
+      where: { id: deudaId }
+    });
+    if (!deuda) throw new NotFoundError('Deuda con personal no encontrada');
     const asientosGuardados = [];
 
     for (const asientoData of asientosData) {
       const asiento = await asientoContableService.crear({
         ...asientoData,
-        submoduloOrigenId: BigInt(136),
+        submoduloOrigenId: Number(136),
         procesoOrigenId: deudaId,
-        esSaldoInicial: true,
+        esSaldoInicial: deuda.esSaldoInicial,
+        esGerencial: deuda.esGerencial,
         creadoPor: usuarioId,
         actualizadoPor: usuarioId,
         deudas: {
@@ -481,7 +496,7 @@ const guardarAsientosCTS = async (deudaId, asientosData, usuarioId) => {
         },
         detalles: asientoData.detalles.map((d, index) => ({
           ...d,
-          submoduloOrigenLineaId: BigInt(136),
+          submoduloOrigenLineaId: Number(136),
           procesoOrigenLineaId: deudaId,
           creadoPor: usuarioId,
           actualizadoPor: usuarioId

@@ -3585,6 +3585,12 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
         const nuevoCorrelativo = ultimoAsiento ? ultimoAsiento.correlativo + 1 : 1;
         const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(nuevoCorrelativo).padStart(5, "0")}`;
 
+        // Obtener PreFactura completa para heredar campos
+        const preFacturaCompleta = await tx.preFactura.findUnique({
+          where: { id: preFacturaId },
+          select: { esGerencial: true }
+        });
+
         asiento = await tx.asientoContable.create({
           data: {
             empresaId: asientoData.empresaId,
@@ -3604,6 +3610,8 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
             estaCuadrado: Math.abs(diferencia) < 0.01,
             monedaId: asientoData.monedaId,
             tipoCambio: asientoData.tipoCambio,
+            esGerencial: preFacturaCompleta?.esGerencial || false,
+            esSaldoInicial: false,
             creadoPor: creadoPor,
             preFacturas: {
               connect: { id: preFacturaId }

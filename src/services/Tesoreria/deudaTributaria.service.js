@@ -570,6 +570,11 @@ const generarAsientoContable = async (deudaTributariaId, usuarioId) => {
  */
 const guardarAsientosTributarios = async (deudaId, asientosData, usuarioId) => {
   try {
+    const deuda = await prisma.deudaTributaria.findUnique({
+      where: { id: Number(deudaId) }
+    });
+    if (!deuda) throw new NotFoundError('Deuda tributaria no encontrada');
+
     const asientosGuardados = [];
     for (const asientoData of asientosData) {
 
@@ -580,6 +585,8 @@ const guardarAsientosTributarios = async (deudaId, asientosData, usuarioId) => {
         monedaId: Number(asientoData.monedaId),
         submoduloOrigenId: Number(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
         procesoOrigenId: Number(deudaId),
+        esSaldoInicial: deuda.esSaldoInicial,
+        esGerencial: false,
         creadoPor: Number(usuarioId),
         actualizadoPor: Number(usuarioId),
         deudasTributarias: {

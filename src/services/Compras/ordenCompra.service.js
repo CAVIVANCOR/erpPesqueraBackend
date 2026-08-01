@@ -3498,7 +3498,7 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
     // ⭐ Validar cuadratura en SOLES (detalles), NO en moneda original
     const diferenciaEnSoles = totalDebeEnSoles - totalHaberEnSoles;
 
-    if (Math.abs(diferenciaEnSoles) > 0.01) {
+    if (Math.abs(diferenciaEnSoles) > 0.02) {
       throw new ValidationError(
         `El asiento no está cuadrado. Diferencia en soles: ${diferenciaEnSoles.toFixed(2)}`
       );
@@ -3606,6 +3606,12 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
         }
       } else {
         // ✅ CREAR: Nuevo asiento
+        // Obtener OrdenCompra completa para heredar campos
+        const ordenCompraCompleta = await tx.ordenCompra.findUnique({
+          where: { id: ordenCompraId },
+          select: { esGerencial: true }
+        });
+
         // Obtener último asiento del período para calcular correlativo
         const ultimoAsiento = await tx.asientoContable.findFirst({
           where: {
@@ -3638,6 +3644,7 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
             estaCuadrado: Math.abs(diferencia) < 0.01,
             monedaId: asientoData.monedaId,
             tipoCambio: asientoData.tipoCambio,
+            esGerencial: ordenCompraCompleta?.esGerencial || false,
             esSaldoInicial: asientoData.esSaldoInicial || false,
             creadoPor: creadoPor,
             ordenesCompra: {

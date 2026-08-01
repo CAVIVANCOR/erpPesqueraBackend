@@ -106,6 +106,7 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         monedaId: prestamo.monedaId,
         tipoCambio: prestamo.tipoCambioAplicado,
         esSaldoInicial: prestamo.esSaldoInicial || false,
+        esGerencial: false,
         creadoPor,
         prestamos: {
           connect: { id: Number(prestamo.id) }
