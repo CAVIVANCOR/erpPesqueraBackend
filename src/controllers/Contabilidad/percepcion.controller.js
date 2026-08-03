@@ -1,4 +1,4 @@
-import percepcionService from '../../services/RetencionesPercepciones/percepcion.service.js';
+import percepcionService from '../../services/Contabilidad/percepcion.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
 export async function listar(req, res, next) {
@@ -22,8 +22,8 @@ export async function obtenerPorId(req, res, next) {
 
 export async function crear(req, res, next) {
   try {
-    const nueva = await percepcionService.crear(req.body);
-    res.status(201).json(toJSONBigInt(nueva));
+    const nuevo = await percepcionService.crear(req.body);
+    res.status(201).json(toJSONBigInt(nuevo));
   } catch (err) {
     next(err);
   }
@@ -32,8 +32,8 @@ export async function crear(req, res, next) {
 export async function actualizar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const actualizada = await percepcionService.actualizar(id, req.body);
-    res.json(toJSONBigInt(actualizada));
+    const actualizado = await percepcionService.actualizar(id, req.body);
+    res.json(toJSONBigInt(actualizado));
   } catch (err) {
     next(err);
   }
@@ -53,27 +53,6 @@ export async function listarPorEmpresa(req, res, next) {
   try {
     const empresaId = Number(req.params.empresaId);
     const percepciones = await percepcionService.listarPorEmpresa(empresaId);
-    res.json(toJSONBigInt(percepciones));
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function listarPorCliente(req, res, next) {
-  try {
-    const clienteId = Number(req.params.clienteId);
-    const percepciones = await percepcionService.listarPorCliente(clienteId);
-    res.json(toJSONBigInt(percepciones));
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function listarPorPeriodo(req, res, next) {
-  try {
-    const empresaId = Number(req.params.empresaId);
-    const { fechaInicio, fechaFin } = req.query;
-    const percepciones = await percepcionService.listarPorPeriodo(empresaId, fechaInicio, fechaFin);
     res.json(toJSONBigInt(percepciones));
   } catch (err) {
     next(err);

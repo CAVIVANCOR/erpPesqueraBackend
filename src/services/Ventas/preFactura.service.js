@@ -14,6 +14,8 @@ import {
 } from '../Almacen/kardexGenerico.service.js';
 import { ESTADO_PERIODO_CONTABLE, ESTADO_PREFACTURA, ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 import { aplicarSignoMonto, TIPO_DOC_ID } from '../../utils/tiposDocumento.constants.js';
+import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
+
 // ========================================
 // CONSTANTES DE ESTADOS PREFACTURA
 // ========================================
@@ -3513,6 +3515,17 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
           },
         });
 
+        // Obtener PreFactura completa para heredar campos del documento final
+        const preFacturaCompleta = await tx.preFactura.findUnique({
+          where: { id: preFacturaId },
+          select: {
+            tipoDocumentoFinalId: true,
+            numeroDocumentoFinal: true,
+            fechaFacturacion: true,
+            fechaVencimiento: true,
+          }
+        });
+
         // Actualizar detalles uno por uno (UPDATE, no DELETE+CREATE)
         for (let i = 0; i < asientoData.detalles.length; i++) {
           const detalle = asientoData.detalles[i];
@@ -3532,9 +3545,10 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
                 tipoCambio: detalle.tipoCambio || asientoData.tipoCambio,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
-                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
-                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
-                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                tipoDocumentoOrigenId: preFacturaCompleta?.tipoDocumentoFinalId || null,
+                numeroDocumentoOrigen: preFacturaCompleta?.numeroDocumentoFinal || null,
+                fechaDocumentoOrigen: preFacturaCompleta?.fechaFacturacion || null,
+                fechaVenceDocumentoOrigen: preFacturaCompleta?.fechaVencimiento || null,
               },
             });
           } else {
@@ -3551,9 +3565,10 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
                 tipoCambio: detalle.tipoCambio || asientoData.tipoCambio,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
-                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
-                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
-                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                tipoDocumentoOrigenId: preFacturaCompleta?.tipoDocumentoFinalId || null,
+                numeroDocumentoOrigen: preFacturaCompleta?.numeroDocumentoFinal || null,
+                fechaDocumentoOrigen: preFacturaCompleta?.fechaFacturacion || null,
+                fechaVenceDocumentoOrigen: preFacturaCompleta?.fechaVencimiento || null,
                 submoduloOrigenLineaId: submodulo.id,
                 procesoOrigenLineaId: preFacturaId,
                 creadoPor: creadoPor,
@@ -3588,9 +3603,19 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
         // Obtener PreFactura completa para heredar campos
         const preFacturaCompleta = await tx.preFactura.findUnique({
           where: { id: preFacturaId },
-          select: { esGerencial: true }
+          select: {
+            esGerencial: true,
+            tipoDocumentoFinalId: true,
+            numeroDocumentoFinal: true,
+            fechaFacturacion: true,
+            fechaVencimiento: true,
+            tipoDocumento: {
+              select: { codigo: true }
+            }
+          }
         });
-
+        const esSaldoInicial = preFacturaCompleta?.tipoDocumento?.codigo?.startsWith("SI") || false;
+        const tipoLibroId = esSaldoInicial ? TIPO_LIBRO.DIARIO : TIPO_LIBRO.VENTAS;
         asiento = await tx.asientoContable.create({
           data: {
             empresaId: asientoData.empresaId,
@@ -3600,6 +3625,7 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
             fechaAsiento: asientoData.fechaAsiento,
             glosa: asientoData.glosa,
             tipoLibro: asientoData.tipoLibro,
+            tipoLibroId: tipoLibroId,
             origenAsiento: "AUTOMATICO",
             submoduloOrigenId: submodulo.id,
             procesoOrigenId: preFacturaId,
@@ -3610,8 +3636,8 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
             estaCuadrado: Math.abs(diferencia) < 0.01,
             monedaId: asientoData.monedaId,
             tipoCambio: asientoData.tipoCambio,
-            esGerencial: preFacturaCompleta?.esGerencial || false,
-            esSaldoInicial: false,
+            esGerencial: preFacturaCompleta.esGerencial || false,
+            esSaldoInicial: esSaldoInicial,
             creadoPor: creadoPor,
             preFacturas: {
               connect: { id: preFacturaId }
@@ -3627,9 +3653,10 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
                 tipoCambio: detalle.tipoCambio || asientoData.tipoCambio,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
-                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
-                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
-                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                tipoDocumentoOrigenId: preFacturaCompleta?.tipoDocumentoFinalId || null,
+                numeroDocumentoOrigen: preFacturaCompleta?.numeroDocumentoFinal || null,
+                fechaDocumentoOrigen: preFacturaCompleta?.fechaFacturacion || null,
+                fechaVenceDocumentoOrigen: preFacturaCompleta?.fechaVencimiento || null,
                 submoduloOrigenLineaId: submodulo.id,
                 procesoOrigenLineaId: preFacturaId,
                 creadoPor: creadoPor,

@@ -31,8 +31,14 @@ const listarLineas = async (filtros) => {
     if (filtros.estadoAsientoId) {
       whereAsiento.estadoId = BigInt(filtros.estadoAsientoId);
     }
-    if (filtros.tipoLibro) {
-      whereAsiento.tipoLibro = filtros.tipoLibro;
+    if (typeof filtros.esGerencial === 'boolean') {
+      whereAsiento.esGerencial = filtros.esGerencial;
+    }
+    if (filtros.tipoLibroId) {
+      whereAsiento.tipoLibroId = BigInt(filtros.tipoLibroId);
+    }
+    if (filtros.monedaId) {
+      whereAsiento.monedaId = BigInt(filtros.monedaId);
     }
     if (filtros.soloCuadrados) {
       whereAsiento.estaCuadrado = true;
@@ -47,19 +53,19 @@ const listarLineas = async (filtros) => {
     // ========================================
     // FILTROS DE DETALLE
     // ========================================
-    
+
     // Filtro por código de cuenta (startsWith)
     if (filtros.codigoCuentaInicia) {
       where.planCuenta = {
         codigoCuenta: { startsWith: filtros.codigoCuentaInicia }
       };
     }
-    
+
     // Filtro por cuenta específica
     if (filtros.planCuentaId) {
       where.planCuentaId = BigInt(filtros.planCuentaId);
     }
-    
+
     // Filtro por entidad comercial
     if (filtros.entidadComercialId) {
       where.entidadComercialId = BigInt(filtros.entidadComercialId);
@@ -67,49 +73,44 @@ const listarLineas = async (filtros) => {
     if (filtros.soloConEntidad) {
       where.entidadComercialId = { not: null };
     }
-    
+
     // Filtro por centro de costo
     if (filtros.centroCostoId) {
       where.centroCostoId = BigInt(filtros.centroCostoId);
     }
-    
+
     // Filtro por activo
     if (filtros.activoId) {
       where.activoId = BigInt(filtros.activoId);
     }
-    
+
     // Filtro por tipo de documento origen
     if (filtros.tipoDocumentoOrigenId) {
       where.tipoDocumentoOrigenId = BigInt(filtros.tipoDocumentoOrigenId);
     }
-    
+
     // Filtro por número de documento origen
     if (filtros.numeroDocumentoOrigen) {
       where.numeroDocumentoOrigen = { contains: filtros.numeroDocumentoOrigen };
     }
-    
-    // Filtro por moneda
-    if (filtros.monedaId) {
-      where.monedaId = BigInt(filtros.monedaId);
-    }
-    
+
     // Filtro por submódulo origen
     if (filtros.submoduloOrigenLineaId) {
       where.submoduloOrigenLineaId = BigInt(filtros.submoduloOrigenLineaId);
     }
-    
+
     // Filtro por glosa
     if (filtros.glosa) {
       where.glosa = { contains: filtros.glosa, mode: 'insensitive' };
     }
-    
+
     // Filtro por rango de fecha documento origen
     if (filtros.fechaDocDesde || filtros.fechaDocHasta) {
       where.fechaDocumentoOrigen = {};
       if (filtros.fechaDocDesde) where.fechaDocumentoOrigen.gte = new Date(filtros.fechaDocDesde);
       if (filtros.fechaDocHasta) where.fechaDocumentoOrigen.lte = new Date(filtros.fechaDocHasta);
     }
-    
+
     // Filtro por rango de fecha vencimiento
     if (filtros.fechaVenceDesde || filtros.fechaVenceHasta) {
       where.fechaVenceDocumentoOrigen = {};
@@ -159,14 +160,16 @@ const listarLineas = async (filtros) => {
     for (const linea of lineas) {
       const asientoId = linea.asientoContableId.toString();
       const numeroAsiento = linea.asientoContable?.numeroAsiento || '';
-      
+
       if (!asientosMap.has(asientoId)) {
         asientosMap.set(asientoId, {
           asientoId,
           numeroAsiento,
           fechaAsiento: linea.asientoContable?.fechaAsiento,
           glosaAsiento: linea.asientoContable?.glosa,
-          tipoLibro: linea.asientoContable?.tipoLibro,
+          esGerencial: linea.asientoContable?.esGerencial,
+          tipoLibroId: linea.asientoContable?.tipoLibroId,
+          monedaId: linea.asientoContable?.monedaId,
           estado: linea.asientoContable?.estado,
           estaCuadrado: linea.asientoContable?.estaCuadrado,
           esSaldoInicial: linea.asientoContable?.esSaldoInicial,
@@ -181,7 +184,7 @@ const listarLineas = async (filtros) => {
       }
 
       const asiento = asientosMap.get(asientoId);
-      
+
       // Calcular totales del asiento
       const debe = Number(linea.debe);
       const haber = Number(linea.haber);
@@ -268,7 +271,7 @@ const generarFormatoSUNAT51 = async (filtros) => {
       const fecha = linea.asientoContable.fechaAsiento.toISOString().split('T')[0].replace(/-/g, '');
       const debe = linea.debe > 0 ? linea.debe.toFixed(2) : '';
       const haber = linea.haber > 0 ? linea.haber.toFixed(2) : '';
-      
+
       contenido += `${linea.asientoContable.numeroAsiento}|`;
       contenido += `${fecha}|`;
       contenido += `${linea.glosa}|`;

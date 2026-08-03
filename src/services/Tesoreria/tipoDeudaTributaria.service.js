@@ -25,6 +25,11 @@ async function validarTipoDeudaTributaria(data) {
     const cuenta = await prisma.planCuentasContable.findUnique({ where: { id: data.cuentaContableId } });
     if (!cuenta) throw new ValidationError('La cuenta contable referenciada no existe.');
   }
+
+  if (data.tipoLibroId) {
+    const tipoLibro = await prisma.tipoLibroContableSunat.findUnique({ where: { id: data.tipoLibroId } });
+    if (!tipoLibro) throw new ValidationError('El tipo de libro contable referenciado no existe.');
+  }
 }
 
 const listar = async () => {
@@ -33,7 +38,8 @@ const listar = async () => {
       include: {
         categoria: true,
         entidadRecaudadora: true,
-        cuentaContable: true
+        cuentaContable: true,
+        tipoLibroContableSunat: true
       },
       orderBy: { nombre: 'asc' }
     });
@@ -52,7 +58,8 @@ const listarActivos = async () => {
       include: {
         categoria: true,
         entidadRecaudadora: true,
-        cuentaContable: true
+        cuentaContable: true,
+        tipoLibroContableSunat: true
       },
       orderBy: { nombre: 'asc' }
     });
@@ -72,6 +79,7 @@ const obtenerPorId = async (id) => {
         categoria: true,
         entidadRecaudadora: true,
         cuentaContable: true,
+        tipoLibroContableSunat: true,
         deudas: {
           include: {
             empresa: true,
@@ -100,7 +108,6 @@ const crear = async (data) => {
     }
 
     await validarTipoDeudaTributaria(data);
-
     const tipoData = {
       nombre: data.nombre,
       descripcion: data.descripcion || null,
@@ -108,6 +115,7 @@ const crear = async (data) => {
       entidadRecaudadoraId: Number(data.entidadRecaudadoraId) || null,
       periodicidad: data.periodicidad,
       cuentaContableId: Number(data.cuentaContableId) || null,
+      tipoLibroId: Number(data.tipoLibroId) || null,
       activo: data.activo !== undefined ? data.activo : true,
       creadoPor: data.creadoPor || null
     };

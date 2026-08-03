@@ -1,11 +1,7 @@
 // Importa la instancia de Prisma Client para acceder a la base de datos
-import prisma from "../../config/prismaClient.js";
-// Importa los errores personalizados para manejo consistente de errores
-import {
-  NotFoundError,
-  DatabaseError,
-  ValidationError,
-} from "../../utils/errors.js";
+import prisma from '../../config/prismaClient.js';
+import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
 // Importa servicios necesarios para generación de asientos contables
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
@@ -367,6 +363,7 @@ const guardarAsientoContable = async (saldoId, asientoData, creadoPor) => {
           fechaAsiento: asientoData.fechaAsiento,
           glosa: asientoData.glosa,
           tipoLibro: asientoData.tipoLibro || "FISCAL",
+          tipoLibroId: TIPO_LIBRO.DIARIO,
           origenAsiento: asientoData.origenAsiento || "AUTOMATICO",
           submoduloOrigenId: submodulo.id,
           procesoOrigenId: saldoId,

@@ -2,6 +2,8 @@ import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import { SUBMODULO_ORIGEN } from '../../utils/submodulos.constants.js';
+import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
+
 /**
  * Servicio CRUD para DeudaTributaria
  * Gestiona las deudas tributarias con SUNAT, ESSALUD, ONP, etc.
@@ -571,7 +573,14 @@ const generarAsientoContable = async (deudaTributariaId, usuarioId) => {
 const guardarAsientosTributarios = async (deudaId, asientosData, usuarioId) => {
   try {
     const deuda = await prisma.deudaTributaria.findUnique({
-      where: { id: Number(deudaId) }
+      where: { id: Number(deudaId) },
+      include: {
+        tipoDeuda: {
+          include: {
+            tipoLibroContableSunat: true
+          }
+        }
+      }
     });
     if (!deuda) throw new NotFoundError('Deuda tributaria no encontrada');
 
@@ -585,6 +594,7 @@ const guardarAsientosTributarios = async (deudaId, asientosData, usuarioId) => {
         monedaId: Number(asientoData.monedaId),
         submoduloOrigenId: Number(SUBMODULO_ORIGEN.DEUDA_TRIBUTARIA),
         procesoOrigenId: Number(deudaId),
+        tipoLibroId: deuda.esSaldoInicial ? TIPO_LIBRO.DIARIO : (deuda.tipoDeuda?.tipoLibroId || TIPO_LIBRO.DIARIO),
         esSaldoInicial: deuda.esSaldoInicial,
         esGerencial: false,
         creadoPor: Number(usuarioId),

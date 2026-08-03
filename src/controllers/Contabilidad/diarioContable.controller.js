@@ -16,11 +16,10 @@ export async function listarLineas(req, res, next) {
       fechaHasta: req.query.fechaHasta || null,
       numeroAsiento: req.query.numeroAsiento || null,
       estadoAsientoId: req.query.estadoAsientoId ? Number(req.query.estadoAsientoId) : null,
-      tipoLibro: req.query.tipoLibro || null,
       soloCuadrados: req.query.soloCuadrados === 'true',
       soloDescuadrados: req.query.soloDescuadrados === 'true',
       soloSaldosIniciales: req.query.soloSaldosIniciales === 'true',
-      
+
       // Filtros de detalle
       codigoCuentaInicia: req.query.codigoCuentaInicia || null,
       planCuentaId: req.query.planCuentaId ? Number(req.query.planCuentaId) : null,
@@ -37,7 +36,9 @@ export async function listarLineas(req, res, next) {
       fechaDocHasta: req.query.fechaDocHasta || null,
       fechaVenceDesde: req.query.fechaVenceDesde || null,
       fechaVenceHasta: req.query.fechaVenceHasta || null,
-      
+      esGerencial: req.query.esGerencial === 'true',
+      tipoLibroId: req.query.tipoLibroId ? Number(req.query.tipoLibroId) : null,
+      monedaId: req.query.monedaId ? Number(req.query.monedaId) : null,
       // Paginación
       page: req.query.page ? Number(req.query.page) : 1,
       limit: req.query.limit ? Number(req.query.limit) : 50,
@@ -59,7 +60,7 @@ export async function exportarSUNAT51(req, res, next) {
     };
 
     const contenido = await diarioContableService.generarFormatoSUNAT51(filtros);
-    
+
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="LE_DIARIO_${filtros.empresaId}_${filtros.periodoContableId}.txt"`);
     res.send(contenido);
@@ -77,7 +78,7 @@ export async function exportarExcel(req, res, next) {
     };
 
     const buffer = await diarioContableService.generarExcel(filtros);
-    
+
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="DiarioContable_${filtros.empresaId}_${filtros.periodoContableId}.xlsx"`);
     res.send(buffer);
@@ -95,7 +96,7 @@ export async function exportarPDF(req, res, next) {
     };
 
     const buffer = await diarioContableService.generarPDF(filtros);
-    
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="DiarioContable_${filtros.empresaId}_${filtros.periodoContableId}.pdf"`);
     res.send(buffer);

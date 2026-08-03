@@ -3,6 +3,8 @@ import { ValidationError, DatabaseError } from "../../utils/errors.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
+import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
+
 /**
  * Servicio de integración contable para Préstamos Bancarios
  * Genera asientos contables automáticos para:
@@ -95,6 +97,7 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         fechaAsiento: prestamo.fechaContable || prestamo.fechaDesembolso,
         glosa: `Desembolso de préstamo ${prestamo.numeroPrestamo} - ${prestamo.banco?.nombre || "Banco"}`,
         tipoLibro: "FISCAL",
+        tipoLibroId: TIPO_LIBRO.DIARIO,
         origenAsiento: "AUTOMATICO",
         submoduloOrigenId: SUBMODULO_ORIGEN.PRESTAMO_BANCARIO,
         procesoOrigenId: Number(prestamo.id),
@@ -278,6 +281,7 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
         fechaAsiento: cuota.fechaPago || new Date(),
         glosa: `Pago cuota ${cuota.numeroCuota} préstamo ${prestamo.numeroPrestamo}`,
         tipoLibro: "FISCAL",
+        tipoLibroId: TIPO_LIBRO.DIARIO,
         origenAsiento: "AUTOMATICO",
         submoduloOrigenId: submodulo.id,
         procesoOrigenId: cuota.id,
@@ -389,6 +393,7 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
         fechaAsiento: prestamo.fechaContable || prestamo.fechaDesembolso,
         glosa: `Saldo Inicial préstamo ${prestamo.numeroPrestamo} - ${prestamo.banco?.nombre || "Banco"}`,
         tipoLibro: "FISCAL",
+        tipoLibroId: TIPO_LIBRO.DIARIO,
         origenAsiento: "AUTOMATICO",
         submoduloOrigenId: SUBMODULO_ORIGEN.PRESTAMO_BANCARIO,
         procesoOrigenId: Number(prestamo.id),
@@ -406,10 +411,10 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
         },
       },
     });
-        // Convertir montos a SOLES para los detalles
+    // Convertir montos a SOLES para los detalles
     const MONEDA_SOLES_ID = 1;
     const montoCapitalSoles = convertirMontoASoles(montoCapital, prestamo);
-    
+
     await Promise.all([
       tx.detalleAsientoContable.create({
         data: {

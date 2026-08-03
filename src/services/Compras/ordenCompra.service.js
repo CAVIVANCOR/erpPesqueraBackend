@@ -13,6 +13,7 @@ import {
   recalcularSaldosAfectados,
 } from "../Almacen/kardexGenerico.service.js";
 import { aplicarSignoMonto } from '../../utils/tiposDocumento.constants.js';
+import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 
 async function validarForaneas(data) {
   if (data.empresaId) {
@@ -213,7 +214,6 @@ const obtenerPorId = async (id) => {
         },
       },
     });
-
     if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
 
     if (orden.solicitanteId) {
@@ -712,7 +712,12 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       const proveedorSujeto = orden.proveedor.sujetoRetencion || false;
       const umbralRetencion = Number(orden.empresa.montoMinimoRetencion || 700);
 
-      if (empresaEsAgente && proveedorSujeto && total > umbralRetencion) {
+      // Verificar si algún producto está exonerado de retención
+      const hayProductoExonerado = orden.detalles.some(
+        (d) => d.producto?.exoneradoRetencion === true
+      );
+
+      if (empresaEsAgente && proveedorSujeto && total > umbralRetencion && !hayProductoExonerado) {
         aplicaRetencion = true;
         porcentajeRetencion = Number(orden.empresa.porcentajeRetencion || 3);
         const esSoles = orden.moneda.codigoSunat === 'PEN';
@@ -760,6 +765,9 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       aplicaRetencion,
       porcentajeRetencion,
       montoRetencion,
+      aplicaPercepcion,
+      porcentajePercepcion,
+      montoPercepcion,
     };
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
@@ -3529,6 +3537,18 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
           select: { id: true },
         });
 
+        // Obtener OrdenCompra completa para heredar campos del documento final
+        const ordenCompraCompleta = await tx.ordenCompra.findUnique({
+          where: { id: ordenCompraId },
+          select: {
+            esGerencial: true,
+            tipoDocumentoFinalId: true,
+            numeroDocumentoFinal: true,
+            fechaFacturacion: true,
+            fechaVencimiento: true,
+          }
+        });
+
         // Actualizar asiento (siempre vuelve a PENDIENTE al editar)
         asiento = await tx.asientoContable.update({
           where: { id: Number(asientoData.id) },
@@ -3543,6 +3563,7 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
             estaCuadrado: Math.abs(diferencia) < 0.01,
             monedaId: asientoData.monedaId,
             tipoCambio: asientoData.tipoCambio,
+            esGerencial: ordenCompraCompleta?.esGerencial || false,
           },
         });
 
@@ -3565,9 +3586,10 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
                 tipoCambio: asientoData.tipoCambio,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
-                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
-                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
-                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                tipoDocumentoOrigenId: ordenCompraCompleta?.tipoDocumentoFinalId || null,
+                numeroDocumentoOrigen: ordenCompraCompleta?.numeroDocumentoFinal || null,
+                fechaDocumentoOrigen: ordenCompraCompleta?.fechaFacturacion || null,
+                fechaVenceDocumentoOrigen: ordenCompraCompleta?.fechaVencimiento || null,
               },
             });
           } else {
@@ -3584,9 +3606,10 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
                 tipoCambio: asientoData.tipoCambio,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
-                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
-                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
-                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                tipoDocumentoOrigenId: ordenCompraCompleta?.tipoDocumentoFinalId || null,
+                numeroDocumentoOrigen: ordenCompraCompleta?.numeroDocumentoFinal || null,
+                fechaDocumentoOrigen: ordenCompraCompleta?.fechaFacturacion || null,
+                fechaVenceDocumentoOrigen: ordenCompraCompleta?.fechaVencimiento || null,
                 submoduloOrigenLineaId: submodulo.id,
                 procesoOrigenLineaId: ordenCompraId,
                 creadoPor: creadoPor,
@@ -3609,7 +3632,13 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
         // Obtener OrdenCompra completa para heredar campos
         const ordenCompraCompleta = await tx.ordenCompra.findUnique({
           where: { id: ordenCompraId },
-          select: { esGerencial: true }
+          select: {
+            esGerencial: true,
+            tipoDocumentoFinalId: true,
+            numeroDocumentoFinal: true,
+            fechaFacturacion: true,
+            fechaVencimiento: true,
+          }
         });
 
         // Obtener último asiento del período para calcular correlativo
@@ -3634,6 +3663,7 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
             fechaAsiento: asientoData.fechaAsiento,
             glosa: asientoData.glosa,
             tipoLibro: asientoData.tipoLibro,
+            tipoLibroId: asientoData.esSaldoInicial ? TIPO_LIBRO.DIARIO : TIPO_LIBRO.COMPRAS,
             origenAsiento: "AUTOMATICO",
             submoduloOrigenId: submodulo.id,
             procesoOrigenId: ordenCompraId,
@@ -3661,9 +3691,10 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
                 tipoCambio: asientoData.tipoCambio,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
-                tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
-                numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
-                fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
+                tipoDocumentoOrigenId: ordenCompraCompleta?.tipoDocumentoFinalId || null,
+                numeroDocumentoOrigen: ordenCompraCompleta?.numeroDocumentoFinal || null,
+                fechaDocumentoOrigen: ordenCompraCompleta?.fechaFacturacion || null,
+                fechaVenceDocumentoOrigen: ordenCompraCompleta?.fechaVencimiento || null,
                 submoduloOrigenLineaId: submodulo.id,
                 procesoOrigenLineaId: ordenCompraId,
                 creadoPor: creadoPor,
@@ -3714,6 +3745,7 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
                 fechaAsiento: borradorDestino.fechaAsiento,
                 glosa: borradorDestino.glosa,
                 tipoLibro: borradorDestino.tipoLibro,
+                tipoLibroId: borradorDestino.esSaldoInicial ? TIPO_LIBRO.DIARIO : TIPO_LIBRO.COMPRAS,
                 origenAsiento: "AUTOMATICO",
                 submoduloOrigenId: submodulo.id,
                 procesoOrigenId: ordenCompraId,
@@ -3724,6 +3756,7 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
                 estaCuadrado: Math.abs(diferenciaDestino) < 0.01,
                 monedaId: borradorDestino.monedaId,
                 tipoCambio: borradorDestino.tipoCambio,
+                esGerencial: ordenCompraCompleta?.esGerencial || false,
                 creadoPor: creadoPor,
                 ordenesCompra: {
                   connect: { id: ordenCompraId },

@@ -16,6 +16,9 @@ import documentosOrigenRoutes from './Contabilidad/documentosOrigen.routes.js';
 import tipoAfectacionIGVRoutes from './FacturacionElectronica/tipoAfectacionIGV.routes.js';
 import tipoOperacionSunatRoutes from './FacturacionElectronica/tipoOperacionSunat.routes.js';
 import comprobanteElectronicoRoutes from './FacturacionElectronica/comprobanteElectronico.routes.js';
+import detraccionRoutes from './Contabilidad/detraccion.routes.js';
+import retencionRoutes from './Contabilidad/retencion.routes.js';
+import percepcionRoutes from './Contabilidad/percepcion.routes.js';
 import cuentaPorCobrarRoutes from './CuentasPorCobrarPagar/cuentaPorCobrar.routes.js';
 import cuentaPorPagarRoutes from './CuentasPorCobrarPagar/cuentaPorPagar.routes.js';
 import tipoDetraccionRoutes from './Tesoreria/tipoDetraccion.routes.js';
@@ -27,10 +30,8 @@ import atenderAsignacionRoutes from "./Tesoreria/atenderAsignacion.routes.js";
 import inversionFinancieraRoutes from './Tesoreria/inversionFinanciera.routes.js';
 import pendientesRoutes from './Tesoreria/pendientes.routes.js';
 import letraCambioRoutes from './LetrasCambio/letraCambio.routes.js';
-import retencionRoutes from './RetencionesPercepciones/retencion.routes.js';
 import mayorContableRoutes from './Contabilidad/mayorContable.routes.js';
 import balanceComprobacionRoutes from './Contabilidad/balanceComprobacion.routes.js';
-import percepcionRoutes from './RetencionesPercepciones/percepcion.routes.js';
 import presupuestoRoutes from './Presupuestos/presupuesto.routes.js';
 import usuarioRoutes from './Usuarios/usuario.routes.js';
 import authRoutes from './Usuarios/auth.routes.js'; // Rutas de autenticación de usuarios
@@ -677,6 +678,9 @@ router.use('/bancos', bancoRoutes);
 router.use('/medio-pago', medioPagoRoutes);
 router.use('/tipos-cuenta-corriente', tipoCuentaCorrienteRoutes);
 // Rutas para Contabilidad - Plan de Cuentas Contable
+router.use('/contabilidad/detraccion', detraccionRoutes);
+router.use('/contabilidad/retencion', retencionRoutes);
+router.use('/contabilidad/percepcion', percepcionRoutes);
 router.use('/contabilidad/plan-cuentas-contable', planCuentasContableRoutes);
 router.use('/contabilidad/periodo-contable', periodoContableRoutes);
 router.use('/contabilidad/asiento-contable', asientoContableRoutes);
@@ -743,9 +747,6 @@ router.use('/documentos', documentoDinamicoRoutes);
 
 // Rutas para Letras de Cambio
 router.use('/letras-cambio', letraCambioRoutes);
-// Rutas para Retenciones y Percepciones
-router.use('/retenciones-percepciones/retencion', retencionRoutes);
-router.use('/retenciones-percepciones/percepcion', percepcionRoutes);
 // Rutas para Presupuestos
 router.use('/presupuestos', presupuestoRoutes);
 

@@ -204,7 +204,7 @@ const listarPorTipoProviene = async (tipoProvieneDeId) => {
   try {
     return await prisma.estadoMultiFuncion.findMany({
       where: {
-        tipoProvieneDeId: BigInt(tipoProvieneDeId),
+        tipoProvieneDeId: Number(tipoProvieneDeId),
         cesado: false
       },
       include: { tipoProvieneDe: true }

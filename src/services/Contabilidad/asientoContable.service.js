@@ -276,6 +276,7 @@ const listar = async () => {
         submoduloOrigen: true,
         personalAprobador: true,
         personalAnulador: true,
+        tipoLibroContableSunat: true,
         detalles: {
           include: {
             planCuenta: true,
@@ -310,6 +311,7 @@ const obtenerPorId = async (id) => {
         moneda: true,
         personalAprobador: true,
         personalAnulador: true,
+        tipoLibroContableSunat: true,
         detalles: {
           include: {
             planCuenta: true,

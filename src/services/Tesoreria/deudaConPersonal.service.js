@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
+import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
 
 /**
  * Servicio CRUD para DeudaConPersonal
@@ -487,6 +488,7 @@ const guardarAsientosCTS = async (deudaId, asientosData, usuarioId) => {
         ...asientoData,
         submoduloOrigenId: Number(136),
         procesoOrigenId: deudaId,
+        tipoLibroId: deuda.esSaldoInicial ? TIPO_LIBRO.DIARIO : TIPO_LIBRO.PLANILLAS,
         esSaldoInicial: deuda.esSaldoInicial,
         esGerencial: deuda.esGerencial,
         creadoPor: usuarioId,
