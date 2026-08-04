@@ -3226,7 +3226,22 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           tipoCambio: ordenCompra.tipoCambio,
         });
 
-        const montoTotal = convertirMontoASoles(total, ordenCompra);
+        // ⭐ CALCULAR MONTO DE CUENTA POR PAGAR (reducido si hay retención)
+        let montoCuentaPorPagar = total;
+        const tieneRetencion = ordenCompra.aplicaRetencion && ordenCompra.montoRetencion > 0;
+
+        if (tieneRetencion) {
+          const empresa = await prisma.empresa.findUnique({
+            where: { id: ordenCompra.empresaId },
+            select: { soyAgenteRetencion: true }
+          });
+
+          if (empresa?.soyAgenteRetencion) {
+            montoCuentaPorPagar = total - Number(ordenCompra.montoRetencion);
+          }
+        }
+
+        const montoTotal = convertirMontoASoles(montoCuentaPorPagar, ordenCompra);
         const { debe, haber } = invertirSiEsNC(0, montoTotal, esNotaCredito);
 
         borrador.detalles.push({
@@ -3242,6 +3257,42 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           numeroDocumentoOrigen: ordenCompra.numeroDocumento,
           fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
+
+        // ⭐ AGREGAR CUENTA 401141 SI HAY RETENCIÓN Y EMPRESA ES AGENTE
+        if (tieneRetencion) {
+          const empresa = await prisma.empresa.findUnique({
+            where: { id: ordenCompra.empresaId },
+            select: { soyAgenteRetencion: true }
+          });
+
+          if (empresa?.soyAgenteRetencion) {
+            const cuentaRetencion = await prisma.planCuentasContable.findFirst({
+              where: {
+                codigoCuenta: "401141",
+                activo: true,
+              },
+            });
+
+            if (!cuentaRetencion) {
+              throw new ValidationError(
+                "No se encontró la cuenta 401141 (IGV Régimen de Retenciones). Configure el plan de cuentas antes de generar el asiento."
+              );
+            }
+
+            const montoRetencion = convertirMontoASoles(Number(ordenCompra.montoRetencion), ordenCompra);
+            const { debe: debeRet, haber: haberRet } = invertirSiEsNC(0, montoRetencion, esNotaCredito);
+
+            borrador.detalles.push({
+              numeroLinea: numeroLinea++,
+              planCuentaId: cuentaRetencion.id,
+              glosa: `Retención ${ordenCompra.porcentajeRetencion}% según ${referenciaDoc}`,
+              debe: debeRet,
+              haber: haberRet,
+              monedaId: 1, // ⭐ SIEMPRE SOLES
+              tipoCambio: ordenCompra.tipoCambio,
+            });
+          }
+        }
 
         if (totalInventario > 0) {
           const productoConInventario = ordenCompra.detalles.find(d => d.producto.cuentaInventarioId);
@@ -3481,6 +3532,45 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
     const MONEDA_SOLES_ID = 1;
     const tipoCambio = Number(asientoData.tipoCambio) || 1;
 
+    // ⭐ APLICAR RETENCIÓN: Modificar detalles si aplica (ANTES de calcular totales)
+    const ordenCompraParaRetencion = await prisma.ordenCompra.findUnique({
+      where: { id: ordenCompraId },
+      select: {
+        aplicaRetencion: true,
+        montoRetencion: true,
+        porcentajeRetencion: true,
+        monedaId: true,
+      }
+    });
+
+    if (ordenCompraParaRetencion?.aplicaRetencion && ordenCompraParaRetencion?.montoRetencion > 0) {
+      const montoRetencion = Number(ordenCompraParaRetencion.montoRetencion);
+      const porcentajeRetencion = Number(ordenCompraParaRetencion.porcentajeRetencion || 3);
+      const esSoles = Number(ordenCompraParaRetencion.monedaId) === 1;
+      const cuentaPorPagar = esSoles ? 421201 : 421202;
+      const cuentaRetencion = 401141;
+
+      const lineaCuentaPorPagar = asientoData.detalles.find(
+        d => Number(d.planCuentaId) === cuentaPorPagar
+      );
+
+      if (lineaCuentaPorPagar) {
+        lineaCuentaPorPagar.haber = Number(lineaCuentaPorPagar.haber) - montoRetencion;
+
+        const nuevaLinea = {
+          numeroLinea: asientoData.detalles.length + 1,
+          planCuentaId: cuentaRetencion,
+          glosa: `Retención ${porcentajeRetencion}% - ${asientoData.glosa}`,
+          debe: 0,
+          haber: montoRetencion,
+          centroCostoId: null,
+          entidadComercialId: lineaCuentaPorPagar.entidadComercialId || null,
+        };
+
+        asientoData.detalles.push(nuevaLinea);
+      }
+    }
+
     // Calcular totales en soles (de los detalles)
     // ⭐ Usar Math.abs() para manejar valores negativos (NC)
     const totalDebeEnSoles = asientoData.detalles.reduce(
@@ -3529,6 +3619,23 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
     return await prisma.$transaction(async (tx) => {
       let asiento;
 
+      // Obtener OrdenCompra completa para heredar campos del documento final
+      // Se obtiene antes de los bloques condicionales para estar disponible en ambos
+      const ordenCompraCompleta = await tx.ordenCompra.findUnique({
+        where: { id: ordenCompraId },
+        select: {
+          esGerencial: true,
+          tipoDocumentoFinalId: true,
+          numeroDocumentoFinal: true,
+          fechaFacturacion: true,
+          fechaVencimiento: true,
+          aplicaRetencion: true,
+          montoRetencion: true,
+          porcentajeRetencion: true,
+          monedaId: true,
+        }
+      });
+
       if (esEdicion) {
         // ✅ EDITAR: Actualizar asiento existente SIN eliminar registros
         // Primero, obtener IDs de detalles existentes
@@ -3536,19 +3643,6 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
           where: { asientoContableId: Number(asientoData.id) },
           select: { id: true },
         });
-
-        // Obtener OrdenCompra completa para heredar campos del documento final
-        const ordenCompraCompleta = await tx.ordenCompra.findUnique({
-          where: { id: ordenCompraId },
-          select: {
-            esGerencial: true,
-            tipoDocumentoFinalId: true,
-            numeroDocumentoFinal: true,
-            fechaFacturacion: true,
-            fechaVencimiento: true,
-          }
-        });
-
         // Actualizar asiento (siempre vuelve a PENDIENTE al editar)
         asiento = await tx.asientoContable.update({
           where: { id: Number(asientoData.id) },
