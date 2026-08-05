@@ -278,9 +278,9 @@ const generarFormatoSUNAT51 = async (filtros) => {
       contenido += `${linea.tipoDocumentoOrigen?.codigo || ''}|`;
       contenido += `${String(linea.numeroLinea).padStart(4, '0')}|`;
       contenido += `${linea.numeroDocumentoOrigen || ''}|`;
-      contenido += `${linea.planCuenta.codigoCuenta}|`;
-      contenido += `${linea.planCuenta.nombreCuenta}|`;
-      contenido += `${linea.entidadComercial?.ruc || ''}|`;
+      contenido += `${linea.planCuenta?.codigoCuenta || ''}|`;
+      contenido += `${linea.planCuenta?.nombreCuenta || ''}|`;
+      contenido += `${linea.entidadComercial?.numeroDocumento || ''}|`;
       contenido += `${debe}|`;
       contenido += `${haber}\n`;
     });
