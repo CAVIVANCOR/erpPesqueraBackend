@@ -2735,7 +2735,6 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         "La OrdenCompra no tiene un período contable asignado."
       );
     }
-
     // ========================================
     // FUNCIÓN HELPER: Buscar cuenta contable de compras
     // ========================================
@@ -2920,6 +2919,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           haber: haber2,
           monedaId: 1,
           tipoCambio: ordenCompra.tipoCambio,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
 
         // HABER: 421201/421202 (Facturas por Pagar)
@@ -2960,6 +2963,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
             monedaId: 1, // ⭐ SIEMPRE SOLES
             tipoCambio: ordenCompra.tipoCambio,
             centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+            entidadComercialId: ordenCompra.proveedorId,
+            tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+            numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+            fechaDocumentoOrigen: ordenCompra.fechaDocumento,
           });
 
           if (detalle.producto.cuentaInventarioId) {
@@ -2967,8 +2974,12 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
         }
 
-        const montoTotal = convertirMontoASoles(total, ordenCompra);
-        const { debe, haber } = invertirSiEsNC(0, montoTotal, esNotaCredito);
+        // ⭐ CALCULAR CxP AJUSTADO PARA CUADRAR
+        const totalDebeGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+        const montoCxPAjustado = totalDebeGenerado;
+
+
+        const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
 
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
@@ -3001,6 +3012,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
               monedaId: 1, // ⭐ SIEMPRE SOLES
               tipoCambio: ordenCompra.tipoCambio,
               centroCostoId: ordenCompra.centroCostoId,
+              entidadComercialId: ordenCompra.proveedorId,
+              tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+              numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+              fechaDocumentoOrigen: ordenCompra.fechaDocumento,
             });
 
             if (productoConInventario.producto.cuentaVariacionId) {
@@ -3012,6 +3027,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
                 haber: haberVar,
                 monedaId: 1, // ⭐ SIEMPRE SOLES
                 tipoCambio: ordenCompra.tipoCambio,
+                entidadComercialId: ordenCompra.proveedorId,
+                tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+                numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+                fechaDocumentoOrigen: ordenCompra.fechaDocumento,
               });
             }
           }
@@ -3050,6 +3069,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           haber: haber2,
           monedaId: 1, // ⭐ SIEMPRE SOLES
           tipoCambio: ordenCompra.tipoCambio,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
       } else {
         // COMPRA NORMAL: Orden: 60→42→20→61
@@ -3075,6 +3098,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
             monedaId: 1, // ⭐ SIEMPRE SOLES
             tipoCambio: ordenCompra.tipoCambio,
             centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+            entidadComercialId: ordenCompra.proveedorId,
+            tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+            numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+            fechaDocumentoOrigen: ordenCompra.fechaDocumento,
           });
 
           if (detalle.producto.cuentaInventarioId) {
@@ -3082,8 +3109,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
         }
 
-        const montoTotal = convertirMontoASoles(total, ordenCompra);
-        const { debe, haber } = invertirSiEsNC(0, montoTotal, esNotaCredito);
+        // ⭐ CALCULAR CxP AJUSTADO PARA CUADRAR
+        const totalDebeGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+        const montoCxPAjustado = totalDebeGenerado;
+        const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
 
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
@@ -3116,6 +3145,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
               monedaId: 1, // ⭐ SIEMPRE SOLES
               tipoCambio: ordenCompra.tipoCambio,
               centroCostoId: ordenCompra.centroCostoId,
+              entidadComercialId: ordenCompra.proveedorId,
+              tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+              numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+              fechaDocumentoOrigen: ordenCompra.fechaDocumento,
             });
 
             if (productoConInventario.producto.cuentaVariacionId) {
@@ -3127,6 +3160,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
                 haber: haberVar,
                 monedaId: 1, // ⭐ SIEMPRE SOLES
                 tipoCambio: ordenCompra.tipoCambio,
+                entidadComercialId: ordenCompra.proveedorId,
+                tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+                numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+                fechaDocumentoOrigen: ordenCompra.fechaDocumento,
               });
             }
           }
@@ -3181,6 +3218,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           haber: haber2,
           monedaId: 1, // ⭐ SIEMPRE SOLES
           tipoCambio: ordenCompra.tipoCambio,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
       } else {
         // COMPRA NORMAL: Orden: 60→40→42→20→61
@@ -3206,6 +3247,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
             monedaId: 1, // ⭐ SIEMPRE SOLES
             tipoCambio: ordenCompra.tipoCambio,
             centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+            entidadComercialId: ordenCompra.proveedorId,
+            tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+            numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+            fechaDocumentoOrigen: ordenCompra.fechaDocumento,
           });
 
           if (detalle.producto.cuentaInventarioId) {
@@ -3224,6 +3269,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           haber: haberIGV,
           monedaId: 1, // ⭐ SIEMPRE SOLES
           tipoCambio: ordenCompra.tipoCambio,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
 
         // ⭐ CALCULAR MONTO DE CUENTA POR PAGAR (reducido si hay retención)
@@ -3241,13 +3290,20 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
         }
 
-        const montoTotal = convertirMontoASoles(montoCuentaPorPagar, ordenCompra);
-        const { debe, haber } = invertirSiEsNC(0, montoTotal, esNotaCredito);
+        // ⭐ CALCULAR CxP AJUSTADO PARA CUADRAR
+        // Sumar todos los DEBE ya generados
+        const totalDebeGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+
+        // CxP debe ser igual al total DEBE para cuadrar perfectamente
+        const montoCxPAjustado = totalDebeGenerado;
+        const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
 
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaHaber.id,
-          glosa: `Inventario - ${referenciaDoc}`,
+          glosa: esSaldoInicial
+            ? `Saldo Inicial CxP según ${referenciaDoc}`
+            : `Compra según ${referenciaDoc}`,
           debe: debe,
           haber: haber,
           monedaId: 1, // ⭐ SIEMPRE SOLES
@@ -3290,6 +3346,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
               haber: haberRet,
               monedaId: 1, // ⭐ SIEMPRE SOLES
               tipoCambio: ordenCompra.tipoCambio,
+              entidadComercialId: ordenCompra.proveedorId,
+              tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+              numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+              fechaDocumentoOrigen: ordenCompra.fechaDocumento,
             });
           }
         }
@@ -3311,6 +3371,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
               monedaId: 1, // ⭐ SIEMPRE SOLES
               tipoCambio: ordenCompra.tipoCambio,
               centroCostoId: ordenCompra.centroCostoId,
+              entidadComercialId: ordenCompra.proveedorId,
+              tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+              numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+              fechaDocumentoOrigen: ordenCompra.fechaDocumento,
             });
 
             if (productoConInventario.producto.cuentaVariacionId) {
@@ -3322,6 +3386,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
                 haber: haberVar,
                 monedaId: 1, // ⭐ SIEMPRE SOLES
                 tipoCambio: ordenCompra.tipoCambio,
+                entidadComercialId: ordenCompra.proveedorId,
+                tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+                numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+                fechaDocumentoOrigen: ordenCompra.fechaDocumento,
               });
             }
           }
@@ -3335,6 +3403,13 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     if (warnings.length > 0) {
       borrador.warnings = warnings;
     }
+
+    // ========================================
+    // 🔍 DIAGNÓSTICO FINAL DE CUADRE
+    // ========================================
+    const totalDebe = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+    const totalHaber = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
+    const diferencia = totalDebe - totalHaber;
 
     return borrador;
   } catch (err) {
@@ -3369,6 +3444,11 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
                 cuentaPadre: true,
               },
             },
+          },
+        },
+        detalles: {
+          include: {
+            producto: true,
           },
         },
       },
@@ -3422,15 +3502,22 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
       );
     }
 
-    // Calcular subtotal (sin IGV) y convertir a soles
-    const subtotal = Number(ordenCompra.subtotal) || 0;
+    // ⭐ CALCULAR SUBTOTAL AJUSTADO
+    // Debe coincidir con la suma de detalles 60xxx del asiento principal
+    // Para evitar descuadres por redondeo, sumamos los detalles convertidos
+    let subtotalEnSoles = 0;
 
-    if (subtotal === 0) {
-      return null;
+    for (const detalle of ordenCompra.detalles) {
+      const subtotalDetalle = Number(detalle.subtotal);
+      const montoDetalle = convertirMontoASoles(subtotalDetalle, ordenCompra);
+      subtotalEnSoles += montoDetalle;
     }
 
-    // ⭐ Convertir subtotal a soles
-    const subtotalEnSoles = convertirMontoASoles(subtotal, ordenCompra);
+    // Redondear a 2 decimales
+    subtotalEnSoles = Math.round(subtotalEnSoles * 100) / 100;
+    if (subtotalEnSoles === 0) {
+      return null;
+    }
 
     // Determinar tipo de libro según esGerencial de la orden
     const tipoLibro = ordenCompra.esGerencial ? "GERENCIAL" : "FISCAL";
@@ -3460,6 +3547,10 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
       haber: 0,
       monedaId: 1, // ⭐ SIEMPRE SOLES
       tipoCambio: ordenCompra.tipoCambio,
+      entidadComercialId: ordenCompra.proveedorId,
+      tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+      numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+      fechaDocumentoOrigen: ordenCompra.fechaDocumento,
     });
 
     // Línea HABER: 791101 (Cargas Imputables)
@@ -3471,6 +3562,10 @@ const generarAsientoDestinoCentroCosto = async (ordenCompraId, prismaClient = pr
       haber: Math.abs(subtotalEnSoles),
       monedaId: 1, // ⭐ SIEMPRE SOLES
       tipoCambio: ordenCompra.tipoCambio,
+      entidadComercialId: ordenCompra.proveedorId,
+      tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+      numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+      fechaDocumentoOrigen: ordenCompra.fechaDocumento,
     });
 
     return borrador;

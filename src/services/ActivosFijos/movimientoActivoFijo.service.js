@@ -7,8 +7,26 @@ import {
 } from "../../utils/errors.js";
 import lineaCreditoService from "../Tesoreria/lineaCredito.service.js";
 import { ESTADO_PERIODO_CONTABLE } from "../../utils/estados.constants.js";
+import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
 
-const { obtenerTipoCambio } = lineaCreditoService;
+
+// Mapeo de Tipo de Movimiento → Código de Libro SUNAT
+const TIPO_LIBRO_POR_MOVIMIENTO = {
+  1: 5,  // SALDO INICIAL → LIBRO DIARIO (05)
+  2: 7,  // COMPRA → REGISTRO ACTIVOS FIJOS (07)
+  3: 5,  // DEPRECIACION MENSUAL → LIBRO DIARIO (05)
+  4: 5,  // VENTA → LIBRO DIARIO (05)
+  5: 5,  // BAJA → LIBRO DIARIO (05)
+  6: 5,  // MEJORA → LIBRO DIARIO (05)
+  7: 5,  // TRANSFERENCIA → LIBRO DIARIO (05)
+  8: 5,  // REVALUACION → LIBRO DIARIO (05)
+  9: 5,  // AJUSTE POR INVENTARIO → LIBRO DIARIO (05)
+  10: 5, // DETERIORO → LIBRO DIARIO (05)
+  11: 5, // DONACION RECIBIDA → LIBRO DIARIO (05)
+  12: 5, // DONACION ENTREGADA → LIBRO DIARIO (05)
+  13: 5, // REVERSION DEPRECIACION → LIBRO DIARIO (05)
+  14: 5  // ARRENDAMIENTO FINANCIERO → LIBRO DIARIO (05)
+};
 
 /**
  * Servicio CRUD para MovimientoActivoFijo
@@ -460,7 +478,7 @@ const generarBorradorAsiento = async (movimientoId) => {
       tipoLibro: "FISCAL",
       origenAsiento: "AUTOMATICO",
       monedaId: movimiento.monedaId,
-      submoduloOrigenId: 40,
+      submoduloOrigenId: 133,  // ✅ CORRECCIÓN: ID correcto MovimientoActivoFijo
       procesoOrigenId: movimiento.id,
       esSaldoInicial: Number(movimiento.tipoMovimientoId) === 1,
       detalles: []
@@ -558,13 +576,22 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
       throw new ValidationError(`El asiento no está cuadrado. Diferencia: ${diferencia}`);
     }
 
+    // ✅ Obtener tipo de cambio validado
+    const tipoCambioFinal = await validarTipoCambio(
+      asientoData.tipoCambio || 0,
+      asientoData.fechaAsiento || movimiento.fechaContable || movimiento.fechaMovimiento
+    );
+
     const submodulo = await prisma.submoduloSistema.findFirst({
-      where: { id: 40 }
+      where: { id: Number(133) }  // ✅ CORRECCIÓN: ID correcto es 133
     });
 
     if (!submodulo) {
       throw new NotFoundError("Submódulo MovimientoActivoFijo no encontrado");
     }
+
+    // ✅ Obtener código de libro SUNAT según tipo de movimiento
+    const tipoLibroId = TIPO_LIBRO_POR_MOVIMIENTO[Number(movimiento.tipoMovimientoId)] || 5;
 
     const esEdicion = !!asientoData.id;
 
@@ -597,13 +624,14 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
               debe: detalle.debe,
               haber: detalle.haber,
               monedaId: asientoData.monedaId,
-              tipoCambio: asientoData.tipoCambio,
-              centroCostoId: detalle.centroCostoId || null,
+              tipoCambio: tipoCambioFinal,  // ✅ CORRECCIÓN: Usar tipo de cambio validado
+              activoId: Number(movimiento.activoId),  // ✅ AGREGADO: ID del activo
+              centroCostoId: detalle.centroCostoId || movimiento.centroCostoId || null,  // ✅ MEJORADO
               entidadComercialId: detalle.entidadComercialId || null,
               tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
               numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
               fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
-              submoduloOrigenLineaId: submodulo.id,
+              submoduloOrigenLineaId: Number(submodulo.id),  // ✅ CORRECCIÓN: Convertir a BigInt
               procesoOrigenLineaId: movimientoId,
               creadoPor: creadoPor
             }
@@ -631,16 +659,17 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
             fechaAsiento: asientoData.fechaAsiento,
             glosa: asientoData.glosa,
             tipoLibro: asientoData.tipoLibro || "FISCAL",
+            tipoLibroId: Number(tipoLibroId),  // ✅ AGREGADO: Código de libro SUNAT
             origenAsiento: asientoData.origenAsiento || "AUTOMATICO",
-            submoduloOrigenId: submodulo.id,
+            submoduloOrigenId: Number(submodulo.id),  // ✅ CORRECCIÓN: Convertir a BigInt
             procesoOrigenId: movimientoId,
-            estadoId: 76,
+            estadoId: Number(76),  // ✅ CORRECCIÓN: Convertir a BigInt
             totalDebe: totalDebe,
             totalHaber: totalHaber,
             diferencia: diferencia,
             estaCuadrado: estaCuadrado,
             monedaId: asientoData.monedaId,
-            tipoCambio: asientoData.tipoCambio,
+            tipoCambio: tipoCambioFinal,  // ✅ CORRECCIÓN: Usar tipo de cambio validado
             esSaldoInicial: asientoData.esSaldoInicial || false,
             creadoPor: creadoPor,
             movimientosActivoFijo: {
@@ -654,13 +683,14 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
                 debe: detalle.debe,
                 haber: detalle.haber,
                 monedaId: asientoData.monedaId,
-                tipoCambio: asientoData.tipoCambio,
-                centroCostoId: detalle.centroCostoId || null,
+                tipoCambio: tipoCambioFinal,  // ✅ CORRECCIÓN: Usar tipo de cambio validado
+                activoId: Number(movimiento.activoId),  // ✅ AGREGADO: ID del activo
+                centroCostoId: detalle.centroCostoId || movimiento.centroCostoId || null,  // ✅ MEJORADO: Heredar de movimiento
                 entidadComercialId: detalle.entidadComercialId || null,
                 tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
                 numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
                 fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
-                submoduloOrigenLineaId: submodulo.id,
+                submoduloOrigenLineaId: Number(submodulo.id),  // ✅ CORRECCIÓN: Convertir a BigInt
                 procesoOrigenLineaId: movimientoId,
                 creadoPor: creadoPor
               }))

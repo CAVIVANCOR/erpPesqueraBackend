@@ -3194,6 +3194,10 @@ const generarBorradorAsiento = async (preFacturaId) => {
           haber: convertirMontoASoles(dv.monto, preFactura),
           monedaId: MONEDA_SOLES_ID,
           tipoCambio: preFactura.tipoCambio,
+          entidadComercialId: preFactura.clienteId,
+          tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+          numeroDocumentoOrigen: preFactura.numeroDocumento,
+          fechaDocumentoOrigen: preFactura.fechaDocumento,
           centroCostoId: null,
         })),
       ];
@@ -3227,6 +3231,10 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento,
             centroCostoId: null,
           })),
           {
@@ -3266,6 +3274,10 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: convertirMontoASoles(dv.monto, preFactura),
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento,
             centroCostoId: null,
           })),
         ];
@@ -3313,6 +3325,10 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento,
             centroCostoId: null,
           })),
           {
@@ -3323,6 +3339,10 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento,
           },
           {
             numeroLinea: detallesVentas.length + 2,
@@ -3361,6 +3381,10 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: convertirMontoASoles(dv.monto, preFactura),
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento,
             centroCostoId: null,
           })),
           {
@@ -3371,6 +3395,10 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: convertirMontoASoles(totalIGV, preFactura),
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            entidadComercialId: preFactura.clienteId,
+            tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+            numeroDocumentoOrigen: preFactura.numeroDocumento,
+            fechaDocumentoOrigen: preFactura.fechaDocumento
           },
         ];
       }
