@@ -3009,6 +3009,20 @@ const convertirMontoASoles = (monto, preFactura) => {
   }
   return Math.round(Number(monto) * 100) / 100;
 };
+
+/**
+ * Calcula totales del asiento en la moneda original del documento
+ */
+const calcularTotalesEnMonedaOriginal = (preFactura) => {
+  const subtotal = Number(preFactura.subtotal) || 0;
+  const totalIGV = Number(preFactura.totalIGV) || 0;
+  const total = Number(preFactura.total) || 0;
+
+  const totalDebe = Math.round(total * 100) / 100;
+  const totalHaber = Math.round((subtotal + totalIGV) * 100) / 100;
+
+  return { totalDebe, totalHaber };
+};
 /**
  * Genera un borrador de asiento contable para una PreFactura
  * NO lo guarda en BD, solo retorna la estructura para edición
@@ -3139,7 +3153,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
     }
     // Determinar tipo de libro según esGerencial
     const tipoLibro = preFactura.esGerencial ? "GERENCIAL" : "FISCAL";
-
+    const { totalDebe: totalDebeOriginal, totalHaber: totalHaberOriginal } = calcularTotalesEnMonedaOriginal(preFactura);
     const borrador = {
       empresaId: preFactura.empresaId,
       periodoContableId: preFactura.periodoContableId,
@@ -3149,11 +3163,12 @@ const generarBorradorAsiento = async (preFacturaId) => {
       origenAsiento: "AUTOMATICO",
       monedaId: preFactura.monedaId,
       tipoCambio: preFactura.tipoCambio,
+      totalDebe: Number(totalDebeOriginal),
+      totalHaber: Number(totalHaberOriginal),
       detalles: [],
     };
 
     const MONEDA_SOLES_ID = 1;
-
     // CASO 1: GERENCIAL (sin IGV)
     if (preFactura.esGerencial) {
       const detallesVentas = esSaldoInicial
@@ -3181,6 +3196,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
           haber: 0,
           monedaId: MONEDA_SOLES_ID,
           tipoCambio: preFactura.tipoCambio,
+          debeMonedaExtranjera: total,
+          haberMonedaExtranjera: 0,
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
           numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3194,6 +3211,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
           haber: convertirMontoASoles(dv.monto, preFactura),
           monedaId: MONEDA_SOLES_ID,
           tipoCambio: preFactura.tipoCambio,
+          debeMonedaExtranjera: 0,
+          haberMonedaExtranjera: dv.monto,
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
           numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3231,6 +3250,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: Math.abs(dv.monto),
+            haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3245,6 +3266,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: convertirMontoASoles(Math.abs(total), preFactura),
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: 0,
+            haberMonedaExtranjera: Math.abs(total),
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3261,6 +3284,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: total,
+            haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3274,6 +3299,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: convertirMontoASoles(dv.monto, preFactura),
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: 0,
+            haberMonedaExtranjera: dv.monto,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3325,6 +3352,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: Math.abs(dv.monto),
+            haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3339,6 +3368,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: Math.abs(totalIGV),
+            haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3352,6 +3383,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: convertirMontoASoles(Math.abs(total), preFactura),
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: 0,
+            haberMonedaExtranjera: Math.abs(total),
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3368,6 +3401,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: total,
+            haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3381,6 +3416,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: convertirMontoASoles(dv.monto, preFactura),
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: 0,
+            haberMonedaExtranjera: dv.monto,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3395,6 +3432,8 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: convertirMontoASoles(totalIGV, preFactura),
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
+            debeMonedaExtranjera: 0,
+            haberMonedaExtranjera: totalIGV,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3469,7 +3508,8 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
       throw new NotFoundError("PreFactura no encontrada");
     }
 
-    // Calcular totales en SOLES (los detalles vienen en PEN)
+    // ⭐ USAR TOTALES DEL ASIENTO SI VIENEN DEFINIDOS (desde generarBorradorAsiento)
+    // Si no vienen, calcular desde los detalles (compatibilidad con asientos antiguos)
     const totalDebePEN = asientoData.detalles.reduce(
       (sum, d) => sum + Number(d.debe),
       0,
@@ -3479,28 +3519,27 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
       0,
     );
 
-    // Convertir totales a moneda ORIGINAL de la PreFactura
-    const MONEDA_USD_ID = 2;
-    const totalDebe = Number(preFactura.monedaId) === MONEDA_USD_ID
-      ? totalDebePEN / Number(preFactura.tipoCambio)
-      : totalDebePEN;
+    const totalDebe = asientoData.totalDebe !== undefined && asientoData.totalDebe !== null
+      ? Number(asientoData.totalDebe)
+      : (Number(asientoData.monedaId) === 1
+        ? totalDebePEN
+        : Math.round((totalDebePEN / Number(preFactura.tipoCambio)) * 100) / 100);
 
-    const totalHaber = Number(preFactura.monedaId) === MONEDA_USD_ID
-      ? totalHaberPEN / Number(preFactura.tipoCambio)
-      : totalHaberPEN;
+    const totalHaber = asientoData.totalHaber !== undefined && asientoData.totalHaber !== null
+      ? Number(asientoData.totalHaber)
+      : (Number(asientoData.monedaId) === 1
+        ? totalHaberPEN
+        : Math.round((totalHaberPEN / Number(preFactura.tipoCambio)) * 100) / 100);
 
     const diferencia = totalDebe - totalHaber;
 
-    // Validar que esté cuadrado
-    if (Math.abs(diferencia) > 0.01) {
-      console.error('❌ ASIENTO DESCUADRADO:', {
-        totalDebe,
-        totalHaber,
-        diferencia,
-        detalles: asientoData.detalles
-      });
+    // ⭐ Validar cuadratura en SOLES (detalles), NO en moneda original
+    const diferenciaEnSoles = totalDebePEN - totalHaberPEN;
+
+    // Validar que esté cuadrado en SOLES
+    if (Math.abs(diferenciaEnSoles) > 0.02) {
       throw new ValidationError(
-        `El asiento no está cuadrado. Diferencia: ${diferencia}`,
+        `El asiento no está cuadrado. Diferencia en soles: ${diferenciaEnSoles.toFixed(2)}`
       );
     }
 
@@ -3571,6 +3610,8 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
                 haber: detalle.haber,
                 monedaId: detalle.monedaId || 1,
                 tipoCambio: detalle.tipoCambio || asientoData.tipoCambio,
+                debeMonedaExtranjera: detalle.debeMonedaExtranjera || null,
+                haberMonedaExtranjera: detalle.haberMonedaExtranjera || null,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
                 tipoDocumentoOrigenId: preFacturaCompleta?.tipoDocumentoFinalId || null,
@@ -3591,6 +3632,8 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
                 haber: detalle.haber,
                 monedaId: detalle.monedaId || 1,
                 tipoCambio: detalle.tipoCambio || asientoData.tipoCambio,
+                debeMonedaExtranjera: detalle.debeMonedaExtranjera || null,
+                haberMonedaExtranjera: detalle.haberMonedaExtranjera || null,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
                 tipoDocumentoOrigenId: preFacturaCompleta?.tipoDocumentoFinalId || null,
@@ -3679,6 +3722,8 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
                 haber: detalle.haber,
                 monedaId: detalle.monedaId || 1,
                 tipoCambio: detalle.tipoCambio || asientoData.tipoCambio,
+                debeMonedaExtranjera: detalle.debeMonedaExtranjera || null,
+                haberMonedaExtranjera: detalle.haberMonedaExtranjera || null,
                 centroCostoId: detalle.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
                 tipoDocumentoOrigenId: preFacturaCompleta?.tipoDocumentoFinalId || null,

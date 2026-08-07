@@ -2,6 +2,7 @@ import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
+import { obtenerTipoCambioSunat } from '../../utils/tipoCambio.util.js';
 
 /**
  * Servicio CRUD para DeudaConPersonal
@@ -84,9 +85,11 @@ const obtenerPorId = async (id) => {
         asientosContables: {
           include: {
             estado: true,
+            moneda: true,
             detalles: {
               include: {
-                planCuenta: true
+                planCuenta: true,
+                moneda: true
               }
             }
           }
@@ -406,9 +409,18 @@ const generarBorradorAsientoCTS = async (deudaId) => {
     }
 
     const fechaAsiento = deuda.fechaContable || deuda.fecha;
-    const monto = Number(deuda.montoOriginal);
-    const borradores = [];
+    const montoOriginal = Number(deuda.montoOriginal);
 
+    // ⭐ Obtener tipo de cambio para la fecha del asiento
+    const tipoCambioDeuda = await obtenerTipoCambioSunat(new Date(fechaAsiento)) || 1;
+
+    // ⭐ Convertir monto a soles si es moneda extranjera
+    const MONEDA_USD_ID = 2;
+    const montoEnSoles = Number(deuda.monedaId) === MONEDA_USD_ID
+      ? Math.round(montoOriginal * tipoCambioDeuda * 100) / 100
+      : montoOriginal;
+
+    const borradores = [];
     // 5. GENERAR ASIENTO DE SALDO INICIAL
     if (deuda.esSaldoInicial) {
       const glosaAsiento = `SALDO INICIAL - ${deuda.tipoDeuda.nombre} - ${deuda.personal.nombres} ${deuda.personal.apellidos}`;
@@ -421,8 +433,9 @@ const generarBorradorAsientoCTS = async (deudaId) => {
         tipoLibro: 'GERENCIAL',
         origenAsiento: 'AUTOMATICO',
         monedaId: deuda.monedaId,
-        totalDebe: monto,
-        totalHaber: monto,
+        tipoCambio: tipoCambioDeuda,
+        totalDebe: montoOriginal,
+        totalHaber: montoOriginal,
         diferencia: 0,
         estaCuadrado: true,
         detalles: [
@@ -431,9 +444,12 @@ const generarBorradorAsientoCTS = async (deudaId) => {
             planCuentaId: cuenta591101.id,
             planCuenta: cuenta591101,
             glosa: glosaAsiento,
-            debe: monto,
+            debe: montoEnSoles,
             haber: 0,
-            monedaId: deuda.monedaId
+            monedaId: 1,
+            tipoCambio: tipoCambioDeuda,
+            debeMonedaExtranjera: montoOriginal,
+            haberMonedaExtranjera: 0
           },
           {
             numeroLinea: 2,
@@ -441,8 +457,11 @@ const generarBorradorAsientoCTS = async (deudaId) => {
             planCuenta: deuda.tipoDeuda.cuentaContable,
             glosa: glosaAsiento,
             debe: 0,
-            haber: monto,
-            monedaId: deuda.monedaId
+            haber: montoEnSoles,
+            monedaId: 1,
+            tipoCambio: tipoCambioDeuda,
+            debeMonedaExtranjera: 0,
+            haberMonedaExtranjera: montoOriginal
           }
         ]
       });

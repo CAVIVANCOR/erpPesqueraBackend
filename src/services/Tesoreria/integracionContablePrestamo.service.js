@@ -128,6 +128,8 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         haber: 0,
         monedaId: MONEDA_SOLES_ID,
         tipoCambio: prestamo.tipoCambioAplicado,
+        debeMonedaExtranjera: montoNeto,
+        haberMonedaExtranjera: 0,
         creadoPor,
       },
       {
@@ -139,6 +141,8 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         haber: 0,
         monedaId: MONEDA_SOLES_ID,
         tipoCambio: prestamo.tipoCambioAplicado,
+        debeMonedaExtranjera: totalIntereses,
+        haberMonedaExtranjera: 0,
         creadoPor,
       },
       {
@@ -150,6 +154,8 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         haber: convertirMontoASoles(montoDesembolso, prestamo),
         monedaId: MONEDA_SOLES_ID,
         tipoCambio: prestamo.tipoCambioAplicado,
+        debeMonedaExtranjera: 0,
+        haberMonedaExtranjera: montoDesembolso,
         creadoPor,
       },
     ];
@@ -297,16 +303,19 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
     });
 
     // Crear detalles del asiento
+    const MONEDA_SOLES_ID = 1;
     const detalles = [
       {
         asientoContableId: asiento.id,
         numeroLinea: 1,
         planCuentaId: cuentaPrestamo.id,
         glosa: `Capital cuota ${cuota.numeroCuota}`,
-        debe: montoCapital,
+        debe: convertirMontoASoles(montoCapital, prestamo),
         haber: 0,
-        monedaId: prestamo.monedaId,
+        monedaId: MONEDA_SOLES_ID,
         tipoCambio: prestamo.tipoCambioAplicado,
+        debeMonedaExtranjera: montoCapital,
+        haberMonedaExtranjera: 0,
         creadoPor,
       },
       {
@@ -314,10 +323,12 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
         numeroLinea: 2,
         planCuentaId: cuentaInteres.id,
         glosa: `Interés cuota ${cuota.numeroCuota}`,
-        debe: montoInteres,
+        debe: convertirMontoASoles(montoInteres, prestamo),
         haber: 0,
-        monedaId: prestamo.monedaId,
+        monedaId: MONEDA_SOLES_ID,
         tipoCambio: prestamo.tipoCambioAplicado,
+        debeMonedaExtranjera: montoInteres,
+        haberMonedaExtranjera: 0,
         creadoPor,
       },
       {
@@ -326,9 +337,11 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
         planCuentaId: cuentaEfectivo.id,
         glosa: `Pago cuota ${cuota.numeroCuota}`,
         debe: 0,
-        haber: montoTotal,
-        monedaId: prestamo.monedaId,
+        haber: convertirMontoASoles(montoTotal, prestamo),
+        monedaId: MONEDA_SOLES_ID,
         tipoCambio: prestamo.tipoCambioAplicado,
+        debeMonedaExtranjera: 0,
+        haberMonedaExtranjera: montoTotal,
         creadoPor,
       },
     ];
@@ -426,8 +439,8 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
           haber: 0,
           monedaId: MONEDA_SOLES_ID,
           tipoCambio: prestamo.tipoCambioAplicado,
-          debeMonedaExtranjera: Number(prestamo.monedaId) === 2 ? montoCapital : null,
-          haberMonedaExtranjera: null,
+          debeMonedaExtranjera: montoCapital,
+          haberMonedaExtranjera: 0,
           creadoPor,
         },
       }),
@@ -441,8 +454,8 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
           haber: montoCapitalSoles,
           monedaId: MONEDA_SOLES_ID,
           tipoCambio: prestamo.tipoCambioAplicado,
-          debeMonedaExtranjera: null,
-          haberMonedaExtranjera: Number(prestamo.monedaId) === 2 ? montoCapital : null,
+          debeMonedaExtranjera: 0,
+          haberMonedaExtranjera: montoCapital,
           creadoPor,
         },
       }),

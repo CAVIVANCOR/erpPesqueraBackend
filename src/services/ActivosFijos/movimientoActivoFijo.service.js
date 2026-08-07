@@ -7,7 +7,7 @@ import {
 } from "../../utils/errors.js";
 import lineaCreditoService from "../Tesoreria/lineaCredito.service.js";
 import { ESTADO_PERIODO_CONTABLE } from "../../utils/estados.constants.js";
-import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
+import { validarTipoCambio, obtenerTipoCambioSunat } from "../../utils/tipoCambio.util.js";
 
 
 // Mapeo de Tipo de Movimiento → Código de Libro SUNAT
@@ -121,6 +121,7 @@ const listar = async () => {
             detalles: {
               include: {
                 planCuenta: true,
+                moneda: true,
               },
               orderBy: { numeroLinea: "asc" },
             },
@@ -162,6 +163,7 @@ const obtenerPorId = async (id) => {
             detalles: {
               include: {
                 planCuenta: true,
+                moneda: true,
               },
               orderBy: { numeroLinea: "asc" },
             },
@@ -245,6 +247,7 @@ const crear = async (data) => {
             detalles: {
               include: {
                 planCuenta: true,
+                moneda: true,
               },
               orderBy: { numeroLinea: "asc" },
             },
@@ -325,6 +328,7 @@ const actualizar = async (id, data) => {
             detalles: {
               include: {
                 planCuenta: true,
+                moneda: true,
               },
               orderBy: { numeroLinea: "asc" },
             },
@@ -405,6 +409,7 @@ const listarPorActivo = async (activoId) => {
             detalles: {
               include: {
                 planCuenta: true,
+                moneda: true,
               },
               orderBy: { numeroLinea: "asc" },
             },
@@ -470,14 +475,26 @@ const generarBorradorAsiento = async (movimientoId) => {
       throw new NotFoundError("Cuenta 591101 (Utilidades Acumuladas) no encontrada");
     }
 
+    // ⭐ Obtener tipo de cambio para la fecha del asiento
+    const fechaAsiento = movimiento.fechaContable || movimiento.fechaMovimiento;
+    const tipoCambioMovimiento = await obtenerTipoCambioSunat(new Date(fechaAsiento)) || 1;
+
+    // ⭐ Convertir monto a soles si es moneda extranjera
+    const MONEDA_USD_ID = 2;
+    const montoOriginal = Number(movimiento.monto);
+    const montoEnSoles = Number(movimiento.monedaId) === MONEDA_USD_ID
+      ? Math.round(montoOriginal * tipoCambioMovimiento * 100) / 100
+      : montoOriginal;
+
     const borrador = {
       empresaId: movimiento.empresaId,
       periodoContableId: movimiento.periodoContableId,
-      fechaAsiento: movimiento.fechaContable,
+      fechaAsiento: fechaAsiento,
       glosa: `${movimiento.tipoMovimiento.nombre} - ${movimiento.activo.nombre}`,
       tipoLibro: "FISCAL",
       origenAsiento: "AUTOMATICO",
       monedaId: movimiento.monedaId,
+      tipoCambio: tipoCambioMovimiento,
       submoduloOrigenId: 133,  // ✅ CORRECCIÓN: ID correcto MovimientoActivoFijo
       procesoOrigenId: movimiento.id,
       esSaldoInicial: Number(movimiento.tipoMovimientoId) === 1,
@@ -495,9 +512,12 @@ const generarBorradorAsiento = async (movimientoId) => {
         numeroLinea: numeroLinea++,
         planCuentaId: movimiento.activo.cuentaContableId,
         glosa: `Activo Fijo - ${movimiento.activo.nombre}`,
-        debe: movimiento.monto,
+        debe: montoEnSoles,
         haber: 0,
-        monedaId: movimiento.monedaId
+        monedaId: 1,
+        tipoCambio: tipoCambioMovimiento,
+        debeMonedaExtranjera: montoOriginal,
+        haberMonedaExtranjera: 0,
       });
 
       borrador.detalles.push({
@@ -505,8 +525,11 @@ const generarBorradorAsiento = async (movimientoId) => {
         planCuentaId: cuentaUtilidades.id,
         glosa: "Utilidades Acumuladas",
         debe: 0,
-        haber: movimiento.monto,
-        monedaId: movimiento.monedaId
+        haber: montoEnSoles,
+        monedaId: 1,
+        tipoCambio: tipoCambioMovimiento,
+        debeMonedaExtranjera: 0,
+        haberMonedaExtranjera: montoOriginal,
       });
 
       if (movimiento.depreciacionAcumulada && Number(movimiento.depreciacionAcumulada) > 0) {
@@ -514,13 +537,21 @@ const generarBorradorAsiento = async (movimientoId) => {
           throw new ValidationError(`El activo ${movimiento.activo.nombre} no tiene cuenta de depreciación (39xxx) configurada`);
         }
 
+        const depreciacionOriginal = Number(movimiento.depreciacionAcumulada);
+        const depreciacionEnSoles = Number(movimiento.monedaId) === MONEDA_USD_ID
+          ? Math.round(depreciacionOriginal * tipoCambioMovimiento * 100) / 100
+          : depreciacionOriginal;
+
         borrador.detalles.push({
           numeroLinea: numeroLinea++,
           planCuentaId: cuentaUtilidades.id,
           glosa: "Utilidades",
-          debe: movimiento.depreciacionAcumulada,
+          debe: depreciacionEnSoles,
           haber: 0,
-          monedaId: movimiento.monedaId
+          monedaId: 1,
+          tipoCambio: tipoCambioMovimiento,
+          debeMonedaExtranjera: depreciacionOriginal,
+          haberMonedaExtranjera: 0,
         });
 
         borrador.detalles.push({
@@ -528,16 +559,20 @@ const generarBorradorAsiento = async (movimientoId) => {
           planCuentaId: movimiento.activo.cuentaDepreciacionId,
           glosa: `Depreciación Acumulada - ${movimiento.activo.nombre}`,
           debe: 0,
-          haber: movimiento.depreciacionAcumulada,
-          monedaId: movimiento.monedaId
+          haber: depreciacionEnSoles,
+          monedaId: 1,
+          tipoCambio: tipoCambioMovimiento,
+          debeMonedaExtranjera: 0,
+          haberMonedaExtranjera: depreciacionOriginal,
         });
       }
     } else {
       throw new ValidationError(`Tipo de movimiento ${movimiento.tipoMovimiento.nombre} no soportado aún`);
     }
 
-    const totalDebe = borrador.detalles.reduce((sum, d) => sum + Number(d.debe), 0);
-    const totalHaber = borrador.detalles.reduce((sum, d) => sum + Number(d.haber), 0);
+    // ✅ CORRECTO: Calcula totales en MONEDA ORIGINAL
+    const totalDebe = borrador.detalles.reduce((sum, d) => sum + Number(d.debeMonedaExtranjera || 0), 0);
+    const totalHaber = borrador.detalles.reduce((sum, d) => sum + Number(d.haberMonedaExtranjera || 0), 0);
     const diferencia = totalDebe - totalHaber;
 
     borrador.totalDebe = totalDebe;
@@ -623,15 +658,17 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
               glosa: detalle.glosa,
               debe: detalle.debe,
               haber: detalle.haber,
-              monedaId: asientoData.monedaId,
-              tipoCambio: tipoCambioFinal,  // ✅ CORRECCIÓN: Usar tipo de cambio validado
-              activoId: Number(movimiento.activoId),  // ✅ AGREGADO: ID del activo
-              centroCostoId: detalle.centroCostoId || movimiento.centroCostoId || null,  // ✅ MEJORADO
+              monedaId: 1,
+              tipoCambio: tipoCambioFinal,
+              debeMonedaExtranjera: detalle.debeMonedaExtranjera || null,
+              haberMonedaExtranjera: detalle.haberMonedaExtranjera || null,
+              activoId: Number(movimiento.activoId),
+              centroCostoId: detalle.centroCostoId || movimiento.centroCostoId || null,
               entidadComercialId: detalle.entidadComercialId || null,
               tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
               numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
               fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
-              submoduloOrigenLineaId: Number(submodulo.id),  // ✅ CORRECCIÓN: Convertir a BigInt
+              submoduloOrigenLineaId: Number(submodulo.id),
               procesoOrigenLineaId: movimientoId,
               creadoPor: creadoPor
             }
@@ -682,15 +719,17 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
                 glosa: detalle.glosa,
                 debe: detalle.debe,
                 haber: detalle.haber,
-                monedaId: asientoData.monedaId,
-                tipoCambio: tipoCambioFinal,  // ✅ CORRECCIÓN: Usar tipo de cambio validado
-                activoId: Number(movimiento.activoId),  // ✅ AGREGADO: ID del activo
-                centroCostoId: detalle.centroCostoId || movimiento.centroCostoId || null,  // ✅ MEJORADO: Heredar de movimiento
+                monedaId: 1,
+                tipoCambio: tipoCambioFinal,
+                debeMonedaExtranjera: detalle.debeMonedaExtranjera || null,
+                haberMonedaExtranjera: detalle.haberMonedaExtranjera || null,
+                activoId: Number(movimiento.activoId),
+                centroCostoId: detalle.centroCostoId || movimiento.centroCostoId || null,
                 entidadComercialId: detalle.entidadComercialId || null,
                 tipoDocumentoOrigenId: detalle.tipoDocumentoOrigenId || null,
                 numeroDocumentoOrigen: detalle.numeroDocumentoOrigen || null,
                 fechaDocumentoOrigen: detalle.fechaDocumentoOrigen || null,
-                submoduloOrigenLineaId: Number(submodulo.id),  // ✅ CORRECCIÓN: Convertir a BigInt
+                submoduloOrigenLineaId: Number(submodulo.id),
                 procesoOrigenLineaId: movimientoId,
                 creadoPor: creadoPor
               }))
@@ -709,7 +748,8 @@ const guardarAsientoContable = async (movimientoId, asientoData, creadoPor) => {
           moneda: true,
           detalles: {
             include: {
-              planCuenta: true
+              planCuenta: true,
+              moneda: true,
             }
           }
         },

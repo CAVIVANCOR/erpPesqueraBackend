@@ -3,6 +3,7 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import { SUBMODULO_ORIGEN } from '../../utils/submodulos.constants.js';
 import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
+import { obtenerTipoCambioSunat } from '../../utils/tipoCambio.util.js';
 
 /**
  * Servicio CRUD para DeudaTributaria
@@ -118,7 +119,8 @@ const obtenerPorId = async (id) => {
             moneda: true,
             detalles: {
               include: {
-                planCuenta: true
+                planCuenta: true,
+                moneda: true
               }
             }
           },
@@ -437,6 +439,16 @@ const generarBorradorAsiento = async (deudaTributariaId) => {
       );
     }
 
+    // ⭐ Obtener tipo de cambio para la fecha del asiento
+    const fechaAsiento = deuda.fechaContable || deuda.fechaGeneracion;
+    const tipoCambioDeuda = await obtenerTipoCambioSunat(new Date(fechaAsiento)) || 1;
+
+    // ⭐ Convertir monto a soles si es moneda extranjera
+    const MONEDA_USD_ID = 2;
+    const montoEnSoles = Number(deuda.monedaId) === MONEDA_USD_ID
+      ? Math.round(montoOriginal * tipoCambioDeuda * 100) / 100
+      : montoOriginal;
+
     // Generar glosa descriptiva
     const tipoDeudaNombre = deuda.tipoDeuda?.nombre || 'Deuda Tributaria';
     const periodo = deuda.periodo || '';
@@ -446,12 +458,12 @@ const generarBorradorAsiento = async (deudaTributariaId) => {
     const borrador = {
       empresaId: deuda.empresaId,
       periodoContableId: deuda.periodoContableId,
-      fechaAsiento: deuda.fechaContable || deuda.fechaGeneracion,
+      fechaAsiento: fechaAsiento,
       glosa: glosa,
       tipoLibro: 'FISCAL',
       origenAsiento: 'AUTOMATICO',
       monedaId: deuda.monedaId,
-      tipoCambio: 0, // Las deudas tributarias normalmente son en soles
+      tipoCambio: tipoCambioDeuda,
       totalDebe: montoOriginal,
       totalHaber: montoOriginal,
       diferencia: 0,
@@ -463,10 +475,12 @@ const generarBorradorAsiento = async (deudaTributariaId) => {
           planCuentaId: cuentaUtilidades.id,
           planCuenta: cuentaUtilidades,
           glosa: glosa,
-          debe: montoOriginal,
+          debe: montoEnSoles,
           haber: 0,
           monedaId: 1,
-          tipoCambio: 0,
+          tipoCambio: tipoCambioDeuda,
+          debeMonedaExtranjera: montoOriginal,
+          haberMonedaExtranjera: 0,
         },
         {
           numeroLinea: 2,
@@ -474,9 +488,11 @@ const generarBorradorAsiento = async (deudaTributariaId) => {
           planCuenta: deuda.tipoDeuda.cuentaContable,
           glosa: glosa,
           debe: 0,
-          haber: montoOriginal,
+          haber: montoEnSoles,
           monedaId: 1,
-          tipoCambio: 0,
+          tipoCambio: tipoCambioDeuda,
+          debeMonedaExtranjera: 0,
+          haberMonedaExtranjera: montoOriginal,
         },
       ],
     };
