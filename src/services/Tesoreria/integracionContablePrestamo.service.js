@@ -130,6 +130,8 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         tipoCambio: prestamo.tipoCambioAplicado,
         debeMonedaExtranjera: montoNeto,
         haberMonedaExtranjera: 0,
+        submoduloOrigenLineaId: SUBMODULO_ORIGEN.PRESTAMO_BANCARIO,
+        procesoOrigenLineaId: Number(prestamo.id),
         creadoPor,
       },
       {
@@ -143,6 +145,8 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         tipoCambio: prestamo.tipoCambioAplicado,
         debeMonedaExtranjera: totalIntereses,
         haberMonedaExtranjera: 0,
+        submoduloOrigenLineaId: SUBMODULO_ORIGEN.PRESTAMO_BANCARIO,
+        procesoOrigenLineaId: Number(prestamo.id),
         creadoPor,
       },
       {
@@ -156,6 +160,8 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
         tipoCambio: prestamo.tipoCambioAplicado,
         debeMonedaExtranjera: 0,
         haberMonedaExtranjera: montoDesembolso,
+        submoduloOrigenLineaId: SUBMODULO_ORIGEN.PRESTAMO_BANCARIO,
+        procesoOrigenLineaId: Number(prestamo.id),
         creadoPor,
       },
     ];
@@ -316,6 +322,8 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
         tipoCambio: prestamo.tipoCambioAplicado,
         debeMonedaExtranjera: montoCapital,
         haberMonedaExtranjera: 0,
+        submoduloOrigenLineaId: submodulo.id,
+        procesoOrigenLineaId: cuota.id,
         creadoPor,
       },
       {
@@ -329,6 +337,8 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
         tipoCambio: prestamo.tipoCambioAplicado,
         debeMonedaExtranjera: montoInteres,
         haberMonedaExtranjera: 0,
+        submoduloOrigenLineaId: submodulo.id,
+        procesoOrigenLineaId: cuota.id,
         creadoPor,
       },
       {
@@ -342,10 +352,11 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
         tipoCambio: prestamo.tipoCambioAplicado,
         debeMonedaExtranjera: 0,
         haberMonedaExtranjera: montoTotal,
+        submoduloOrigenLineaId: submodulo.id,
+        procesoOrigenLineaId: cuota.id,
         creadoPor,
       },
     ];
-
     await Promise.all(
       detalles.map((detalle) =>
         tx.detalleAsientoContable.create({ data: detalle }),
@@ -441,6 +452,8 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
           tipoCambio: prestamo.tipoCambioAplicado,
           debeMonedaExtranjera: montoCapital,
           haberMonedaExtranjera: 0,
+          submoduloOrigenLineaId: SUBMODULO_ORIGEN.PRESTAMO_BANCARIO,
+          procesoOrigenLineaId: Number(prestamo.id),
           creadoPor,
         },
       }),
@@ -456,6 +469,8 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
           tipoCambio: prestamo.tipoCambioAplicado,
           debeMonedaExtranjera: 0,
           haberMonedaExtranjera: montoCapital,
+          submoduloOrigenLineaId: SUBMODULO_ORIGEN.PRESTAMO_BANCARIO,
+          procesoOrigenLineaId: Number(prestamo.id),
           creadoPor,
         },
       }),

@@ -59,10 +59,27 @@ export async function exportarSUNAT51(req, res, next) {
       tipoLibro: req.query.tipoLibro || 'FISCAL',
     };
 
-    const contenido = await diarioContableService.generarFormatoSUNAT51(filtros);
+    // Obtener empresa y periodo para construir nombre
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: filtros.empresaId }
+    });
 
+    const periodo = await prisma.periodoContable.findUnique({
+      where: { id: filtros.periodoContableId }
+    });
+
+    const ruc = empresa.ruc.padStart(11, '0');
+    const anio = periodo.anio;
+    const mes = String(periodo.mes).padStart(2, '0');
+    const periodoSunat = `${anio}${mes}00`;
+    
+    // Nombre oficial SUNAT - Formato 5.1 Libro Diario
+    const nombreArchivo = `LE${ruc}${periodoSunat}0501001111.txt`;
+
+    const contenido = await diarioContableService.generarFormatoSUNAT51(filtros);
+    
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="LE_DIARIO_${filtros.empresaId}_${filtros.periodoContableId}.txt"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
     res.send(contenido);
   } catch (err) {
     next(err);

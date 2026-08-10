@@ -21,4 +21,26 @@ router.get(
   mayorContableController.listarLineas
 );
 
+// Rutas de exportación
+router.get(
+  '/export/sunat-61',
+  autenticarJWT,
+  checkPermission('detalleAsientoContableMayor', 'ver'),
+  mayorContableController.exportarSUNAT61
+);
+
+router.get(
+  '/export/excel',
+  autenticarJWT,
+  checkPermission('detalleAsientoContableMayor', 'ver'),
+  mayorContableController.exportarExcel
+);
+
+router.get(
+  '/export/pdf',
+  autenticarJWT,
+  checkPermission('detalleAsientoContableMayor', 'ver'),
+  mayorContableController.exportarPDF
+);
+
 export default router;

@@ -304,11 +304,12 @@ const obtenerPorId = async (id) => {
         empresa: true,
         periodoContable: {
           include: {
-            estado: true, // ✅ INCLUIR ESTADO DEL PERÍODO
+            estado: true,
           },
         },
         estado: true,
         moneda: true,
+        submoduloOrigen: true,
         personalAprobador: true,
         personalAnulador: true,
         tipoLibroContableSunat: true,
@@ -327,6 +328,7 @@ const obtenerPorId = async (id) => {
       },
     });
     if (!asiento) throw new NotFoundError("Asiento contable no encontrado");
+
     return asiento;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
