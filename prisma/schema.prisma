@@ -4873,6 +4873,7 @@ model SubmoduloSistema {
   // ========================================
   asientosContables               AsientoContable[]
   detallesAsientoContable         DetalleAsientoContable[]   @relation("DetalleAsientoSubmodulo")  // 🆕
+  ordenesCompra                   OrdenCompra[]
 
   @@unique([moduloId, nombre])
   @@index([moduloId])
@@ -7195,7 +7196,13 @@ model OrdenCompra {
   aplicaPercepcion            Boolean     @default(false)
   porcentajePercepcion        Decimal?     @db.Decimal(5,2)
   montoPercepcion             Decimal?     @db.Decimal(18,2)
-
+  // ======================================== 
+  // ⭐ NUEVOS CAMPOS - TRAZABILIDAD                                     
+  // Siguen el mismo patrón que AsientoContable,
+  // CuentaPorPagar, PagoCuentaPorPagar, etc.
+  // ========================================
+  submoduloOrigenId           BigInt?           
+  procesoOrigenId             BigInt?
 
   dcmtoAfectoNCND             OrdenCompra?            @relation("OrdenCompraAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
   notasCreditoDebito          OrdenCompra[]           @relation("OrdenCompraAfectadaNCND")  // NC/ND que afectan a esta OC
@@ -7235,12 +7242,12 @@ model OrdenCompra {
   datosAdicionales          DetDatosAdicionalesOrdenCompra[]
   detalles                  DetalleOrdenCompra[]
   repuestosContratistasOT   DetRepuestosContratistaOT[]
-  asientosContables         AsientoContable[]  // Relación inversa - Asientos generados
-  periodoContable           PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
-  tipoOperacionSunat        TipoOperacionSunat?  @relation(fields: [tipoOperacionSunatId], references: [id])
-  tipoDetraccion            TipoDetraccion?  @relation("OrdenCompraTipoDetraccion", fields: [tipoDetraccionId], references: [id])
-  centroCosto               CentroCosto?                @relation(fields: [centroCostoId], references: [id])  // ⭐ NUEVO
-
+  asientosContables         AsientoContable[]     // Relación inversa - Asientos generados
+  periodoContable           PeriodoContable?      @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
+  tipoOperacionSunat        TipoOperacionSunat?   @relation(fields: [tipoOperacionSunatId], references: [id])
+  tipoDetraccion            TipoDetraccion?       @relation("OrdenCompraTipoDetraccion", fields: [tipoDetraccionId], references: [id])
+  centroCosto               CentroCosto?          @relation(fields: [centroCostoId], references: [id])  // ⭐ NUEVO
+  submoduloOrigen           SubmoduloSistema?     @relation(fields: [submoduloOrigenId], references: [id])
   // ========================================
   // ÍNDICES EXISTENTES
   // ========================================
@@ -7250,7 +7257,8 @@ model OrdenCompra {
   @@index([requerimientoCompraId])
   @@index([comprobanteRecibido])                                         // YA EXISTE
   @@index([tipoDocumentoFinalId])                                        // YA EXISTE
-  
+  @@index([submoduloOrigenId, procesoOrigenId])
+
   // ========================================
   // ⭐ ÍNDICES NUEVOS
   // ========================================
