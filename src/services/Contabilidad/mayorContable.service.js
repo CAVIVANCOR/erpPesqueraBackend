@@ -25,9 +25,16 @@ const listarLineas = async (filtros) => {
       if (filtros.fechaDesde) whereAsiento.fechaAsiento.gte = new Date(filtros.fechaDesde);
       if (filtros.fechaHasta) whereAsiento.fechaAsiento.lte = new Date(filtros.fechaHasta);
     }
-    if (filtros.estadoAsientoId) {
+        if (filtros.estadoAsientoId) {
       whereAsiento.estadoId = Number(filtros.estadoAsientoId);
     }
+    // ✅ AGREGAR FILTRO FISCAL/GERENCIAL
+    // FISCAL (false): Solo asientos con esGerencial = false
+    // GERENCIAL (true): Todos los asientos (sin filtro)
+    if (filtros.esGerencial === false) {
+      whereAsiento.esGerencial = false;
+    }
+    // Si esGerencial === true, NO se agrega filtro (muestra TODO)
     if (filtros.tipoLibro) {
       whereAsiento.tipoLibro = filtros.tipoLibro;
     }

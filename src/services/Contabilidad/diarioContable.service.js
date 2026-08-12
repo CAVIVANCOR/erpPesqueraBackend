@@ -31,9 +31,13 @@ const listarLineas = async (filtros) => {
     if (filtros.estadoAsientoId) {
       whereAsiento.estadoId = BigInt(filtros.estadoAsientoId);
     }
-    if (typeof filtros.esGerencial === 'boolean') {
-      whereAsiento.esGerencial = filtros.esGerencial;
+ // Filtro FISCAL/GERENCIAL
+    // FISCAL (false): Solo asientos con esGerencial = false
+    // GERENCIAL (true): Todos los asientos (sin filtro)
+    if (filtros.esGerencial === false) {
+      whereAsiento.esGerencial = false;
     }
+    // Si esGerencial === true, NO se agrega filtro (muestra TODO)
     if (filtros.tipoLibroId) {
       whereAsiento.tipoLibroId = BigInt(filtros.tipoLibroId);
     }

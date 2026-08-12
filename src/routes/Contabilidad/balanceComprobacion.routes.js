@@ -12,4 +12,25 @@ router.get(
   balanceComprobacionController.listarBalance
 );
 
+router.get(
+  '/exportar-sunat-317',
+  autenticarJWT,
+  checkPermission('balanceComprobacion', 'ver'),
+  balanceComprobacionController.exportarSUNAT317
+);
+
+router.get(
+  '/exportar-sunat-316',
+  autenticarJWT,
+  checkPermission('balanceComprobacion', 'ver'),
+  balanceComprobacionController.exportarSUNAT316
+);
+
+router.get(
+  '/exportar-sunat-320',
+  autenticarJWT,
+  checkPermission('balanceComprobacion', 'ver'),
+  balanceComprobacionController.exportarSUNAT320
+);
+
 export default router;
