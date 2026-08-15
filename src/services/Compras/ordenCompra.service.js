@@ -3770,7 +3770,7 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
 
       // Obtener OrdenCompra completa para heredar campos del documento final
       // Se obtiene antes de los bloques condicionales para estar disponible en ambos
-      const ordenCompraCompleta = await tx.ordenCompra.findUnique({
+          const ordenCompraCompleta = await tx.ordenCompra.findUnique({
         where: { id: ordenCompraId },
         select: {
           esGerencial: true,
@@ -3782,9 +3782,20 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
           montoRetencion: true,
           porcentajeRetencion: true,
           monedaId: true,
+          submoduloOrigenId: true,
+        },
+        include: {
+          submoduloOrigen: true,
         }
       });
 
+      // Validar que no se intente modificar asientos de Rendición de Gastos
+      if (ordenCompraCompleta?.submoduloOrigen?.ruta === 'rendicionGastos') {
+        throw new ValidationError(
+          'Los asientos contables de Rendición de Gastos no pueden ser modificados desde Orden de Compra. ' +
+          'Debe regenerarlos desde el módulo de Rendición de Gastos donde se creó el gasto original.'
+        );
+      }
       if (esEdicion) {
         // ✅ EDITAR: Actualizar asiento existente SIN eliminar registros
         // Primero, obtener IDs de detalles existentes

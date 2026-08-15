@@ -233,6 +233,17 @@ export async function asignarCentroCostoMasivo(req, res, next) {
   }
 }
 
+export async function generarDocumentosFinancieros(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await detMovsEntregaRendirService.generarDocumentosFinancieros(id);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+
 export default {
   listar,
   obtenerPorId,
@@ -247,5 +258,6 @@ export default {
   obtenerSaldoInicial,
   calcularSaldoFinal,
   recalcularSaldosResponsable,
-  asignarCentroCostoMasivo
+  asignarCentroCostoMasivo,
+  generarDocumentosFinancieros
 };
