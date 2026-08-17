@@ -1605,8 +1605,7 @@ async function generarDocumentosFinancieros(detMovId) {
   if (!tipoLibroDiario || !tipoLibroCompras) {
     throw new NotFoundError('Tipos de libro contable SUNAT no encontrados');
   }
-  console.log("tipoDocumentoIdOC", tipoDocumentoIdOC)
-  console.log("empresaId", detMov.empresaId)
+
   // Buscar serie "002" para el tipo de documento y empresa
   const serieDoc = await prisma.serieDoc.findFirst({
     where: {
@@ -1616,7 +1615,6 @@ async function generarDocumentosFinancieros(detMovId) {
       empresaId: detMov.empresaId,  // ← AGREGAR FILTRO POR EMPRESA
     },
   });
-  console.log("serieDoc", serieDoc)
 
   if (!serieDoc) {
     throw new NotFoundError(`Serie "002" no encontrada para tipo documento ${tipoDocumentoIdOC} y empresa ${detMov.empresaId}`);

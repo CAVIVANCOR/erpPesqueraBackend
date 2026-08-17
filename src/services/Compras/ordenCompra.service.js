@@ -2673,18 +2673,29 @@ const convertirMontoASoles = (monto, ordenCompra) => {
 
 /**
  * Calcula totales del asiento en la moneda original del documento
+ * ⭐ SOPORTA NOTAS DE CRÉDITO: Invierte debe/haber si esNotaCredito=true
+ * 
+ * @param {Object} ordenCompra - Orden de compra con subtotal, totalIGV, total
+ * @param {boolean} esNotaCredito - Si es Nota de Crédito (invierte debe/haber)
+ * @returns {Object} - { totalDebe, totalHaber } en moneda original
  */
-const calcularTotalesEnMonedaOriginal = (ordenCompra) => {
+const calcularTotalesEnMonedaOriginal = (ordenCompra, esNotaCredito = false) => {
   const subtotal = Number(ordenCompra.subtotal) || 0;
   const totalIGV = Number(ordenCompra.totalIGV) || 0;
   const total = Number(ordenCompra.total) || 0;
 
-  const totalDebe = Math.round((subtotal + totalIGV) * 100) / 100;
-  const totalHaber = Math.round(total * 100) / 100;
+  let totalDebe = Math.round((subtotal + totalIGV) * 100) / 100;
+  let totalHaber = Math.round(total * 100) / 100;
+
+  // ⭐ INVERTIR TOTALES SI ES NOTA DE CRÉDITO
+  if (esNotaCredito) {
+    const temp = totalDebe;
+    totalDebe = totalHaber;
+    totalHaber = temp;
+  }
 
   return { totalDebe, totalHaber };
 };
-
 /**
  * Invierte debe/haber para Notas de Crédito
  * Las NC revierten el asiento original intercambiando debe y haber
@@ -2894,7 +2905,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     // Determinar tipo de libro según esGerencial
     const tipoLibro = ordenCompra.esGerencial ? "GERENCIAL" : "FISCAL";
 
-    const { totalDebe: totalDebeOriginal, totalHaber: totalHaberOriginal } = calcularTotalesEnMonedaOriginal(ordenCompra);
+    const { totalDebe: totalDebeOriginal, totalHaber: totalHaberOriginal } = calcularTotalesEnMonedaOriginal(ordenCompra, esNotaCredito);
 
     const borrador = {
       empresaId: ordenCompra.empresaId,
@@ -2999,8 +3010,9 @@ const generarBorradorAsiento = async (ordenCompraId) => {
 
         // ⭐ CALCULAR CxP AJUSTADO PARA CUADRAR
         const totalDebeGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
-        const montoCxPAjustado = totalDebeGenerado;
+        const totalHaberGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
 
+        const montoCxPAjustado = esNotaCredito ? totalHaberGenerado : totalDebeGenerado;
 
         const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
         const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(0, total, esNotaCredito);
@@ -3141,7 +3153,9 @@ const generarBorradorAsiento = async (ordenCompraId) => {
 
         // ⭐ CALCULAR CxP AJUSTADO PARA CUADRAR
         const totalDebeGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
-        const montoCxPAjustado = totalDebeGenerado;
+        const totalHaberGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
+
+        const montoCxPAjustado = esNotaCredito ? totalHaberGenerado : totalDebeGenerado;
         const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
         const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(0, total, esNotaCredito);
 
@@ -3333,10 +3347,14 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         // ⭐ CALCULAR CxP AJUSTADO PARA CUADRAR
         // Sumar todos los DEBE ya generados
         const totalDebeGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+        const totalHaberGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
+
 
         // CxP debe ser igual al total DEBE para cuadrar perfectamente
-        const montoCxPAjustado = totalDebeGenerado;
+        // ⭐ PARA NC: usar totalHaberGenerado porque los gastos están en HABER
+        const montoCxPAjustado = esNotaCredito ? totalHaberGenerado : totalDebeGenerado;
         const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
+
         const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(0, montoCuentaPorPagar, esNotaCredito);
 
         borrador.detalles.push({
@@ -3715,7 +3733,6 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
         asientoData.detalles.push(nuevaLinea);
       }
     }
-
     // Calcular totales en soles (de los detalles) para validación de cuadre
     const totalDebeEnSoles = asientoData.detalles.reduce(
       (sum, d) => sum + Math.abs(Number(d.debe || 0)),
@@ -3770,20 +3787,8 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
 
       // Obtener OrdenCompra completa para heredar campos del documento final
       // Se obtiene antes de los bloques condicionales para estar disponible en ambos
-          const ordenCompraCompleta = await tx.ordenCompra.findUnique({
+      const ordenCompraCompleta = await tx.ordenCompra.findUnique({
         where: { id: ordenCompraId },
-        select: {
-          esGerencial: true,
-          tipoDocumentoFinalId: true,
-          numeroDocumentoFinal: true,
-          fechaFacturacion: true,
-          fechaVencimiento: true,
-          aplicaRetencion: true,
-          montoRetencion: true,
-          porcentajeRetencion: true,
-          monedaId: true,
-          submoduloOrigenId: true,
-        },
         include: {
           submoduloOrigen: true,
         }
