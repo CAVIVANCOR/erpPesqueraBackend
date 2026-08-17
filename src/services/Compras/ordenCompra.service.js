@@ -2838,7 +2838,6 @@ const generarBorradorAsiento = async (ordenCompraId) => {
 
     // ⭐ DETECTAR SI ES NOTA DE CRÉDITO (tipoDocumentoFinalId = 8)
     const esNotaCredito = Number(ordenCompra.tipoDocumentoFinalId) === 8;
-
     // ⭐ Función helper para formatear referencia del documento
     const obtenerReferenciaDocumento = () => {
       const proveedor = ordenCompra.proveedor?.razonSocial || 'Proveedor';
@@ -3352,7 +3351,8 @@ const generarBorradorAsiento = async (ordenCompraId) => {
 
         // CxP debe ser igual al total DEBE para cuadrar perfectamente
         // ⭐ PARA NC: usar totalHaberGenerado porque los gastos están en HABER
-        const montoCxPAjustado = esNotaCredito ? totalHaberGenerado : totalDebeGenerado;
+        const montoCxPEnSoles = convertirMontoASoles(montoCuentaPorPagar, ordenCompra);
+        const montoCxPAjustado = tieneRetencion ? montoCxPEnSoles : (esNotaCredito ? totalHaberGenerado : totalDebeGenerado);
         const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
 
         const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(0, montoCuentaPorPagar, esNotaCredito);
@@ -3397,6 +3397,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
 
             const montoRetencion = convertirMontoASoles(Number(ordenCompra.montoRetencion), ordenCompra);
             const { debe: debeRet, haber: haberRet } = invertirSiEsNC(0, montoRetencion, esNotaCredito);
+            const { debe: debeRetOriginal, haber: haberRetOriginal } = invertirSiEsNC(0, Number(ordenCompra.montoRetencion), esNotaCredito);
 
             borrador.detalles.push({
               numeroLinea: numeroLinea++,
@@ -3404,8 +3405,10 @@ const generarBorradorAsiento = async (ordenCompraId) => {
               glosa: `Retención ${ordenCompra.porcentajeRetencion}% según ${referenciaDoc}`,
               debe: debeRet,
               haber: haberRet,
-              monedaId: 1, // ⭐ SIEMPRE SOLES
+              monedaId: 1,
               tipoCambio: ordenCompra.tipoCambio,
+              debeMonedaExtranjera: debeRetOriginal,
+              haberMonedaExtranjera: haberRetOriginal,
               entidadComercialId: ordenCompra.proveedorId,
               tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
               numeroDocumentoOrigen: ordenCompra.numeroDocumento,
@@ -3414,6 +3417,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           }
         }
 
+        // ⭐ AGREGAR LÍNEAS DE INVENTARIO/VARIACIÓN si hay productos con inventario
         if (totalInventario > 0) {
           const productoConInventario = ordenCompra.detalles.find(d => d.producto.cuentaInventarioId);
 
@@ -3695,44 +3699,11 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
     const MONEDA_SOLES_ID = 1;
     const tipoCambio = Number(asientoData.tipoCambio) || 1;
 
-    // ⭐ APLICAR RETENCIÓN: Modificar detalles si aplica (ANTES de calcular totales)
-    const ordenCompraParaRetencion = await prisma.ordenCompra.findUnique({
-      where: { id: ordenCompraId },
-      select: {
-        aplicaRetencion: true,
-        montoRetencion: true,
-        porcentajeRetencion: true,
-        monedaId: true,
-      }
-    });
+    // ⭐ LA RETENCIÓN YA VIENE APLICADA DESDE generarBorradorAsiento
+    // NO hacer nada aquí, solo validar cuadratura
 
-    if (ordenCompraParaRetencion?.aplicaRetencion && ordenCompraParaRetencion?.montoRetencion > 0) {
-      const montoRetencion = Number(ordenCompraParaRetencion.montoRetencion);
-      const porcentajeRetencion = Number(ordenCompraParaRetencion.porcentajeRetencion || 3);
-      const esSoles = Number(ordenCompraParaRetencion.monedaId) === 1;
-      const cuentaPorPagar = esSoles ? 421201 : 421202;
-      const cuentaRetencion = 401141;
 
-      const lineaCuentaPorPagar = asientoData.detalles.find(
-        d => Number(d.planCuentaId) === cuentaPorPagar
-      );
 
-      if (lineaCuentaPorPagar) {
-        lineaCuentaPorPagar.haber = Number(lineaCuentaPorPagar.haber) - montoRetencion;
-
-        const nuevaLinea = {
-          numeroLinea: asientoData.detalles.length + 1,
-          planCuentaId: cuentaRetencion,
-          glosa: `Retención ${porcentajeRetencion}% - ${asientoData.glosa}`,
-          debe: 0,
-          haber: montoRetencion,
-          centroCostoId: null,
-          entidadComercialId: lineaCuentaPorPagar.entidadComercialId || null,
-        };
-
-        asientoData.detalles.push(nuevaLinea);
-      }
-    }
     // Calcular totales en soles (de los detalles) para validación de cuadre
     const totalDebeEnSoles = asientoData.detalles.reduce(
       (sum, d) => sum + Math.abs(Number(d.debe || 0)),

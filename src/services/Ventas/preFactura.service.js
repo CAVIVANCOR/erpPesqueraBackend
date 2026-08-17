@@ -293,6 +293,7 @@ const obtenerTodos = async (where = {}) => {
         empresa: true,
         cliente: true,
         tipoDocumento: true,
+        tipoDocumentoFinal: true,  // ⭐ AGREGADO: Incluir tipo de documento final
         moneda: true,
         detalles: {
           include: {
