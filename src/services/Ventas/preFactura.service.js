@@ -916,10 +916,11 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
     let montoRetencion = null;
 
     if (aplicaImpuestos && !aplicaDetraccion) {
+      const empresaEsAgente = preFactura.empresa.soyAgenteRetencion || false;
       const clienteEsAgente = preFactura.cliente.esAgenteRetencion || false;
       const umbralRetencion = Number(preFactura.empresa.montoMinimoRetencion || 700);
 
-      if (clienteEsAgente && total > umbralRetencion) {
+      if (clienteEsAgente && !empresaEsAgente && total > umbralRetencion) {
         aplicaRetencion = true;
         porcentajeRetencion = Number(preFactura.empresa.porcentajeRetencion || 3);
         const esSoles = preFactura.moneda.codigoSunat === 'PEN';

@@ -3308,7 +3308,6 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         }
 
         const montoIGV = convertirMontoASoles(totalIGV, ordenCompra);
-
         const { debe: debeIGV, haber: haberIGV } = invertirSiEsNC(montoIGV, 0, esNotaCredito);
         const { debe: debeIGVOriginal, haber: haberIGVOriginal } = invertirSiEsNC(totalIGV, 0, esNotaCredito);
 
@@ -3339,7 +3338,11 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           });
 
           if (empresa?.soyAgenteRetencion) {
-            montoCuentaPorPagar = total - Number(ordenCompra.montoRetencion);
+            // Convertir retención de soles a moneda original para restar correctamente
+            const montoRetencionEnMonedaOriginal = Number(ordenCompra.monedaId) === 1
+              ? Number(ordenCompra.montoRetencion)
+              : Number(ordenCompra.montoRetencion) / Number(ordenCompra.tipoCambio);
+            montoCuentaPorPagar = total - montoRetencionEnMonedaOriginal;
           }
         }
 
@@ -3395,7 +3398,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
               );
             }
 
-            const montoRetencion = convertirMontoASoles(Number(ordenCompra.montoRetencion), ordenCompra);
+            const montoRetencion = Number(ordenCompra.montoRetencion); // YA ESTÁ EN SOLES
             const { debe: debeRet, haber: haberRet } = invertirSiEsNC(0, montoRetencion, esNotaCredito);
             const { debe: debeRetOriginal, haber: haberRetOriginal } = invertirSiEsNC(0, Number(ordenCompra.montoRetencion), esNotaCredito);
 
