@@ -455,15 +455,16 @@ const crear = async (data) => {
         data: { correlativo: Number(nuevoCorrelativo) },
       });
 
-      // 9. Calcular fechaVencimiento si no viene (30 días después de fechaDocumento)
-      let fechaVencimiento = data.fechaVencimiento;
-      if (!fechaVencimiento) {
-        const fechaDoc = data.fechaDocumento
-          ? new Date(data.fechaDocumento)
-          : new Date();
-        fechaVencimiento = new Date(fechaDoc);
-        fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
+      // 9. Validar que fechaDocumento y fechaVencimiento sean obligatorios
+      if (!data.fechaDocumento) {
+        throw new ValidationError('La fecha de documento es obligatoria');
       }
+      if (!data.fechaVencimiento) {
+        throw new ValidationError('La fecha de vencimiento es obligatoria');
+      }
+
+      const fechaDocumento = new Date(data.fechaDocumento);
+      const fechaVencimiento = new Date(data.fechaVencimiento);
 
       // 10. Crear objeto limpio solo con campos del modelo (patrón estándar)
       const datosLimpios = {
@@ -474,7 +475,7 @@ const crear = async (data) => {
         numeroDocumento,
         numSerieDoc: numSerie,
         numCorreDoc: numCorre,
-        fechaDocumento: data.fechaDocumento,
+        fechaDocumento,
         fechaVencimiento,
         fechaContable: data.fechaContable,
         periodoContableId: data.periodoContableId, // ✅ AGREGADO - Campo obligatorio para contabilidad
@@ -705,6 +706,14 @@ const actualizar = async (id, data) => {
         data.tipoCambio,
         data.fechaDocumento || existente.fechaDocumento,
       );
+    }
+
+    // ✅ Validar que fechaDocumento y fechaVencimiento sean obligatorios
+    if (data.hasOwnProperty("fechaDocumento") && !data.fechaDocumento) {
+      throw new ValidationError('La fecha de documento es obligatoria');
+    }
+    if (data.hasOwnProperty("fechaVencimiento") && !data.fechaVencimiento) {
+      throw new ValidationError('La fecha de vencimiento es obligatoria');
     }
 
     // ════════════════════════════════════════════════════════════
@@ -1346,7 +1355,7 @@ const generarFacturaDesdePreFactura = async (
             ? new Date(datosFactura.fechaEmision)
             : new Date(),
           horaEmision: new Date().toTimeString().split(" ")[0],
-          fechaVencimiento: preFactura.fechaVencimiento,
+          fechaVencimiento: preFactura.fechaVencimiento || new Date(),
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoClienteId: preFactura.cliente.tipoDocumentoId,
           numeroDocumentoCliente: preFactura.cliente.numeroDocumento,
@@ -1555,7 +1564,7 @@ const generarBoletaDesdePreFactura = async (preFacturaId, datosBoleta = {}) => {
             ? new Date(datosBoleta.fechaEmision)
             : new Date(),
           horaEmision: new Date().toTimeString().split(" ")[0],
-          fechaVencimiento: preFactura.fechaVencimiento,
+          fechaVencimiento: preFactura.fechaVencimiento || new Date(),
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoClienteId: preFactura.cliente.tipoDocumentoId,
           numeroDocumentoCliente: preFactura.cliente.numeroDocumento,
