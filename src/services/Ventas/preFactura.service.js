@@ -1848,6 +1848,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
           empresa: true,
           serieDoc: true,
           tipoDocumento: true,
+          tipoDocumentoFinal: true,  // ✅ AGREGAR ESTA LÍNEA
           periodoContable: true, // ✅ AGREGADO: Necesario para heredar periodo
         },
       });
@@ -2002,6 +2003,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         );
         saldoPendiente = montoFinal - montoPagado;
       }
+      console.log("numeroPreFactura", `${preFactura.tipoDocumentoFinal?.codigo || ''}${preFactura.numeroDocumentoFinal || ''}`)
 
       // Preparar datos de la CxC
       const dataCxC = {
@@ -2011,10 +2013,9 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         clienteId: preFactura.clienteId,
 
         // DOCUMENTO
-        numeroPreFactura: preFactura.codigo,
-        fechaEmision: preFactura.fechaDocumento,
+        numeroPreFactura: `${preFactura.tipoDocumentoFinal?.codigo || ''}${preFactura.numeroDocumentoFinal || ''}`,
+        fechaEmision: preFactura.fechaFacturacion || preFactura.fechaDocumento,
         fechaVencimiento: preFactura.fechaVencimiento,
-
         // MONTOS ALMACENADOS (recalculados si hay pagos)
         montoTotal: montoFinal,
         montoPagado: montoPagado,
@@ -2070,13 +2071,19 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
       // ========================================
       // 5. ACTUALIZAR PREFACTURA A EMITIDA (96) - SIN COMPROBANTE
       // ========================================
+      const dataUpdateBlanca = {
+        facturado: true,
+        estadoId: ESTADO_PREFACTURA.EMITIDA, // Estado EMITIDA (solo CxC, sin CE)
+      };
+
+      // Solo asignar fechaFacturacion si NO existe (primera facturación)
+      if (!preFactura.fechaFacturacion) {
+        dataUpdateBlanca.fechaFacturacion = preFactura.fechaDocumento;
+      }
+
       await tx.preFactura.update({
         where: { id: preFactura.id },
-        data: {
-          facturado: true,
-          fechaFacturacion: new Date(),
-          estadoId: ESTADO_PREFACTURA.EMITIDA, // Estado EMITIDA (solo CxC, sin CE)
-        },
+        data: dataUpdateBlanca,
       });
 
       return {
@@ -2136,6 +2143,7 @@ const generarComprobanteElectronico = async (preFacturaId) => {
           empresa: true,
           serieDoc: true,
           tipoDocumento: true,
+          tipoDocumentoFinal: true,  // ✅ AGREGAR ESTA LÍNEA
           cuentaPorCobrar: true,
           comprobantesElectronicos: true,
         },
@@ -2280,6 +2288,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
           empresa: true,
           periodoContable: true, // ✅ AGREGADO: Necesario para heredar periodo
           tipoDocumento: true, // ✅ AGREGADO: Necesario para detectar SI-CXC
+          tipoDocumentoFinal: true,  // ✅ AGREGAR ESTA LÍNEA
         },
       });
 
@@ -2438,8 +2447,8 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         clienteId: preFactura.clienteId,
 
         // DOCUMENTO
-        numeroPreFactura: preFactura.numeroDocumento,
-        fechaEmision: preFactura.fechaDocumento || new Date(),
+        numeroPreFactura: `${preFactura.tipoDocumentoFinal?.codigo || ''}${preFactura.numeroDocumentoFinal || ''}`,
+        fechaEmision: preFactura.fechaFacturacion || preFactura.fechaDocumento || new Date(),
         fechaVencimiento: preFactura.fechaVencimiento || new Date(),
 
         // MONTOS ALMACENADOS (recalculados si hay pagos)
@@ -2495,13 +2504,19 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
       }
 
       // 5. Actualizar PreFactura a FACTURADA (estado 95)
+      const dataUpdateNegra = {
+        facturado: true,
+        estadoId: ESTADO_PREFACTURA.FACTURADA,
+      };
+
+      // Solo asignar fechaFacturacion si NO existe (primera facturación)
+      if (!preFactura.fechaFacturacion) {
+        dataUpdateNegra.fechaFacturacion = preFactura.fechaDocumento;
+      }
+
       await tx.preFactura.update({
         where: { id: preFactura.id },
-        data: {
-          facturado: true,
-          fechaFacturacion: new Date(),
-          estadoId: ESTADO_PREFACTURA.FACTURADA,
-        },
+        data: dataUpdateNegra,
       });
 
       return {
@@ -2836,7 +2851,6 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
           estadoId: estadoPendiente.id,
           movSalidaAlmacenId: null, // Limpiar referencia al movimiento
           facturado: false, // Marcar como no facturado
-          fechaFacturacion: null, // Limpiar fecha de facturación
           fechaActualizacion: new Date(),
           actualizadoPor: usuarioId,
         },
@@ -2860,7 +2874,11 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
         preFactura: preFacturaReactivada,
         movimientosAlmacen: movimientosEliminados.length > 0 ? {
           eliminados: movimientosEliminados.length,
-          movimientos: movimientosEliminados,
+          movimientos: movimientosEliminados.map(m => ({
+            id: Number(m.id),
+            numeroDocumento: m.numeroDocumento,
+            fechaDocumento: m.fechaDocumento,
+          })),
           kardexEliminados,
           detallesEliminados: detallesMovimientoEliminados,
         } : {
@@ -2873,8 +2891,8 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
         },
         cuentaPorCobrar: preFactura.cuentaPorCobrar ? {
           eliminada: true,
-          cxcId: preFactura.cuentaPorCobrar.id,
-          montoTotal: preFactura.cuentaPorCobrar.montoTotal,
+          cxcId: Number(preFactura.cuentaPorCobrar.id),
+          montoTotal: Number(preFactura.cuentaPorCobrar.montoTotal),
         } : {
           eliminada: false,
         },
@@ -2883,7 +2901,7 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
         },
         asientosContables: {
           eliminados: asientosEliminados,
-          asientosIds: asientosContables?.map(a => a.id) || [],
+          asientosIds: asientosContables?.map(a => Number(a.id)) || [],
         },
         mensaje: 'PreFactura reactivada exitosamente',
       };
@@ -3826,6 +3844,7 @@ const generarKardex = async (id, datosKardex, usuarioId, esRegeneracion = false)
         include: {
           empresa: true,
           serieDoc: true,
+          tipoDocumentoFinal: true,  // ✅ AGREGAR ESTA LÍNEA
           detalles: {
             include: {
               producto: {
@@ -4085,6 +4104,7 @@ const regenerarKardex = async (id, usuarioId) => {
             },
           },
           serieDoc: true,
+          tipoDocumentoFinal: true,  // ✅ AGREGAR ESTA LÍNEA
           detalles: {
             include: {
               producto: true,
