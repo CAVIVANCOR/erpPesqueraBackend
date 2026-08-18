@@ -86,6 +86,7 @@ const listar = async () => {
         tipoDocumentoFinal: true,
         ordenCompraOrigen: true,
         unidadNegocio: true,
+        submoduloOrigen: true,
         motivoNotaCreditoDebito: true,
         tipoOperacionSunat: true,
         tipoDetraccion: true,
