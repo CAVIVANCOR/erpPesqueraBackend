@@ -816,7 +816,7 @@ const actualizar = async (id, data) => {
 /**
  * Calcula TODOS los totales e impuestos de una PreFactura
  * Subtotal, IGV, Total, Detracción, Retención, Percepción
- * @param {BigInt} preFacturaId - ID de la PreFactura
+ * @param {Number} preFacturaId - ID de la PreFactura
  * @param {Object} tx - Transacción de Prisma (opcional)
  * @returns {Object} - Campos calculados para actualizar
  */
@@ -4234,8 +4234,8 @@ const regenerarKardex = async (id, usuarioId) => {
 /**
  * Actualiza masivamente el tipoOperacionSunatId de múltiples PreFacturas
  * @param {Array<BigInt>} ids - Array de IDs de PreFacturas a actualizar
- * @param {BigInt} tipoOperacionSunatId - ID del tipo de operación SUNAT
- * @param {BigInt} usuarioId - ID del usuario que realiza la actualización
+ * @param {Number} tipoOperacionSunatId - ID del tipo de operación SUNAT
+ * @param {Number} usuarioId - ID del usuario que realiza la actualización
  * @returns {Object} Resultado de la actualización masiva
  */
 async function actualizarTipoOperacionSunatMasivo(ids, tipoOperacionSunatId, usuarioId) {
@@ -4250,12 +4250,12 @@ async function actualizarTipoOperacionSunatMasivo(ids, tipoOperacionSunatId, usu
   const resultado = await prisma.preFactura.updateMany({
     where: {
       id: {
-        in: ids.map(id => BigInt(id))
+        in: ids.map(id => Number(id))
       }
     },
     data: {
-      tipoOperacionSunatId: BigInt(tipoOperacionSunatId),
-      actualizadoPor: usuarioId ? BigInt(usuarioId) : null
+      tipoOperacionSunatId: Number(tipoOperacionSunatId),
+      actualizadoPor: usuarioId ? Number(usuarioId) : null
     }
   });
 
@@ -4277,12 +4277,12 @@ async function actualizarTipoAfectacionIGVMasivo(ids, tipoAfectacionIGVId, usuar
   const resultado = await prisma.preFactura.updateMany({
     where: {
       id: {
-        in: ids.map(id => BigInt(id))
+        in: ids.map(id => Number(id))
       }
     },
     data: {
-      tipoAfectacionIGVId: BigInt(tipoAfectacionIGVId),
-      actualizadoPor: usuarioId ? BigInt(usuarioId) : null
+      tipoAfectacionIGVId: Number(tipoAfectacionIGVId),
+      actualizadoPor: usuarioId ? Number(usuarioId) : null
     }
   });
 
