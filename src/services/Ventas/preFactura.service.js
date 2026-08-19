@@ -1874,11 +1874,19 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         );
       }
 
-      // Validar que NO sea GERENCIAL
+           // Validar que NO sea GERENCIAL
       if (preFactura.esGerencial) {
         throw new ValidationError(
           "Las PreFacturas GERENCIALES deben usar 'Generar Venta' (CxC Negra)",
         );
+      }
+
+      // Validar que fechaDocumento y fechaVencimiento existan
+      if (!preFactura.fechaDocumento) {
+        throw new ValidationError('La fecha de documento es obligatoria para facturar');
+      }
+      if (!preFactura.fechaVencimiento) {
+        throw new ValidationError('La fecha de vencimiento es obligatoria para facturar');
       }
 
       // 2. Buscar estado PENDIENTE DE PAGO para CxC (ID 100)
@@ -2022,7 +2030,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         clienteId: preFactura.clienteId,
 
         // DOCUMENTO
-        numeroPreFactura: `${preFactura.tipoDocumentoFinal?.codigo || ''}${preFactura.numeroDocumentoFinal || ''}`,
+        numeroPreFactura: `${preFactura.tipoDocumentoFinal?.codigo || ''} - ${preFactura.numeroDocumentoFinal || ''}`,
         fechaEmision: preFactura.fechaFacturacion || preFactura.fechaDocumento,
         fechaVencimiento: preFactura.fechaVencimiento,
         // MONTOS ALMACENADOS (recalculados si hay pagos)
@@ -2313,11 +2321,19 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         );
       }
 
-      // Validar que sea GERENCIAL
+            // Validar que sea GERENCIAL
       if (!preFactura.esGerencial) {
         throw new ValidationError(
           "Solo se pueden facturar como NEGRA las PreFacturas GERENCIALES",
         );
+      }
+
+      // Validar que fechaDocumento y fechaVencimiento existan
+      if (!preFactura.fechaDocumento) {
+        throw new ValidationError('La fecha de documento es obligatoria para facturar');
+      }
+      if (!preFactura.fechaVencimiento) {
+        throw new ValidationError('La fecha de vencimiento es obligatoria para facturar');
       }
 
       // 2. Buscar estado PENDIENTE DE PAGO para CxC (ID 100)
@@ -2456,7 +2472,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         clienteId: preFactura.clienteId,
 
         // DOCUMENTO
-        numeroPreFactura: `${preFactura.tipoDocumentoFinal?.codigo || ''}${preFactura.numeroDocumentoFinal || ''}`,
+        numeroPreFactura: `${preFactura.tipoDocumentoFinal?.codigo || ''} - ${preFactura.numeroDocumentoFinal || ''}`,
         fechaEmision: preFactura.fechaFacturacion || preFactura.fechaDocumento || new Date(),
         fechaVencimiento: preFactura.fechaVencimiento || new Date(),
 
@@ -2945,11 +2961,19 @@ const aprobar = async (id) => {
         throw new NotFoundError("PreFactura no encontrada.");
       }
 
-      // Verificar que tiene al menos un detalle
+            // Verificar que tiene al menos un detalle
       if (!preFactura.detalles || preFactura.detalles.length === 0) {
         throw new ValidationError(
           "La PreFactura debe tener al menos un detalle para ser aprobada.",
         );
+      }
+
+      // Validar que fechaDocumento y fechaVencimiento existan
+      if (!preFactura.fechaDocumento) {
+        throw new ValidationError('La fecha de documento es obligatoria para aprobar la PreFactura');
+      }
+      if (!preFactura.fechaVencimiento) {
+        throw new ValidationError('La fecha de vencimiento es obligatoria para aprobar la PreFactura');
       }
 
       // Verificar que el estado actual es PENDIENTE (tipoProvieneDeId = 9, estado <= 45)

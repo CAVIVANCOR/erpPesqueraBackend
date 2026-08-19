@@ -153,19 +153,6 @@ const listarPendientes = async (filtros = {}) => {
               codigoSunat: true,
             },
           },
-          comprobanteElectronico: {
-            select: {
-              id: true,
-              numeroCompleto: true,
-              tipoComprobante: {
-                select: {
-                  id: true,
-                  descripcion: true,  // ✅ CORREGIDO: nombre → descripcion
-                  codigoSunat: true,
-                },
-              },
-            },
-          },
           preFactura: {
             select: {
               id: true,
@@ -634,12 +621,8 @@ const listarPendientes = async (filtros = {}) => {
       tipoDocumento: 'CXC',
       origen: 'Cuentas por Cobrar',
       origenId: cxc.id,
-      documentoNumero: cxc.comprobanteElectronico
-        ? cxc.comprobanteElectronico.numeroCompleto
-        : cxc.preFactura
-          ? cxc.preFactura.numeroDocumento
-          : `CxC-${cxc.id}`,
-      documentoTipo: cxc.comprobanteElectronico?.tipoComprobante?.descripcion || 'Pre-Factura',  // ✅ CORREGIDO
+           documentoNumero: cxc.numeroPreFactura,
+      documentoTipo: 'Pre-Factura',
       entidadComercial: {
         id: cxc.cliente?.id,
         razonSocial: cxc.cliente?.razonSocial || 'N/A',
