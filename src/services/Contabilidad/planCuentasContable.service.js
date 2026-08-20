@@ -14,8 +14,8 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 async function validarPlanCuentasContable(data) {
   // Validar cuentaPadreId si existe
   if (data.cuentaPadreId) {
-    const cuentaPadre = await prisma.planCuentasContable.findUnique({ 
-      where: { id: data.cuentaPadreId } 
+    const cuentaPadre = await prisma.planCuentasContable.findUnique({
+      where: { id: data.cuentaPadreId }
     });
     if (!cuentaPadre) {
       throw new ValidationError('La cuenta padre referenciada no existe.');
@@ -64,14 +64,27 @@ async function validarPlanCuentasContable(data) {
  */
 const listar = async () => {
   try {
-    return await prisma.planCuentasContable.findMany({
+    const resultado = await prisma.planCuentasContable.findMany({
       include: {
         cuentaPadre: true,
-        subcuentas: true
+        subcuentas: true,
+        centroCosto: {
+          include: {
+            categoria: true
+          }
+        }
       },
       orderBy: { codigoCuenta: 'asc' }
     });
+
+    console.log('✅ Total cuentas:', resultado.length);
+    console.log('✅ Primera cuenta:', resultado[0]);
+    console.log('✅ Cuentas con centroCosto:', resultado.filter(c => c.centroCosto).length);
+    console.log('✅ Ejemplo cuenta con centroCosto:', resultado.find(c => c.centroCosto));
+
+    return resultado;
   } catch (err) {
+    console.error('❌ Error en listar planCuentasContable:', err);
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos', err.message);
     }
@@ -90,6 +103,11 @@ const obtenerPorId = async (id) => {
         cuentaPadre: true,
         subcuentas: {
           orderBy: { codigoCuenta: 'asc' }
+        },
+        centroCosto: {
+          include: {
+            categoria: true
+          }
         }
       }
     });
@@ -185,7 +203,7 @@ const eliminar = async (id) => {
 
     // Validar que no esté en configuraciones
     if ((existente.configuracionesDebe && existente.configuracionesDebe.length > 0) ||
-        (existente.configuracionesHaber && existente.configuracionesHaber.length > 0)) {
+      (existente.configuracionesHaber && existente.configuracionesHaber.length > 0)) {
       throw new ConflictError('No se puede eliminar la cuenta porque está siendo usada en configuraciones contables.');
     }
 
@@ -209,7 +227,12 @@ const listarActivas = async () => {
       where: { activo: true },
       include: {
         cuentaPadre: true,
-        subcuentas: true
+        subcuentas: true,
+        centroCosto: {
+          include: {
+            categoria: true
+          }
+        }
       },
       orderBy: { codigoCuenta: 'asc' }
     });

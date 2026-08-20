@@ -92,7 +92,11 @@ const listar = async (filtros = {}) => {
       include: {
         usuario: true,
         cargo: true,
-        centroCosto: true,  // ⭐ NUEVO
+        centroCosto: {
+          include: {
+            categoria: true
+          }
+        },
         ubigeo: true,
         enlaceEntidadComercial: true,
       },
