@@ -209,6 +209,7 @@ const obtenerPorId = async (id) => {
         preFactura: {
           include: {
             tipoDocumento: true,
+            tipoProducto: true,
           },
         },
         pagos: {

@@ -2020,7 +2020,6 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         );
         saldoPendiente = montoFinal - montoPagado;
       }
-      console.log("numeroPreFactura", `${preFactura.tipoDocumentoFinal?.codigo || ''}${preFactura.numeroDocumentoFinal || ''}`)
 
       // Preparar datos de la CxC
       const dataCxC = {
