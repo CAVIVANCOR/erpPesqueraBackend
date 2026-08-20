@@ -499,6 +499,8 @@ model CentroCosto {
   saldosCuentaCorriente             SaldoCuentaCorriente[]  @relation("SaldoCuentaCorrienteCentroCosto")
   asientosContables                 AsientoContableInterfaz[]
   cuentaContable                    PlanCuentasContable? @relation("CentroCostoToCuentaContable", fields: [cuentaContableId], references: [id])  // ⭐ NUEVO
+  // ⭐ NUEVA RELACIÓN: Planes de cuenta que tienen este centro de costo por defecto
+  planesCuentaDefecto               PlanCuentasContable[]     @relation("PlanCuentasCentroCostoDefecto")
 
 
 // ========================================
@@ -5168,7 +5170,7 @@ model TipoMaterial {
 
 model TipoMovEntregaRendir {
   id                           BigInt                         @id @default(autoincrement())
-  nombre                       String                         @db.VarChar(50)
+  nombre                       String                         @db.VarChar(100)
   descripcion                  String?
   esIngreso                    Boolean
   esTransferencia              Boolean   @default(false)  // 🆕 NUEVO CAMPO
@@ -5848,7 +5850,8 @@ model PlanCuentasContable {
   codigoCuenta          String                  @db.VarChar(20)      // "10", "101", "1011", "10111", "101110"
   nombreCuenta          String                  @db.VarChar(200)     // "Efectivo y Equivalentes de Efectivo"
   descripcion           String?                 @db.Text
-  
+  centroCostoId         BigInt?                 // ⭐ Centro de costo por defecto para esta cuenta
+
   // ========================================
   // JERARQUÍA (5 niveles PCGE)
   // ========================================
@@ -5910,6 +5913,8 @@ model PlanCuentasContable {
   tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR ESTA LÍNEA
   tiposDeudaPersonal              TipoDeudaPersonal[]       @relation("TipoDeudaPersonalToCuentaContable")  // ⭐ NUEVO: Tipos de deuda personal que usan esta cuenta
   centrosCosto                    CentroCosto[]             @relation("CentroCostoToCuentaContable")        // ⭐ NUEVO
+  centroCosto                     CentroCosto?              @relation("PlanCuentasCentroCostoDefecto", fields: [centroCostoId], references: [id])
+
   // ========================================
   // 🆕 RELACIONES CON PRODUCTOS (INVENTARIO)
   // ========================================
