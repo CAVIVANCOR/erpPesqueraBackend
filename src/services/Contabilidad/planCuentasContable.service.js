@@ -77,11 +77,6 @@ const listar = async () => {
       orderBy: { codigoCuenta: 'asc' }
     });
 
-    console.log('✅ Total cuentas:', resultado.length);
-    console.log('✅ Primera cuenta:', resultado[0]);
-    console.log('✅ Cuentas con centroCosto:', resultado.filter(c => c.centroCosto).length);
-    console.log('✅ Ejemplo cuenta con centroCosto:', resultado.find(c => c.centroCosto));
-
     return resultado;
   } catch (err) {
     console.error('❌ Error en listar planCuentasContable:', err);
