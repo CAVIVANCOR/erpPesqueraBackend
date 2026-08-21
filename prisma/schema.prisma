@@ -3778,6 +3778,8 @@ model MovimientoCaja {
   productoId                              BigInt?
   origenReferenciaIngresoMovCajaId        BigInt?
   urlOperacionIndividualOperacionCaja     String?
+  esGerencial                             Boolean?    @default(false)                  // ⭐ NUEVO: true = Facturación Negra (Gerencial/No SUNAT), false = Blanca (Formal/SUNAT)
+  tipoCambio                              Decimal?    @db.Decimal(18, 6)               // Tipo de cambio del día
 
   // ========================================
   // 🆕 CAMPOS NUEVOS (TODOS OPCIONALES)
