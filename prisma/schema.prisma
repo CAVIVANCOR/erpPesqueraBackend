@@ -2544,6 +2544,8 @@ model Empresa {
   novedadesPescaConsumo         NovedadPescaConsumo[]
   movimientosCajaOrigen         MovimientoCaja[] @relation("EmpresaOrigenMovCaja")
   movimientosCajaDestino        MovimientoCaja[] @relation("EmpresaDestinoMovCaja")
+  movimientosCaja               MovimientoCaja[] @relation("EmpresaMovCaja")
+
   ordenesMantenimiento          OTMantenimiento[]
   contratosServicio             ContratoServicio[]    @relation("ContratoServicioEmpresa")
   detallesCuotaPesca            DetCuotaPesca[]
@@ -3750,8 +3752,9 @@ model UbicacionFisica {
 
 model MovimientoCaja {
   id                                      BigInt                        @id @default(autoincrement())
-  empresaOrigenId                         BigInt?
-  empresaDestinoId                        BigInt?
+  empresaId                               BigInt?
+  empresaOrigenId                         BigInt?    //Depreciado NO Usar
+  empresaDestinoId                        BigInt?    //Depreciado NO Usar
   tipoMovimientoId                        BigInt
   entidadComercialId                      BigInt?
   monto                                   Decimal
@@ -3814,12 +3817,13 @@ model MovimientoCaja {
   // ========================================
   // RELACIONES EXISTENTES
   // ========================================
-  cuentaCorrienteOrigen     CuentaCorriente?           @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
+  cuentaCorrienteOrigen     CuentaCorriente?          @relation("CuentaCorrienteOrigen", fields: [cuentaCorrienteOrigenId], references: [id])
   cuentaCorrienteDestino    CuentaCorriente?          @relation("CuentaCorrienteDestino", fields: [cuentaCorrienteDestinoId], references: [id])
   entidadComercial          EntidadComercial?         @relation(fields: [entidadComercialId], references: [id])
   estadoMovimientoCaja      EstadoMultiFuncion        @relation(fields: [estadoId], references: [id])
-  empresaOrigen             Empresa?                   @relation("EmpresaOrigenMovCaja", fields: [empresaOrigenId], references: [id])
+  empresaOrigen             Empresa?                  @relation("EmpresaOrigenMovCaja", fields: [empresaOrigenId], references: [id])
   empresaDestino            Empresa?                  @relation("EmpresaDestinoMovCaja", fields: [empresaDestinoId], references: [id])
+  empresa                   Empresa?                  @relation("EmpresaMovCaja", fields: [empresaId], references: [id])
   moneda                    Moneda                    @relation(fields: [monedaId], references: [id])
   tipoMovimiento            TipoMovEntregaRendir      @relation(fields: [tipoMovimientoId], references: [id])
   ctaCteEntidad             CtaCteEntidad?            @relation(fields: [cuentaDestinoEntidadComercialId], references: [id])
@@ -3874,6 +3878,7 @@ model MovimientoCaja {
   // ========================================
   @@index([esTransferencia])
   @@index([movimientoRelacionadoId])
+  @@index([empresaId])
 }
 
 model NovedadPescaConsumo {
@@ -6721,16 +6726,6 @@ model PagoCuentaPorCobrar {
   // ========================================
   montoAplicadoDeuda    Decimal     @db.Decimal(18, 2)              // ✅ AGREGADO: Monto total aplicado a la deuda (incluye detracción/retención)
   monedaDeudaId         BigInt                                       // ✅ AGREGADO: Moneda de la CxC (para referencia)
-  
-  // ========================================
-  // DETRACCIÓN SPOT (SUNAT PERÚ)
-  // Cliente deposita en cuenta SUNAT
-  // ========================================
-  // tieneDetraccion              Boolean     @default(false)                 ELIMINADO
-  // montoDetraccion              Decimal     @default(0) @db.Decimal(18, 2)  ELIMINADO
-  // porcentajeDetraccion         Decimal?    @db.Decimal(5, 2)               ELIMINADO
-  // numeroConstanciaDetraccion   String?     @db.VarChar(50)                 ELIMINADO
-  // fechaDetraccion              DateTime?                                   ELIMINADO
   
   // ========================================
   // RETENCIÓN (SUNAT PERÚ)
