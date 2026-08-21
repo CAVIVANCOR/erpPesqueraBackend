@@ -215,6 +215,15 @@ const obtenerPorId = async (id) => {
         pagos: {
           include: {
             medioPago: true,
+            monedaPago: true,
+            monedaDeuda: true,
+            banco: true,
+            cuentaBancaria: {
+              include: {
+                banco: true,
+                moneda: true
+              }
+            }
           },
           orderBy: { fechaPago: "desc" },
         },
@@ -482,11 +491,21 @@ const obtenerPorPreFacturaId = async (preFacturaId) => {
         preFactura: {
           include: {
             tipoDocumento: true,
+            tipoProducto: true,
           },
         },
         pagos: {
           include: {
             medioPago: true,
+            monedaPago: true,
+            monedaDeuda: true,
+            banco: true,
+            cuentaBancaria: {
+              include: {
+                banco: true,
+                moneda: true
+              }
+            }
           },
           orderBy: { fechaPago: "desc" },
         },

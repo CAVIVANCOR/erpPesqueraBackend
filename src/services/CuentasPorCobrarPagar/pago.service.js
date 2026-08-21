@@ -195,7 +195,12 @@ const listarPorCuentaCobrar = async (cuentaPorCobrarId) => {
         monedaPago: true,
         monedaDeuda: true,
         banco: true,
-        cuentaBancaria: true,
+        cuentaBancaria: {
+          include: {
+            banco: true,
+            moneda: true
+          }
+        },
         empresa: true,
         periodoContable: true,
         movimientoCaja: true,
