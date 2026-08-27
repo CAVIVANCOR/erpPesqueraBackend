@@ -2481,11 +2481,24 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
         );
       }
 
-      // Validar que NO esté ya facturada
-      if (ordenCompra.facturado) {
-        throw new ValidationError(
-          "Esta OrdenCompra ya tiene una CuentaPorPagar generada"
-        );
+      // Buscar CxP existente directamente
+      const cxpExistente = await tx.cuentaPorPagar.findUnique({
+        where: { ordenCompraId: ordenCompraId }
+      });
+
+      if (cxpExistente) {
+        // Validar que NO tenga pagos
+        const montoPagado = Number(cxpExistente.montoPagado) || 0;
+        if (montoPagado > 0) {
+          throw new ValidationError(
+            `No se puede regenerar la CxP porque ya tiene pagos registrados (${montoPagado.toFixed(2)})`
+          );
+        }
+
+        // Eliminar CxP existente para regenerar
+        await tx.cuentaPorPagar.delete({
+          where: { id: cxpExistente.id }
+        });
       }
 
 
@@ -2527,25 +2540,24 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
       } else {
         // Fallback: Si no tiene total (OC antiguas), calcular desde detalles
         if (!ordenCompra.detalles || ordenCompra.detalles.length === 0) {
-          throw new ValidationError(
-            "La OrdenCompra no tiene detalles ni total calculado. No se puede generar la CxP."
-          );
+          montoFinal = 0;
+        } else {
+
+          // Calcular desde detalles
+          const subtotal = ordenCompra.detalles.reduce((sum, detalle) => {
+            const cantidad = Number(detalle.cantidad || 0);
+            const precioUnitario = Number(detalle.precioUnitario || 0);
+            return sum + (cantidad * precioUnitario);
+          }, 0);
+
+          const pagosPreviosSI = Number(ordenCompra.pagosPreviosSI) || 0;
+          const subtotalNeto = subtotal - pagosPreviosSI;
+          const porcentajeIGV = Number(ordenCompra.porcentajeIGV) || 0;
+          const igvNeto = ordenCompra.esExoneradoAlIGV
+            ? 0
+            : subtotalNeto * (porcentajeIGV / 100);
+          montoFinal = subtotalNeto + igvNeto;
         }
-
-        // Calcular desde detalles
-        const subtotal = ordenCompra.detalles.reduce((sum, detalle) => {
-          const cantidad = Number(detalle.cantidad || 0);
-          const precioUnitario = Number(detalle.precioUnitario || 0);
-          return sum + (cantidad * precioUnitario);
-        }, 0);
-
-        const pagosPreviosSI = Number(ordenCompra.pagosPreviosSI) || 0;
-        const subtotalNeto = subtotal - pagosPreviosSI;
-        const porcentajeIGV = Number(ordenCompra.porcentajeIGV) || 0;
-        const igvNeto = ordenCompra.esExoneradoAlIGV
-          ? 0
-          : subtotalNeto * (porcentajeIGV / 100);
-        montoFinal = subtotalNeto + igvNeto;
       }
 
       // ========================================
@@ -2605,7 +2617,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
           esGerencial: ordenCompra.esGerencial || false,
 
           // MONEDA Y TIPO DE COMPRA
-          monedaId: ordenCompra.monedaId,
+          monedaId: ordenCompra.monedaId || 1,
           esContado: ordenCompra.formaPagoId ? false : true, // Si no tiene forma de pago, es contado
           estadoId: estadoPendiente.id,
           observaciones: esSaldoInicial
@@ -2626,7 +2638,6 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
         data: {
           estadoId: ESTADO_ORDEN_COMPRA.FACTURADA, // FACTURADA
           facturado: true,
-          fechaFacturacion: new Date(),
         },
         include: {
           proveedor: true,
@@ -2648,8 +2659,10 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
-    if (err.code && err.code.startsWith("P"))
-      throw new DatabaseError("Error de base de datos", err.message);
+    if (err.code && err.code.startsWith("P")) {
+      console.error("Error Prisma completo:", err);
+      throw new DatabaseError(`Error BD: ${err.code} - ${err.message}`, err.message);
+    }
     throw err;
   }
 };

@@ -150,7 +150,7 @@ const registrarPagoCuentaPorCobrar = async (datos) => {
       // 1️⃣ CREAR MOVIMIENTO DE CAJA
       const movimientoCaja = await tx.movimientoCaja.create({
         data: {
-          empresaDestinoId: Number(empresaId), // Empresa que recibe el dinero
+          empresaId: Number(empresaId),
           tipoMovimientoId: tipoMovimientoIngreso.id,
           entidadComercialId: cuentaPorCobrar.clienteId,
           monto: Number(montoPagado),

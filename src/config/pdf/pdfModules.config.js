@@ -650,6 +650,32 @@ const PDF_MODULES_CONFIG = {
       field: "urlComprobanteMovimiento",
     },
   },
+
+  "pago-cuenta-por-cobrar": {
+    uploadPath: "uploads/pdf-system/pago-cuenta-por-cobrar",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-cuenta-por-cobrar",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "PagoCuentaPorCobrar",
+      field: "urlVoucherConsolidado",
+    },
+  },
+
+  "movimiento-caja": {
+    uploadPath: "uploads/pdf-system/movimiento-caja",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/movimiento-caja",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "MovimientoCaja",
+      field: "urlDocumentoMovCaja",
+    },
+  },
 };
 
 export function getModuleConfig(moduleName) {

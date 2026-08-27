@@ -47,7 +47,7 @@ const incluirRelaciones = {
       ruc: true,
     },
   },
-  empresaDestino: {
+  empresa: {
     select: {
       id: true,
       razonSocial: true,
@@ -181,7 +181,7 @@ async function crearMovimientoCajaDesdeTesoreria(tx, params) {
 
   // Determinar campos según tipo
   const esIngreso = config.tipo === 'INGRESO';
-  const empresaCampo = esIngreso ? 'empresaDestinoId' : 'empresaOrigenId';
+  const empresaCampo = 'empresaId';
   const cuentaCampo = esIngreso ? 'cuentaCorrienteDestinoId' : 'cuentaCorrienteOrigenId';
 
   // Construir datos del movimiento
@@ -272,8 +272,7 @@ async function actualizarSaldosCuentasCorrientes(movimiento) {
       id,
       cuentaCorrienteOrigenId,
       cuentaCorrienteDestinoId,
-      empresaOrigenId,
-      empresaDestinoId,
+      empresaId,
       monto,
       centroCostoId,
     } = movimiento;
@@ -315,7 +314,7 @@ async function actualizarSaldosCuentasCorrientes(movimiento) {
       saldosGenerados.push(saldoOrigen);
     }
 
-    if (cuentaCorrienteDestinoId && empresaDestinoId) {
+    if (cuentaCorrienteDestinoId && empresaId) {
       const ultimoSaldoDestino = await prisma.saldoCuentaCorriente.findFirst({
         where: { cuentaCorrienteId: cuentaCorrienteDestinoId },
         orderBy: { fecha: "desc" },
@@ -324,12 +323,11 @@ async function actualizarSaldosCuentasCorrientes(movimiento) {
       const saldoAnteriorDestino = ultimoSaldoDestino
         ? Number(ultimoSaldoDestino.saldoActual)
         : 0;
-      const montoDecimal = Number(monto);
 
       const saldoDestino = await prisma.saldoCuentaCorriente.create({
         data: {
           cuentaCorrienteId: cuentaCorrienteDestinoId,
-          empresaId: empresaDestinoId,
+          empresaId: empresaId,
           fecha: new Date(),
           saldoAnterior: saldoAnteriorDestino,
           ingresos: montoDecimal,
@@ -365,8 +363,7 @@ async function validarReferenciasMovimientoCaja(data) {
   const {
     cuentaCorrienteOrigenId,
     cuentaCorrienteDestinoId,
-    empresaOrigenId,
-    empresaDestinoId,
+    empresaId,
     tipoMovimientoId,
     monedaId,
     usuarioId,
@@ -428,49 +425,16 @@ async function validarReferenciasMovimientoCaja(data) {
       throw new ValidationError("Cuenta corriente origen no existente");
   }
 
-  if (tipoMov.esTransferencia) {
-    if (!empresaOrigenId || !empresaDestinoId) {
-      throw new ValidationError(
-        "Las transferencias requieren empresa origen Y empresa destino",
-      );
-    }
-    const empresaOrigen = await prisma.empresa.findUnique({
-      where: { id: empresaOrigenId },
-    });
-    if (!empresaOrigen)
-      throw new ValidationError("Empresa origen no existente");
-
-    const empresaDestino = await prisma.empresa.findUnique({
-      where: { id: empresaDestinoId },
-    });
-    if (!empresaDestino)
-      throw new ValidationError("Empresa destino no existente");
-  } else if (tipoMov.esIngreso) {
-    if (!empresaDestinoId) {
-      throw new ValidationError("Los ingresos requieren empresa destino");
-    }
-    if (empresaOrigenId) {
-      throw new ValidationError("Los ingresos no deben tener empresa origen");
-    }
-    const empresaDestino = await prisma.empresa.findUnique({
-      where: { id: empresaDestinoId },
-    });
-    if (!empresaDestino)
-      throw new ValidationError("Empresa destino no existente");
-  } else {
-    if (!empresaOrigenId) {
-      throw new ValidationError("Los egresos requieren empresa origen");
-    }
-    if (empresaDestinoId) {
-      throw new ValidationError("Los egresos no deben tener empresa destino");
-    }
-    const empresaOrigen = await prisma.empresa.findUnique({
-      where: { id: empresaOrigenId },
-    });
-    if (!empresaOrigen)
-      throw new ValidationError("Empresa origen no existente");
+    if (!empresaId) {
+    throw new ValidationError("El campo empresaId es obligatorio");
   }
 
+  const empresa = await prisma.empresa.findUnique({
+    where: { id: empresaId },
+  });
+  if (!empresa) {
+    throw new ValidationError("Empresa no existente");
+  }
   if (entidadComercialId) {
     const entidadComercial = await prisma.entidadComercial.findUnique({
       where: { id: entidadComercialId },
@@ -1045,10 +1009,7 @@ const revertir = async (id, motivoReversion, usuarioId) => {
     }
 
     const datosReversion = {
-      empresaOrigenId:
-        movimientoOriginal.empresaDestinoId ||
-        movimientoOriginal.empresaOrigenId,
-      empresaDestinoId: movimientoOriginal.empresaOrigenId,
+      empresaId: movimientoOriginal.empresaId,
       tipoMovimientoId: movimientoOriginal.tipoMovimientoId,
       entidadComercialId: movimientoOriginal.entidadComercialId,
       monto: movimientoOriginal.monto,
@@ -1117,10 +1078,7 @@ const listarConFiltrosAvanzados = async (filtros = {}) => {
     const where = {};
 
     if (empresaId) {
-      where.OR = [
-        { empresaOrigenId: Number(empresaId) },
-        { empresaDestinoId: Number(empresaId) },
-      ];
+      where.empresaId = Number(empresaId);
     }
 
     if (cuentaCorrienteId) {

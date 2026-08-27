@@ -39,7 +39,9 @@ const DESCRIPTIVE_NAMES = {
   'det-tareas-ot-cotizacion-dos': 'COTIZACION-TAREA-2',
   'det-tareas-ot-fotos': 'FOTOS-TAREA',
   'det-movs-entrega-rendir-comprobante': 'ENTREGA-RENDIR-COMPROBANTE-MOVIMIENTO',
-  'det-movs-entrega-rendir-operacion': 'ENTREGA-RENDIR-COMPROBANTE-OPERACION'
+  'det-movs-entrega-rendir-operacion': 'ENTREGA-RENDIR-COMPROBANTE-OPERACION',
+  'pago-cuenta-por-cobrar': 'VOUCHER-CONSOLIDADO-PAGO-CXC',
+  'movimiento-caja': 'VOUCHER-MOVIMIENTO-CAJA'
 };
 
 class PDFMergeService {

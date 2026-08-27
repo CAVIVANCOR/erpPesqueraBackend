@@ -65,10 +65,7 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
     const movimientosCaja = await prisma.movimientoCaja.findMany({
       where: {
         refOperacionEspecializadaMovCaja: Number(correlativo),
-        OR: [
-          { empresaOrigenId: Number(empresaId) },
-          { empresaDestinoId: Number(empresaId) }
-        ]
+        empresaId: Number(empresaId)
       },
       include: {
         tipoMovimiento: true,
@@ -95,7 +92,7 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
     ] = await Promise.all([
       prisma.pagoCuentaPorCobrar.findMany({
         where: { refOperacionEspecializadaMovCaja: Number(correlativo) },
-        include: { 
+        include: {
           cuentaPorCobrar: {
             include: {
               entidadComercial: true,
@@ -106,7 +103,7 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
       }),
       prisma.pagoCuentaPorPagar.findMany({
         where: { refOperacionEspecializadaMovCaja: Number(correlativo) },
-        include: { 
+        include: {
           cuentaPorPagar: {
             include: {
               entidadComercial: true,
@@ -117,7 +114,7 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
       }),
       prisma.pagoDeudaPersonal.findMany({
         where: { refOperacionEspecializadaMovCaja: Number(correlativo) },
-        include: { 
+        include: {
           deudaConPersonal: {
             include: {
               personal: true,
@@ -129,7 +126,7 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
       }),
       prisma.pagoDeudaTributaria.findMany({
         where: { refOperacionEspecializadaMovCaja: Number(correlativo) },
-        include: { 
+        include: {
           deudaTributaria: {
             include: {
               tipoDeuda: true,
@@ -140,7 +137,7 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
       }),
       prisma.pagoLetraCambio.findMany({
         where: { refOperacionEspecializadaMovCaja: Number(correlativo) },
-        include: { 
+        include: {
           letraCambio: {
             include: {
               entidadComercial: true,
@@ -151,7 +148,7 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
       }),
       prisma.cuotaPrestamo.findMany({
         where: { refOperacionEspecializadaMovCaja: Number(correlativo) },
-        include: { 
+        include: {
           prestamoBancario: {
             include: {
               entidadFinanciera: true,
@@ -163,7 +160,7 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
       }),
       prisma.detMovsEntregaRendir.findMany({
         where: { refOperacionEspecializadaMovCaja: Number(correlativo) },
-        include: { 
+        include: {
           entregaARendir: {
             include: {
               responsable: true,
@@ -188,9 +185,9 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
         asignaciones: asignaciones
       },
       totalMovimientos: movimientosCaja.length,
-      totalPagos: pagosCxC.length + pagosCxP.length + pagosDeudaPersonal.length + 
-                  pagosDeudaTributaria.length + pagosLetraCambio.length + 
-                  cuotasPrestamo.length + asignaciones.length
+      totalPagos: pagosCxC.length + pagosCxP.length + pagosDeudaPersonal.length +
+        pagosDeudaTributaria.length + pagosLetraCambio.length +
+        cuotasPrestamo.length + asignaciones.length
     };
   } catch (error) {
     console.error('Error al consultar operación por correlativo:', error);

@@ -1398,7 +1398,6 @@ const generarFacturaDesdePreFactura = async (
           numSerieDocFinal: numSerie,
           numCorreDocFinal: numCorre,
           facturado: true,
-          fechaFacturacion: new Date(),
         },
       });
 
@@ -1607,7 +1606,6 @@ const generarBoletaDesdePreFactura = async (preFacturaId, datosBoleta = {}) => {
           numSerieDocFinal: numSerie,
           numCorreDocFinal: numCorre,
           facturado: true,
-          fechaFacturacion: new Date(),
         },
       });
 
@@ -1874,7 +1872,7 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         );
       }
 
-           // Validar que NO sea GERENCIAL
+      // Validar que NO sea GERENCIAL
       if (preFactura.esGerencial) {
         throw new ValidationError(
           "Las PreFacturas GERENCIALES deben usar 'Generar Venta' (CxC Negra)",
@@ -2068,6 +2066,9 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         // ✅ INTEGRACIÓN CONTABLE - HEREDADO DE PREFACTURA
         fechaContable: preFactura.fechaContable,
         periodoContableId: preFactura.periodoContableId,
+        // AUDITORÍA
+        creadoPor: preFactura.creadoPor,
+        actualizadoPor: preFactura.actualizadoPor,
       };
 
       let cuentaPorCobrar;
@@ -2320,7 +2321,7 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         );
       }
 
-            // Validar que sea GERENCIAL
+      // Validar que sea GERENCIAL
       if (!preFactura.esGerencial) {
         throw new ValidationError(
           "Solo se pueden facturar como NEGRA las PreFacturas GERENCIALES",
@@ -2511,6 +2512,9 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         // ✅ INTEGRACIÓN CONTABLE - HEREDADO DE PREFACTURA
         fechaContable: preFactura.fechaContable,
         periodoContableId: preFactura.periodoContableId,
+        // AUDITORÍA
+        creadoPor: preFactura.creadoPor,
+        actualizadoPor: preFactura.actualizadoPor,
       };
 
       let cuentaPorCobrar;
@@ -2960,7 +2964,7 @@ const aprobar = async (id) => {
         throw new NotFoundError("PreFactura no encontrada.");
       }
 
-            // Verificar que tiene al menos un detalle
+      // Verificar que tiene al menos un detalle
       if (!preFactura.detalles || preFactura.detalles.length === 0) {
         throw new ValidationError(
           "La PreFactura debe tener al menos un detalle para ser aprobada.",
@@ -3066,12 +3070,20 @@ const convertirMontoASoles = (monto, preFactura) => {
  * Calcula totales del asiento en la moneda original del documento
  */
 const calcularTotalesEnMonedaOriginal = (preFactura) => {
-  const subtotal = Number(preFactura.subtotal) || 0;
-  const totalIGV = Number(preFactura.totalIGV) || 0;
+  // ⭐ Recalcular desde detalles en lugar de usar valores de BD
+  const subtotalCalculado = preFactura.detalles?.reduce((sum, det) => {
+    const montoDetalle = Math.round(Number(det.cantidad) * Number(det.precioUnitario) * 100) / 100;
+    return Math.round((sum + montoDetalle) * 100) / 100;
+  }, 0) || 0;
+
+  const totalIGVCalculado = preFactura.exoneradoIgv || preFactura.esGerencial
+    ? 0
+    : Math.round(subtotalCalculado * 0.18 * 100) / 100;
+
   const total = Number(preFactura.total) || 0;
 
   const totalDebe = Math.round(total * 100) / 100;
-  const totalHaber = Math.round((subtotal + totalIGV) * 100) / 100;
+  const totalHaber = Math.round((subtotalCalculado + totalIGVCalculado) * 100) / 100;
 
   return { totalDebe, totalHaber };
 };
@@ -3206,6 +3218,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
     // Determinar tipo de libro según esGerencial
     const tipoLibro = preFactura.esGerencial ? "GERENCIAL" : "FISCAL";
     const { totalDebe: totalDebeOriginal, totalHaber: totalHaberOriginal } = calcularTotalesEnMonedaOriginal(preFactura);
+    
     const borrador = {
       empresaId: preFactura.empresaId,
       periodoContableId: preFactura.periodoContableId,
@@ -3228,9 +3241,9 @@ const generarBorradorAsiento = async (preFacturaId) => {
         : preFactura.detalles.reduce((acc, det) => {
           const cuentaId = det.producto?.cuentaVentasId || cuentaHaber.id;
           const existing = acc.find(a => a.planCuentaId === cuentaId);
-          const montoDetalle = Number(det.cantidad) * Number(det.precioUnitario);
+          const montoDetalle = Math.round(Number(det.cantidad) * Number(det.precioUnitario) * 100) / 100;
           if (existing) {
-            existing.monto += montoDetalle;
+            existing.monto = Math.round((existing.monto + montoDetalle) * 100) / 100;
           } else {
             acc.push({ planCuentaId: cuentaId, monto: montoDetalle });
           }
@@ -3248,7 +3261,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
           haber: 0,
           monedaId: MONEDA_SOLES_ID,
           tipoCambio: preFactura.tipoCambio,
-          debeMonedaExtranjera: total,
+          debeMonedaExtranjera: Number(preFactura.monedaId) === 2 ? total : Math.round((total / Number(preFactura.tipoCambio)) * 100) / 100,
           haberMonedaExtranjera: 0,
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
@@ -3264,7 +3277,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
           monedaId: MONEDA_SOLES_ID,
           tipoCambio: preFactura.tipoCambio,
           debeMonedaExtranjera: 0,
-          haberMonedaExtranjera: dv.monto,
+          haberMonedaExtranjera: Number(preFactura.monedaId) === 2 ? Math.round(dv.monto * 100) / 100 : Math.round((dv.monto / Number(preFactura.tipoCambio)) * 100) / 100,
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
           numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3280,9 +3293,9 @@ const generarBorradorAsiento = async (preFacturaId) => {
         : preFactura.detalles.reduce((acc, det) => {
           const cuentaId = det.producto?.cuentaVentasId || cuentaHaber.id;
           const existing = acc.find(a => a.planCuentaId === cuentaId);
-          const montoDetalle = Number(det.cantidad) * Number(det.precioUnitario);
+          const montoDetalle = Math.round(Number(det.cantidad) * Number(det.precioUnitario) * 100) / 100;
           if (existing) {
-            existing.monto += montoDetalle;
+            existing.monto = Math.round((existing.monto + montoDetalle) * 100) / 100;
           } else {
             acc.push({ planCuentaId: cuentaId, monto: montoDetalle });
           }
@@ -3302,7 +3315,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
-            debeMonedaExtranjera: Math.abs(dv.monto),
+            debeMonedaExtranjera: Number(preFactura.monedaId) === 2 ? Math.abs(dv.monto) : Math.round((Math.abs(dv.monto) / Number(preFactura.tipoCambio)) * 100) / 100,
             haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
@@ -3319,7 +3332,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
             debeMonedaExtranjera: 0,
-            haberMonedaExtranjera: Math.abs(total),
+            haberMonedaExtranjera: Number(preFactura.monedaId) === 2 ? Math.abs(total) : Math.round((Math.abs(total) / Number(preFactura.tipoCambio)) * 100) / 100,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3336,7 +3349,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
-            debeMonedaExtranjera: total,
+            debeMonedaExtranjera: Number(preFactura.monedaId) === 2 ? total : Math.round((total / Number(preFactura.tipoCambio)) * 100) / 100,
             haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
@@ -3352,7 +3365,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
             debeMonedaExtranjera: 0,
-            haberMonedaExtranjera: dv.monto,
+            haberMonedaExtranjera: Number(preFactura.monedaId) === 2 ? Math.round(dv.monto * 100) / 100 : Math.round((dv.monto / Number(preFactura.tipoCambio)) * 100) / 100,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3382,9 +3395,9 @@ const generarBorradorAsiento = async (preFacturaId) => {
         : preFactura.detalles.reduce((acc, det) => {
           const cuentaId = det.producto?.cuentaVentasId || cuentaHaber.id;
           const existing = acc.find(a => a.planCuentaId === cuentaId);
-          const montoDetalle = Number(det.cantidad) * Number(det.precioUnitario);
+          const montoDetalle = Math.round(Number(det.cantidad) * Number(det.precioUnitario) * 100) / 100;
           if (existing) {
-            existing.monto += montoDetalle;
+            existing.monto = Math.round((existing.monto + montoDetalle) * 100) / 100;
           } else {
             acc.push({ planCuentaId: cuentaId, monto: montoDetalle });
           }
@@ -3404,7 +3417,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
-            debeMonedaExtranjera: Math.abs(dv.monto),
+            debeMonedaExtranjera: Number(preFactura.monedaId) === 2 ? Math.abs(dv.monto) : Math.round((Math.abs(dv.monto) / Number(preFactura.tipoCambio)) * 100) / 100,
             haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
@@ -3420,7 +3433,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
-            debeMonedaExtranjera: Math.abs(totalIGV),
+            debeMonedaExtranjera: Number(preFactura.monedaId) === 2 ? Math.abs(totalIGV) : Math.round((Math.abs(totalIGV) / Number(preFactura.tipoCambio)) * 100) / 100,
             haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
@@ -3436,7 +3449,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
             debeMonedaExtranjera: 0,
-            haberMonedaExtranjera: Math.abs(total),
+            haberMonedaExtranjera: Number(preFactura.monedaId) === 2 ? Math.abs(total) : Math.round((Math.abs(total) / Number(preFactura.tipoCambio)) * 100) / 100,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3453,7 +3466,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             haber: 0,
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
-            debeMonedaExtranjera: total,
+            debeMonedaExtranjera: Number(preFactura.monedaId) === 2 ? total : Math.round((total / Number(preFactura.tipoCambio)) * 100) / 100,
             haberMonedaExtranjera: 0,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
@@ -3469,7 +3482,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
             debeMonedaExtranjera: 0,
-            haberMonedaExtranjera: dv.monto,
+            haberMonedaExtranjera: Number(preFactura.monedaId) === 2 ? Math.round(dv.monto * 100) / 100 : Math.round((dv.monto / Number(preFactura.tipoCambio)) * 100) / 100,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3485,7 +3498,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
             monedaId: MONEDA_SOLES_ID,
             tipoCambio: preFactura.tipoCambio,
             debeMonedaExtranjera: 0,
-            haberMonedaExtranjera: totalIGV,
+            haberMonedaExtranjera: Number(preFactura.monedaId) === 2 ? Math.round(totalIGV * 100) / 100 : Math.round((totalIGV / Number(preFactura.tipoCambio)) * 100) / 100,
             entidadComercialId: preFactura.clienteId,
             tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
             numeroDocumentoOrigen: preFactura.numeroDocumento,
@@ -3571,17 +3584,14 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
       0,
     );
 
-    const totalDebe = asientoData.totalDebe !== undefined && asientoData.totalDebe !== null
-      ? Number(asientoData.totalDebe)
-      : (Number(asientoData.monedaId) === 1
-        ? totalDebePEN
-        : Math.round((totalDebePEN / Number(preFactura.tipoCambio)) * 100) / 100);
+    // ⭐ SIEMPRE recalcular desde detalles para evitar descuadres
+    const totalDebe = Number(asientoData.monedaId) === 1
+      ? totalDebePEN
+      : Math.round((totalDebePEN / Number(preFactura.tipoCambio)) * 100) / 100;
 
-    const totalHaber = asientoData.totalHaber !== undefined && asientoData.totalHaber !== null
-      ? Number(asientoData.totalHaber)
-      : (Number(asientoData.monedaId) === 1
-        ? totalHaberPEN
-        : Math.round((totalHaberPEN / Number(preFactura.tipoCambio)) * 100) / 100);
+    const totalHaber = Number(asientoData.monedaId) === 1
+      ? totalHaberPEN
+      : Math.round((totalHaberPEN / Number(preFactura.tipoCambio)) * 100) / 100;
 
     const diferencia = totalDebe - totalHaber;
 

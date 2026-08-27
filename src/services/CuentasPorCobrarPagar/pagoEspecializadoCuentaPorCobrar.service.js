@@ -717,7 +717,7 @@ const procesarPagoEspecializado = async (data) => {
         data: {
           refOperacionEspecializadaMovCaja: correlativo,
           tipoMovimientoId: Number(data.tipoMovimientoIngresoId),
-          empresaDestinoId: Number(data.empresaId),
+          empresaId: Number(data.empresaId),
           entidadComercialId: Number(cuentaPorCobrar.clienteId),
           monto: Number(data.montoPagado),
           monedaId: Number(data.monedaPagoId),
@@ -770,7 +770,7 @@ const procesarPagoEspecializado = async (data) => {
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.ITF,
-            empresaDestinoId: Number(data.empresaId),
+            empresaId: Number(data.empresaId),
             entidadComercialId: Number(cuentaPorCobrar.clienteId),
             monto: Number(data.montoITF),
             monedaId: Number(data.monedaPagoId),
@@ -824,7 +824,7 @@ const procesarPagoEspecializado = async (data) => {
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.COMISION_BANCARIA,
-            empresaDestinoId: Number(data.empresaId),
+            empresaId: Number(data.empresaId),
             entidadComercialId: Number(cuentaPorCobrar.clienteId),
             monto: Number(data.montoComision),
             monedaId: Number(data.monedaPagoId),
@@ -1360,10 +1360,7 @@ const obtenerPagosPorCorrelativo = async (empresaId, correlativo) => {
     const movimientos = await prisma.movimientoCaja.findMany({
       where: {
         refOperacionEspecializadaMovCaja: Number(correlativo),
-        OR: [
-          { empresaOrigenId: Number(empresaId) },
-          { empresaDestinoId: Number(empresaId) }
-        ]
+        empresaId: Number(empresaId)
       },
       include: {
         tipoMovimiento: true,
