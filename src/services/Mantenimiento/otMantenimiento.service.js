@@ -187,7 +187,7 @@ const obtenerPorId = async (id) => {
  * Crea una OT validando campos obligatorios y existencia de claves foráneas.
  */
 const crear = async (data) => {
-  try {
+  try {    
     if (
       !data.empresaId ||
       !data.tipoDocumentoId ||
@@ -208,7 +208,7 @@ const crear = async (data) => {
     return await prisma.$transaction(async (tx) => {
       // 1. Obtener la serie seleccionada
       const serie = await tx.serieDoc.findUnique({
-        where: { id: BigInt(data.serieDocId) },
+        where: { id: Number(data.serieDocId) },
       });
 
       if (!serie) {
@@ -231,8 +231,8 @@ const crear = async (data) => {
 
       // 4. Actualizar el correlativo en SerieDoc
       await tx.serieDoc.update({
-        where: { id: BigInt(data.serieDocId) },
-        data: { correlativo: BigInt(nuevoCorrelativo) },
+        where: { id: Number(data.serieDocId) },
+        data: { correlativo: Number(nuevoCorrelativo) },
       });
 
       // 5. Crear objeto limpio solo con campos del modelo (patrón estándar)
@@ -273,10 +273,18 @@ const crear = async (data) => {
         creadoPor: data.creadoPor,
         actualizadoPor: data.actualizadoPor,
       };
+            
       // 6. Crear la OT con los números generados (patrón estándar)
       return await tx.oTMantenimiento.create({ data: datosLimpios });
     });
   } catch (err) {
+    console.error("=== ERROR AL CREAR OT ===");
+    console.error("Tipo de error:", err.constructor.name);
+    console.error("Código:", err.code);
+    console.error("Mensaje:", err.message);
+    console.error("Stack:", err.stack);
+    if (err.meta) console.error("Meta:", err.meta);
+    
     if (err instanceof ValidationError || err instanceof ConflictError)
       throw err;
     if (err.code && err.code.startsWith("P"))
