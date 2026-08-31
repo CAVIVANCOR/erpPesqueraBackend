@@ -407,7 +407,38 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
     });
     const correlativo = (ultimoAsiento?.correlativo || 0) + 1;
     const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, "0")}`;
-    const montoCapital = Number(prestamo.saldoCapital);
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // CÁLCULO DEL SALDO CAPITAL PARA SALDO INICIAL
+    // ═══════════════════════════════════════════════════════════════════════
+    // Para préstamos con esSaldoInicial=true, el asiento debe registrar
+    // TODAS las cuotas IMPAGAS (sin importar fecha de vencimiento)
+    // porque representan la deuda total pendiente al inicio del período
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    // Obtener todas las cuotas del préstamo
+    const cuotas = await tx.cuotaPrestamo.findMany({
+      where: { prestamoBancarioId: prestamo.id },
+      orderBy: { numeroCuota: 'asc' }
+    });
+    
+    // Filtrar cuotas IMPAGAS (no pagadas y no marcadas como saldo inicial pagado)
+    const cuotasImpagas = cuotas.filter(c => {
+      const noEstaPagada = c.estadoPago !== 'PAGADO' && !c.saldoInicialPagada;
+      return noEstaPagada;
+    });
+    
+    // Calcular capital de cuotas impagas
+    const montoCapital = cuotasImpagas.reduce(
+      (sum, c) => sum + Number(c.montoCapital || 0),
+      0
+    );
+    
+    // Si no hay cuotas impagas, no generar asiento
+    if (montoCapital === 0 || cuotasImpagas.length === 0) {
+      console.warn(`⚠️ [generarAsientoSaldoInicial] Préstamo ${prestamo.id}: No hay cuotas impagas. No se generará asiento.`);
+      return null;
+    }
     const asiento = await tx.asientoContable.create({
       data: {
         empresaId: prestamo.empresaId,

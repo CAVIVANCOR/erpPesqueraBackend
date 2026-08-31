@@ -4377,7 +4377,6 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
       orderBy: { fechaDocumento: 'asc' }
     });
 
-    console.log(`📊 EXPORTAR TXT - Empresa: ${empresaId}, Periodo: ${periodoContableId}, PreFacturas encontradas: ${preFacturas.length}`);
 
     // Generar líneas del TXT
     const lineas = [];

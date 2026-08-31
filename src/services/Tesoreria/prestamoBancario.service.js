@@ -423,10 +423,20 @@ const crear = async (data) => {
     }
 
     // Calcular saldos iniciales
-    const saldoCapital = parseFloat(data.montoDesembolsado);
-    const saldoInteres = 0;
-    const capitalPagado = 0;
-    const interesPagado = 0;
+    // Si es saldo inicial, usar el saldoCapital del formulario (puede ser diferente al montoDesembolsado)
+    // Esto es importante para Leasing vehicular y otros préstamos con saldo inicial
+    const saldoCapital = data.esSaldoInicial && data.saldoCapital !== undefined
+      ? parseFloat(data.saldoCapital)
+      : parseFloat(data.montoDesembolsado);
+    const saldoInteres = data.esSaldoInicial && data.saldoInteres !== undefined
+      ? parseFloat(data.saldoInteres)
+      : 0;
+    const capitalPagado = data.esSaldoInicial && data.capitalPagado !== undefined
+      ? parseFloat(data.capitalPagado)
+      : 0;
+    const interesPagado = data.esSaldoInicial && data.interesPagado !== undefined
+      ? parseFloat(data.interesPagado)
+      : 0;
 
     // Generar cronograma de cuotas
     const cuotas = calcularCronogramaCuotas(data);
