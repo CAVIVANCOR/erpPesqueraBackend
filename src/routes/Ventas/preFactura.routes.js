@@ -23,6 +23,13 @@ router.get(
 );
 
 router.get(
+  '/exportar-registro-ventas-sunat',
+  autenticarJWT,
+  checkPermission('preFactura', 'ver'),
+  preFacturaController.exportarRegistroVentasSUNAT
+);
+
+router.get(
   '/por-cliente',
   autenticarJWT,
   checkPermission('preFactura', 'ver'),

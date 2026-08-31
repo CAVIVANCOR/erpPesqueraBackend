@@ -90,6 +90,11 @@ const listar = async () => {
         motivoNotaCreditoDebito: true,
         tipoOperacionSunat: true,
         tipoDetraccion: true,
+        dcmtoAfectoNCND: {
+          include: {
+            tipoDocumentoFinal: true
+          }
+        },
         detalles: {
           include: {
             producto: {
@@ -4139,6 +4144,107 @@ const asignarCentroCostoMasivo = async (centroCostoId, ordenesIds) => {
   }
 };
 
+async function exportarRegistroComprasSUNAT(empresaId, periodoContableId) {
+  try {
+    const [empresa, periodo] = await Promise.all([
+      prisma.empresa.findUnique({ where: { id: empresaId } }),
+      prisma.periodoContable.findUnique({ where: { id: periodoContableId } })
+    ]);
+
+    if (!empresa || !periodo) {
+      throw new NotFoundError('Empresa o Periodo no encontrado');
+    }
+
+    const ordenesCompra = await prisma.ordenCompra.findMany({
+      where: {
+        empresaId,
+        periodoContableId,
+        comprobanteRecibido: true,
+        esGerencial: false
+      },
+      include: {
+        proveedor: {
+          include: {
+            tipoDocumento: true
+          }
+        },
+        tipoDocumentoFinal: true,
+        moneda: true,
+        tipoOperacionSunat: true,
+        dcmtoAfectoNCND: {
+          include: {
+            tipoDocumentoFinal: true
+          }
+        }
+      },
+      orderBy: { fechaRecepcionComprobante: 'asc' }
+    });
+
+    const lineas = [];
+    let correlativo = 1;
+
+    for (const oc of ordenesCompra) {
+      const fechaDoc = oc.fechaDocumento ? new Date(oc.fechaDocumento) : null;
+      const fechaCont = oc.fechaContable ? new Date(oc.fechaContable) : null;
+      
+      if (!fechaDoc || !fechaCont) {
+        console.warn(`⚠️ OrdenCompra ${oc.id} sin fechaDocumento o fechaContable, se omite del TXT`);
+        continue;
+      }
+      
+      const periodo = `${fechaCont.getFullYear()}${String(fechaCont.getMonth() + 1).padStart(2, '0')}00`;
+      const correlativoStr = `M${String(correlativo).padStart(9, '0')}`;
+      const fechaEmision = `${String(fechaDoc.getDate()).padStart(2, '0')}/${String(fechaDoc.getMonth() + 1).padStart(2, '0')}/${fechaDoc.getFullYear()}`;
+      const fechaVenc = oc.fechaVencimiento ? (() => { const fv = new Date(oc.fechaVencimiento); return `${String(fv.getDate()).padStart(2, '0')}/${String(fv.getMonth() + 1).padStart(2, '0')}/${fv.getFullYear()}`; })() : "";
+      const fechaContable = `${String(fechaCont.getDate()).padStart(2, '0')}/${String(fechaCont.getMonth() + 1).padStart(2, '0')}/${fechaCont.getFullYear()}`;
+
+      const tipoDocCodigo = oc.tipoDocumentoFinal?.codigo || "";
+      const serie = oc.numSerieDocFinal || "";
+      const numero = oc.numCorreDocFinal || "";
+      const tipoDocProv = oc.proveedor?.tipoDocumento?.codSunat || "6";
+      const nroDocProv = oc.proveedor?.numeroDocumento || "";
+      const razonSocialProv = oc.proveedor?.razonSocial || "";
+
+      const esExonerado = oc.esExoneradoAlIGV || false;
+      const baseGravada = !esExonerado ? Number(oc.subtotal || 0).toFixed(2) : "0.00";
+      const igv = Number(oc.totalIGV || 0).toFixed(2);
+      const exonerado = esExonerado ? Number(oc.subtotal || 0).toFixed(2) : "0.00";
+      const total = Number(oc.total || 0).toFixed(2);
+      const moneda = oc.moneda?.codigoSunat || "PEN";
+      const tipoCambio = Number(oc.tipoCambio || 1).toFixed(3);
+
+      const esNCND = ["07", "08", "NC", "ND"].includes(tipoDocCodigo);
+      const fechaDocMod = esNCND && oc.fechaDcmtoAfectoNCND ? (() => { const fdm = new Date(oc.fechaDcmtoAfectoNCND); return `${String(fdm.getDate()).padStart(2, '0')}/${String(fdm.getMonth() + 1).padStart(2, '0')}/${fdm.getFullYear()}`; })() : "";
+      const tipoDocMod = esNCND && oc.dcmtoAfectoNCND ? oc.dcmtoAfectoNCND.tipoDocumentoFinal?.codigo || "" : "";
+      const serieDocMod = esNCND && oc.dcmtoAfectoNCND ? oc.dcmtoAfectoNCND.numSerieDocFinal || "" : "";
+      const nroDocMod = esNCND && oc.dcmtoAfectoNCND ? oc.dcmtoAfectoNCND.numCorreDocFinal || "" : "";
+
+      const indDetraccion = oc.aplicaDetraccion ? "1" : "";
+      const estadoId = Number(oc.estadoId);
+      const estadoSunat = estadoId === 39 ? "1" : "2";
+
+      const linea = [
+        periodo, correlativoStr, correlativoStr, fechaEmision, fechaVenc, fechaContable,
+        tipoDocCodigo, serie, "", numero, "",
+        tipoDocProv, nroDocProv, razonSocialProv,
+        baseGravada, igv, "0.00", "0.00", exonerado, "0.00", "0.00", "0.00", "0.00", "0.00",
+        total, moneda, tipoCambio,
+        fechaDocMod, tipoDocMod, serieDocMod, "", nroDocMod,
+        indDetraccion, "01", "", "", "", "", "", "", estadoSunat, ""
+      ].join('|');
+
+      lineas.push(linea);
+      correlativo++;
+    }
+
+    return lineas.join('\n');
+  } catch (err) {
+    if (err.code && err.code.startsWith('P'))
+      throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+}
+
 export default {
   listar,
   obtenerPorId,
@@ -4161,5 +4267,5 @@ export default {
   calcularTotalesEImpuestos, // ⭐ AGREGAR
   asignarCentroCostoMasivo,
   obtenerTodos, // ← AGREGAR ESTA LÍNEA
-
+  exportarRegistroComprasSUNAT
 };

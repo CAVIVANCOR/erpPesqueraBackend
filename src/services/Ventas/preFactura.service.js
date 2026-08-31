@@ -198,6 +198,11 @@ const listar = async () => {
         tipoDocumentoFinal: true,
         serieDocFinal: true,
         preFacturaOrigen: true,
+        dcmtoAfectoNCND: {
+          include: {
+            tipoDocumentoFinal: true
+          }
+        },
         tipoAfectacionIGV: true,
         tipoOperacionSunat: true,
         tipoDetraccion: true,
@@ -3218,7 +3223,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
     // Determinar tipo de libro según esGerencial
     const tipoLibro = preFactura.esGerencial ? "GERENCIAL" : "FISCAL";
     const { totalDebe: totalDebeOriginal, totalHaber: totalHaberOriginal } = calcularTotalesEnMonedaOriginal(preFactura);
-    
+
     const borrador = {
       empresaId: preFactura.empresaId,
       periodoContableId: preFactura.periodoContableId,
@@ -4334,6 +4339,120 @@ async function actualizarTipoAfectacionIGVMasivo(ids, tipoAfectacionIGVId, usuar
   };
 }
 
+async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
+  try {
+    // Obtener empresa y periodo
+    const [empresa, periodo] = await Promise.all([
+      prisma.empresa.findUnique({ where: { id: empresaId } }),
+      prisma.periodoContable.findUnique({ where: { id: periodoContableId } })
+    ]);
+
+    if (!empresa || !periodo) {
+      throw new NotFoundError('Empresa o Periodo no encontrado');
+    }
+
+    // Obtener PreFacturas facturadas del periodo
+    const preFacturas = await prisma.preFactura.findMany({
+      where: {
+        empresaId,
+        periodoContableId,
+        facturado: true,
+        estadoId: { in: [95, 96, 97, 98] }
+      },
+      include: {
+        cliente: {
+          include: {
+            tipoDocumento: true
+          }
+        },
+        tipoDocumentoFinal: true,
+        moneda: true,
+        tipoOperacionSunat: true,
+        dcmtoAfectoNCND: {
+          include: {
+            tipoDocumentoFinal: true
+          }
+        }
+      },
+      orderBy: { fechaDocumento: 'asc' }
+    });
+
+    console.log(`📊 EXPORTAR TXT - Empresa: ${empresaId}, Periodo: ${periodoContableId}, PreFacturas encontradas: ${preFacturas.length}`);
+
+    // Generar líneas del TXT
+    const lineas = [];
+    let correlativo = 1;
+
+    for (const pf of preFacturas) {
+      const fechaDoc = pf.fechaDocumento ? new Date(pf.fechaDocumento) : null;
+      const fechaCont = pf.fechaContable ? new Date(pf.fechaContable) : null;
+      
+      if (!fechaDoc || !fechaCont) {
+        console.warn(`⚠️ PreFactura ${pf.id} sin fechaDocumento o fechaContable, se omite del TXT`);
+        continue;
+      }
+      
+      const periodo = `${fechaCont.getFullYear()}${String(fechaCont.getMonth() + 1).padStart(2, '0')}00`;
+      const correlativoStr = `M${String(correlativo).padStart(9, '0')}`;
+      const fechaEmision = `${String(fechaDoc.getDate()).padStart(2, '0')}/${String(fechaDoc.getMonth() + 1).padStart(2, '0')}/${fechaDoc.getFullYear()}`;
+      const fechaVenc = pf.fechaVencimiento ? (() => { const fv = new Date(pf.fechaVencimiento); return `${String(fv.getDate()).padStart(2, '0')}/${String(fv.getMonth() + 1).padStart(2, '0')}/${fv.getFullYear()}`; })() : "";
+      const fechaContable = `${String(fechaCont.getDate()).padStart(2, '0')}/${String(fechaCont.getMonth() + 1).padStart(2, '0')}/${fechaCont.getFullYear()}`;
+
+      const tipoDocCodigo = pf.tipoDocumentoFinal?.codigo || "";
+      const serie = pf.numSerieDocFinal || "";
+      const numero = pf.numCorreDocFinal || "";
+      const tipoDocCliente = pf.cliente?.tipoDocumento?.codSunat || "";
+      const nroDocCliente = pf.cliente?.numeroDocumento || "";
+      const razonSocialCliente = pf.cliente?.razonSocial || "";
+
+      const esExportacion = pf.tipoOperacionSunat?.codigo === "0200";
+      const valorExportacion = esExportacion ? Number(pf.total || 0).toFixed(2) : "0.00";
+      const baseGravada = !pf.exoneradoIgv && !esExportacion ? Number(pf.subtotal || 0).toFixed(2) : "0.00";
+      const descuentoBI = Number(pf.totalDescuentos || 0).toFixed(2);
+      const igv = Number(pf.totalIGV || 0).toFixed(2);
+      const exonerado = pf.exoneradoIgv ? Number(pf.subtotal || 0).toFixed(2) : "0.00";
+      const total = Number(pf.total || 0).toFixed(2);
+      const moneda = pf.moneda?.codigoSunat || "";
+      const tipoCambio = Number(pf.tipoCambio || 0).toFixed(3);
+
+      // Documento modificado (para NC/ND)
+      const esNCND = ["07", "08", "NC", "ND"].includes(tipoDocCodigo);
+      const fechaDocMod = esNCND && pf.fechaDcmtoAfectoNCND ? (() => { const fdm = new Date(pf.fechaDcmtoAfectoNCND); return `${String(fdm.getDate()).padStart(2, '0')}/${String(fdm.getMonth() + 1).padStart(2, '0')}/${fdm.getFullYear()}`; })() : "";
+      const tipoDocMod = esNCND && pf.dcmtoAfectoNCND ? pf.dcmtoAfectoNCND.tipoDocumentoFinal?.codigo || "" : "";
+      const serieDocMod = esNCND && pf.dcmtoAfectoNCND ? pf.dcmtoAfectoNCND.numSerieDocFinal || "" : "";
+      const nroDocMod = esNCND && pf.dcmtoAfectoNCND ? pf.dcmtoAfectoNCND.numCorreDocFinal || "" : "";
+
+      const contratoId = pf.contratoServicioId || "";
+      const indDetraccion = pf.aplicaDetraccion ? "1" : "";
+
+      // Estado SUNAT
+      const estadoId = Number(pf.estadoId);
+      const estadoSunat = [95, 96, 97, 98].includes(estadoId) ? "1" : ([47, 99].includes(estadoId) ? "2" : "");
+
+      // Construir línea (38 campos separados por | - SUNAT 14.1)
+      const linea = [
+        periodo, correlativoStr, correlativoStr, fechaEmision, fechaVenc, fechaContable,
+        tipoDocCodigo, serie, "", numero, numero,
+        tipoDocCliente, nroDocCliente, razonSocialCliente,
+        valorExportacion, baseGravada, descuentoBI, igv, "0.00",
+        exonerado, "0.00", "0.00", "0.00", "0.00", "0.00", "0.00",
+        total, moneda, tipoCambio,
+        fechaDocMod, tipoDocMod, serieDocMod, nroDocMod,
+        contratoId, "", indDetraccion, estadoSunat, "", ""
+      ].join('|');
+
+      lineas.push(linea);
+      correlativo++;
+    }
+
+    return lineas.join('\n');
+  } catch (err) {
+    if (err.code && err.code.startsWith('P'))
+      throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+}
+
 export default {
   listar,
   obtenerPorId,
@@ -4360,4 +4479,5 @@ export default {
   actualizarTipoOperacionSunatMasivo,
   actualizarTipoAfectacionIGVMasivo,
   calcularTotalesEImpuestos, // ⭐ AGREGAR
+  exportarRegistroVentasSUNAT, // ⭐ NUEVO
 };

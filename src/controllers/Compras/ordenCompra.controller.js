@@ -365,3 +365,25 @@ export async function obtenerOrdenesCompraPorProveedor(req, res, next) {
     next(err);
   }
 }
+
+export async function exportarRegistroComprasSUNAT(req, res, next) {
+  try {
+    const { empresaId, periodoContableId } = req.query;
+    
+    if (!empresaId || !periodoContableId) {
+      return res.status(400).json({ message: 'empresaId y periodoContableId son requeridos' });
+    }
+
+    const txtContent = await ordenCompraService.exportarRegistroComprasSUNAT(
+      Number(empresaId),
+      Number(periodoContableId)
+    );
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="registro_compras.txt"');
+    res.send(txtContent);
+  } catch (err) {
+    console.error('❌ ERROR EN CONTROLADOR EXPORTAR TXT:', err);
+    next(err);
+  }
+}

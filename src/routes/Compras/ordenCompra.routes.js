@@ -32,6 +32,14 @@ router.get(
   ordenCompraController.obtenerOrdenesCompraPorProveedor
 );
 
+// Ruta de exportación SUNAT (DEBE IR ANTES DE /:id)
+router.get(
+  '/exportar-registro-compras-sunat',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.exportarRegistroComprasSUNAT
+);
+
 
 // ========================================
 // RUTAS CRUD PARA ORDENCOMPRA
@@ -201,7 +209,5 @@ router.delete(
   checkPermission('ordenCompra', 'ver'),
   ordenCompraController.eliminarAsientoContable
 );
-
-
 
 export default router;

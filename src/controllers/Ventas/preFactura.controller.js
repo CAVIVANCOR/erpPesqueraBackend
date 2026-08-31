@@ -434,3 +434,26 @@ export async function actualizarTipoAfectacionIGVMasivo(req, res, next) {
     next(error);
   }
 }
+
+
+export async function exportarRegistroVentasSUNAT(req, res, next) {
+  try {
+    const { empresaId, periodoContableId } = req.query;
+    
+    if (!empresaId || !periodoContableId) {
+      return res.status(400).json({ message: 'empresaId y periodoContableId son requeridos' });
+    }
+
+    const txtContent = await preFacturaService.exportarRegistroVentasSUNAT(
+      Number(empresaId),
+      Number(periodoContableId)
+    );
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="registro_ventas.txt"');
+    res.send(txtContent);
+  } catch (err) {
+    console.error('❌ ERROR EN CONTROLADOR EXPORTAR TXT:', err);
+    next(err);
+  }
+}
