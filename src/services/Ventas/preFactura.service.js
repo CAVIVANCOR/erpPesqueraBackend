@@ -4369,7 +4369,7 @@ async function actualizarTipoAfectacionIGVMasivo(ids, tipoAfectacionIGVId, usuar
   };
 }
 
-async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
+async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluirSaldosIniciales = false) {
   try {
     // Obtener empresa y periodo
     const [empresa, periodo] = await Promise.all([
@@ -4381,13 +4381,28 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
       throw new NotFoundError('Empresa o Periodo no encontrado');
     }
 
+    // Construir filtro dinámico para tipoDocumento
+    const filtroTipoDocumento = incluirSaldosIniciales 
+      ? {} 
+      : {
+          tipoDocumento: {
+            codigo: {
+              not: {
+                startsWith: "SI"
+              }
+            }
+          }
+        };
+
     // Obtener PreFacturas facturadas del periodo
     const preFacturas = await prisma.preFactura.findMany({
       where: {
         empresaId,
         periodoContableId,
         facturado: true,
-        estadoId: { in: [95, 96, 97, 98] }
+        esGerencial: false,
+        estadoId: { in: [95, 96, 97, 98] },
+        ...filtroTipoDocumento
       },
       include: {
         cliente: {
@@ -4395,6 +4410,7 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
             tipoDocumento: true
           }
         },
+        tipoDocumento: true,
         tipoDocumentoFinal: true,
         moneda: true,
         tipoOperacionSunat: true,
@@ -4404,15 +4420,30 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
           }
         }
       },
-      orderBy: { fechaDocumento: 'asc' }
+      orderBy: [
+        { fechaDocumento: 'asc' },
+        { numCorreDocFinal: 'asc' }
+      ]
     });
 
+    // Filtrar solo documentos oficiales SUNAT: Factura (01), Boleta (03), NC (07), ND (08)
+    let documentosOficialesSunat = preFacturas.filter(pf => {
+      const codigo = pf.tipoDocumentoFinal?.codigoSunat;
+      return codigo === "01" || codigo === "03" || codigo === "07" || codigo === "08";
+    });
+
+    // Ordenar explícitamente por fechaDocumento ASC
+    documentosOficialesSunat = documentosOficialesSunat.sort((a, b) => {
+      const fechaA = a.fechaDocumento ? new Date(a.fechaDocumento).getTime() : 0;
+      const fechaB = b.fechaDocumento ? new Date(b.fechaDocumento).getTime() : 0;
+      return fechaA - fechaB;
+    });
 
     // Generar líneas del TXT
     const lineas = [];
     let correlativo = 1;
 
-    for (const pf of preFacturas) {
+    for (const pf of documentosOficialesSunat) {
       const fechaDoc = pf.fechaDocumento ? new Date(pf.fechaDocumento) : null;
       const fechaCont = pf.fechaContable ? new Date(pf.fechaContable) : null;
       
@@ -4427,7 +4458,7 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
       const fechaVenc = pf.fechaVencimiento ? (() => { const fv = new Date(pf.fechaVencimiento); return `${String(fv.getDate()).padStart(2, '0')}/${String(fv.getMonth() + 1).padStart(2, '0')}/${fv.getFullYear()}`; })() : "";
       const fechaContable = `${String(fechaCont.getDate()).padStart(2, '0')}/${String(fechaCont.getMonth() + 1).padStart(2, '0')}/${fechaCont.getFullYear()}`;
 
-      const tipoDocCodigo = pf.tipoDocumentoFinal?.codigo || "";
+      const tipoDocCodigo = pf.tipoDocumentoFinal?.codigoSunat || "";
       const serie = pf.numSerieDocFinal || "";
       const numero = pf.numCorreDocFinal || "";
       const tipoDocCliente = pf.cliente?.tipoDocumento?.codSunat || "";
@@ -4440,13 +4471,28 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
       // Si el documento está en moneda extranjera, se convierte usando el tipo de cambio registrado
       // ============================================================
       const esMonedaExtranjera = pf.moneda?.codigoSunat !== "PEN";
-      const tcAplicable = esMonedaExtranjera ? Number(pf.tipoCambio || 1) : 1;
+      const tcRegistrado = Number(pf.tipoCambio || 0);
+      
+      // Si es ME pero no tiene TC, advertir y usar 1 (error de datos)
+      if (esMonedaExtranjera && tcRegistrado === 0) {
+        console.warn(`⚠️ PreFactura ${pf.id} en ${pf.moneda?.codigoSunat} sin tipo de cambio. Se usa TC=1`);
+      }
+      
+      const tcAplicable = esMonedaExtranjera ? (tcRegistrado > 0 ? tcRegistrado : 1) : 1;
       
       // Convertir montos a soles (si está en ME, multiplica por TC; si ya está en PEN, mantiene el valor)
-      const subtotalPEN = Number(pf.subtotal || 0) * tcAplicable;
-      const totalDescuentosPEN = Number(pf.totalDescuentos || 0) * tcAplicable;
-      const totalIGVPEN = Number(pf.totalIGV || 0) * tcAplicable;
-      const totalPEN = Number(pf.total || 0) * tcAplicable;
+      let subtotalPEN = Number(pf.subtotal || 0) * tcAplicable;
+      let totalDescuentosPEN = Number(pf.totalDescuentos || 0) * tcAplicable;
+      let totalIGVPEN = Number(pf.totalIGV || 0) * tcAplicable;
+      let totalPEN = Number(pf.total || 0) * tcAplicable;
+      
+      // Si es Nota de Crédito (07), los montos deben ser negativos
+      if (tipoDocCodigo === "07") {
+        subtotalPEN = Math.abs(subtotalPEN) * -1;
+        totalDescuentosPEN = Math.abs(totalDescuentosPEN) * -1;
+        totalIGVPEN = Math.abs(totalIGVPEN) * -1;
+        totalPEN = Math.abs(totalPEN) * -1;
+      }
       
       // Construir campos para el TXT SUNAT (siempre en soles)
       const esExportacion = pf.tipoOperacionSunat?.codigo === "0200";
@@ -4456,13 +4502,13 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
       const igv = totalIGVPEN.toFixed(2);
       const exonerado = pf.exoneradoIgv ? subtotalPEN.toFixed(2) : "0.00";
       const total = totalPEN.toFixed(2);
-      const moneda = "PEN";  // SUNAT siempre requiere PEN en el reporte
-      const tipoCambio = Number(pf.tipoCambio || 1).toFixed(3);  // Se mantiene como referencia
+      const moneda = pf.moneda?.codigoSunat || "PEN";  // Moneda original del documento
+      const tipoCambio = Number(pf.tipoCambio || 1).toFixed(3);
 
       // Documento modificado (para NC/ND)
-      const esNCND = ["07", "08", "NC", "ND"].includes(tipoDocCodigo);
+      const esNCND = ["07", "08"].includes(tipoDocCodigo);
       const fechaDocMod = esNCND && pf.fechaDcmtoAfectoNCND ? (() => { const fdm = new Date(pf.fechaDcmtoAfectoNCND); return `${String(fdm.getDate()).padStart(2, '0')}/${String(fdm.getMonth() + 1).padStart(2, '0')}/${fdm.getFullYear()}`; })() : "";
-      const tipoDocMod = esNCND && pf.dcmtoAfectoNCND ? pf.dcmtoAfectoNCND.tipoDocumentoFinal?.codigo || "" : "";
+      const tipoDocMod = esNCND && pf.dcmtoAfectoNCND ? pf.dcmtoAfectoNCND.tipoDocumentoFinal?.codigoSunat || "" : "";
       const serieDocMod = esNCND && pf.dcmtoAfectoNCND ? pf.dcmtoAfectoNCND.numSerieDocFinal || "" : "";
       const nroDocMod = esNCND && pf.dcmtoAfectoNCND ? pf.dcmtoAfectoNCND.numCorreDocFinal || "" : "";
 

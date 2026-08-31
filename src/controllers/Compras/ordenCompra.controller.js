@@ -368,7 +368,7 @@ export async function obtenerOrdenesCompraPorProveedor(req, res, next) {
 
 export async function exportarRegistroComprasSUNAT(req, res, next) {
   try {
-    const { empresaId, periodoContableId } = req.query;
+    const { empresaId, periodoContableId, incluirSaldosIniciales } = req.query;
     
     if (!empresaId || !periodoContableId) {
       return res.status(400).json({ message: 'empresaId y periodoContableId son requeridos' });
@@ -376,7 +376,8 @@ export async function exportarRegistroComprasSUNAT(req, res, next) {
 
     const txtContent = await ordenCompraService.exportarRegistroComprasSUNAT(
       Number(empresaId),
-      Number(periodoContableId)
+      Number(periodoContableId),
+      incluirSaldosIniciales === 'true'
     );
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');

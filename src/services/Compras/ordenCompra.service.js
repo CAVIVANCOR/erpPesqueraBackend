@@ -4173,7 +4173,7 @@ const asignarCentroCostoMasivo = async (centroCostoId, ordenesIds) => {
   }
 };
 
-async function exportarRegistroComprasSUNAT(empresaId, periodoContableId) {
+async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, incluirSaldosIniciales = false) {
   try {
     const [empresa, periodo] = await Promise.all([
       prisma.empresa.findUnique({ where: { id: empresaId } }),
@@ -4184,12 +4184,26 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId) {
       throw new NotFoundError('Empresa o Periodo no encontrado');
     }
 
+    // Construir filtro dinámico para tipoDocumento
+    const filtroTipoDocumento = incluirSaldosIniciales 
+      ? {} 
+      : {
+          tipoDocumento: {
+            codigo: {
+              not: {
+                startsWith: "SI"
+              }
+            }
+          }
+        };
+
     const ordenesCompra = await prisma.ordenCompra.findMany({
       where: {
         empresaId,
         periodoContableId,
         comprobanteRecibido: true,
-        esGerencial: false
+        esGerencial: false,
+        ...filtroTipoDocumento
       },
       include: {
         proveedor: {
@@ -4197,6 +4211,7 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId) {
             tipoDocumento: true
           }
         },
+        tipoDocumento: true,
         tipoDocumentoFinal: true,
         moneda: true,
         tipoOperacionSunat: true,
@@ -4206,13 +4221,29 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId) {
           }
         }
       },
-      orderBy: { fechaRecepcionComprobante: 'asc' }
+      orderBy: [
+        { fechaDocumento: 'asc' },
+        { numCorreDocFinal: 'asc' }
+      ]
+    });
+
+    // Filtrar solo documentos oficiales SUNAT: Factura (01), Boleta (03), NC (07), ND (08)
+    let documentosOficialesSunat = ordenesCompra.filter(oc => {
+      const codigo = oc.tipoDocumentoFinal?.codigoSunat;
+      return codigo === "01" || codigo === "03" || codigo === "07" || codigo === "08";
+    });
+
+    // Ordenar explícitamente por fechaDocumento ASC
+    documentosOficialesSunat = documentosOficialesSunat.sort((a, b) => {
+      const fechaA = a.fechaDocumento ? new Date(a.fechaDocumento).getTime() : 0;
+      const fechaB = b.fechaDocumento ? new Date(b.fechaDocumento).getTime() : 0;
+      return fechaA - fechaB;
     });
 
     const lineas = [];
     let correlativo = 1;
 
-    for (const oc of ordenesCompra) {
+    for (const oc of documentosOficialesSunat) {
       const fechaDoc = oc.fechaDocumento ? new Date(oc.fechaDocumento) : null;
       const fechaCont = oc.fechaContable ? new Date(oc.fechaContable) : null;
       
@@ -4227,7 +4258,7 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId) {
       const fechaVenc = oc.fechaVencimiento ? (() => { const fv = new Date(oc.fechaVencimiento); return `${String(fv.getDate()).padStart(2, '0')}/${String(fv.getMonth() + 1).padStart(2, '0')}/${fv.getFullYear()}`; })() : "";
       const fechaContable = `${String(fechaCont.getDate()).padStart(2, '0')}/${String(fechaCont.getMonth() + 1).padStart(2, '0')}/${fechaCont.getFullYear()}`;
 
-      const tipoDocCodigo = oc.tipoDocumentoFinal?.codigo || "";
+      const tipoDocCodigo = oc.tipoDocumentoFinal?.codigoSunat || "";
       const serie = oc.numSerieDocFinal || "";
       const numero = oc.numCorreDocFinal || "";
       const tipoDocProv = oc.proveedor?.tipoDocumento?.codSunat || "6";
@@ -4240,12 +4271,26 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId) {
       // Si el documento está en moneda extranjera, se convierte usando el tipo de cambio registrado
       // ============================================================
       const esMonedaExtranjera = oc.moneda?.codigoSunat !== "PEN";
-      const tcAplicable = esMonedaExtranjera ? Number(oc.tipoCambio || 1) : 1;
+      const tcRegistrado = Number(oc.tipoCambio || 0);
+      
+      // Si es ME pero no tiene TC, advertir y usar 1 (error de datos)
+      if (esMonedaExtranjera && tcRegistrado === 0) {
+        console.warn(`⚠️ OrdenCompra ${oc.id} en ${oc.moneda?.codigoSunat} sin tipo de cambio. Se usa TC=1`);
+      }
+      
+      const tcAplicable = esMonedaExtranjera ? (tcRegistrado > 0 ? tcRegistrado : 1) : 1;
       
       // Convertir montos a soles (si está en ME, multiplica por TC; si ya está en PEN, mantiene el valor)
-      const subtotalPEN = Number(oc.subtotal || 0) * tcAplicable;
-      const totalIGVPEN = Number(oc.totalIGV || 0) * tcAplicable;
-      const totalPEN = Number(oc.total || 0) * tcAplicable;
+      let subtotalPEN = Number(oc.subtotal || 0) * tcAplicable;
+      let totalIGVPEN = Number(oc.totalIGV || 0) * tcAplicable;
+      let totalPEN = Number(oc.total || 0) * tcAplicable;
+      
+      // Si es Nota de Crédito (07), los montos deben ser negativos
+      if (tipoDocCodigo === "07") {
+        subtotalPEN = Math.abs(subtotalPEN) * -1;
+        totalIGVPEN = Math.abs(totalIGVPEN) * -1;
+        totalPEN = Math.abs(totalPEN) * -1;
+      }
       
       // Construir campos para el TXT SUNAT (siempre en soles)
       const esExonerado = oc.esExoneradoAlIGV || false;
@@ -4253,12 +4298,12 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId) {
       const igv = totalIGVPEN.toFixed(2);
       const exonerado = esExonerado ? subtotalPEN.toFixed(2) : "0.00";
       const total = totalPEN.toFixed(2);
-      const moneda = "PEN";  // SUNAT siempre requiere PEN en el reporte
-      const tipoCambio = Number(oc.tipoCambio || 1).toFixed(3);  // Se mantiene como referencia
+      const moneda = oc.moneda?.codigoSunat || "PEN";  // Moneda original del documento
+      const tipoCambio = Number(oc.tipoCambio || 1).toFixed(3);
 
-      const esNCND = ["07", "08", "NC", "ND"].includes(tipoDocCodigo);
+      const esNCND = ["07", "08"].includes(tipoDocCodigo);
       const fechaDocMod = esNCND && oc.fechaDcmtoAfectoNCND ? (() => { const fdm = new Date(oc.fechaDcmtoAfectoNCND); return `${String(fdm.getDate()).padStart(2, '0')}/${String(fdm.getMonth() + 1).padStart(2, '0')}/${fdm.getFullYear()}`; })() : "";
-      const tipoDocMod = esNCND && oc.dcmtoAfectoNCND ? oc.dcmtoAfectoNCND.tipoDocumentoFinal?.codigo || "" : "";
+      const tipoDocMod = esNCND && oc.dcmtoAfectoNCND ? oc.dcmtoAfectoNCND.tipoDocumentoFinal?.codigoSunat || "" : "";
       const serieDocMod = esNCND && oc.dcmtoAfectoNCND ? oc.dcmtoAfectoNCND.numSerieDocFinal || "" : "";
       const nroDocMod = esNCND && oc.dcmtoAfectoNCND ? oc.dcmtoAfectoNCND.numCorreDocFinal || "" : "";
 
