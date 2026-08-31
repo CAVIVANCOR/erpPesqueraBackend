@@ -63,7 +63,7 @@ async function validarForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.ordenCompra.findMany({
+    const ordenes = await prisma.ordenCompra.findMany({
       include: {
         empresa: true,
         centroCosto: {
@@ -111,6 +111,21 @@ const listar = async () => {
         fechaDocumento: "desc",
       },
     });
+
+    // Agregar montos en PEN para reportes SUNAT
+    return ordenes.map(oc => {
+      const esMonedaExtranjera = oc.moneda?.codigoSunat !== "PEN";
+      const tc = esMonedaExtranjera ? Number(oc.tipoCambio || 1) : 1;
+      return {
+        ...oc,
+        subtotalPEN: Number(oc.subtotal || 0) * tc,
+        totalIGVPEN: Number(oc.totalIGV || 0) * tc,
+        totalPEN: Number(oc.total || 0) * tc,
+        totalDescuentosPEN: Number(oc.totalDescuentos || 0) * tc,
+        montoDetraccionPEN: Number(oc.montoDetraccion || 0) * tc,
+        montoImpuestoRentaPEN: Number(oc.montoImpuestoRenta || 0) * tc
+      };
+    });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -139,7 +154,21 @@ const obtenerTodos = async (where = {}) => {
         { id: 'desc' }
       ],
     });
-    return ordenes;
+
+    // Agregar montos en PEN para reportes SUNAT
+    return ordenes.map(oc => {
+      const esMonedaExtranjera = oc.moneda?.codigoSunat !== "PEN";
+      const tc = esMonedaExtranjera ? Number(oc.tipoCambio || 1) : 1;
+      return {
+        ...oc,
+        subtotalPEN: Number(oc.subtotal || 0) * tc,
+        totalIGVPEN: Number(oc.totalIGV || 0) * tc,
+        totalPEN: Number(oc.total || 0) * tc,
+        totalDescuentosPEN: Number(oc.totalDescuentos || 0) * tc,
+        montoDetraccionPEN: Number(oc.montoDetraccion || 0) * tc,
+        montoImpuestoRentaPEN: Number(oc.montoImpuestoRenta || 0) * tc
+      };
+    });
   } catch (error) {
     console.error("Error al obtener órdenes de compra:", error);
     throw new DatabaseError("Error al obtener órdenes de compra: " + error.message);
@@ -4205,13 +4234,27 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId) {
       const nroDocProv = oc.proveedor?.numeroDocumento || "";
       const razonSocialProv = oc.proveedor?.razonSocial || "";
 
+      // ============================================================
+      // CONVERSIÓN A SOLES PARA REPORTE SUNAT
+      // Todos los montos deben reportarse en PEN según normativa SUNAT
+      // Si el documento está en moneda extranjera, se convierte usando el tipo de cambio registrado
+      // ============================================================
+      const esMonedaExtranjera = oc.moneda?.codigoSunat !== "PEN";
+      const tcAplicable = esMonedaExtranjera ? Number(oc.tipoCambio || 1) : 1;
+      
+      // Convertir montos a soles (si está en ME, multiplica por TC; si ya está en PEN, mantiene el valor)
+      const subtotalPEN = Number(oc.subtotal || 0) * tcAplicable;
+      const totalIGVPEN = Number(oc.totalIGV || 0) * tcAplicable;
+      const totalPEN = Number(oc.total || 0) * tcAplicable;
+      
+      // Construir campos para el TXT SUNAT (siempre en soles)
       const esExonerado = oc.esExoneradoAlIGV || false;
-      const baseGravada = !esExonerado ? Number(oc.subtotal || 0).toFixed(2) : "0.00";
-      const igv = Number(oc.totalIGV || 0).toFixed(2);
-      const exonerado = esExonerado ? Number(oc.subtotal || 0).toFixed(2) : "0.00";
-      const total = Number(oc.total || 0).toFixed(2);
-      const moneda = oc.moneda?.codigoSunat || "PEN";
-      const tipoCambio = Number(oc.tipoCambio || 1).toFixed(3);
+      const baseGravada = !esExonerado ? subtotalPEN.toFixed(2) : "0.00";
+      const igv = totalIGVPEN.toFixed(2);
+      const exonerado = esExonerado ? subtotalPEN.toFixed(2) : "0.00";
+      const total = totalPEN.toFixed(2);
+      const moneda = "PEN";  // SUNAT siempre requiere PEN en el reporte
+      const tipoCambio = Number(oc.tipoCambio || 1).toFixed(3);  // Se mantiene como referencia
 
       const esNCND = ["07", "08", "NC", "ND"].includes(tipoDocCodigo);
       const fechaDocMod = esNCND && oc.fechaDcmtoAfectoNCND ? (() => { const fdm = new Date(oc.fechaDcmtoAfectoNCND); return `${String(fdm.getDate()).padStart(2, '0')}/${String(fdm.getMonth() + 1).padStart(2, '0')}/${fdm.getFullYear()}`; })() : "";

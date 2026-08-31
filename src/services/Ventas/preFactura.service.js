@@ -168,7 +168,7 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.preFactura.findMany({
+    const preFacturas = await prisma.preFactura.findMany({
       include: {
         empresa: true,
         tipoDocumento: true,
@@ -220,6 +220,21 @@ const listar = async () => {
         },
       },
       orderBy: { fechaDocumento: "desc" },
+    });
+
+    // Agregar montos en PEN para reportes SUNAT
+    return preFacturas.map(pf => {
+      const esMonedaExtranjera = pf.moneda?.codigoSunat !== "PEN";
+      const tc = esMonedaExtranjera ? Number(pf.tipoCambio || 1) : 1;
+      return {
+        ...pf,
+        subtotalPEN: Number(pf.subtotal || 0) * tc,
+        totalIGVPEN: Number(pf.totalIGV || 0) * tc,
+        totalPEN: Number(pf.total || 0) * tc,
+        totalDescuentosPEN: Number(pf.totalDescuentos || 0) * tc,
+        montoDetraccionPEN: Number(pf.montoDetraccion || 0) * tc,
+        montoImpuestoRentaPEN: Number(pf.montoImpuestoRenta || 0) * tc
+      };
     });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -292,7 +307,7 @@ const obtenerPorId = async (id) => {
 // Obtener PreFacturas con filtros dinámicos (para selector de documentos afectos)
 const obtenerTodos = async (where = {}) => {
   try {
-    return await prisma.preFactura.findMany({
+    const preFacturas = await prisma.preFactura.findMany({
       where,
       include: {
         empresa: true,
@@ -314,6 +329,21 @@ const obtenerTodos = async (where = {}) => {
         },
       },
       orderBy: { fechaDocumento: "desc" },
+    });
+
+    // Agregar montos en PEN para reportes SUNAT
+    return preFacturas.map(pf => {
+      const esMonedaExtranjera = pf.moneda?.codigoSunat !== "PEN";
+      const tc = esMonedaExtranjera ? Number(pf.tipoCambio || 1) : 1;
+      return {
+        ...pf,
+        subtotalPEN: Number(pf.subtotal || 0) * tc,
+        totalIGVPEN: Number(pf.totalIGV || 0) * tc,
+        totalPEN: Number(pf.total || 0) * tc,
+        totalDescuentosPEN: Number(pf.totalDescuentos || 0) * tc,
+        montoDetraccionPEN: Number(pf.montoDetraccion || 0) * tc,
+        montoImpuestoRentaPEN: Number(pf.montoImpuestoRenta || 0) * tc
+      };
     });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -4404,15 +4434,30 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId) {
       const nroDocCliente = pf.cliente?.numeroDocumento || "";
       const razonSocialCliente = pf.cliente?.razonSocial || "";
 
+      // ============================================================
+      // CONVERSIÓN A SOLES PARA REPORTE SUNAT
+      // Todos los montos deben reportarse en PEN según normativa SUNAT
+      // Si el documento está en moneda extranjera, se convierte usando el tipo de cambio registrado
+      // ============================================================
+      const esMonedaExtranjera = pf.moneda?.codigoSunat !== "PEN";
+      const tcAplicable = esMonedaExtranjera ? Number(pf.tipoCambio || 1) : 1;
+      
+      // Convertir montos a soles (si está en ME, multiplica por TC; si ya está en PEN, mantiene el valor)
+      const subtotalPEN = Number(pf.subtotal || 0) * tcAplicable;
+      const totalDescuentosPEN = Number(pf.totalDescuentos || 0) * tcAplicable;
+      const totalIGVPEN = Number(pf.totalIGV || 0) * tcAplicable;
+      const totalPEN = Number(pf.total || 0) * tcAplicable;
+      
+      // Construir campos para el TXT SUNAT (siempre en soles)
       const esExportacion = pf.tipoOperacionSunat?.codigo === "0200";
-      const valorExportacion = esExportacion ? Number(pf.total || 0).toFixed(2) : "0.00";
-      const baseGravada = !pf.exoneradoIgv && !esExportacion ? Number(pf.subtotal || 0).toFixed(2) : "0.00";
-      const descuentoBI = Number(pf.totalDescuentos || 0).toFixed(2);
-      const igv = Number(pf.totalIGV || 0).toFixed(2);
-      const exonerado = pf.exoneradoIgv ? Number(pf.subtotal || 0).toFixed(2) : "0.00";
-      const total = Number(pf.total || 0).toFixed(2);
-      const moneda = pf.moneda?.codigoSunat || "";
-      const tipoCambio = Number(pf.tipoCambio || 0).toFixed(3);
+      const valorExportacion = esExportacion ? totalPEN.toFixed(2) : "0.00";
+      const baseGravada = !pf.exoneradoIgv && !esExportacion ? subtotalPEN.toFixed(2) : "0.00";
+      const descuentoBI = totalDescuentosPEN.toFixed(2);
+      const igv = totalIGVPEN.toFixed(2);
+      const exonerado = pf.exoneradoIgv ? subtotalPEN.toFixed(2) : "0.00";
+      const total = totalPEN.toFixed(2);
+      const moneda = "PEN";  // SUNAT siempre requiere PEN en el reporte
+      const tipoCambio = Number(pf.tipoCambio || 1).toFixed(3);  // Se mantiene como referencia
 
       // Documento modificado (para NC/ND)
       const esNCND = ["07", "08", "NC", "ND"].includes(tipoDocCodigo);
