@@ -5,7 +5,7 @@ import {
   ValidationError,
 } from "../../utils/errors.js";
 import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
-import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
+import { validarTipoCambio, obtenerTipoCambioEfectivo } from "../../utils/tipoCambio.util.js";
 import { ESTADO_ORDEN_COMPRA, ESTADO_PERIODO_CONTABLE, ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 import {
   capturarCombinacionesAfectadas,
@@ -112,12 +112,15 @@ const listar = async () => {
       },
     });
 
-    // Agregar montos en PEN para reportes SUNAT
+    // Agregar montos en PEN para reportes SUNAT.
+    // El TC aplicado sigue la regla centralizada en obtenerTipoCambioEfectivo():
+    // NC/ND usan el TC del documento afectado; FAC/BV el propio. Se expone
+    // `tipoCambioAplicado` para que Excel/PDF muestren el mismo TC con el que se convirtió.
     return ordenes.map(oc => {
-      const esMonedaExtranjera = oc.moneda?.codigoSunat !== "PEN";
-      const tc = esMonedaExtranjera ? Number(oc.tipoCambio || 1) : 1;
+      const { tc } = obtenerTipoCambioEfectivo(oc);
       return {
         ...oc,
+        tipoCambioAplicado: tc,
         subtotalPEN: Number(oc.subtotal || 0) * tc,
         totalIGVPEN: Number(oc.totalIGV || 0) * tc,
         totalPEN: Number(oc.total || 0) * tc,
@@ -148,6 +151,9 @@ const obtenerTodos = async (where = {}) => {
         tipoDocumento: { select: { descripcion: true, codigo: true } },
         estado: { select: { descripcion: true } },
         moneda: { select: { codigoSunat: true, simbolo: true } },
+        // Necesarios para resolver el TC efectivo de NC/ND (obtenerTipoCambioEfectivo)
+        tipoDocumentoFinal: { select: { codigoSunat: true } },
+        dcmtoAfectoNCND: { select: { tipoCambio: true } },
       },
       orderBy: [
         { fechaDocumento: 'desc' },
@@ -155,12 +161,12 @@ const obtenerTodos = async (where = {}) => {
       ],
     });
 
-    // Agregar montos en PEN para reportes SUNAT
+    // Agregar montos en PEN para reportes SUNAT (misma regla de TC que listar)
     return ordenes.map(oc => {
-      const esMonedaExtranjera = oc.moneda?.codigoSunat !== "PEN";
-      const tc = esMonedaExtranjera ? Number(oc.tipoCambio || 1) : 1;
+      const { tc } = obtenerTipoCambioEfectivo(oc);
       return {
         ...oc,
+        tipoCambioAplicado: tc,
         subtotalPEN: Number(oc.subtotal || 0) * tc,
         totalIGVPEN: Number(oc.totalIGV || 0) * tc,
         totalPEN: Number(oc.total || 0) * tc,
@@ -4336,18 +4342,21 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
 
       // ============================================================
       // CONVERSIÓN A SOLES PARA REPORTE SUNAT
-      // Todos los montos deben reportarse en PEN según normativa SUNAT
-      // Si el documento está en moneda extranjera, se convierte usando el tipo de cambio registrado
+      // Todos los montos deben reportarse en PEN según normativa SUNAT.
+      // El TC se resuelve con obtenerTipoCambioEfectivo(): FAC/BV usan su propio TC
+      // (fechaFacturacion); NC/ND usan el TC del documento afectado (fechaDcmtoAfectoNCND)
+      // para que el ajuste cuadre en soles con el comprobante que corrige.
       // ============================================================
       const esMonedaExtranjera = oc.moneda?.codigoSunat !== "PEN";
-      const tcRegistrado = Number(oc.tipoCambio || 0);
-      
-      // Si es ME pero no tiene TC, advertir y usar 1 (error de datos)
-      if (esMonedaExtranjera && tcRegistrado === 0) {
+      const { tc: tcAplicable, origen: origenTC } = obtenerTipoCambioEfectivo(oc);
+
+      // Trazabilidad de casos que requieren revisión de datos
+      if (esMonedaExtranjera && Number(oc.tipoCambio || 0) === 0 && origenTC !== "DOC_AFECTADO") {
         console.warn(`⚠️ OrdenCompra ${oc.id} en ${oc.moneda?.codigoSunat} sin tipo de cambio. Se usa TC=1`);
       }
-      
-      const tcAplicable = esMonedaExtranjera ? (tcRegistrado > 0 ? tcRegistrado : 1) : 1;
+      if (origenTC === "FALLBACK_NCND") {
+        console.warn(`⚠️ OrdenCompra ${oc.id} (NC/ND) sin TC del documento afectado; se usa su TC propio ${tcAplicable}`);
+      }
       
       // Convertir montos a soles (si está en ME, multiplica por TC; si ya está en PEN, mantiene el valor)
       let subtotalPEN = Number(oc.subtotal || 0) * tcAplicable;
@@ -4368,7 +4377,8 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
       const exonerado = esExonerado ? subtotalPEN.toFixed(2) : "0.00";
       const total = totalPEN.toFixed(2);
       const moneda = oc.moneda?.codigoSunat || "PEN";  // Moneda original del documento
-      const tipoCambio = Number(oc.tipoCambio || 1).toFixed(3);
+      // Se reporta el TC realmente aplicado en la conversión (para NC/ND es el del doc afectado)
+      const tipoCambio = Number(tcAplicable).toFixed(3);
 
       const esNCND = ["07", "08"].includes(tipoDocCodigo);
       const fechaDocMod = esNCND && oc.fechaDcmtoAfectoNCND ? (() => { const fdm = new Date(oc.fechaDcmtoAfectoNCND); return `${String(fdm.getDate()).padStart(2, '0')}/${String(fdm.getMonth() + 1).padStart(2, '0')}/${fdm.getFullYear()}`; })() : "";

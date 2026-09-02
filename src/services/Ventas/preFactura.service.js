@@ -5,7 +5,7 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
-import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
+import { validarTipoCambio, obtenerTipoCambioEfectivo } from "../../utils/tipoCambio.util.js";
 import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
 import {
   capturarCombinacionesAfectadas,
@@ -222,12 +222,15 @@ const listar = async () => {
       orderBy: { fechaDocumento: "desc" },
     });
 
-    // Agregar montos en PEN para reportes SUNAT
+    // Agregar montos en PEN para reportes SUNAT.
+    // El TC aplicado sigue la regla centralizada en obtenerTipoCambioEfectivo():
+    // NC/ND usan el TC del documento afectado; FAC/BV el propio. Se expone
+    // `tipoCambioAplicado` para que Excel/PDF muestren el mismo TC con el que se convirtió.
     return preFacturas.map(pf => {
-      const esMonedaExtranjera = pf.moneda?.codigoSunat !== "PEN";
-      const tc = esMonedaExtranjera ? Number(pf.tipoCambio || 1) : 1;
+      const { tc } = obtenerTipoCambioEfectivo(pf);
       return {
         ...pf,
+        tipoCambioAplicado: tc,
         subtotalPEN: Number(pf.subtotal || 0) * tc,
         totalIGVPEN: Number(pf.totalIGV || 0) * tc,
         totalPEN: Number(pf.total || 0) * tc,
@@ -315,6 +318,8 @@ const obtenerTodos = async (where = {}) => {
         tipoDocumento: true,
         tipoDocumentoFinal: true,  // ⭐ AGREGADO: Incluir tipo de documento final
         moneda: true,
+        // Necesario para resolver el TC efectivo de NC/ND (obtenerTipoCambioEfectivo)
+        dcmtoAfectoNCND: { select: { tipoCambio: true } },
         detalles: {
           include: {
             producto: {
@@ -331,12 +336,12 @@ const obtenerTodos = async (where = {}) => {
       orderBy: { fechaDocumento: "desc" },
     });
 
-    // Agregar montos en PEN para reportes SUNAT
+    // Agregar montos en PEN para reportes SUNAT (misma regla de TC que listar)
     return preFacturas.map(pf => {
-      const esMonedaExtranjera = pf.moneda?.codigoSunat !== "PEN";
-      const tc = esMonedaExtranjera ? Number(pf.tipoCambio || 1) : 1;
+      const { tc } = obtenerTipoCambioEfectivo(pf);
       return {
         ...pf,
+        tipoCambioAplicado: tc,
         subtotalPEN: Number(pf.subtotal || 0) * tc,
         totalIGVPEN: Number(pf.totalIGV || 0) * tc,
         totalPEN: Number(pf.total || 0) * tc,
@@ -4534,24 +4539,18 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluir
 
       // ============================================================
       // CONVERSIÓN A SOLES PARA REPORTE SUNAT
-      // Todos los montos deben reportarse en PEN según normativa SUNAT
-      // Si el documento está en moneda extranjera, se convierte usando el tipo de cambio registrado
+      // Todos los montos deben reportarse en PEN según normativa SUNAT.
+      // El TC efectivo se obtiene de la función centralizada:
+      // - NC/ND: TC del documento afectado (fechaDcmtoAfectoNCND)
+      // - FAC/BV: TC propio (tipoCambio)
       // ============================================================
-      const esMonedaExtranjera = pf.moneda?.codigoSunat !== "PEN";
-      const tcRegistrado = Number(pf.tipoCambio || 0);
+      const { tc: tcEfectivo } = obtenerTipoCambioEfectivo(pf);
       
-      // Si es ME pero no tiene TC, advertir y usar 1 (error de datos)
-      if (esMonedaExtranjera && tcRegistrado === 0) {
-        console.warn(`⚠️ PreFactura ${pf.id} en ${pf.moneda?.codigoSunat} sin tipo de cambio. Se usa TC=1`);
-      }
-      
-      const tcAplicable = esMonedaExtranjera ? (tcRegistrado > 0 ? tcRegistrado : 1) : 1;
-      
-      // Convertir montos a soles (si está en ME, multiplica por TC; si ya está en PEN, mantiene el valor)
-      let subtotalPEN = Number(pf.subtotal || 0) * tcAplicable;
-      let totalDescuentosPEN = Number(pf.totalDescuentos || 0) * tcAplicable;
-      let totalIGVPEN = Number(pf.totalIGV || 0) * tcAplicable;
-      let totalPEN = Number(pf.total || 0) * tcAplicable;
+      // Convertir montos a soles usando el TC efectivo
+      let subtotalPEN = Number(pf.subtotal || 0) * tcEfectivo;
+      let totalDescuentosPEN = Number(pf.totalDescuentos || 0) * tcEfectivo;
+      let totalIGVPEN = Number(pf.totalIGV || 0) * tcEfectivo;
+      let totalPEN = Number(pf.total || 0) * tcEfectivo;
       
       // Si es Nota de Crédito (07), los montos deben ser negativos
       if (tipoDocCodigo === "07") {
@@ -4561,16 +4560,61 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluir
         totalPEN = Math.abs(totalPEN) * -1;
       }
       
-      // Construir campos para el TXT SUNAT (siempre en soles)
-      const esExportacion = pf.tipoOperacionSunat?.codigo === "0200";
+      // ═══════════════════════════════════════════════════════════════════════════
+      // CLASIFICACIÓN TRIBUTARIA PARA REGISTRO DE VENTAS SUNAT (Formato 14.1)
+      // ═══════════════════════════════════════════════════════════════════════════
+      // Se utilizan DOS campos para clasificar correctamente las operaciones:
+      // 1. tipoOperacionSunat: Define el tipo de operación (PRIORIDAD para Exportación)
+      // 2. tipoAfectacionIGV: Define el tratamiento del IGV (catálogo 07 SUNAT)
+      //
+      // REGLAS DE CLASIFICACIÓN (según normativa SUNAT):
+      // ┌──────────────────────────┬──────────────────────────────────────────────┐
+      // │  Tipo Operación SUNAT    │  Columnas PLE 14.1                           │
+      // ├──────────────────────────┼──────────────────────────────────────────────┤
+      // │ 02XX (Exportación)       │  EXPORTACIÓN = monto                         │
+      // │                          │  EXONERADO = 0.00 (no duplicar)              │
+      // │                          │  BASE GRAVADA = 0.00                         │
+      // ├──────────────────────────┼──────────────────────────────────────────────┤
+      // │ 0101 (Venta Interna)     │  Según Tipo Afectación IGV:                  │
+      // │   + Afectación 10-17     │    BASE GRAVADA = subtotal, IGV = calculado  │
+      // │   + Afectación 20-21     │    EXONERADO = subtotal                      │
+      // │   + Afectación 30-36     │    INAFECTO = subtotal                       │
+      // └──────────────────────────┴──────────────────────────────────────────────┘
+      //
+      // IMPORTANTE: La columna EXPORTACIÓN se determina ÚNICAMENTE por el
+      // Tipo de Operación SUNAT (02XX), independientemente del Tipo de Afectación IGV.
+      // Esto evita duplicación entre EXPORTACIÓN y EXONERADO.
+      // ═══════════════════════════════════════════════════════════════════════════
+
+      const codigoAfectacionIGV = pf.tipoAfectacionIGV?.codigo || "";
+      const codigoOperacionSunat = pf.tipoOperacionSunat?.codigo || "";
+
+      // EXPORTACIÓN: Determinada por Tipo de Operación SUNAT (códigos 02XX)
+      // Incluye: 0200 (Bienes), 0201-0208 (Servicios)
+      const esExportacion = codigoOperacionSunat.startsWith("02");
       const valorExportacion = esExportacion ? totalPEN.toFixed(2) : "0.00";
-      const baseGravada = !pf.exoneradoIgv && !esExportacion ? subtotalPEN.toFixed(2) : "0.00";
+
+      // BASE IMPONIBLE GRAVADA: Códigos 10-17 (operaciones gravadas con IGV)
+      // Solo aplica para ventas internas (NO exportaciones)
+      const esGravado = ["10", "11", "12", "13", "14", "15", "16", "17"].includes(codigoAfectacionIGV);
+      const baseGravada = esGravado && !esExportacion ? subtotalPEN.toFixed(2) : "0.00";
+
+      // EXONERADO: Códigos 20 (exonerado oneroso) o 21 (exonerado gratuito)
+      // NUNCA debe incluir exportaciones (para evitar duplicación)
+      const esExonerado = ["20", "21"].includes(codigoAfectacionIGV) && !esExportacion;
+      const exonerado = esExonerado ? subtotalPEN.toFixed(2) : "0.00";
+
+      // INAFECTO: Códigos 30-36 (operaciones inafectas)
+      // Solo aplica para ventas internas (NO exportaciones)
+      const esInafecto = ["30", "31", "32", "33", "34", "35", "36"].includes(codigoAfectacionIGV);
+      const inafecto = esInafecto && !esExportacion ? subtotalPEN.toFixed(2) : "0.00";
+
+      // Otros campos del reporte
       const descuentoBI = totalDescuentosPEN.toFixed(2);
-      const igv = totalIGVPEN.toFixed(2);
-      const exonerado = pf.exoneradoIgv ? subtotalPEN.toFixed(2) : "0.00";
+      const igv = esGravado && !esExportacion ? totalIGVPEN.toFixed(2) : "0.00";  // IGV solo para gravados internos
       const total = totalPEN.toFixed(2);
       const moneda = pf.moneda?.codigoSunat || "PEN";  // Moneda original del documento
-      const tipoCambio = Number(pf.tipoCambio || 1).toFixed(3);
+      const tipoCambio = tcEfectivo.toFixed(3);  // TC efectivo (NC/ND: del doc afectado; FAC/BV: propio)
 
       // Documento modificado (para NC/ND)
       const esNCND = ["07", "08"].includes(tipoDocCodigo);
@@ -4586,14 +4630,48 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluir
       const estadoId = Number(pf.estadoId);
       const estadoSunat = [95, 96, 97, 98].includes(estadoId) ? "1" : ([47, 99].includes(estadoId) ? "2" : "");
 
-      // Construir línea (38 campos separados por | - SUNAT 14.1)
+      // ═══════════════════════════════════════════════════════════════════════════
+      // CONSTRUCCIÓN DE LÍNEA TXT - REGISTRO DE VENTAS SUNAT (Formato 14.1)
+      // ═══════════════════════════════════════════════════════════════════════════
+      // Estructura de 38 campos separados por pipe (|):
+      // Campos 1-6:   Periodo, correlativo, fechas
+      // Campos 7-14:  Tipo doc, serie, número, datos del cliente
+      // Campos 15-27: MONTOS TRIBUTARIOS (todos en PEN):
+      //   15: Valor Exportación (solo código afectación 40 + operación 02XX)
+      //   16: Base Imponible Gravada (códigos 10-17)
+      //   17: Descuento Base Imponible
+      //   18: IGV (solo para operaciones gravadas)
+      //   19: Descuento IGV
+      //   20: Exonerado (códigos 20-21, NUNCA exportación)
+      //   21: Inafecto (códigos 30-36)
+      //   22: ISC
+      //   23: Base Imponible Arroz Pilado
+      //   24: IGV Arroz Pilado
+      //   25: ICBPER
+      //   26: Otros Tributos
+      //   27: Total
+      // Campos 28-29: Moneda, Tipo Cambio
+      // Campos 30-33: Documento modificado (NC/ND)
+      // Campos 34-38: Contrato, detracción, estado, campos libres
+      // ═══════════════════════════════════════════════════════════════════════════
       const linea = [
         periodo, correlativoStr, correlativoStr, fechaEmision, fechaVenc, fechaContable,
         tipoDocCodigo, serie, "", numero, numero,
         tipoDocCliente, nroDocCliente, razonSocialCliente,
-        valorExportacion, baseGravada, descuentoBI, igv, "0.00",
-        exonerado, "0.00", "0.00", "0.00", "0.00", "0.00", "0.00",
-        total, moneda, tipoCambio,
+        valorExportacion,  // 15: Exportación (40 + 02XX)
+        baseGravada,       // 16: Base Gravada (10-17)
+        descuentoBI,       // 17: Descuento BI
+        igv,               // 18: IGV
+        "0.00",            // 19: Descuento IGV
+        exonerado,         // 20: Exonerado (20-21, NO exportación)
+        inafecto,          // 21: Inafecto (30-36)
+        "0.00",            // 22: ISC
+        "0.00",            // 23: Base Arroz Pilado
+        "0.00",            // 24: IGV Arroz Pilado
+        "0.00",            // 25: ICBPER
+        "0.00",            // 26: Otros Tributos
+        total,             // 27: Total
+        moneda, tipoCambio,
         fechaDocMod, tipoDocMod, serieDocMod, nroDocMod,
         contratoId, "", indDetraccion, estadoSunat, "", ""
       ].join('|');

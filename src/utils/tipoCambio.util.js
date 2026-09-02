@@ -93,3 +93,41 @@ export async function validarTipoCambio(tipoCambio, fechaDocumento) {
     return Number(tipoCambio);
   }
 }
+
+/**
+ * Determina el tipo de cambio EFECTIVO con el que un documento (OrdenCompra / PreFactura)
+ * debe convertirse a soles en los Registros de Compras y Ventas SUNAT.
+ *
+ * Regla de negocio:
+ *   - Documento en PEN                → TC = 1 (no hay conversión).
+ *   - Factura / Boleta (01, 03) en ME → TC propio del documento (obtenido con su fechaFacturacion).
+ *   - Nota de Crédito / Débito (07, 08) en ME → TC del DOCUMENTO AFECTADO (dcmtoAfectoNCND.tipoCambio),
+ *     porque la NC/ND ajusta un comprobante anterior y debe valorizarse al mismo TC de ese
+ *     comprobante (fecha de emisión del afectado = fechaDcmtoAfectoNCND). Si el afectado es
+ *     externo al sistema o no tiene TC, se usa el TC propio de la NC/ND como fallback (que la
+ *     Regeneración Masiva FASE 0 y los formularios ya obtienen con fechaDcmtoAfectoNCND).
+ *
+ * El documento debe venir con las relaciones `moneda`, `tipoDocumentoFinal` y `dcmtoAfectoNCND`.
+ *
+ * @param {Object} doc - OrdenCompra o PreFactura con sus relaciones
+ * @returns {{ tc: number, origen: 'PEN'|'PROPIO'|'DOC_AFECTADO'|'FALLBACK_NCND' }}
+ */
+export function obtenerTipoCambioEfectivo(doc) {
+  // Misma semántica histórica del sistema: si no hay moneda o no es PEN, se trata como ME
+  const esMonedaExtranjera = doc?.moneda?.codigoSunat !== "PEN";
+  if (!esMonedaExtranjera) return { tc: 1, origen: "PEN" };
+
+  const codigoSunat = doc?.tipoDocumentoFinal?.codigoSunat;
+  const esNCND = codigoSunat === "07" || codigoSunat === "08";
+
+  if (esNCND) {
+    const tcAfectado = Number(doc?.dcmtoAfectoNCND?.tipoCambio || 0);
+    if (tcAfectado > 0) return { tc: tcAfectado, origen: "DOC_AFECTADO" };
+  }
+
+  const tcPropio = Number(doc?.tipoCambio || 0);
+  return {
+    tc: tcPropio > 0 ? tcPropio : 1,
+    origen: esNCND ? "FALLBACK_NCND" : "PROPIO",
+  };
+}
