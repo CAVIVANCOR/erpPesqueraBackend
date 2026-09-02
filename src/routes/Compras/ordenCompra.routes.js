@@ -118,6 +118,14 @@ router.put(
   ordenCompraController.reactivarDocumentoOrdenCompra
 );
 
+// Actualizar SOLO tipo de cambio (Regeneración Masiva - FASE 0)
+router.put(
+  '/:id/tipo-cambio',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'editar'),
+  ordenCompraController.actualizarTipoCambio
+);
+
 // ========================================
 // RUTAS DE KARDEX
 // (Generan recursos derivados - solo requieren 'ver')

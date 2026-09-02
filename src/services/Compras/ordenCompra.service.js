@@ -4176,6 +4176,69 @@ const asignarCentroCostoMasivo = async (centroCostoId, ordenesIds) => {
   }
 };
 
+/**
+ * Actualiza ÚNICAMENTE el tipo de cambio de una Orden de Compra.
+ *
+ * Creado para la Regeneración Masiva (FASE 0): corregir el TC histórico con el
+ * TC Venta SUNAT de la fechaFacturacion antes de regenerar CxP y asientos.
+ *
+ * NO se usa el PUT genérico `actualizar()` porque con un payload parcial:
+ *   - fuerza pagosPreviosSI = null,
+ *   - recalcula totales/impuestos,
+ *   - y ejecuta validarTipoCambio() con fechaDocumento (fecha incorrecta para SUNAT).
+ *
+ * Reglas:
+ *   - No se modifica una OC ANULADA.
+ *   - No se modifica si su CxP ya tiene pagos registrados: cambiar el TC de una deuda
+ *     con dinero movido descuadraría pagos vs. CxP (mismo criterio que reactivar/regenerar).
+ */
+const actualizarTipoCambio = async (id, tipoCambio, usuarioId) => {
+  try {
+    const tc = Number(tipoCambio);
+    if (!tc || tc <= 0) {
+      throw new ValidationError("El tipo de cambio debe ser un número mayor a cero");
+    }
+
+    const ordenCompra = await prisma.ordenCompra.findUnique({
+      where: { id },
+      include: { cuentaPorPagar: true },
+    });
+    if (!ordenCompra) throw new NotFoundError("OrdenCompra no encontrada");
+
+    if (Number(ordenCompra.estadoId) === ESTADO_ORDEN_COMPRA.ANULADO) {
+      throw new ValidationError("No se puede modificar el tipo de cambio de una orden anulada");
+    }
+
+    const montoPagado = Number(ordenCompra.cuentaPorPagar?.montoPagado || 0);
+    if (montoPagado > 0) {
+      throw new ValidationError(
+        `No se puede modificar el tipo de cambio: la CxP ya tiene pagos registrados (${montoPagado.toFixed(2)})`
+      );
+    }
+
+    const actualizada = await prisma.ordenCompra.update({
+      where: { id },
+      data: {
+        tipoCambio: tc,
+        actualizadoEn: new Date(),
+        actualizadoPor: usuarioId,
+      },
+      select: { id: true, tipoCambio: true },
+    });
+
+    return {
+      id: actualizada.id,
+      tipoCambioAnterior: Number(ordenCompra.tipoCambio || 0),
+      tipoCambioNuevo: Number(actualizada.tipoCambio),
+    };
+  } catch (err) {
+    if (err instanceof ValidationError || err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, incluirSaldosIniciales = false) {
   try {
     const [empresa, periodo] = await Promise.all([
@@ -4360,6 +4423,7 @@ export default {
   eliminarAsientoContable, // ⭐ NUEVO
   calcularTotalesEImpuestos, // ⭐ AGREGAR
   asignarCentroCostoMasivo,
+  actualizarTipoCambio,
   obtenerTodos, // ← AGREGAR ESTA LÍNEA
   exportarRegistroComprasSUNAT
 };
