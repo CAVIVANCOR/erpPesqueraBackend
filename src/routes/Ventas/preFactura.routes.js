@@ -195,5 +195,13 @@ router.put(
   preFacturaController.reactivarDocumento
 );
 
+// Actualizar SOLO tipo de cambio (Regeneración Masiva Ventas - FASE 0)
+router.put(
+  '/:id/tipo-cambio',
+  autenticarJWT,
+  checkPermission('preFactura', 'editar'),
+  preFacturaController.actualizarTipoCambio
+);
+
 
 export default router;

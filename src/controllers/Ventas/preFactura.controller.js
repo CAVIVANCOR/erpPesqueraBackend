@@ -436,6 +436,36 @@ export async function actualizarTipoAfectacionIGVMasivo(req, res, next) {
 }
 
 
+/**
+ * Actualizar SOLO el tipo de cambio de una PreFactura
+ * PUT /api/pre-facturas/:id/tipo-cambio
+ * Body: { tipoCambio: number }
+ * Usado por la Regeneración Masiva de Ventas (FASE 0) para corregir el TC histórico.
+ */
+export async function actualizarTipoCambio(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const { tipoCambio } = req.body;
+    const usuarioId = req.user?.id;
+
+    if (tipoCambio === undefined || tipoCambio === null) {
+      return res.status(400).json({
+        success: false,
+        message: "tipoCambio es requerido"
+      });
+    }
+
+    const resultado = await preFacturaService.actualizarTipoCambio(
+      id,
+      tipoCambio,
+      usuarioId ? Number(usuarioId) : null
+    );
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function exportarRegistroVentasSUNAT(req, res, next) {
   try {
     const { empresaId, periodoContableId, incluirSaldosIniciales } = req.query;

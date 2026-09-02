@@ -4371,6 +4371,68 @@ async function actualizarTipoAfectacionIGVMasivo(ids, tipoAfectacionIGVId, usuar
   };
 }
 
+/**
+ * Actualiza ÚNICAMENTE el tipo de cambio de una PreFactura.
+ *
+ * Creado para la Regeneración Masiva de Ventas (FASE 0): corregir el TC histórico con el
+ * TC Venta SUNAT de la fechaFacturacion antes de regenerar CxC y asientos.
+ * Réplica exacta de ordenCompra.service.actualizarTipoCambio (Compras).
+ *
+ * NO se usa el PUT genérico `actualizar()` porque con un payload parcial recalcula totales
+ * e impuestos y ejecuta validarTipoCambio() con fechaDocumento (fecha incorrecta para SUNAT).
+ *
+ * Reglas:
+ *   - No se modifica una PreFactura ANULADA.
+ *   - No se modifica si su CxC ya tiene cobros registrados: cambiar el TC de una deuda
+ *     con dinero movido descuadraría cobros vs. CxC (mismo criterio que reactivar/regenerar).
+ */
+async function actualizarTipoCambio(id, tipoCambio, usuarioId) {
+  try {
+    const tc = Number(tipoCambio);
+    if (!tc || tc <= 0) {
+      throw new ValidationError("El tipo de cambio debe ser un número mayor a cero");
+    }
+
+    const preFactura = await prisma.preFactura.findUnique({
+      where: { id },
+      include: { cuentaPorCobrar: true },
+    });
+    if (!preFactura) throw new NotFoundError("PreFactura no encontrada");
+
+    if (Number(preFactura.estadoId) === ESTADO_PREFACTURA.ANULADA) {
+      throw new ValidationError("No se puede modificar el tipo de cambio de una PreFactura anulada");
+    }
+
+    const montoPagado = Number(preFactura.cuentaPorCobrar?.montoPagado || 0);
+    if (montoPagado > 0) {
+      throw new ValidationError(
+        `No se puede modificar el tipo de cambio: la CxC ya tiene cobros registrados (${montoPagado.toFixed(2)})`
+      );
+    }
+
+    const actualizada = await prisma.preFactura.update({
+      where: { id },
+      data: {
+        tipoCambio: tc,
+        fechaActualizacion: new Date(),
+        actualizadoPor: usuarioId,
+      },
+      select: { id: true, tipoCambio: true },
+    });
+
+    return {
+      id: actualizada.id,
+      tipoCambioAnterior: Number(preFactura.tipoCambio || 0),
+      tipoCambioNuevo: Number(actualizada.tipoCambio),
+    };
+  } catch (err) {
+    if (err instanceof ValidationError || err instanceof NotFoundError) throw err;
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+}
+
 async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluirSaldosIniciales = false) {
   try {
     // Obtener empresa y periodo
@@ -4573,6 +4635,7 @@ export default {
   regenerarKardex,
   actualizarTipoOperacionSunatMasivo,
   actualizarTipoAfectacionIGVMasivo,
+  actualizarTipoCambio,
   calcularTotalesEImpuestos, // ⭐ AGREGAR
   exportarRegistroVentasSUNAT, // ⭐ NUEVO
 };
