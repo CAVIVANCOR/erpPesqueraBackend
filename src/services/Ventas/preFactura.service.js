@@ -2914,6 +2914,8 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
           estadoId: estadoPendiente.id,
           movSalidaAlmacenId: null, // Limpiar referencia al movimiento
           facturado: false, // Marcar como no facturado
+          // fechaFacturacion NO se limpia: es un dato del comprobante emitido, no del proceso.
+          // Reactivar solo revierte estado, kardex, CxC y asientos (mismo criterio que Compras).
           fechaActualizacion: new Date(),
           actualizadoPor: usuarioId,
         },
@@ -4421,7 +4423,7 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluir
         }
       },
       orderBy: [
-        { fechaDocumento: 'asc' },
+        { fechaFacturacion: 'asc' },
         { numCorreDocFinal: 'asc' }
       ]
     });
@@ -4432,10 +4434,11 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluir
       return codigo === "01" || codigo === "03" || codigo === "07" || codigo === "08";
     });
 
-    // Ordenar explícitamente por fechaDocumento ASC
+    // Ordenar por fecha de emisión del comprobante (fechaFacturacion) ASC.
+    // fechaDocumento es la fecha interna de la PreFactura; SUNAT exige la del comprobante emitido.
     documentosOficialesSunat = documentosOficialesSunat.sort((a, b) => {
-      const fechaA = a.fechaDocumento ? new Date(a.fechaDocumento).getTime() : 0;
-      const fechaB = b.fechaDocumento ? new Date(b.fechaDocumento).getTime() : 0;
+      const fechaA = a.fechaFacturacion ? new Date(a.fechaFacturacion).getTime() : 0;
+      const fechaB = b.fechaFacturacion ? new Date(b.fechaFacturacion).getTime() : 0;
       return fechaA - fechaB;
     });
 
@@ -4444,11 +4447,13 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluir
     let correlativo = 1;
 
     for (const pf of documentosOficialesSunat) {
-      const fechaDoc = pf.fechaDocumento ? new Date(pf.fechaDocumento) : null;
+      // Fecha de emisión = fechaFacturacion (comprobante emitido), NO fechaDocumento (PreFactura interna).
+      // Es lo que SUNAT exige en el campo 4 del formato 14.1.
+      const fechaDoc = pf.fechaFacturacion ? new Date(pf.fechaFacturacion) : null;
       const fechaCont = pf.fechaContable ? new Date(pf.fechaContable) : null;
       
       if (!fechaDoc || !fechaCont) {
-        console.warn(`⚠️ PreFactura ${pf.id} sin fechaDocumento o fechaContable, se omite del TXT`);
+        console.warn(`⚠️ PreFactura ${pf.id} sin fechaFacturacion o fechaContable, se omite del TXT`);
         continue;
       }
       

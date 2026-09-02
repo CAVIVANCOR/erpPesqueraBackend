@@ -1333,7 +1333,10 @@ const reactivarDocumentoOrdenCompra = async (id, usuarioId) => {
           estadoId: estadoPendiente.id,
           movIngresoAlmacenId: null, // Limpiar referencia al movimiento
           facturado: false, // Marcar como no facturado
-          fechaFacturacion: null, // Limpiar fecha de facturación
+          // fechaFacturacion NO se limpia: es un dato del comprobante físico del proveedor,
+          // no un dato del proceso. Reactivar solo revierte estado, kardex, CxP y asientos.
+          // Borrarla obligaba a re-digitar la fecha y re-consultaba el TC SUNAT, pudiendo
+          // alterar el tipo de cambio ya registrado en el documento.
           actualizadoEn: new Date(),
           actualizadoPor: usuarioId,
         },
@@ -4222,7 +4225,7 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
         }
       },
       orderBy: [
-        { fechaDocumento: 'asc' },
+        { fechaFacturacion: 'asc' },
         { numCorreDocFinal: 'asc' }
       ]
     });
@@ -4233,10 +4236,11 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
       return codigo === "01" || codigo === "03" || codigo === "07" || codigo === "08";
     });
 
-    // Ordenar explícitamente por fechaDocumento ASC
+    // Ordenar por fecha de emisión del comprobante del proveedor (fechaFacturacion) ASC.
+    // SUNAT exige la fecha del comprobante, no la fecha de creación de la OC (fechaDocumento).
     documentosOficialesSunat = documentosOficialesSunat.sort((a, b) => {
-      const fechaA = a.fechaDocumento ? new Date(a.fechaDocumento).getTime() : 0;
-      const fechaB = b.fechaDocumento ? new Date(b.fechaDocumento).getTime() : 0;
+      const fechaA = a.fechaFacturacion ? new Date(a.fechaFacturacion).getTime() : 0;
+      const fechaB = b.fechaFacturacion ? new Date(b.fechaFacturacion).getTime() : 0;
       return fechaA - fechaB;
     });
 
@@ -4244,11 +4248,13 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
     let correlativo = 1;
 
     for (const oc of documentosOficialesSunat) {
-      const fechaDoc = oc.fechaDocumento ? new Date(oc.fechaDocumento) : null;
+      // Fecha de emisión = fechaFacturacion (fecha del comprobante del proveedor), NO fechaDocumento
+      // (fecha interna de creación de la OC). Es lo que SUNAT exige en el campo 4 del formato 8.1.
+      const fechaDoc = oc.fechaFacturacion ? new Date(oc.fechaFacturacion) : null;
       const fechaCont = oc.fechaContable ? new Date(oc.fechaContable) : null;
       
       if (!fechaDoc || !fechaCont) {
-        console.warn(`⚠️ OrdenCompra ${oc.id} sin fechaDocumento o fechaContable, se omite del TXT`);
+        console.warn(`⚠️ OrdenCompra ${oc.id} sin fechaFacturacion o fechaContable, se omite del TXT`);
         continue;
       }
       

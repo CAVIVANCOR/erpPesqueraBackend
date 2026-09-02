@@ -323,8 +323,8 @@ const listar = async () => {
               monedaLinea.codigoSunat === "PEN" &&
               monedaPrestamo.codigoSunat === "USD"
             ) {
-              // Convertir USD a PEN: multiplicar por tipo de cambio compra
-              montoEnMonedaLinea = montoDesembolsado * tipoCambio.compra;
+              // Convertir USD a PEN: multiplicar por TC Venta (estándar del sistema: siempre sell_price)
+              montoEnMonedaLinea = montoDesembolsado * tipoCambio.venta;
             } else {
             }
           } else {
