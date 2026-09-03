@@ -2530,7 +2530,13 @@ model Empresa {
   ultimoCorrelativoOperacionCaja      BigInt?     @default(0)
   porcentajePercepcion                Decimal?    @db.Decimal(5, 2)  // 🆕 AGREGAR ESTA LÍNEA
   porcentajeImpuestoRenta             Decimal?    @default(8.00) @db.Decimal(5, 2)  // % Impuesto a la Renta para Recibos por Honorarios
-
+  // ========================================
+  // ⭐ CAMPOS SUNAT SIRE (API OFICIAL COMPRAS Y VENTAS)
+  // ========================================
+  sunatClientId      String?     // ID asignado en SOL para la API del SIRE
+  sunatClientSecret  String?     // CLAVE asignada en SOL para la API del SIRE
+  sunatUsuarioSol    String?     // Usuario SOL de la empresa (ej: USUARIO1)
+  sunatClaveSol      String?     // Clave SOL de la empresa
 
   sedes                         SedesEmpresa[]
   centrosCosto                  EmpresaCentroCosto[]
