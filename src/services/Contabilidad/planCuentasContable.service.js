@@ -133,12 +133,7 @@ const crear = async (data) => {
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) {
-      // console.error('❌ ERROR PRISMA COMPLETO:', {
-        code: err.code,
-        message: err.message,
-        meta: err.meta,
-        data: data
-      });
+      // console.error('❌ ERROR PRISMA COMPLETO:', { code: err.code, message: err.message, meta: err.meta, data: data });
       throw new DatabaseError(`Error de base de datos: ${err.code} - ${err.message}`, err.message);
     }
     throw err;

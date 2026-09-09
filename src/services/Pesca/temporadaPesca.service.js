@@ -348,10 +348,7 @@ const actualizar = async (id, data, usuarioId = null) => {
     try {
       await recalcularToneladasService.recalcularToneladasTemporada(BigInt(id));
     } catch (recalcError) {
-      // console.error(
-        `⚠️ Error al recalcular toneladas para temporada ${id}:`,
-        recalcError,
-      );
+      // console.error(`⚠️ Error al recalcular toneladas para temporada ${id}:`, recalcError);
     }
 
     // ⭐ RECALCULAR PORCENTAJE JUVENILES PARA TODAS LAS FAENAS DE LA TEMPORADA
@@ -360,10 +357,7 @@ const actualizar = async (id, data, usuarioId = null) => {
         BigInt(id),
       );
     } catch (juvenilesError) {
-      // console.error(
-        `⚠️ Error al recalcular porcentaje juveniles para temporada ${id}:`,
-        juvenilesError,
-      );
+      // console.error(`⚠️ Error al recalcular porcentaje juveniles para temporada ${id}:`, juvenilesError);
     }
 
     return temporadaActualizada;

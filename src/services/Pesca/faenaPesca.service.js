@@ -308,10 +308,7 @@ const actualizar = async (id, data, usuarioId = null) => {
         BigInt(id),
       );
     } catch (juvenilesError) {
-      // console.error(
-        `⚠️ Error al recalcular porcentaje juveniles para faena ${id}:`,
-        juvenilesError,
-      );
+      // console.error(`⚠️ Error al recalcular porcentaje juveniles para faena ${id}:`, juvenilesError);
       // No lanzar error, solo registrar - la actualización de faena ya se completó
     }
 
@@ -391,10 +388,7 @@ async function actualizarToneladasTemporada(temporadaId) {
       },
     });
   } catch (error) {
-    // console.error(
-      `❌ Error actualizando toneladas de temporada ${temporadaId}:`,
-      error,
-    );
+    // console.error(`❌ Error actualizando toneladas de temporada ${temporadaId}:`, error);
     // No lanzar error para no interrumpir la operación principal
   }
 }
@@ -480,10 +474,7 @@ async function actualizarCombustibleYRecorridoTemporada(temporadaId) {
       },
     });
   } catch (error) {
-    // console.error(
-      `❌ Error actualizando combustible/recorrido de temporada ${temporadaId}:`,
-      error,
-    );
+    // console.error(`❌ Error actualizando combustible/recorrido de temporada ${temporadaId}:`, error);
   }
 }
 
@@ -544,10 +535,7 @@ async function obtenerPrecioCombustibleFaena(faenaPescaId, fechaReferencia) {
 
     return precioFinal;
   } catch (error) {
-    // console.error(
-      `❌ Error obteniendo precio combustible para faena ${faenaPescaId}:`,
-      error,
-    );
+    // console.error(`❌ Error obteniendo precio combustible para faena ${faenaPescaId}:`, error);
     return 0;
   }
 }

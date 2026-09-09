@@ -315,10 +315,7 @@ async function actualizarToneladasFaena(faenaPescaId) {
       },
     });
   } catch (error) {
-    // console.error(
-      `❌ Error actualizando toneladas de faena ${faenaPescaId}:`,
-      error,
-    );
+    // console.error(`❌ Error actualizando toneladas de faena ${faenaPescaId}:`, error);
     // No lanzar error para no interrumpir la operación principal
   }
 }
@@ -373,10 +370,7 @@ async function actualizarCombustibleYRecorridoFaena(faenaPescaId) {
       },
     });
   } catch (error) {
-    // console.error(
-      `❌ Error actualizando combustible/recorrido de faena ${faenaPescaId}:`,
-      error,
-    );
+    // console.error(`❌ Error actualizando combustible/recorrido de faena ${faenaPescaId}:`, error);
   }
 }
 

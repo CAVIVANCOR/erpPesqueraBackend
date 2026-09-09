@@ -542,10 +542,8 @@ async function upsertConReintentos(tx, tabla, where, data, maxIntentos = 3) {
       // Logging detallado del error
       // console.error(`\n❌ ERROR en upsert (intento ${intento + 1}/${maxIntentos}):`);
       // console.error('Tabla:', tabla);
-      // console.error('WHERE:', JSON.stringify(where, (key, value) => 
-        typeof value === 'bigint' ? value.toString() : value, 2));
-      // console.error('DATA:', JSON.stringify(data, (key, value) => 
-        typeof value === 'bigint' ? value.toString() : value, 2));
+      // console.error('WHERE:', JSON.stringify(where, (key, value) => typeof value === 'bigint' ? value.toString() : value, 2));
+      // console.error('DATA:', JSON.stringify(data, (key, value) => typeof value === 'bigint' ? value.toString() : value, 2));
       // console.error('Error message:', error.message);
       // console.error('Error code:', error.code);
       

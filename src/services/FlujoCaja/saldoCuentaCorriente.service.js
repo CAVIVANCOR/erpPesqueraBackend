@@ -454,9 +454,7 @@ async function generarAsientoSaldoInicial(
 ) {
   try {
     if (!cuentaCorriente.cuentaContableId || !cuentaCorriente.cuentaContable) {
-      // console.warn(
-        `Cuenta corriente ${cuentaCorriente.id} no tiene cuenta contable vinculada. No se generará asiento.`,
-      );
+      // console.warn(`Cuenta corriente ${cuentaCorriente.id} no tiene cuenta contable vinculada. No se generará asiento.`);
       return null;
     }
 
@@ -464,9 +462,7 @@ async function generarAsientoSaldoInicial(
       saldo.empresaId,
     );
     if (!periodoActivo) {
-      // console.warn(
-        `No hay período contable activo para empresa ${saldo.empresaId}. No se generará asiento.`,
-      );
+      // console.warn(`No hay período contable activo para empresa ${saldo.empresaId}. No se generará asiento.`);
       return null;
     }
 
@@ -492,9 +488,7 @@ async function generarAsientoSaldoInicial(
     });
 
     if (!cuentaContrapartida) {
-      // console.warn(
-        "No se encontró cuenta de Resultados Acumulados (591). No se generará asiento.",
-      );
+      // console.warn("No se encontró cuenta de Resultados Acumulados (591). No se generará asiento.");
       return null;
     }
 

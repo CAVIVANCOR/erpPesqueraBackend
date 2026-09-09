@@ -237,9 +237,7 @@ async function copiarPdfAMovimientoCaja(rutaOrigen, movimientoCajaId) {
     const rutaAbsolutaOrigen = path.join(process.cwd(), rutaOrigen);
 
     if (!fs.existsSync(rutaAbsolutaOrigen)) {
-      // console.warn(
-        `[MOVIMIENTO CAJA] Archivo origen no existe: ${rutaAbsolutaOrigen}`,
-      );
+      // console.warn(`[MOVIMIENTO CAJA] Archivo origen no existe: ${rutaAbsolutaOrigen}`);
       return rutaOrigen;
     }
 

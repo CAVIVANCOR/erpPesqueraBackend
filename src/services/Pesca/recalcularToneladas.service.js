@@ -186,10 +186,7 @@ async function recalcularCascadaDesdeFaena(faenaId) {
     }
     return { success: true };
   } catch (error) {
-    // console.error(
-      `❌ Error en recálculo cascada desde Faena ${faenaId}:`,
-      error,
-    );
+    // console.error(`❌ Error en recálculo cascada desde Faena ${faenaId}:`, error);
     throw error;
   }
 }

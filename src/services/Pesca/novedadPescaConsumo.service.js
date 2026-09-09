@@ -68,10 +68,7 @@ async function actualizarToneladasNovedad(novedadPescaConsumoId) {
       },
     });
   } catch (error) {
-    // console.error(
-      `❌ Error actualizando toneladas de novedad ${novedadPescaConsumoId}:`,
-      error,
-    );
+    // console.error(`❌ Error actualizando toneladas de novedad ${novedadPescaConsumoId}:`, error);
     // No lanzar error para no interrumpir la operación principal
   }
 }
@@ -308,10 +305,7 @@ const actualizar = async (id, data) => {
     try {
       await actualizarToneladasNovedad(id);
     } catch (recalcError) {
-      // console.error(
-        `⚠️ Error al recalcular toneladas para novedad ${id}:`,
-        recalcError,
-      );
+      // console.error(`⚠️ Error al recalcular toneladas para novedad ${id}:`, recalcError);
     }
 
     return novedadActualizada;
@@ -765,10 +759,7 @@ const finalizar = async (id, usuarioId = null) => {
               resultado: resultadoDescarga,
             });
           } catch (errorDescarga) {
-            // console.error(
-              `❌ Error procesando descarga ${faena.descarga.id}:`,
-              errorDescarga.message,
-            );
+            // console.error(`❌ Error procesando descarga ${faena.descarga.id}:`, errorDescarga.message);
 
             // Registrar error pero continuar con otras descargas
             resultadosDescargas.push({

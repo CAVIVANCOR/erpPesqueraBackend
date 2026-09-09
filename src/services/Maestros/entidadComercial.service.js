@@ -1092,10 +1092,7 @@ const clonarAEmpresasSeleccionadas = async (entidadId, empresasDestinoIds) => {
           exito: true,
         });
       } catch (error) {
-        // console.error(
-          `Error al clonar en empresa ${empresaDestino.razonSocial}:`,
-          error,
-        );
+        // console.error(`Error al clonar en empresa ${empresaDestino.razonSocial}:`, error);
         resumen.errores.push({
           empresaId: empresaDestino.id,
           empresaNombre: empresaDestino.razonSocial,

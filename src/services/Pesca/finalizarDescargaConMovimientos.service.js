@@ -350,10 +350,7 @@ const finalizarDescargaConMovimientos = async (descargaId, temporadaPescaId, usu
           });
 
           if (!seriePreFactura) {
-            // console.warn(
-              `⚠️ No se encontró serie activa para PRE FACTURA (Materia Prima) en empresa ${temporada.empresaId}. ` +
-              `PreFactura no será generada. Configure una serie con Tipo Documento=PRE FACTURA y Tipo Almacén=MATERIA PRIMA.`
-            );
+            // console.warn(`⚠️ No se encontró serie activa para PRE FACTURA (Materia Prima) en empresa ${temporada.empresaId}. PreFactura no será generada. Configure una serie con Tipo Documento=PRE FACTURA y Tipo Almacén=MATERIA PRIMA.`);
           } else {
             // 6.7: Preparar cabecera de PreFactura
             const fechaDocumentoPreFactura = new Date();
