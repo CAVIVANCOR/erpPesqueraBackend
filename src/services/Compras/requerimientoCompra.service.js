@@ -496,7 +496,6 @@ const aprobar = async (id) => {
       return aprobado;
     });
   } catch (err) {
-    console.error("Error en aprobar requerimiento:", err);
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
     if (err.code && err.code.startsWith("P"))

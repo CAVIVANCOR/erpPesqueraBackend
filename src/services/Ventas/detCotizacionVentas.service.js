@@ -31,7 +31,6 @@ function validarMargenUtilidad(margenMinimo, precioFinal, precioBase, nombreProd
   const margenReal = ((precioFinal - precioBase) / precioFinal) * 100;
   
   if (margenMinimo && margenReal < margenMinimo) {
-    console.warn(`⚠️ Advertencia: Margen real (${margenReal.toFixed(2)}%) es menor al mínimo permitido (${margenMinimo}%) para el producto: ${nombreProducto}`);
     // No lanzar error, solo advertencia
   }
   

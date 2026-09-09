@@ -223,7 +223,7 @@ async function actualizarCombustibleYRecorridoFaena(faenaPescaId) {
       },
     });
   } catch (error) {
-    console.error(
+    // console.error(
       `❌ Error actualizando combustible/recorrido de faena ${faenaPescaId}:`,
       error,
     );
@@ -301,7 +301,7 @@ const obtenerPorFaena = async (faenaPescaId) => {
 
     return result;
   } catch (err) {
-    console.error("obtenerPorFaena service - Error:", err);
+    // console.error("obtenerPorFaena service - Error:", err);
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
     throw err;
@@ -445,10 +445,10 @@ const actualizar = async (id, data, usuarioId = null) => {
     )
       throw err;
     if (err.code && err.code.startsWith("P")) {
-      console.error("❌ Error de base de datos en actualizar:", err);
+      // console.error("❌ Error de base de datos en actualizar:", err);
       throw new DatabaseError("Error de base de datos", err.message);
     }
-    console.error("❌ Error desconocido en actualizar:", err);
+    // console.error("❌ Error desconocido en actualizar:", err);
     throw err;
   }
 };

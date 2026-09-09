@@ -68,7 +68,7 @@ async function actualizarToneladasNovedad(novedadPescaConsumoId) {
       },
     });
   } catch (error) {
-    console.error(
+    // console.error(
       `❌ Error actualizando toneladas de novedad ${novedadPescaConsumoId}:`,
       error,
     );
@@ -308,7 +308,7 @@ const actualizar = async (id, data) => {
     try {
       await actualizarToneladasNovedad(id);
     } catch (recalcError) {
-      console.error(
+      // console.error(
         `⚠️ Error al recalcular toneladas para novedad ${id}:`,
         recalcError,
       );
@@ -765,7 +765,7 @@ const finalizar = async (id, usuarioId = null) => {
               resultado: resultadoDescarga,
             });
           } catch (errorDescarga) {
-            console.error(
+            // console.error(
               `❌ Error procesando descarga ${faena.descarga.id}:`,
               errorDescarga.message,
             );

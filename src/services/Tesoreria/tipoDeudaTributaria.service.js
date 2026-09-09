@@ -107,18 +107,29 @@ const crear = async (data) => {
       throw new ValidationError('El nombre y la periodicidad son obligatorios.');
     }
 
-    await validarTipoDeudaTributaria(data);
+    // Convertir 0 a null para cuenta contable ANTES de validar (0 significa "limpiar campo")
+    let cuentaContableId = data.cuentaContableId;
+    if (cuentaContableId === 0) {
+      cuentaContableId = null;
+    } else if (cuentaContableId) {
+      cuentaContableId = Number(cuentaContableId);
+    } else {
+      cuentaContableId = null;
+    }
+    
     const tipoData = {
       nombre: data.nombre,
       descripcion: data.descripcion || null,
       categoriaId: data.categoriaId ? Number(data.categoriaId) : null,
       entidadRecaudadoraId: Number(data.entidadRecaudadoraId) || null,
       periodicidad: data.periodicidad,
-      cuentaContableId: Number(data.cuentaContableId) || null,
+      cuentaContableId: cuentaContableId,
       tipoLibroId: Number(data.tipoLibroId) || null,
       activo: data.activo !== undefined ? data.activo : true,
       creadoPor: data.creadoPor || null
     };
+
+    await validarTipoDeudaTributaria(tipoData);
 
     return await prisma.tipoDeudaTributaria.create({ data: tipoData });
   } catch (err) {
@@ -135,12 +146,15 @@ const actualizar = async (id, data) => {
     const existente = await prisma.tipoDeudaTributaria.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Tipo de deuda tributaria no encontrado');
 
-    await validarTipoDeudaTributaria(data);
+    // Convertir 0 a null para cuenta contable ANTES de validar (0 significa "limpiar campo")
+    const tipoData = { ...data };
+    if (tipoData.cuentaContableId === 0) {
+      tipoData.cuentaContableId = null;
+    }
+    
+    tipoData.actualizadoPor = data.actualizadoPor || null;
 
-    const tipoData = {
-      ...data,
-      actualizadoPor: data.actualizadoPor || null
-    };
+    await validarTipoDeudaTributaria(tipoData);
 
     return await prisma.tipoDeudaTributaria.update({
       where: { id },

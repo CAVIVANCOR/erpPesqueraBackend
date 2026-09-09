@@ -210,7 +210,7 @@ const crear = async (data) => {
         });
       }
     } catch (notifError) {
-      console.error('Error al crear notificación para moderador:', notifError);
+      // console.error('Error al crear notificación para moderador:', notifError);
       // No lanzar error, la videoconferencia ya fue creada exitosamente
     }
     

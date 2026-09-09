@@ -638,7 +638,7 @@ const obtenerLabelEnlace = async (enlaceId) => {
 
     return null;
   } catch (err) {
-    console.error("Error al obtener label de enlace:", err);
+    // console.error("Error al obtener label de enlace:", err);
     return null;
   }
 };
@@ -1197,7 +1197,7 @@ const recalcularSaldosAutomatico = async (responsableId) => {
       }
     }
   } catch (error) {
-    console.error('Error en recalcularSaldosAutomatico:', error);
+    // console.error('Error en recalcularSaldosAutomatico:', error);
     // No lanzar error para no bloquear la operación principal
   }
 };

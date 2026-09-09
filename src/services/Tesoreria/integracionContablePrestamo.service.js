@@ -34,7 +34,7 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
     const fechaAsiento = prestamo.fechaContable || prestamo.fechaDesembolso;
     const periodo = await periodoContableService.obtenerPeriodoPorFecha(prestamo.empresaId, fechaAsiento);
     if (!periodo) {
-      console.warn(`No hay período contable para la fecha ${fechaAsiento} en empresa ${prestamo.empresaId}. No se generará asiento.`);
+
       return null;
     }
     const estadoPendiente = await tx.estadoMultiFuncion.findUnique({
@@ -63,12 +63,12 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
     });
 
     if (!cuentaPrestamo || !cuentaInteresesNoDev) {
-      console.warn("No se encontraron todas las cuentas necesarias. No se generará asiento.");
+
       return null;
     }
 
     if (!cuentaCorriente?.cuentaContable) {
-      console.warn("La cuenta corriente no tiene cuenta contable vinculada. No se generará asiento.");
+
       return null;
     }
 
@@ -189,7 +189,6 @@ async function generarAsientoPrestamoNuevo(prestamo, tx, creadoPor) {
     });
 
   } catch (err) {
-    console.error("Error al generar asiento contable para desembolso:", err);
     throw err;
   }
 }
@@ -224,7 +223,7 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
     const fechaAsiento = cuota.fechaPago || new Date();
     const periodo = await periodoContableService.obtenerPeriodoPorFecha(prestamo.empresaId, fechaAsiento);
     if (!periodo) {
-      console.warn(`No hay período contable para la fecha ${fechaAsiento} en empresa ${prestamo.empresaId}. No se generará asiento.`);
+
       return null;
     }
 
@@ -262,9 +261,6 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
     });
 
     if (!cuentaPrestamo || !cuentaInteres || !cuentaEfectivo) {
-      console.warn(
-        "No se encontraron todas las cuentas necesarias. No se generará asiento.",
-      );
       return null;
     }
 
@@ -365,7 +361,6 @@ async function generarAsientoPagoCuota(cuota, prestamo, tx, creadoPor) {
 
     return asiento;
   } catch (err) {
-    console.error("Error al generar asiento contable para pago de cuota:", err);
     throw err;
   }
 }
@@ -381,7 +376,7 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
     const fechaAsiento = prestamo.fechaContable || prestamo.fechaDesembolso;
     const periodo = await periodoContableService.obtenerPeriodoPorFecha(prestamo.empresaId, fechaAsiento);
     if (!periodo) {
-      console.warn(`No hay período contable para la fecha ${fechaAsiento} en empresa ${prestamo.empresaId}. No se generará asiento.`);
+
       return null;
     }
     const estadoPendiente = await tx.estadoMultiFuncion.findUnique({
@@ -436,7 +431,7 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
     
     // Si no hay cuotas impagas, no generar asiento
     if (montoCapital === 0 || cuotasImpagas.length === 0) {
-      console.warn(`⚠️ [generarAsientoSaldoInicial] Préstamo ${prestamo.id}: No hay cuotas impagas. No se generará asiento.`);
+
       return null;
     }
     const asiento = await tx.asientoContable.create({
@@ -523,11 +518,6 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
       },
     });
   } catch (err) {
-    console.error("❌ [generarAsientoSaldoInicial] ERROR:", {
-      mensaje: err.message,
-      stack: err.stack,
-      prestamoId: prestamo?.id
-    });
     throw err;
   }
 }

@@ -58,7 +58,6 @@ const buscarPrecioProducto = async (
     }
 
   } catch (error) {
-    console.error('Error al buscar precio del producto:', error);
     return null;
   }
 };

@@ -96,6 +96,12 @@ app.use(
     ),
   ),
 );
+// Middleware para servir archivos SIRE (PDFs de comprobantes descargados de SUNAT)
+app.use(
+  "/uploads/sire",
+  cors(), // Habilitar CORS para archivos SIRE
+  express.static(path.join(process.cwd(), "uploads/sire")),
+);
 
 // Middlewares globales
 app.use(express.json({ limit: "50mb" }));

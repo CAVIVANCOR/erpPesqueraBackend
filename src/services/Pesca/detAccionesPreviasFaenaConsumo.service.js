@@ -101,7 +101,7 @@ const obtenerPorFaenaConsumo = async (faenaPescaConsumoId) => {
     });
     return resultado;
   } catch (err) {
-    console.error("❌ [DEBUG] Error en obtenerPorFaenaConsumo:", err);
+    // console.error("❌ [DEBUG] Error en obtenerPorFaenaConsumo:", err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

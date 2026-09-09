@@ -92,17 +92,28 @@ const crear = async (data) => {
       throw new ValidationError('El nombre es obligatorio.');
     }
 
-    await validarTipoDeudaPersonal(data);
+    // Convertir 0 a null para cuenta contable ANTES de validar (0 significa "limpiar campo")
+    let cuentaContableId = data.cuentaContableId;
+    if (cuentaContableId === 0) {
+      cuentaContableId = null;
+    } else if (cuentaContableId) {
+      cuentaContableId = Number(cuentaContableId);
+    } else {
+      cuentaContableId = null;
+    }
 
     const tipoData = {
       nombre: data.nombre,
       descripcion: data.descripcion || null,
       categoriaId: data.categoriaId ? Number(data.categoriaId) : null,
-      cuentaContableId: Number(data.cuentaContableId) || null,
+      cuentaContableId: cuentaContableId,
       periodicidad: data.periodicidad || null,
       activo: data.activo !== undefined ? data.activo : true,
       creadoPor: data.creadoPor || null
     };
+    
+    await validarTipoDeudaPersonal(tipoData);
+    
     return await prisma.tipoDeudaPersonal.create({ data: tipoData });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
@@ -118,12 +129,15 @@ const actualizar = async (id, data) => {
     const existente = await prisma.tipoDeudaPersonal.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Tipo de deuda personal no encontrado');
 
-    await validarTipoDeudaPersonal(data);
+    // Convertir 0 a null para cuenta contable ANTES de validar (0 significa "limpiar campo")
+    const tipoData = { ...data };
+    if (tipoData.cuentaContableId === 0) {
+      tipoData.cuentaContableId = null;
+    }
+    
+    tipoData.actualizadoPor = data.actualizadoPor || null;
 
-    const tipoData = {
-      ...data,
-      actualizadoPor: data.actualizadoPor || null
-    };
+    await validarTipoDeudaPersonal(tipoData);
 
     return await prisma.tipoDeudaPersonal.update({
       where: { id },

@@ -49,7 +49,7 @@ export const enviarEmail = async (opciones) => {
     
     return { success: true, messageId: info.messageId };
   } catch (err) {
-    console.error('Error al enviar email:', err);
+    // console.error('Error al enviar email:', err);
     throw new DatabaseError('Error al enviar email', err.message);
   }
 };

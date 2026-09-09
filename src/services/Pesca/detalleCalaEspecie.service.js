@@ -46,7 +46,7 @@ async function actualizarToneladasCala(calaId) {
     // Actualizar también las toneladas de la faena
     await actualizarToneladasFaena(calaActualizada.faenaPescaId);
   } catch (error) {
-    console.error('Error actualizando toneladas de cala:', error);
+    // console.error('Error actualizando toneladas de cala:', error);
     // No lanzar error para no interrumpir la operación principal
   }
 }
@@ -73,7 +73,7 @@ async function actualizarToneladasFaena(faenaPescaId) {
     // Actualizar también las toneladas de la temporada
     await actualizarToneladasTemporada(faenaActualizada.temporadaId);
   } catch (error) {
-    console.error('Error actualizando toneladas de faena:', error);
+    // console.error('Error actualizando toneladas de faena:', error);
     // No lanzar error para no interrumpir la operación principal
   }
 }
@@ -97,7 +97,7 @@ async function actualizarToneladasTemporada(temporadaId) {
       }
     });
   } catch (error) {
-    console.error('Error actualizando toneladas de temporada:', error);
+    // console.error('Error actualizando toneladas de temporada:', error);
     // No lanzar error para no interrumpir la operación principal
   }
 }

@@ -430,7 +430,7 @@ async function generarAsientoPagoCxC(data, cuentaPorCobrar, movimientoIngreso, p
 
     return asiento;
   } catch (error) {
-    console.error('Error generando asiento de pago CxC:', error);
+    // console.error('Error generando asiento de pago CxC:', error);
     throw error;
   }
 }
@@ -528,7 +528,7 @@ async function generarAsientoITF(data, movimientoITF, pagoCuentaPorCobrar, glosa
 
     return asiento;
   } catch (error) {
-    console.error('Error generando asiento ITF:', error);
+    // console.error('Error generando asiento ITF:', error);
     throw error;
   }
 }
@@ -626,7 +626,7 @@ async function generarAsientoComision(data, movimientoComision, pagoCuentaPorCob
 
     return asiento;
   } catch (error) {
-    console.error('Error generando asiento Comisión:', error);
+    // console.error('Error generando asiento Comisión:', error);
     throw error;
   }
 }
@@ -1184,7 +1184,7 @@ const procesarPagoEspecializado = async (data) => {
       };
     });
   } catch (err) {
-    console.error('❌ Error en procesarPagoEspecializado:', err);
+    // console.error('❌ Error en procesarPagoEspecializado:', err);
 
     if (err instanceof ValidationError || err instanceof NotFoundError) {
       throw err;
@@ -1554,7 +1554,7 @@ const actualizarUrlVoucherConsolidado = async (movimientoIngresoId, urlPdf) => {
     });
     return { success: true };
   } catch (error) {
-    console.error('Error al actualizar URL voucher consolidado:', error);
+    // console.error('Error al actualizar URL voucher consolidado:', error);
     throw new DatabaseError('Error al actualizar URL del voucher consolidado');
   }
 };
@@ -1570,7 +1570,7 @@ const actualizarUrlVoucherIndividual = async (movimientoId, urlPdf) => {
     });
     return { success: true };
   } catch (error) {
-    console.error('Error al actualizar URL voucher individual:', error);
+    // console.error('Error al actualizar URL voucher individual:', error);
     throw new DatabaseError('Error al actualizar URL del voucher individual');
   }
 };

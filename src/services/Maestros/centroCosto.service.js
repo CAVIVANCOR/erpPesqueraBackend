@@ -75,9 +75,17 @@ const crear = async (data) => {
     if (!data.Codigo || !data.Nombre || !data.CategoriaID) {
       throw new ValidationError('Los campos Codigo, Nombre y CategoriaID son obligatorios.');
     }
-    await validarCategoria(data.CategoriaID);
-    await validarCuentaContable(data.cuentaContableId);  // ⭐ NUEVO
-    return await prisma.centroCosto.create({ data });
+    
+    // Convertir 0 a null para cuenta contable ANTES de validar (0 significa "limpiar campo")
+    const dataToCreate = { ...data };
+    if (dataToCreate.cuentaContableId === 0) {
+      dataToCreate.cuentaContableId = null;
+    }
+    
+    await validarCategoria(dataToCreate.CategoriaID);
+    await validarCuentaContable(dataToCreate.cuentaContableId);
+    
+    return await prisma.centroCosto.create({ data: dataToCreate });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -92,13 +100,21 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.centroCosto.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Centro de costo no encontrado');
-    if (data.CategoriaID !== undefined && data.CategoriaID !== null) {
-      await validarCategoria(data.CategoriaID);
+    
+    // Convertir 0 a null para cuenta contable ANTES de validar (0 significa "limpiar campo")
+    const dataToUpdate = { ...data };
+    if (dataToUpdate.cuentaContableId === 0) {
+      dataToUpdate.cuentaContableId = null;
     }
-    if (data.cuentaContableId !== undefined && data.cuentaContableId !== null) {  // ⭐ NUEVO
-      await validarCuentaContable(data.cuentaContableId);
+    
+    if (dataToUpdate.CategoriaID !== undefined && dataToUpdate.CategoriaID !== null) {
+      await validarCategoria(dataToUpdate.CategoriaID);
     }
-    return await prisma.centroCosto.update({ where: { id }, data });
+    if (dataToUpdate.cuentaContableId !== undefined && dataToUpdate.cuentaContableId !== null) {
+      await validarCuentaContable(dataToUpdate.cuentaContableId);
+    }
+    
+    return await prisma.centroCosto.update({ where: { id }, data: dataToUpdate });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

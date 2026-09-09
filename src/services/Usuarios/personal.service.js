@@ -166,7 +166,7 @@ const crear = async (data) => {
     const resultado = await prisma.personal.create({ data });
     return resultado;
   } catch (err) {
-    console.error("❌ Backend - Error al crear personal:", err);
+    // console.error("❌ Backend - Error al crear personal:", err);
     if (err instanceof ConflictError || err instanceof ValidationError)
       throw err;
     if (err.code && err.code.startsWith("P"))
@@ -186,7 +186,7 @@ const actualizar = async (id, data) => {
     const resultado = await prisma.personal.update({ where: { id }, data });
     return resultado;
   } catch (err) {
-    console.error("❌ Backend - Error al actualizar personal:", err);
+    // console.error("❌ Backend - Error al actualizar personal:", err);
     if (
       err instanceof ConflictError ||
       err instanceof NotFoundError ||

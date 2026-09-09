@@ -237,7 +237,7 @@ async function copiarPdfAMovimientoCaja(rutaOrigen, movimientoCajaId) {
     const rutaAbsolutaOrigen = path.join(process.cwd(), rutaOrigen);
 
     if (!fs.existsSync(rutaAbsolutaOrigen)) {
-      console.warn(
+      // console.warn(
         `[MOVIMIENTO CAJA] Archivo origen no existe: ${rutaAbsolutaOrigen}`,
       );
       return rutaOrigen;
@@ -261,7 +261,7 @@ async function copiarPdfAMovimientoCaja(rutaOrigen, movimientoCajaId) {
     const rutaRelativa = `/uploads/pdf-system/movimiento-caja-comprobante/${nombreArchivo}`;
     return rutaRelativa;
   } catch (error) {
-    console.error("[MOVIMIENTO CAJA] Error al copiar archivo:", error);
+    // console.error("[MOVIMIENTO CAJA] Error al copiar archivo:", error);
     return rutaOrigen;
   }
 }
@@ -351,7 +351,7 @@ async function actualizarSaldosCuentasCorrientes(movimiento) {
 
     return saldosGenerados;
   } catch (err) {
-    console.error("Error al actualizar saldos de cuentas corrientes:", err);
+    // console.error("Error al actualizar saldos de cuentas corrientes:", err);
     throw new DatabaseError(
       "Error al actualizar saldos de cuentas corrientes",
       err.message,

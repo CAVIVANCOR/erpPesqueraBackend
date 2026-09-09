@@ -56,7 +56,7 @@ const listar = async () => {
       },
     });
   } catch (err) {
-    console.error('Error en listar EntregaARendirMovAlmacen:', err);
+    // console.error('Error en listar EntregaARendirMovAlmacen:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -86,7 +86,7 @@ const obtenerPorId = async (id) => {
     if (!entrega) throw new NotFoundError('EntregaARendirMovAlmacen no encontrada');
     return entrega;
   } catch (err) {
-    console.error('Error en obtenerPorId EntregaARendirMovAlmacen:', err);
+    // console.error('Error en obtenerPorId EntregaARendirMovAlmacen:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -138,7 +138,7 @@ const crear = async (data) => {
       },
     });
   } catch (err) {
-    console.error('Error en crear EntregaARendirMovAlmacen:', err);
+    // console.error('Error en crear EntregaARendirMovAlmacen:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -192,7 +192,7 @@ const actualizar = async (id, data) => {
       },
     });
   } catch (err) {
-    console.error('Error en actualizar EntregaARendirMovAlmacen:', err);
+    // console.error('Error en actualizar EntregaARendirMovAlmacen:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

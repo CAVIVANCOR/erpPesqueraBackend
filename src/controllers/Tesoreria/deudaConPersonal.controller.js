@@ -133,7 +133,7 @@ export async function guardarAsiento(req, res, next) {
 
     res.status(201).json(toJSONBigInt(resultado));
   } catch (err) {
-    console.error('❌ BACKEND Controller - Error:', err);
+    // console.error('❌ BACKEND Controller - Error:', err);
     next(err);
   }
 }

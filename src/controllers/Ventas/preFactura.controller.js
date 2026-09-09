@@ -275,7 +275,7 @@ export async function generarBorradorAsiento(req, res, next) {
     const borrador = await preFacturaService.generarBorradorAsiento(preFacturaId);
     res.json(toJSONBigInt(borrador));
   } catch (err) {
-    console.error("🔴 [CONTROLLER] generarBorradorAsiento - ERROR:", err);
+    // console.error("🔴 [CONTROLLER] generarBorradorAsiento - ERROR:", err);
     next(err);
   }
 }
@@ -484,7 +484,7 @@ export async function exportarRegistroVentasSUNAT(req, res, next) {
     res.setHeader('Content-Disposition', 'attachment; filename="registro_ventas.txt"');
     res.send(txtContent);
   } catch (err) {
-    console.error('❌ ERROR EN CONTROLADOR EXPORTAR TXT:', err);
+    // console.error('❌ ERROR EN CONTROLADOR EXPORTAR TXT:', err);
     next(err);
   }
 }

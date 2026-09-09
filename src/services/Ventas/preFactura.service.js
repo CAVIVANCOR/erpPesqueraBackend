@@ -1244,7 +1244,6 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
     ) {
       throw error;
     }
-    console.error("Error al eliminar PreFactura completa:", error);
     throw new DatabaseError(
       "Error al eliminar PreFactura: " + error.message
     );
@@ -3555,12 +3554,6 @@ const generarBorradorAsiento = async (preFacturaId) => {
     const diferenciaCalculada = totalDebePEN - totalHaberPEN;
 
     if (Math.abs(diferenciaCalculada) > 0.01) {
-      console.error('❌ Borrador descuadrado:', {
-        totalDebePEN,
-        totalHaberPEN,
-        diferenciaCalculada,
-        detalles: borrador.detalles
-      });
       throw new ValidationError(
         `Error al generar borrador: asiento descuadrado. Diferencia: ${diferenciaCalculada.toFixed(2)}`
       );
@@ -3859,18 +3852,11 @@ const guardarAsientoContable = async (preFacturaId, asientoData, creadoPor) => {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
     if (err.code && err.code.startsWith("P")) {
-      console.error('❌ Error de Prisma al guardar asiento:', {
-        code: err.code,
-        message: err.message,
-        meta: err.meta,
-        stack: err.stack
-      });
       throw new DatabaseError(
         `Error de base de datos: ${err.message}`,
         `Código Prisma: ${err.code}. Meta: ${JSON.stringify(err.meta)}`
       );
     }
-    console.error('❌ Error desconocido al guardar asiento:', err);
     throw err;
   }
 };
@@ -4296,12 +4282,6 @@ const regenerarKardex = async (id, usuarioId) => {
       maxWait: 125000,
     });
   } catch (err) {
-    console.error("❌ Error en regenerarKardex:", {
-      message: err.message,
-      code: err.code,
-      meta: err.meta,
-    });
-
     if (
       err instanceof NotFoundError ||
       err instanceof ValidationError ||
@@ -4520,7 +4500,6 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluir
       const fechaCont = pf.fechaContable ? new Date(pf.fechaContable) : null;
       
       if (!fechaDoc || !fechaCont) {
-        console.warn(`⚠️ PreFactura ${pf.id} sin fechaFacturacion o fechaContable, se omite del TXT`);
         continue;
       }
       

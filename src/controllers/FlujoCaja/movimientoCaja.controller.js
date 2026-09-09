@@ -208,7 +208,7 @@ export const subirComprobante = [
             urlComprobanteOperacionMovCaja: rutaRelativa
           });
         } catch (updateError) {
-          console.error('Error actualizando movimiento caja:', updateError);
+          // console.error('Error actualizando movimiento caja:', updateError);
         }
       }
 
@@ -220,7 +220,7 @@ export const subirComprobante = [
       });
 
     } catch (error) {
-      console.error('Error en upload comprobante:', error);
+      // console.error('Error en upload comprobante:', error);
       res.status(500).json({
         error: 'Error interno del servidor al subir comprobante',
         codigo: 'ERR_UPLOAD_COMPROBANTE'
@@ -263,7 +263,7 @@ export const subirDocumento = [
             urlDocumentoMovCaja: rutaRelativa
           });
         } catch (updateError) {
-          console.error('Error actualizando movimiento caja:', updateError);
+          // console.error('Error actualizando movimiento caja:', updateError);
         }
       }
 
@@ -275,7 +275,7 @@ export const subirDocumento = [
       });
 
     } catch (error) {
-      console.error('Error en upload documento:', error);
+      // console.error('Error en upload documento:', error);
       res.status(500).json({
         error: 'Error interno del servidor al subir documento',
         codigo: 'ERR_UPLOAD_DOCUMENTO'
@@ -298,7 +298,7 @@ export async function servirArchivoComprobante(req, res) {
 
     res.sendFile(archivoPath);
   } catch (error) {
-    console.error('Error al servir archivo comprobante:', error);
+    // console.error('Error al servir archivo comprobante:', error);
     res.status(500).json({ error: 'Error al servir el archivo' });
   }
 }
@@ -317,7 +317,7 @@ export async function servirArchivoDocumento(req, res) {
 
     res.sendFile(archivoPath);
   } catch (error) {
-    console.error('Error al servir archivo documento:', error);
+    // console.error('Error al servir archivo documento:', error);
     res.status(500).json({ error: 'Error al servir el archivo' });
   }
 }

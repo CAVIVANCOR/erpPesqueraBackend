@@ -55,7 +55,7 @@ class PDFService {
       };
 
     } catch (error) {
-      console.error('Error en uploadSingle:', error);
+      // console.error('Error en uploadSingle:', error);
       throw error;
     }
   }
@@ -72,7 +72,7 @@ class PDFService {
       return fs.readFileSync(filePath);
 
     } catch (error) {
-      console.error('Error en getFile:', error);
+      // console.error('Error en getFile:', error);
       throw error;
     }
   }
@@ -94,7 +94,7 @@ class PDFService {
     } catch (error) {
       // ⭐ NO LOGUEAR ERRORES 404 COMO ERRORES CRÍTICOS
       if (error.statusCode !== 404) {
-        console.error('Error en getFilePath:', error);
+        // console.error('Error en getFilePath:', error);
       }
       throw error;
     }
@@ -112,7 +112,7 @@ class PDFService {
       throw new Error('Archivo no encontrado');
 
     } catch (error) {
-      console.error('Error en deleteFile:', error);
+      // console.error('Error en deleteFile:', error);
       throw error;
     }
   }

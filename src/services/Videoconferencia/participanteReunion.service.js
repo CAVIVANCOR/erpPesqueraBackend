@@ -165,7 +165,7 @@ const crear = async (data) => {
           }
         });
       } catch (error) {
-        console.error('Error al crear notificación:', error);
+        // console.error('Error al crear notificación:', error);
       }
     }
     
@@ -184,7 +184,7 @@ const crear = async (data) => {
           nuevo.videoconferencia
         );
       } catch (error) {
-        console.error('Error al enviar email:', error);
+        // console.error('Error al enviar email:', error);
       }
     }
     

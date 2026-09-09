@@ -14,10 +14,7 @@ export async function atenderAsignacion(req, res, next) {
     const resultado = await atenderAsignacionService.atenderAsignacion(datos);    
     res.status(201).json(toJSONBigInt(resultado));
   } catch (error) {
-    console.error("❌ [CONTROLLER] Error capturado:", error);
-    console.error("❌ [CONTROLLER] Error stack:", error.stack);
-    console.error("❌ [CONTROLLER] Error message:", error.message);
-    console.error("❌ [CONTROLLER] Error name:", error.name);
+
     next(error);
   }
 }

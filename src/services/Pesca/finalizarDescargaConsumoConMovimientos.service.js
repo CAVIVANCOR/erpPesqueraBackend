@@ -337,7 +337,7 @@ const finalizarDescargaConsumoConMovimientos = async (
         }
 
         if (!precioInfo) {
-          console.warn(
+          // console.warn(
             `⚠️ No se encontró precio para producto ${producto.id}. PreFactura no será generada.`,
           );
         } else {
@@ -383,7 +383,7 @@ const finalizarDescargaConsumoConMovimientos = async (
           });
 
           if (!seriePreFactura) {
-            console.warn(
+            // console.warn(
               `⚠️ No se encontró serie activa para PRE FACTURA (Materia Prima) en empresa ${novedad.empresaId}. ` +
               `PreFactura no será generada. Configure una serie con Tipo Documento=PRE FACTURA y Tipo Almacén=MATERIA PRIMA.`,
             );
@@ -442,11 +442,11 @@ const finalizarDescargaConsumoConMovimientos = async (
         }
       } catch (errorPreFactura) {
         // ⚠️ Si falla la PreFactura, solo registrar el error pero NO detener el proceso
-        console.error(
+        // console.error(
           "⚠️ Error al generar PreFactura (no crítico):",
           errorPreFactura.message,
         );
-        console.error(
+        // console.error(
           "Los movimientos de almacén se completaron exitosamente.",
         );
       }
@@ -500,7 +500,7 @@ const finalizarDescargaConsumoConMovimientos = async (
 
       return resultado;
     } catch (error) {
-      console.error(
+      // console.error(
         "❌ Error en finalizarDescargaConsumoConMovimientos:",
         error,
       );
@@ -570,7 +570,7 @@ async function calcularCostoUnitarioConsumo(
 
     return costoUnitario;
   } catch (error) {
-    console.error("❌ Error calculando costo unitario consumo:", error);
+    // console.error("❌ Error calculando costo unitario consumo:", error);
     return 0;
   }
 }

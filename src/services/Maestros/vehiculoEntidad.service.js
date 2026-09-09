@@ -115,7 +115,7 @@ const obtenerPorEntidad = async (entidadComercialId) => {
     
     return resultadoConPersonal;
   } catch (err) {
-    console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
+    // console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

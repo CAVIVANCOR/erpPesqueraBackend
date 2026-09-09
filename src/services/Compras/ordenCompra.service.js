@@ -176,7 +176,6 @@ const obtenerTodos = async (where = {}) => {
       };
     });
   } catch (error) {
-    console.error("Error al obtener órdenes de compra:", error);
     throw new DatabaseError("Error al obtener órdenes de compra: " + error.message);
   }
 };
@@ -1002,7 +1001,6 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
     ) {
       throw error;
     }
-    console.error("Error al eliminar OrdenCompra completa:", error);
     throw new DatabaseError(
       "Error al eliminar OrdenCompra: " + error.message
     );
@@ -2703,7 +2701,6 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
     if (err.code && err.code.startsWith("P")) {
-      console.error("Error Prisma completo:", err);
       throw new DatabaseError(`Error BD: ${err.code} - ${err.message}`, err.message);
     }
     throw err;
@@ -4077,7 +4074,6 @@ const guardarAsientoContable = async (ordenCompraId, asientoData, creadoPor) => 
             });
           }
         } catch (errDestino) {
-          console.error("Error al generar asiento de destino:", errDestino);
           // No fallar la transacción principal si falla el asiento destino
         }
       }
@@ -4291,6 +4287,11 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
           include: {
             tipoDocumentoFinal: true
           }
+        },
+        detalles: {
+          include: {
+            tipoAfectacionIGV: true
+          }
         }
       },
       orderBy: [
@@ -4323,7 +4324,6 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
       const fechaCont = oc.fechaContable ? new Date(oc.fechaContable) : null;
       
       if (!fechaDoc || !fechaCont) {
-        console.warn(`⚠️ OrdenCompra ${oc.id} sin fechaFacturacion o fechaContable, se omite del TXT`);
         continue;
       }
       
@@ -4351,30 +4351,64 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
       const { tc: tcAplicable, origen: origenTC } = obtenerTipoCambioEfectivo(oc);
 
       // Trazabilidad de casos que requieren revisión de datos
-      if (esMonedaExtranjera && Number(oc.tipoCambio || 0) === 0 && origenTC !== "DOC_AFECTADO") {
-        console.warn(`⚠️ OrdenCompra ${oc.id} en ${oc.moneda?.codigoSunat} sin tipo de cambio. Se usa TC=1`);
-      }
-      if (origenTC === "FALLBACK_NCND") {
-        console.warn(`⚠️ OrdenCompra ${oc.id} (NC/ND) sin TC del documento afectado; se usa su TC propio ${tcAplicable}`);
+      
+      // ============================================================
+      // CALCULAR MONTOS POR CATEGORÍA DE AFECTACIÓN IGV PARA SUNAT
+      // ============================================================
+      // Separar items por categoría según normativa SUNAT:
+      // - GRAVADO: Base imponible que genera IGV
+      // - EXONERADO: Operaciones exoneradas del IGV
+      // - INAFECTO: Operaciones inafectas (no gravan IGV)
+      // El total del documento para SUNAT = Base Gravada + IGV (sin inafectos)
+      
+      let subtotalGravadoPEN = 0;
+      let subtotalExoneradoPEN = 0;
+      let subtotalInafectoPEN = 0;
+      
+      // Recorrer detalles para clasificar por tipo de afectación
+      if (oc.detalles && Array.isArray(oc.detalles)) {
+        oc.detalles.forEach(detalle => {
+          const subtotalDetalle = Number(detalle.subtotal || 0) * tcAplicable;
+          const categoria = detalle.tipoAfectacionIGV?.categoria;
+          
+          if (categoria === 'INAFECTO') {
+            subtotalInafectoPEN += subtotalDetalle;
+          } else if (categoria === 'EXONERADO' || oc.esExoneradoAlIGV) {
+            subtotalExoneradoPEN += subtotalDetalle;
+          } else {
+            // GRAVADO o sin categoría específica (default gravado)
+            subtotalGravadoPEN += subtotalDetalle;
+          }
+        });
+      } else {
+        // Fallback: Si no hay detalles, usar el subtotal general
+        const subtotalPEN = Number(oc.subtotal || 0) * tcAplicable;
+        if (oc.esExoneradoAlIGV) {
+          subtotalExoneradoPEN = subtotalPEN;
+        } else {
+          subtotalGravadoPEN = subtotalPEN;
+        }
       }
       
-      // Convertir montos a soles (si está en ME, multiplica por TC; si ya está en PEN, mantiene el valor)
-      let subtotalPEN = Number(oc.subtotal || 0) * tcAplicable;
       let totalIGVPEN = Number(oc.totalIGV || 0) * tcAplicable;
-      let totalPEN = Number(oc.total || 0) * tcAplicable;
+      
+      // Total para SUNAT = Base Gravada + IGV (los inafectos NO se suman al total)
+      let totalPEN = subtotalGravadoPEN + totalIGVPEN;
       
       // Si es Nota de Crédito (07), los montos deben ser negativos
       if (tipoDocCodigo === "07") {
-        subtotalPEN = Math.abs(subtotalPEN) * -1;
+        subtotalGravadoPEN = Math.abs(subtotalGravadoPEN) * -1;
+        subtotalExoneradoPEN = Math.abs(subtotalExoneradoPEN) * -1;
+        subtotalInafectoPEN = Math.abs(subtotalInafectoPEN) * -1;
         totalIGVPEN = Math.abs(totalIGVPEN) * -1;
         totalPEN = Math.abs(totalPEN) * -1;
       }
       
       // Construir campos para el TXT SUNAT (siempre en soles)
-      const esExonerado = oc.esExoneradoAlIGV || false;
-      const baseGravada = !esExonerado ? subtotalPEN.toFixed(2) : "0.00";
+      const baseGravada = subtotalGravadoPEN.toFixed(2);
       const igv = totalIGVPEN.toFixed(2);
-      const exonerado = esExonerado ? subtotalPEN.toFixed(2) : "0.00";
+      const exonerado = subtotalExoneradoPEN.toFixed(2);
+      const inafecto = subtotalInafectoPEN.toFixed(2);
       const total = totalPEN.toFixed(2);
       const moneda = oc.moneda?.codigoSunat || "PEN";  // Moneda original del documento
       // Se reporta el TC realmente aplicado en la conversión (para NC/ND es el del doc afectado)
@@ -4390,11 +4424,14 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
       const estadoId = Number(oc.estadoId);
       const estadoSunat = estadoId === 39 ? "1" : "2";
 
+      // Formato SUNAT 8.1 - Campos de montos (posiciones 15-25):
+      // 15: Base Gravada, 16: IGV, 17: Base No Gravada, 18: ISC
+      // 19: Exonerado, 20: Inafecto, 21: ISC, 22: Base Grav IVAP, 23: IVAP, 24: ICBPER, 25: Otros Tributos
       const linea = [
         periodo, correlativoStr, correlativoStr, fechaEmision, fechaVenc, fechaContable,
         tipoDocCodigo, serie, "", numero, "",
         tipoDocProv, nroDocProv, razonSocialProv,
-        baseGravada, igv, "0.00", "0.00", exonerado, "0.00", "0.00", "0.00", "0.00", "0.00",
+        baseGravada, igv, "0.00", "0.00", exonerado, inafecto, "0.00", "0.00", "0.00", "0.00", "0.00",
         total, moneda, tipoCambio,
         fechaDocMod, tipoDocMod, serieDocMod, "", nroDocMod,
         indDetraccion, "01", "", "", "", "", "", "", estadoSunat, ""

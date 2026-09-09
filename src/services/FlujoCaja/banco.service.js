@@ -76,7 +76,14 @@ async function crear(data) {
   try {
     await validarReferencias(data);
     await validarDuplicado(data);
-    return await prisma.banco.create({ data });
+    
+    // Convertir 0 a null para cuenta contable (0 significa "limpiar campo")
+    const dataToCreate = { ...data };
+    if (dataToCreate.cuentaContableId === 0) {
+      dataToCreate.cuentaContableId = null;
+    }
+    
+    return await prisma.banco.create({ data: dataToCreate });
   } catch (err) {
     if (err instanceof ConflictError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -102,8 +109,14 @@ async function actualizar(id, data) {
     // Valida duplicados
     await validarDuplicado(data, id);
 
+    // Convertir 0 a null para cuenta contable (0 significa "limpiar campo")
+    const dataToUpdate = { ...data };
+    if (dataToUpdate.cuentaContableId === 0) {
+      dataToUpdate.cuentaContableId = null;
+    }
+
     // Realiza la actualización
-    const actualizado = await prisma.banco.update({ where: { id }, data });
+    const actualizado = await prisma.banco.update({ where: { id }, data: dataToUpdate });
     return actualizado;
   } catch (err) {
     if (err instanceof ConflictError || err instanceof NotFoundError || err instanceof ValidationError) throw err;

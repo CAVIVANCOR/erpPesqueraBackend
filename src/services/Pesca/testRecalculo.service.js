@@ -108,7 +108,7 @@ async function verificarCalculosCompletos() {
     };
 
   } catch (error) {
-    console.error('❌ ERROR EN VERIFICACIÓN:', error);
+    // console.error('❌ ERROR EN VERIFICACIÓN:', error);
     throw error;
   }
 }

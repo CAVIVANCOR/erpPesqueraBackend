@@ -355,6 +355,20 @@ const crear = async (data) => {
 
     await validarProducto(dataNormalizada);
 
+    // Convertir 0 a null para cuentas contables (0 significa "limpiar campo")
+    const cuentasContables = [
+      'cuentaComprasId',
+      'cuentaInventarioId',
+      'cuentaCostoVentasId',
+      'cuentaVariacionId',
+      'cuentaVentasId'
+    ];
+    cuentasContables.forEach(campo => {
+      if (dataNormalizada[campo] === 0) {
+        dataNormalizada[campo] = null;
+      }
+    });
+
     // Heredar márgenes de la Empresa si no se especificaron
     let dataConMargenes = { ...dataNormalizada };
 
@@ -383,7 +397,7 @@ const crear = async (data) => {
     const { id, ...dataParaCrear } = dataConMargenes;
 
     if (id) {
-      console.warn('⚠️ Se intentó enviar un ID en la creación, se ha removido:', id);
+      // console.warn('⚠️ Se intentó enviar un ID en la creación, se ha removido:', id);
     }
 
     const producto = await prisma.producto.create({
@@ -411,15 +425,8 @@ const crear = async (data) => {
         mensajeDetallado = `Error en campo: ${err.meta.target}`;
       }
 
-      console.error('❌ Error Prisma al crear producto:', {
-        code: err.code,
-        message: err.message,
-        meta: err.meta
-      });
-
       throw new DatabaseError(mensajeDetallado, err.message);
     }
-    console.error('❌ Error inesperado al crear producto:', err);
     throw err;
   }
 };
@@ -434,6 +441,20 @@ const actualizar = async (id, data) => {
 
     // Normalizar campos de texto a mayúsculas
     const dataNormalizada = normalizarDatosProducto(data);
+
+    // Convertir 0 a null para cuentas contables (0 significa "limpiar campo")
+    const cuentasContables = [
+      'cuentaComprasId',
+      'cuentaInventarioId',
+      'cuentaCostoVentasId',
+      'cuentaVariacionId',
+      'cuentaVentasId'
+    ];
+    cuentasContables.forEach(campo => {
+      if (dataNormalizada[campo] === 0) {
+        dataNormalizada[campo] = null;
+      }
+    });
 
     await validarProducto(dataNormalizada, id);
     const producto = await prisma.producto.update({

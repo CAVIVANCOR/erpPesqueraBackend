@@ -44,7 +44,7 @@ const listar = async () => {
     });
     return resultado;
   } catch (err) {
-    console.error('❌ [SERVICIO] Error en listar:', err);
+    // console.error('❌ [SERVICIO] Error en listar:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -62,7 +62,7 @@ const obtenerPorId = async (id) => {
     if (!resultado) throw new NotFoundError('Dirección no encontrada');
     return resultado;
   } catch (err) {
-    console.error('❌ [SERVICIO] Error en obtenerPorId:', err);
+    // console.error('❌ [SERVICIO] Error en obtenerPorId:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -129,7 +129,7 @@ const obtenerPorEntidad = async (entidadComercialId) => {
     
     return resultadoConPersonal;
   } catch (err) {
-    console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
+    // console.error('❌ [SERVICIO] Error en obtenerPorEntidad:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -153,7 +153,7 @@ const obtenerDireccionFiscalPorEntidad = async (entidadComercialId) => {
     });
     return resultado;
   } catch (err) {
-    console.error('❌ [SERVICIO] Error en obtenerDireccionFiscalPorEntidad:', err);
+    // console.error('❌ [SERVICIO] Error en obtenerDireccionFiscalPorEntidad:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -192,7 +192,7 @@ const crear = async (data) => {
     const resultado = await prisma.direccionEntidad.create({ data: datosConAuditoria });
     return resultado;
   } catch (err) {
-    console.error('❌ [SERVICIO] Error en crear:', err);
+    // console.error('❌ [SERVICIO] Error en crear:', err);
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -234,7 +234,7 @@ const actualizar = async (id, data) => {
     const resultado = await prisma.direccionEntidad.update({ where: { id }, data: datosConAuditoria });
     return resultado;
   } catch (err) {
-    console.error('❌ [SERVICIO] Error en actualizar:', err);
+    // console.error('❌ [SERVICIO] Error en actualizar:', err);
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -251,7 +251,7 @@ const eliminar = async (id) => {
     await prisma.direccionEntidad.delete({ where: { id } });
     return true;
   } catch (err) {
-    console.error('❌ [SERVICIO] Error en eliminar:', err);
+    // console.error('❌ [SERVICIO] Error en eliminar:', err);
     if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

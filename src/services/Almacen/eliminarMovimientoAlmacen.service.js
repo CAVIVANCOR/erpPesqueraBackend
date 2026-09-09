@@ -312,7 +312,7 @@ const eliminarMovimientoAlmacenCompleto = async (
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
-    console.error("Error al eliminar movimiento de almacén:", error);
+    // console.error("Error al eliminar movimiento de almacén:", error);
     throw new DatabaseError(
       "Error al eliminar movimiento de almacén: " + error.message,
     );

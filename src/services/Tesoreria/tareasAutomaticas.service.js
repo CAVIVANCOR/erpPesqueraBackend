@@ -55,7 +55,6 @@ export async function procesarCuotasVencidas() {
       fechaEjecucion: new Date(),
     };
   } catch (error) {
-    console.error("[TAREA AUTOMÁTICA] Error al procesar cuotas vencidas:", error);
     throw error;
   }
 }
@@ -123,7 +122,6 @@ export async function ejecutarTareasAutomaticas() {
 
     return resultados;
   } catch (error) {
-    console.error("[TESORERÍA] Error en tareas automáticas:", error);
     throw error;
   }
 }

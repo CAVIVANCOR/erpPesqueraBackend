@@ -114,7 +114,7 @@ async function validarDuplicado(
       );
     }
   } catch (error) {
-    console.error("Error en consulta de duplicados:", error);
+    // console.error("Error en consulta de duplicados:", error);
     throw error;
   }
 }
@@ -194,7 +194,7 @@ const listar = async () => {
 
     return cuentasConSaldo;
   } catch (err) {
-    console.error("Error en listar cuentas corrientes:", err);
+    // console.error("Error en listar cuentas corrientes:", err);
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
     throw err;
@@ -265,14 +265,14 @@ const crear = async (data) => {
       err.code.startsWith("P") &&
       !err.message.includes("Ya existe")
     ) {
-      console.error("Convirtiendo a DatabaseError");
+      // console.error("Convirtiendo a DatabaseError");
       throw new DatabaseError(
         `Error de base de datos: ${err.code} - ${err.message}`,
         err.message
       );
     }
 
-    console.error("Re-lanzando error original");
+    // console.error("Re-lanzando error original");
     throw err;
   }
 };

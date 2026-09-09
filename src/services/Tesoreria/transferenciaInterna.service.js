@@ -277,8 +277,6 @@ const procesarTransferenciaInterna = async (data) => {
       };
     });
   } catch (err) {
-    console.error('❌ Error en procesarTransferenciaInterna:', err);
-
     if (err instanceof ValidationError || err instanceof NotFoundError) {
       throw err;
     }

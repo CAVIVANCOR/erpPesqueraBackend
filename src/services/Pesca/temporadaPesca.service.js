@@ -348,7 +348,7 @@ const actualizar = async (id, data, usuarioId = null) => {
     try {
       await recalcularToneladasService.recalcularToneladasTemporada(BigInt(id));
     } catch (recalcError) {
-      console.error(
+      // console.error(
         `⚠️ Error al recalcular toneladas para temporada ${id}:`,
         recalcError,
       );
@@ -360,7 +360,7 @@ const actualizar = async (id, data, usuarioId = null) => {
         BigInt(id),
       );
     } catch (juvenilesError) {
-      console.error(
+      // console.error(
         `⚠️ Error al recalcular porcentaje juveniles para temporada ${id}:`,
         juvenilesError,
       );

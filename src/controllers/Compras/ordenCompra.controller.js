@@ -414,7 +414,7 @@ export async function exportarRegistroComprasSUNAT(req, res, next) {
     res.setHeader('Content-Disposition', 'attachment; filename="registro_compras.txt"');
     res.send(txtContent);
   } catch (err) {
-    console.error('❌ ERROR EN CONTROLADOR EXPORTAR TXT:', err);
+    // console.error('❌ ERROR EN CONTROLADOR EXPORTAR TXT:', err);
     next(err);
   }
 }

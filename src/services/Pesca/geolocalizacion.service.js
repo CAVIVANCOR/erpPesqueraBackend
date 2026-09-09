@@ -37,7 +37,7 @@ const cargarCentrosPoblados = () => {
     centrosPobladosCache = JSON.parse(geojsonData);
     return centrosPobladosCache;
   } catch (error) {
-    console.error('❌ Error cargando centros poblados:', error);
+    // console.error('❌ Error cargando centros poblados:', error);
     throw new DatabaseError('Error cargando datos geográficos', error.message);
   }
 };
@@ -209,7 +209,7 @@ const obtenerUbicacionGeografica = async (latitud, longitud) => {
           };
         }
       } catch (error) {
-        console.warn('Error consultando tabla Ubigeo:', error);
+        // console.warn('Error consultando tabla Ubigeo:', error);
       }
     }
     
@@ -224,7 +224,7 @@ const obtenerUbicacionGeografica = async (latitud, longitud) => {
     );
 
     if (!response.ok) {
-      console.warn(`Nominatim API error: ${response.status}`);
+      // console.warn(`Nominatim API error: ${response.status}`);
       return {
         direccionCompleta: 'No disponible',
         lugar: 'N/A',
@@ -252,7 +252,7 @@ const obtenerUbicacionGeografica = async (latitud, longitud) => {
       tipoLugar: sanitizarTexto(data.type) || 'N/A'
     };
   } catch (error) {
-    console.error('Error en geocodificación inversa:', error);
+    // console.error('Error en geocodificación inversa:', error);
     return {
       direccionCompleta: 'No disponible',
       lugar: 'N/A',
@@ -330,7 +330,7 @@ const calcularDistanciaDesdeOrigen = async (puertoSalidaId, latitudDestino, long
       distanciaMillasNauticas: parseFloat(distanciaMN.toFixed(2))
     };
   } catch (err) {
-    console.error('Error al calcular distancia desde origen:', err);
+    // console.error('Error al calcular distancia desde origen:', err);
     return null;
   }
 };
@@ -357,7 +357,7 @@ const obtenerProfundidadMar = async (latitud, longitud) => {
     );
 
     if (!response.ok) {
-      console.warn(`NOAA API error: ${response.status}`);
+      // console.warn(`NOAA API error: ${response.status}`);
       return null;
     }
 
@@ -375,7 +375,7 @@ const obtenerProfundidadMar = async (latitud, longitud) => {
 
     return null;
   } catch (error) {
-    console.error('Error al obtener profundidad del mar:', error);
+    // console.error('Error al obtener profundidad del mar:', error);
     return null;
   }
 };
@@ -619,7 +619,7 @@ const obtenerReferenciaCosta = async (latitud, longitud) => {
     };
     
   } catch (err) {
-    console.error('Error en obtenerReferenciaCosta:', err);
+    // console.error('Error en obtenerReferenciaCosta:', err);
     if (err instanceof ValidationError) throw err;
     throw new DatabaseError('Error calculando referencia costera', err.message);
   }

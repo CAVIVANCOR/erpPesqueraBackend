@@ -103,7 +103,6 @@ const atenderAsignacion = async (datos) => {
     });
 
     if (!detMov) {
-      console.error("❌ [SERVICE] Asignación no encontrada con ID:", detMovsEntregaRendirId);
       throw new NotFoundError("Asignación no encontrada");
     }
     // Validar que no esté ya validada

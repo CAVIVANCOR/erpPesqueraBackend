@@ -81,7 +81,7 @@ const eliminarMovimientosDescarga = async (descargaId, usuarioId) => {
               numeroDocumento: preFactura.numeroDocumento
             };
           } catch (error) {
-            console.error('❌ Error eliminando PreFactura:', error);
+            // console.error('❌ Error eliminando PreFactura:', error);
             throw new ValidationError(`Error al eliminar PreFactura: ${error.message}`);
           }
         }
@@ -103,7 +103,7 @@ const eliminarMovimientosDescarga = async (descargaId, usuarioId) => {
             id: descarga.movSalidaAlmacenId
           });
         } catch (error) {
-          console.error('❌ Error eliminando movimiento de salida:', error);
+          // console.error('❌ Error eliminando movimiento de salida:', error);
           throw new ValidationError(`Error al eliminar movimiento de salida: ${error.message}`);
         }
       }
@@ -124,7 +124,7 @@ const eliminarMovimientosDescarga = async (descargaId, usuarioId) => {
             id: descarga.movIngresoAlmacenId
           });
         } catch (error) {
-          console.error('❌ Error eliminando movimiento de ingreso:', error);
+          // console.error('❌ Error eliminando movimiento de ingreso:', error);
           throw new ValidationError(`Error al eliminar movimiento de ingreso: ${error.message}`);
         }
       }
@@ -159,7 +159,7 @@ const eliminarMovimientosDescarga = async (descargaId, usuarioId) => {
       };
 
     } catch (error) {
-      console.error('❌ Error en eliminarMovimientosDescarga:', error);
+      // console.error('❌ Error en eliminarMovimientosDescarga:', error);
       throw error;
     }
   });
@@ -259,7 +259,7 @@ const regenerarMovimientosDescarga = async (descargaId, temporadaPescaId, usuari
       };
 
     } catch (error) {
-      console.error('❌ Error en regenerarMovimientosDescarga:', error);
+      // console.error('❌ Error en regenerarMovimientosDescarga:', error);
       throw error;
     }
   });

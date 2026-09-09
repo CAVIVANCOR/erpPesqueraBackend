@@ -50,7 +50,7 @@ const finalizarFaena = async (faenaPescaId) => {
       };
 
     } catch (error) {
-      console.error('❌ Error en finalizarFaena:', error);
+      // console.error('❌ Error en finalizarFaena:', error);
       throw error;
     }
   });

@@ -516,7 +516,6 @@ const generarBorradorAsiento = async (deudaTributariaId) => {
     if (err instanceof NotFoundError || err instanceof ValidationError) {
       throw err;
     }
-    console.error('Error al generar borrador de asiento:', err);
     throw new DatabaseError('Error al generar borrador de asiento para Deuda Tributaria');
   }
 };
@@ -573,7 +572,6 @@ const generarAsientoContable = async (deudaTributariaId, usuarioId) => {
     if (err instanceof NotFoundError || err instanceof ValidationError) {
       throw err;
     }
-    console.error('Error al generar asiento contable:', err);
     throw new DatabaseError('Error al generar asiento contable para Deuda Tributaria');
   }
 };
@@ -653,7 +651,6 @@ const guardarAsientosTributarios = async (deudaId, asientosData, usuarioId) => {
     return resultado;
 
   } catch (err) {
-    console.error('❌ ERROR en guardarAsientosTributarios:', err);
     if (err instanceof ValidationError || err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos al guardar asientos', err.message);

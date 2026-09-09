@@ -205,10 +205,23 @@ const obtenerPorEmpresaYTipo = async (empresaId, tipoId) => {
  */
 const crear = async (data) => {
   try {
-    await validarActivo(data);
+    // Convertir 0 a null para cuentas contables ANTES de validar (0 significa "limpiar campo")
+    const dataToCreate = { ...data };
+    if (dataToCreate.cuentaContableId === 0) {
+      dataToCreate.cuentaContableId = null;
+    }
+    if (dataToCreate.cuentaDepreciacionId === 0) {
+      dataToCreate.cuentaDepreciacionId = null;
+    }
+    if (dataToCreate.cuentaGastoDepId === 0) {
+      dataToCreate.cuentaGastoDepId = null;
+    }
+    
+    await validarActivo(dataToCreate);
+    
     return await prisma.activo.create({
       data: {
-        ...data,
+        ...dataToCreate,
         updatedAt: new Date(),
       },
     });
@@ -227,11 +240,25 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.activo.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError("Activo no encontrado");
-    await validarActivo(data);
+    
+    // Convertir 0 a null para cuentas contables ANTES de validar (0 significa "limpiar campo")
+    const dataToUpdate = { ...data };
+    if (dataToUpdate.cuentaContableId === 0) {
+      dataToUpdate.cuentaContableId = null;
+    }
+    if (dataToUpdate.cuentaDepreciacionId === 0) {
+      dataToUpdate.cuentaDepreciacionId = null;
+    }
+    if (dataToUpdate.cuentaGastoDepId === 0) {
+      dataToUpdate.cuentaGastoDepId = null;
+    }
+    
+    await validarActivo(dataToUpdate);
+    
     return await prisma.activo.update({
       where: { id },
       data: {
-        ...data,
+        ...dataToUpdate,
         updatedAt: new Date(),
       },
     });

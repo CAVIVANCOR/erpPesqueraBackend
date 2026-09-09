@@ -93,7 +93,7 @@ class PDFMergeService {
       const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
       copiedPages.forEach((page) => mergedPdf.addPage(page));
     } catch (error) {
-      console.error('Error al agregar PDF:', error);
+      // console.error('Error al agregar PDF:', error);
       throw new Error('Error al procesar archivo PDF');
     }
   }
@@ -121,7 +121,7 @@ class PDFMergeService {
       });
 
     } catch (error) {
-      console.error('Error al agregar imagen:', error);
+      // console.error('Error al agregar imagen:', error);
       throw new Error('Error al procesar imagen');
     }
   }
@@ -152,7 +152,7 @@ class PDFMergeService {
       return await pdfDoc.save();
 
     } catch (error) {
-      console.error('Error al convertir imagen a PDF:', error);
+      // console.error('Error al convertir imagen a PDF:', error);
       throw error;
     }
   }

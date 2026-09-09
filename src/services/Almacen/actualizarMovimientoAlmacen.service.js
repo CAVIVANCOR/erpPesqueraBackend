@@ -145,7 +145,7 @@ const actualizarMovimientoAlmacenCompleto = async (
     if (error instanceof ValidationError) {
       throw error;
     }
-    console.error('Error al actualizar movimiento de almacén:', error);
+    // console.error('Error al actualizar movimiento de almacén:', error);
     throw new DatabaseError('Error al actualizar movimiento de almacén: ' + error.message);
   }
 };

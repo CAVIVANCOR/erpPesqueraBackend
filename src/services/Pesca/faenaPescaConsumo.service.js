@@ -121,7 +121,7 @@ async function actualizarToneladasFaenaDesdeCalas(faenaPescaConsumoId) {
       },
     });
   } catch (error) {
-    console.error("❌ [ACTUALIZAR TONELADAS] Error:", error);
+    // console.error("❌ [ACTUALIZAR TONELADAS] Error:", error);
     // No lanzar error para no interrumpir la operación principal
   }
 }
@@ -280,7 +280,7 @@ const actualizar = async (id, data) => {
     });
     return faenaActualizada;
   } catch (err) {
-    console.error("❌ [ACTUALIZAR FAENA] Error:", err);
+    // console.error("❌ [ACTUALIZAR FAENA] Error:", err);
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
     if (err.code && err.code.startsWith("P"))

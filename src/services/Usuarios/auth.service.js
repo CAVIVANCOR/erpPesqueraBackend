@@ -97,7 +97,7 @@ export async function login(username, password) {
     return { usuario: usuarioRespuesta, token, refreshToken: refreshToken.token };
     
   } catch (error) {
-    console.error('❌ [LOGIN] Error al construir respuesta:', error);
+    // console.error('❌ [LOGIN] Error al construir respuesta:', error);
     throw error;
   }
 }

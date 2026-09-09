@@ -135,9 +135,6 @@ async function obtenerTipoCambio(fecha) {
     const token = process.env.TOKEN_API_DECOLETA_SUNAT_RENIEC_TC;
 
     if (!token) {
-      console.warn(
-        "⚠️ Token de API no configurado, usando TC por defecto 3.75",
-      );
       return {
         compra: 3.75,
         venta: 3.75,

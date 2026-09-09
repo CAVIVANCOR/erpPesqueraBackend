@@ -170,7 +170,7 @@ export async function obtenerPrecioCombustibleVigente(req, res, next) {
 
     res.json(toJSONBigInt(precio));
   } catch (err) {
-    console.error('Error en obtenerPrecioCombustibleVigente controller:', err);
+    // console.error('Error en obtenerPrecioCombustibleVigente controller:', err);
     next(err);
   }
 }

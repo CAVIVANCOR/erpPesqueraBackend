@@ -271,7 +271,7 @@ const crearMovimientoAlmacenCompleto = async (
     if (error instanceof ValidationError) {
       throw error;
     }
-    console.error('Error al crear movimiento de almacén:', error);
+    // console.error('Error al crear movimiento de almacén:', error);
     throw new DatabaseError('Error al crear movimiento de almacén: ' + error.message);
   }
 };

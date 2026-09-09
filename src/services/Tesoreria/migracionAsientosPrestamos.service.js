@@ -57,13 +57,11 @@ async function migrarAsientosPrestamos(empresaId = null, creadoPor = null) {
           numeroPrestamo: prestamo.numeroPrestamo,
           error: err.message
         });
-        console.error(`❌ Error en préstamo ${prestamo.numeroPrestamo}:`, err.message);
       }
     }
 
     return resultados;
   } catch (err) {
-    console.error('Error en migración de asientos de préstamos:', err);
     throw err;
   }
 }
@@ -113,7 +111,6 @@ async function obtenerPrestamosSinAsientos(empresaId = null) {
       orderBy: { fechaDesembolso: 'asc' }
     });
   } catch (err) {
-    console.error('Error al obtener préstamos sin asientos:', err);
     throw err;
   }
 }

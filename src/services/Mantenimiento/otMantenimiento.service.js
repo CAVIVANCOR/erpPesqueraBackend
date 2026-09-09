@@ -278,11 +278,11 @@ const crear = async (data) => {
       return await tx.oTMantenimiento.create({ data: datosLimpios });
     });
   } catch (err) {
-    console.error("=== ERROR AL CREAR OT ===");
-    console.error("Tipo de error:", err.constructor.name);
-    console.error("Código:", err.code);
-    console.error("Mensaje:", err.message);
-    console.error("Stack:", err.stack);
+    // console.error("=== ERROR AL CREAR OT ===");
+    // console.error("Tipo de error:", err.constructor.name);
+    // console.error("Código:", err.code);
+    // console.error("Mensaje:", err.message);
+    // console.error("Stack:", err.stack);
     if (err.meta) console.error("Meta:", err.meta);
     
     if (err instanceof ValidationError || err instanceof ConflictError)

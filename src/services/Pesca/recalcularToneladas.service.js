@@ -54,7 +54,7 @@ async function recalcularToneladasCala(calaId, faenaPescaId, TemporadaPescaId) {
 async function recalcularToneladasFaena(faenaId) {
   // ⭐ VALIDAR QUE faenaId NO SEA UNDEFINED O NULL
   if (!faenaId) {
-    console.warn('⚠️ recalcularToneladasFaena: faenaId es undefined o null');
+    // console.warn('⚠️ recalcularToneladasFaena: faenaId es undefined o null');
     return 0;
   }
 
@@ -89,7 +89,7 @@ async function recalcularToneladasFaena(faenaId) {
 async function recalcularToneladasTemporada(temporadaId) {
   // ⭐ VALIDAR QUE temporadaId NO SEA UNDEFINED O NULL
   if (!temporadaId) {
-    console.warn('⚠️ recalcularToneladasTemporada: temporadaId es undefined o null');
+    // console.warn('⚠️ recalcularToneladasTemporada: temporadaId es undefined o null');
     return 0;
   }
 
@@ -160,7 +160,7 @@ async function recalcularCascadaDesdeCala(calaId) {
 
     return { success: true };
   } catch (error) {
-    console.error(`❌ Error en recálculo cascada desde Cala ${calaId}:`, error);
+    // console.error(`❌ Error en recálculo cascada desde Cala ${calaId}:`, error);
     throw error;
   }
 }
@@ -186,7 +186,7 @@ async function recalcularCascadaDesdeFaena(faenaId) {
     }
     return { success: true };
   } catch (error) {
-    console.error(
+    // console.error(
       `❌ Error en recálculo cascada desde Faena ${faenaId}:`,
       error,
     );

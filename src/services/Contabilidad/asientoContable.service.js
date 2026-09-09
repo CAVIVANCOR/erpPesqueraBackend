@@ -88,7 +88,7 @@ async function obtenerTipoCambioSunat(fecha) {
     const token = process.env.TOKEN_API_DECOLETA_SUNAT_RENIEC_TC;
 
     if (!token) {
-      console.warn('⚠️ Token de API no configurado, usando TC por defecto 0');
+      // console.warn('⚠️ Token de API no configurado, usando TC por defecto 0');
       return 0;
     }
 
@@ -104,14 +104,14 @@ async function obtenerTipoCambioSunat(fecha) {
     });
 
     if (!response.ok) {
-      console.warn(`⚠️ No se pudo obtener TC para ${fechaFormateada}, usando 0`);
+      // console.warn(`⚠️ No se pudo obtener TC para ${fechaFormateada}, usando 0`);
       return 0;
     }
 
     const data = await response.json();
     return Number(data.sell_price) || 0;
   } catch (error) {
-    console.error('Error obteniendo tipo de cambio:', error);
+    // console.error('Error obteniendo tipo de cambio:', error);
     return 0;
   }
 }

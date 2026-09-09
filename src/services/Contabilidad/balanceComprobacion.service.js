@@ -340,13 +340,7 @@ const listarBalance = async (filtros) => {
       filtrosAplicados: filtros,
     };
   } catch (error) {
-    console.error('❌ ========================================');
-    console.error('❌ ERROR EN BALANCE DE COMPROBACIÓN');
-    console.error('❌ ========================================');
-    console.error('❌ Error completo:', error);
-    console.error('❌ Error message:', error.message);
-    console.error('❌ Error stack:', error.stack);
-    console.error('❌ ========================================');
+
 
     if (error instanceof ValidationError) {
       throw error;

@@ -139,7 +139,7 @@ export async function guardarAsiento(req, res, next) {
     );    
     res.status(201).json(toJSONBigInt(resultado));
   } catch (err) {
-    console.error('❌ ERROR en guardarAsiento:', err);
+    // console.error('❌ ERROR en guardarAsiento:', err);
     next(err);
   }
 }

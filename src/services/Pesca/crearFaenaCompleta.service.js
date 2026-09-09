@@ -356,7 +356,7 @@ const crearFaenaCompleta = async (temporadaId) => {
     return resultado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    console.error('Error en crearFaenaCompleta:', err);
+    // console.error('Error en crearFaenaCompleta:', err);
     throw err;
   }
 };

@@ -308,7 +308,7 @@ const actualizar = async (id, data, usuarioId = null) => {
         BigInt(id),
       );
     } catch (juvenilesError) {
-      console.error(
+      // console.error(
         `⚠️ Error al recalcular porcentaje juveniles para faena ${id}:`,
         juvenilesError,
       );
@@ -391,7 +391,7 @@ async function actualizarToneladasTemporada(temporadaId) {
       },
     });
   } catch (error) {
-    console.error(
+    // console.error(
       `❌ Error actualizando toneladas de temporada ${temporadaId}:`,
       error,
     );
@@ -480,7 +480,7 @@ async function actualizarCombustibleYRecorridoTemporada(temporadaId) {
       },
     });
   } catch (error) {
-    console.error(
+    // console.error(
       `❌ Error actualizando combustible/recorrido de temporada ${temporadaId}:`,
       error,
     );
@@ -544,7 +544,7 @@ async function obtenerPrecioCombustibleFaena(faenaPescaId, fechaReferencia) {
 
     return precioFinal;
   } catch (error) {
-    console.error(
+    // console.error(
       `❌ Error obteniendo precio combustible para faena ${faenaPescaId}:`,
       error,
     );

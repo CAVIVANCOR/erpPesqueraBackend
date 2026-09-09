@@ -370,7 +370,7 @@ const crearFaenaConsumoCompleta = async (novedadPescaConsumoId) => {
     return resultado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    console.error('Error en crearFaenaConsumoCompleta:', err);
+    // console.error('Error en crearFaenaConsumoCompleta:', err);
     throw err;
   }
 };

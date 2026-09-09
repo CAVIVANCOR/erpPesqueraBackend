@@ -28,7 +28,6 @@ const generarCorrelativo = async (empresaId, tx = null) => {
 
     return empresaActualizada.ultimoCorrelativoOperacionCaja;
   } catch (error) {
-    console.error('Error al generar correlativo:', error);
     throw new DatabaseError('Error al generar número de correlativo de operación.');
   }
 };
@@ -51,7 +50,6 @@ const obtenerUltimoCorrelativo = async (empresaId) => {
 
     return empresa.ultimoCorrelativoOperacionCaja;
   } catch (error) {
-    console.error('Error al obtener último correlativo:', error);
     throw new DatabaseError('Error al consultar correlativo de operación.');
   }
 };
@@ -190,7 +188,6 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
         cuotasPrestamo.length + asignaciones.length
     };
   } catch (error) {
-    console.error('Error al consultar operación por correlativo:', error);
     throw new DatabaseError('Error al consultar operación.');
   }
 };

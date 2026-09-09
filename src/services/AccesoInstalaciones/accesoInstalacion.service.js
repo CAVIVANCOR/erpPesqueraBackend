@@ -390,7 +390,7 @@ const buscarPersonaPorDNI = async (dni) => {
       const token = process.env.TOKEN_API_DECOLETA_SUNAT_RENIEC_TC;
       
       if (!token) {
-        console.warn('⚠️ Token RENIEC no configurado - búsqueda RENIEC omitida');
+        // console.warn('⚠️ Token RENIEC no configurado - búsqueda RENIEC omitida');
         return {
           encontrado: false,
           mensaje: 'DNI no encontrado en registros internos y servicio RENIEC no disponible'
@@ -410,7 +410,7 @@ const buscarPersonaPorDNI = async (dni) => {
         
         // ✅ Validar que la respuesta tenga los campos necesarios
         if (!reniecData || typeof reniecData !== 'object') {
-          console.error('❌ Respuesta RENIEC inválida:', reniecData);
+          // console.error('❌ Respuesta RENIEC inválida:', reniecData);
           return {
             encontrado: false,
             mensaje: 'Respuesta de RENIEC inválida'
@@ -427,7 +427,7 @@ const buscarPersonaPorDNI = async (dni) => {
 
         // ✅ Validar que al menos tengamos un nombre
         if (!nombreCompleto) {
-          console.error('❌ No se pudo extraer nombre de la respuesta RENIEC');
+          // console.error('❌ No se pudo extraer nombre de la respuesta RENIEC');
           return {
             encontrado: false,
             mensaje: 'No se pudo obtener el nombre desde RENIEC'
@@ -455,7 +455,7 @@ const buscarPersonaPorDNI = async (dni) => {
       };
 
     } catch (errorReniec) {
-      console.error('❌ Error consultando RENIEC:', errorReniec);
+      // console.error('❌ Error consultando RENIEC:', errorReniec);
       return {
         encontrado: false,
         mensaje: 'DNI no encontrado en registros internos y error al consultar RENIEC'

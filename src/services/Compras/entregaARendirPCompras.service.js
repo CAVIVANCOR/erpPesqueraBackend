@@ -55,7 +55,6 @@ const listar = async () => {
       },
     });
   } catch (err) {
-    console.error('Error en listar EntregaARendirPCompras:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -83,7 +82,6 @@ const obtenerPorId = async (id) => {
     if (!entrega) throw new NotFoundError('EntregaARendirPCompras no encontrada');
     return entrega;
   } catch (err) {
-    console.error('Error en obtenerPorId EntregaARendirPCompras:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }
@@ -190,7 +188,6 @@ const actualizar = async (id, data) => {
       },
     });
   } catch (err) {
-    console.error('Error en actualizar EntregaARendirPCompras:', err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

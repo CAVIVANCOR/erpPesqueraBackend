@@ -145,7 +145,7 @@ const obtenerPorTemporada = async (temporadaId, faenaPescaId = null) => {
     });
     return resultado;
   } catch (err) {
-    console.error("❌ [DEBUG] Error en obtenerPorTemporada:", err);
+    // console.error("❌ [DEBUG] Error en obtenerPorTemporada:", err);
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
   }

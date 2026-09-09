@@ -938,7 +938,6 @@ const obtenerDisponiblesParaSublinea = async (
 
     return prestamos;
   } catch (error) {
-    console.error("Error al obtener préstamos disponibles:", error);
     throw error;
   }
 };
@@ -960,7 +959,6 @@ const asignarASublinea = async (prestamoId, sublineaCreditoId) => {
 
     return prestamo;
   } catch (error) {
-    console.error("Error al asignar préstamo a sublínea:", error);
     throw error;
   }
 };
@@ -981,7 +979,6 @@ const desvincularDeSublinea = async (prestamoId) => {
 
     return prestamo;
   } catch (error) {
-    console.error("Error al desvincular préstamo de sublínea:", error);
     throw error;
   }
 };

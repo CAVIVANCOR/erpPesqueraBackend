@@ -73,7 +73,7 @@ const crear = async (data) => {
     });
     return nuevo;
   } catch (err) {
-    console.error("❌ ERROR en servicio crear:", err);
+    // console.error("❌ ERROR en servicio crear:", err);
     if (err instanceof ConflictError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;

@@ -86,8 +86,19 @@ const crear = async (data) => {
     if (!data.nombre) {
       throw new ValidationError('El campo nombre es obligatorio.');
     }
-    await validarTipoMovimientoActivoFijo(data);
-    return await prisma.tipoMovimientoActivoFijo.create({ data });
+    
+    // Convertir 0 a null para cuentas contables ANTES de validar (0 significa "limpiar campo")
+    const dataToCreate = { ...data };
+    if (dataToCreate.cuentaDebeId === 0) {
+      dataToCreate.cuentaDebeId = null;
+    }
+    if (dataToCreate.cuentaHaberId === 0) {
+      dataToCreate.cuentaHaberId = null;
+    }
+    
+    await validarTipoMovimientoActivoFijo(dataToCreate);
+    
+    return await prisma.tipoMovimientoActivoFijo.create({ data: dataToCreate });
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -105,8 +116,19 @@ const actualizar = async (id, data) => {
     if (data.nombre !== undefined && (!data.nombre || data.nombre.trim() === '')) {
       throw new ValidationError('El campo nombre es obligatorio.');
     }
-    await validarTipoMovimientoActivoFijo(data, id);
-    return await prisma.tipoMovimientoActivoFijo.update({ where: { id }, data });
+    
+    // Convertir 0 a null para cuentas contables ANTES de validar (0 significa "limpiar campo")
+    const dataToUpdate = { ...data };
+    if (dataToUpdate.cuentaDebeId === 0) {
+      dataToUpdate.cuentaDebeId = null;
+    }
+    if (dataToUpdate.cuentaHaberId === 0) {
+      dataToUpdate.cuentaHaberId = null;
+    }
+    
+    await validarTipoMovimientoActivoFijo(dataToUpdate, id);
+    
+    return await prisma.tipoMovimientoActivoFijo.update({ where: { id }, data: dataToUpdate });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

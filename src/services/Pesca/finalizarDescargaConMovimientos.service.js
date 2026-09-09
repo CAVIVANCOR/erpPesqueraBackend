@@ -312,7 +312,7 @@ const finalizarDescargaConMovimientos = async (descargaId, temporadaPescaId, usu
         }
 
         if (!precioInfo) {
-          console.warn(`⚠️ No se encontró precio para producto ${producto.id}. PreFactura no será generada.`);
+          // console.warn(`⚠️ No se encontró precio para producto ${producto.id}. PreFactura no será generada.`);
         } else {
           // 6.2: Obtener tipo de cambio
           const tipoCambio = await validarTipoCambio(null, new Date());
@@ -350,7 +350,7 @@ const finalizarDescargaConMovimientos = async (descargaId, temporadaPescaId, usu
           });
 
           if (!seriePreFactura) {
-            console.warn(
+            // console.warn(
               `⚠️ No se encontró serie activa para PRE FACTURA (Materia Prima) en empresa ${temporada.empresaId}. ` +
               `PreFactura no será generada. Configure una serie con Tipo Documento=PRE FACTURA y Tipo Almacén=MATERIA PRIMA.`
             );
@@ -407,8 +407,8 @@ const finalizarDescargaConMovimientos = async (descargaId, temporadaPescaId, usu
         }
       } catch (errorPreFactura) {
         // ⚠️ Si falla la PreFactura, solo registrar el error pero NO detener el proceso
-        console.error('⚠️ Error al generar PreFactura (no crítico):', errorPreFactura.message);
-        console.error('Los movimientos de almacén se completaron exitosamente.');
+        // console.error('⚠️ Error al generar PreFactura (no crítico):', errorPreFactura.message);
+        // console.error('Los movimientos de almacén se completaron exitosamente.');
       }
 
       // ============================================
@@ -460,7 +460,7 @@ const finalizarDescargaConMovimientos = async (descargaId, temporadaPescaId, usu
       return resultado;
 
     } catch (error) {
-      console.error('❌ Error en finalizarDescargaConMovimientos:', error);
+      // console.error('❌ Error en finalizarDescargaConMovimientos:', error);
       throw error;
     }
   });
@@ -483,7 +483,7 @@ async function calcularCostoUnitario(tx, temporadaPescaId, descargas) {
     });
 
     if (!temporada || !temporada.cuotaAsignada) {
-      console.warn('⚠️ No se encontró cuota asignada para la temporada');
+      // console.warn('⚠️ No se encontró cuota asignada para la temporada');
       return 0;
     }
 
@@ -512,14 +512,14 @@ async function calcularCostoUnitario(tx, temporadaPescaId, descargas) {
     const cuotaAsignada = Number(temporada.cuotaAsignada);
 
     if (cuotaAsignada === 0) {
-      console.warn('⚠️ Cuota asignada es 0');
+      // console.warn('⚠️ Cuota asignada es 0');
       return 0;
     }
     // 5. Calcular costo unitario
     const costoUnitario = totalEgresos / cuotaAsignada;
     return costoUnitario;
   } catch (error) {
-    console.error('❌ Error calculando costo unitario:', error);
+    // console.error('❌ Error calculando costo unitario:', error);
     return 0;
   }
 }

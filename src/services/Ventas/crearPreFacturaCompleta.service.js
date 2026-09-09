@@ -307,7 +307,6 @@ const crearPreFacturaCompleta = async (
     if (error instanceof ValidationError) {
       throw error;
     }
-    console.error("Error al crear PreFactura:", error);
     throw new DatabaseError("Error al crear PreFactura: " + error.message);
   }
 };
