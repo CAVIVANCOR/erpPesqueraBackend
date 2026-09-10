@@ -144,6 +144,9 @@ model Activo {
   detallesAsientosContables DetalleAsientoContable[]
   contratistasOT           DetContratistasOT[]    @relation("ActivoContratistaOT")
   movimientosActivoFijo    MovimientoActivoFijo[]
+  movimientosEntregaRendir DetMovsEntregaRendir[] @relation("MovimientosEntregaRendirActivo")  // ✅ AGREGAR ESTA LÍNEA
+  ordenesCompra            OrdenCompra[]          @relation("OrdenesCompraActivo")  // ✅ AGREGAR ESTA LÍNEA
+
 }
 
 model AgrupacionEntidad {
@@ -2006,6 +2009,7 @@ model DetMovsEntregaRendir {
   enlaceAOtroDetalleGastoId               BigInt?
   embarcacionId                           BigInt?
   detalleGastosPlanificados               String?     @db.Text
+  activoAfectoId                          BigInt?     // Activo relacionado con el movimiento
 
   // ═══════════════════════════════════════════════════════════
   // RELACIONES
@@ -2032,6 +2036,7 @@ model DetMovsEntregaRendir {
   asignacionOrigen     DetMovsEntregaRendir? @relation("GastosDeAsignacion", fields: [asignacionOrigenId], references: [id])
   gastosAsociados      DetMovsEntregaRendir[] @relation("GastosDeAsignacion")
   gastosPlanificados   DetGastosPlanificados[]
+  activoAfecto         Activo?              @relation("MovimientosEntregaRendirActivo", fields: [activoAfectoId], references: [id])
 
   // ═══════════════════════════════════════════════════════════
   // ÍNDICES
@@ -2045,6 +2050,7 @@ model DetMovsEntregaRendir {
   @@index([fechaMovimiento])
   @@index([creadoPorId])
   @@index([actualizadoPorId])
+  @@index([activoAfectoId])
 }
 
 model DetGastosPlanificados {
@@ -7266,6 +7272,9 @@ model OrdenCompra {
   submoduloOrigenId           BigInt?           
   procesoOrigenId             BigInt?
 
+  activoAfectoId              BigInt?     // Activo relacionado con la orden de compra
+
+
   dcmtoAfectoNCND             OrdenCompra?            @relation("OrdenCompraAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
   notasCreditoDebito          OrdenCompra[]           @relation("OrdenCompraAfectadaNCND")  // NC/ND que afectan a esta OC
 
@@ -7313,6 +7322,7 @@ model OrdenCompra {
   detraccion                Detraccion?         // ✅ AGREGAR - Detracción asociada (1:1)
   retencion                 Retencion?          // ✅ AGREGAR - Retención asociada (1:1) - Cuando MEGUI retiene
   percepcion                Percepcion?         // ✅ AGREGAR - Percepción asociada (1:1) - Cuando a MEGUI le perciben
+  activoAfecto              Activo?                @relation("OrdenesCompraActivo", fields: [activoAfectoId], references: [id])
 
   // ========================================
   // ÍNDICES EXISTENTES
@@ -7334,6 +7344,8 @@ model OrdenCompra {
   @@index([esParticionada])                                              // ⭐ NUEVO: Filtrar OCs particionadas
   @@index([unidadNegocioId])
   @@index([tipoOperacionSunatId])
+  @@index([activoAfectoId])                                              // ⭐ NUEVO: Índice para activo afecto
+
 }
 
 
