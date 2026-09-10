@@ -1,85 +1,75 @@
 import percepcionService from '../../services/Tesoreria/percepcion.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
-const listar = async (req, res, next) => {
+/**
+ * Controlador para el módulo de Percepciones
+ * Maneja las peticiones HTTP y delega la lógica de negocio al servicio
+ */
+
+/**
+ * Lista todas las percepciones
+ * GET /api/tesoreria/percepciones
+ */
+export async function listar(req, res, next) {
   try {
     const percepciones = await percepcionService.listar();
     res.json(toJSONBigInt(percepciones));
   } catch (err) {
     next(err);
   }
-};
+}
 
-const obtenerPorId = async (req, res, next) => {
+/**
+ * Obtiene una percepción por ID
+ * GET /api/tesoreria/percepciones/:id
+ */
+export async function obtenerPorId(req, res, next) {
   try {
-    const percepcion = await percepcionService.obtenerPorId(Number(req.params.id));
+    const id = Number(req.params.id);
+    const percepcion = await percepcionService.obtenerPorId(id);
     res.json(toJSONBigInt(percepcion));
   } catch (err) {
     next(err);
   }
-};
+}
 
-const crear = async (req, res, next) => {
+/**
+ * Crea una nueva percepción
+ * POST /api/tesoreria/percepciones
+ */
+export async function crear(req, res, next) {
   try {
-    const nuevo = await percepcionService.crear(req.body);
-    res.status(201).json(toJSONBigInt(nuevo));
+    const nueva = await percepcionService.crear(req.body);
+    res.status(201).json(toJSONBigInt(nueva));
   } catch (err) {
     next(err);
   }
-};
+}
 
-const actualizar = async (req, res, next) => {
+/**
+ * Actualiza una percepción existente
+ * PUT /api/tesoreria/percepciones/:id
+ */
+export async function actualizar(req, res, next) {
   try {
-    const actualizado = await percepcionService.actualizar(Number(req.params.id), req.body);
-    res.json(toJSONBigInt(actualizado));
+    const id = Number(req.params.id);
+    const actualizada = await percepcionService.actualizar(id, req.body);
+    res.json(toJSONBigInt(actualizada));
   } catch (err) {
     next(err);
   }
-};
+}
 
-const eliminar = async (req, res, next) => {
+/**
+ * Elimina una percepción
+ * DELETE /api/tesoreria/percepciones/:id
+ */
+export async function eliminar(req, res, next) {
   try {
-    await percepcionService.eliminar(Number(req.params.id));
-    res.status(200).json(toJSONBigInt({ eliminado: true, id: Number(req.params.id) }));
+    const id = Number(req.params.id);
+    await percepcionService.eliminar(id);
+    res.status(200).json(toJSONBigInt({ eliminado: true, id }));
   } catch (err) {
     next(err);
   }
-};
-
-const listarPorEmpresa = async (req, res, next) => {
-  try {
-    const percepciones = await percepcionService.listarPorEmpresa(Number(req.params.empresaId));
-    res.json(toJSONBigInt(percepciones));
-  } catch (err) {
-    next(err);
-  }
-};
-
-const listarPorCliente = async (req, res, next) => {
-  try {
-    const percepciones = await percepcionService.listarPorCliente(Number(req.params.clienteId));
-    res.json(toJSONBigInt(percepciones));
-  } catch (err) {
-    next(err);
-  }
-};
-
-const listarPorPeriodo = async (req, res, next) => {
-  try {
-    const percepciones = await percepcionService.listarPorPeriodo(req.params.periodo);
-    res.json(toJSONBigInt(percepciones));
-  } catch (err) {
-    next(err);
-  }
-};
-
-export default {
-  listar,
-  obtenerPorId,
-  crear,
-  actualizar,
-  eliminar,
-  listarPorEmpresa,
-  listarPorCliente,
-  listarPorPeriodo
-};
+}

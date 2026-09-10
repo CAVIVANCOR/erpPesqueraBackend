@@ -1,9 +1,10 @@
 import prisma from '../../config/prismaClient.js';
-import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 
 /**
  * Servicio CRUD para Retencion
- * Gestiona las retenciones fiscales aplicadas a documentos
+ * Gestiona las retenciones fiscales aplicadas a documentos de compras y ventas
+ * Las retenciones son montos retenidos por el agente de retención según normativa SUNAT
  */
 
 const incluirRelaciones = {
@@ -14,20 +15,21 @@ const incluirRelaciones = {
       ruc: true
     }
   },
-    tipoDocumento: {
+  preFactura: {
     select: {
       id: true,
-      descripcion: true,
-      codigo: true
+      numeroDocumento: true,
+      fechaDocumento: true
     }
   },
-  serieDoc: {
+  ordenCompra: {
     select: {
       id: true,
-      serie: true
+      numeroDocumento: true,
+      fechaDocumento: true
     }
   },
-  proveedor: {
+  entidadComercial: {
     select: {
       id: true,
       razonSocial: true,
@@ -42,121 +44,82 @@ const incluirRelaciones = {
       tasa: true
     }
   },
+  tipoDocumento: {
+    select: {
+      id: true,
+      descripcion: true,
+      codigo: true
+    }
+  },
   moneda: {
     select: {
       id: true,
       simbolo: true,
-      codigoSunat: true
+      codigoSunat: true,
+      colorFondo: true
     }
   },
-    estado: {
+  estadoPago: {
     select: {
       id: true,
       descripcion: true,
       severityColor: true
     }
   },
-  tipoDocProveedor: {
+  periodoContable: {
     select: {
       id: true,
-    nombre: true  // ✅ Campo CORRECTO según schema
+      nombrePeriodo: true,
+      anio: true,
+      mes: true
     }
-  },
-  cuentaPorPagar: {
-    select: {
-      id: true,
-    numeroOrdenCompra: true  // ✅ Campo CORRECTO según schema
-    }
-  },
-  movimientoCaja: {
-    select: {
-      id: true,
-      monto: true
-    }
-  },
+  }
 };
 
+/**
+ * Valida los datos de una retención antes de crear o actualizar
+ * @param {Object} data - Datos de la retención a validar
+ * @throws {ValidationError} Si alguna validación falla
+ */
 async function validarRetencion(data) {
-  if (!data.empresaId || !data.tipoDocumentoId || !data.proveedorId || !data.tipoDocProveedorId || 
-      !data.numeroDocProveedor || !data.razonSocialProveedor || !data.tipoRetencionId || 
-      !data.fechaEmision || !data.fechaPago || !data.tasaRetencion || 
-      !data.importeTotal || !data.importeRetenido || !data.importeNeto || 
-      !data.monedaId || !data.estadoId) {
-    throw new ValidationError('Todos los campos obligatorios deben ser proporcionados');
+  if (data.empresaId) {
+    const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
+    if (!empresa) throw new ValidationError('La empresa referenciada no existe.');
   }
 
-  const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
-  if (!empresa) throw new ValidationError('La empresa referenciada no existe');
-
-  const proveedor = await prisma.entidadComercial.findUnique({ where: { id: data.proveedorId } });
-  if (!proveedor) throw new ValidationError('El proveedor referenciado no existe');
-
-  const tipoRetencion = await prisma.tipoRetencionPercepcion.findUnique({ where: { id: data.tipoRetencionId } });
-  if (!tipoRetencion) throw new ValidationError('El tipo de retención referenciado no existe');
-
-  if (tipoRetencion.tipo !== 'RETENCION') {
-    throw new ValidationError('El tipo seleccionado no es de retención');
-  }
-  const tipoDocumento = await prisma.tipoDocumento.findUnique({ where: { id: data.tipoDocumentoId } });
-  if (!tipoDocumento) throw new ValidationError('El tipo de documento referenciado no existe');
-
-  const tipoDocProveedor = await prisma.tiposDocIdentidad.findUnique({ where: { id: data.tipoDocProveedorId } });
-  if (!tipoDocProveedor) throw new ValidationError('El tipo de documento del proveedor referenciado no existe');
-
-  const estado = await prisma.estadoMultiFuncion.findUnique({ where: { id: data.estadoId } });
-  if (!estado) throw new ValidationError('El estado referenciado no existe');
-
-  if (data.serieDocId) {
-    const serieDoc = await prisma.serieDoc.findUnique({ where: { id: data.serieDocId } });
-    if (!serieDoc) throw new ValidationError('La serie de documento referenciada no existe');
+  if (data.entidadComercialId) {
+    const entidad = await prisma.entidadComercial.findUnique({ where: { id: data.entidadComercialId } });
+    if (!entidad) throw new ValidationError('La entidad comercial referenciada no existe.');
   }
 
-  if (data.cuentaPorPagarId) {
-    const cuentaPorPagar = await prisma.cuentaPorPagar.findUnique({ where: { id: data.cuentaPorPagarId } });
-    if (!cuentaPorPagar) throw new ValidationError('La cuenta por pagar referenciada no existe');
+  if (data.monedaId) {
+    const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
+    if (!moneda) throw new ValidationError('La moneda referenciada no existe.');
   }
 
-  if (data.movimientoCajaId) {
-    const movimientoCaja = await prisma.movimientoCaja.findUnique({ where: { id: data.movimientoCajaId } });
-    if (!movimientoCaja) throw new ValidationError('El movimiento de caja referenciado no existe');
-  }
-  const moneda = await prisma.moneda.findUnique({ where: { id: data.monedaId } });
-  if (!moneda) throw new ValidationError('La moneda referenciada no existe');
-
-    if (data.importeTotal <= 0) {
-    throw new ValidationError('El importe total debe ser mayor a cero');
+  if (data.estadoPagoId) {
+    const estado = await prisma.estadoMultiFuncion.findUnique({ where: { id: data.estadoPagoId } });
+    if (!estado) throw new ValidationError('El estado referenciado no existe.');
   }
 
-  if (data.importeRetenido <= 0) {
-    throw new ValidationError('El importe retenido debe ser mayor a cero');
+  if (data.importeRetenido !== undefined && data.importeRetenido < 0) {
+    throw new ValidationError('El importe retenido no puede ser negativo.');
   }
 
-  if (data.importeNeto <= 0) {
-    throw new ValidationError('El importe neto debe ser mayor a cero');
+  if (data.importePagado !== undefined && data.importePagado < 0) {
+    throw new ValidationError('El importe pagado no puede ser negativo.');
   }
-
-  if (data.tasaRetencion < 0 || data.tasaRetencion > 100) {
-    throw new ValidationError('La tasa de retención debe estar entre 0 y 100');
-  }
-
-  const existente = await prisma.retencion.findFirst({
-    where: {
-      numeroDocumento: data.numeroDocumento,
-      empresaId: data.empresaId,
-      id: data.id ? { not: data.id } : undefined
-    }
-  });
-
-  if (existente) {
-throw new ConflictError(`Ya existe una retención con el número de documento ${data.numeroDocumento} para esta empresa`);
-}
 }
 
+/**
+ * Lista todas las retenciones con sus relaciones
+ * @returns {Promise<Array>} Lista de retenciones
+ */
 const listar = async () => {
   try {
     return await prisma.retencion.findMany({
       include: incluirRelaciones,
-      orderBy: { fechaEmision: 'desc' }
+      orderBy: { fechaCreacion: 'desc' }
     });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) {
@@ -166,11 +129,42 @@ const listar = async () => {
   }
 };
 
+/**
+ * Obtiene una retención por su ID con todas sus relaciones
+ * @param {BigInt} id - ID de la retención
+ * @returns {Promise<Object>} Retención encontrada
+ * @throws {NotFoundError} Si la retención no existe
+ */
 const obtenerPorId = async (id) => {
   try {
     const retencion = await prisma.retencion.findUnique({
       where: { id },
-      include: incluirRelaciones
+      include: {
+        ...incluirRelaciones,
+        movimientosCaja: {
+          include: {
+            medioPago: true,
+            cuentaCorrienteOrigen: {
+              include: {
+                banco: true
+              }
+            }
+          },
+          orderBy: { fechaOperacionMovCaja: 'desc' }
+        },
+        asientosContables: {
+          include: {
+            estado: true,
+            moneda: true,
+            detalles: {
+              include: {
+                planCuenta: true
+              }
+            }
+          },
+          orderBy: { fechaAsiento: 'desc' }
+        }
+      }
     });
     if (!retencion) throw new NotFoundError('Retención no encontrada');
     return retencion;
@@ -183,48 +177,60 @@ const obtenerPorId = async (id) => {
   }
 };
 
+/**
+ * Crea una nueva retención
+ * @param {Object} data - Datos de la retención a crear
+ * @returns {Promise<Object>} Retención creada
+ * @throws {ValidationError} Si faltan campos obligatorios o datos inválidos
+ */
 const crear = async (data) => {
   try {
+    // Validar campos obligatorios con mensajes específicos
+    const camposFaltantes = [];
+    
+    if (!data.empresaId) camposFaltantes.push('Empresa');
+    if (!data.entidadComercialId) camposFaltantes.push('Entidad Comercial');
+    if (data.importeRetenido === undefined || data.importeRetenido === null) camposFaltantes.push('Importe Retenido');
+    if (!data.monedaId) camposFaltantes.push('Moneda');
+    if (!data.estadoPagoId) camposFaltantes.push('Estado');
+    
+    if (camposFaltantes.length > 0) {
+      throw new ValidationError(`Faltan campos obligatorios: ${camposFaltantes.join(', ')}`);
+    }
+
     await validarRetencion(data);
 
+    const retencionData = {
+      empresaId: data.empresaId,
+      preFacturaId: data.preFacturaId || null,
+      ordenCompraId: data.ordenCompraId || null,
+      origenOperacionComprasVentas: data.origenOperacionComprasVentas || false,
+      entidadComercialId: data.entidadComercialId,
+      tipoRetencionPercepcionId: data.tipoRetencionPercepcionId || null,
+      tasaRetencion: data.tasaRetencion || 0,
+      tipoDocumentoId: data.tipoDocumentoId || null,
+      numeroDocumento: data.numeroDocumento || null,
+      fechaEmision: data.fechaEmision || null,
+      monedaId: data.monedaId,
+      importeTotal: data.importeTotal || 0,
+      importeRetenido: data.importeRetenido,
+      importePagado: data.importePagado || 0,
+      saldoPendiente: data.saldoPendiente || data.importeRetenido,
+      estadoPagoId: data.estadoPagoId,
+      aplicado: data.aplicado || false,
+      fechaAplicacion: data.fechaAplicacion || null,
+      observaciones: data.observaciones || null,
+      fechaContable: data.fechaContable || new Date(),
+      periodoContableId: data.periodoContableId || null,
+      creadoPor: data.creadoPor || null,
+    };
+
     return await prisma.retencion.create({
-      data: {
-        empresaId: data.empresaId,
-        tipoDocumentoId: data.tipoDocumentoId,
-        serieDocId: data.serieDocId || null,
-        numSerieDoc: data.numSerieDoc || null,
-        numCorreDoc: data.numCorreDoc || null,
-        numeroDocumento: data.numeroDocumento || null,
-        fechaEmision: new Date(data.fechaEmision),
-        fechaPago: new Date(data.fechaPago),
-        proveedorId: data.proveedorId,
-        tipoDocProveedorId: data.tipoDocProveedorId,
-        numeroDocProveedor: data.numeroDocProveedor,
-        razonSocialProveedor: data.razonSocialProveedor,
-        tipoRetencionId: data.tipoRetencionId,
-        tasaRetencion: data.tasaRetencion,
-        monedaId: data.monedaId,
-        importeTotal: data.importeTotal,
-        importeRetenido: data.importeRetenido,
-        importeNeto: data.importeNeto,
-        cuentaPorPagarId: data.cuentaPorPagarId || null,
-        movimientoCajaId: data.movimientoCajaId || null,
-        nubefactEnviado: data.nubefactEnviado || false,
-        nubefactAceptado: data.nubefactAceptado || null,
-        nubefactEnlacePDF: data.nubefactEnlacePDF || null,
-        nubefactEnlaceXML: data.nubefactEnlaceXML || null,
-        nubefactRespuesta: data.nubefactRespuesta || null,
-        estadoId: data.estadoId,
-        periodoDeclaracion: data.periodoDeclaracion || null,
-        declarado: data.declarado || false,
-        fechaDeclaracion: data.fechaDeclaracion ? new Date(data.fechaDeclaracion) : null,
-        observaciones: data.observaciones || null,
-        creadoPor: data.creadoPor || null
-      },
+      data: retencionData,
       include: incluirRelaciones
     });
   } catch (err) {
-    if (err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos', err.message);
     }
@@ -232,51 +238,52 @@ const crear = async (data) => {
   }
 };
 
+/**
+ * Actualiza una retención existente
+ * @param {BigInt} id - ID de la retención a actualizar
+ * @param {Object} data - Datos actualizados
+ * @returns {Promise<Object>} Retención actualizada
+ * @throws {NotFoundError} Si la retención no existe
+ */
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.retencion.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Retención no encontrada');
+    const existe = await prisma.retencion.findUnique({ where: { id } });
+    if (!existe) throw new NotFoundError('Retención no encontrada');
 
-    await validarRetencion({ ...data, id });
+    await validarRetencion(data);
+
+    const retencionData = {
+      empresaId: data.empresaId,
+      preFacturaId: data.preFacturaId,
+      ordenCompraId: data.ordenCompraId,
+      origenOperacionComprasVentas: data.origenOperacionComprasVentas,
+      entidadComercialId: data.entidadComercialId,
+      tipoRetencionPercepcionId: data.tipoRetencionPercepcionId,
+      tasaRetencion: data.tasaRetencion,
+      tipoDocumentoId: data.tipoDocumentoId,
+      numeroDocumento: data.numeroDocumento,
+      fechaEmision: data.fechaEmision,
+      monedaId: data.monedaId,
+      importeTotal: data.importeTotal,
+      importeRetenido: data.importeRetenido,
+      importePagado: data.importePagado,
+      saldoPendiente: data.saldoPendiente,
+      estadoPagoId: data.estadoPagoId,
+      aplicado: data.aplicado,
+      fechaAplicacion: data.fechaAplicacion,
+      observaciones: data.observaciones,
+      fechaContable: data.fechaContable,
+      periodoContableId: data.periodoContableId,
+      actualizadoPor: data.actualizadoPor,
+    };
 
     return await prisma.retencion.update({
       where: { id },
-      data: {
-        empresaId: data.empresaId,
-        tipoDocumentoId: data.tipoDocumentoId,
-        serieDocId: data.serieDocId,
-        numSerieDoc: data.numSerieDoc,
-        numCorreDoc: data.numCorreDoc,
-        numeroDocumento: data.numeroDocumento,
-        fechaEmision: data.fechaEmision ? new Date(data.fechaEmision) : undefined,
-        fechaPago: data.fechaPago ? new Date(data.fechaPago) : undefined,
-        proveedorId: data.proveedorId,
-        tipoDocProveedorId: data.tipoDocProveedorId,
-        numeroDocProveedor: data.numeroDocProveedor,
-        razonSocialProveedor: data.razonSocialProveedor,
-        tipoRetencionId: data.tipoRetencionId,
-        tasaRetencion: data.tasaRetencion,
-        monedaId: data.monedaId,
-        importeTotal: data.importeTotal,
-        importeRetenido: data.importeRetenido,
-        importeNeto: data.importeNeto,
-        cuentaPorPagarId: data.cuentaPorPagarId,
-        movimientoCajaId: data.movimientoCajaId,
-        nubefactEnviado: data.nubefactEnviado,
-        nubefactAceptado: data.nubefactAceptado,
-        nubefactEnlacePDF: data.nubefactEnlacePDF,
-        nubefactEnlaceXML: data.nubefactEnlaceXML,
-        nubefactRespuesta: data.nubefactRespuesta,
-        estadoId: data.estadoId,
-        periodoDeclaracion: data.periodoDeclaracion,
-        declarado: data.declarado,
-        fechaDeclaracion: data.fechaDeclaracion ? new Date(data.fechaDeclaracion) : undefined,
-        observaciones: data.observaciones
-      },
+      data: retencionData,
       include: incluirRelaciones
     });
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos', err.message);
     }
@@ -284,12 +291,18 @@ const actualizar = async (id, data) => {
   }
 };
 
+/**
+ * Elimina una retención
+ * @param {BigInt} id - ID de la retención a eliminar
+ * @returns {Promise<Object>} Retención eliminada
+ * @throws {NotFoundError} Si la retención no existe
+ */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.retencion.findUnique({ where: { id } });
-    if (!existente) throw new NotFoundError('Retención no encontrada');
+    const existe = await prisma.retencion.findUnique({ where: { id } });
+    if (!existe) throw new NotFoundError('Retención no encontrada');
 
-    await prisma.retencion.delete({ where: { id } });
+    return await prisma.retencion.delete({ where: { id } });
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) {
@@ -299,43 +312,10 @@ const eliminar = async (id) => {
   }
 };
 
-const listarPorEmpresa = async (empresaId) => {
-  try {
-    return await prisma.retencion.findMany({
-      where: { empresaId },
-      include: incluirRelaciones,
-      orderBy: { fechaEmision: 'desc' }
-    });
-  } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
-
-const listarPorProveedor = async (proveedorId) => {
-  try {
-    return await prisma.retencion.findMany({
-      where: { proveedorId },
-      include: incluirRelaciones,
-      orderBy: { fechaEmision: 'desc' }
-    });
-  } catch (err) {
-    if (err.code && err.code.startsWith('P')) {
-      throw new DatabaseError('Error de base de datos', err.message);
-    }
-    throw err;
-  }
-};
-
-
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar,
-  listarPorEmpresa,
-  listarPorProveedor,
+  eliminar
 };

@@ -1,71 +1,18 @@
-import express from 'express';
-import percepcionController from '../../controllers/Tesoreria/percepcion.controller.js';
-import { autenticarJWT } from '../../middlewares/authMiddleware.js';
-import { checkPermission } from '../../middlewares/checkPermission.js';
-
-const router = express.Router();
+import { Router } from 'express';
+import * as percepcionController from '../../controllers/Tesoreria/percepcion.controller.js';
 
 /**
- * Rutas CRUD para Percepcion
- * Gestiona las percepciones fiscales
- * Ruta del submódulo: 'percepcion'
+ * Rutas para el módulo de Percepciones
+ * Prefijo: /api/tesoreria/percepciones
  */
 
-router.get(
-  '/',
-  autenticarJWT,
-  checkPermission('percepcion', 'ver'),
-  percepcionController.listar
-);
+const router = Router();
 
-router.get(
-  '/:id',
-  autenticarJWT,
-  checkPermission('percepcion', 'ver'),
-  percepcionController.obtenerPorId
-);
-
-router.post(
-  '/',
-  autenticarJWT,
-  checkPermission('percepcion', 'crear'),
-  percepcionController.crear
-);
-
-router.put(
-  '/:id',
-  autenticarJWT,
-  checkPermission('percepcion', 'editar'),
-  percepcionController.actualizar
-);
-
-router.delete(
-  '/:id',
-  autenticarJWT,
-  checkPermission('percepcion', 'eliminar'),
-  percepcionController.eliminar
-);
-
-// Rutas específicas
-router.get(
-  '/empresa/:empresaId',
-  autenticarJWT,
-  checkPermission('percepcion', 'ver'),
-  percepcionController.listarPorEmpresa
-);
-
-router.get(
-  '/cliente/:clienteId',
-  autenticarJWT,
-  checkPermission('percepcion', 'ver'),
-  percepcionController.listarPorCliente
-);
-
-router.get(
-  '/periodo/:periodo',
-  autenticarJWT,
-  checkPermission('percepcion', 'ver'),
-  percepcionController.listarPorPeriodo
-);
+// Rutas CRUD básicas
+router.get('/', percepcionController.listar);
+router.get('/:id', percepcionController.obtenerPorId);
+router.post('/', percepcionController.crear);
+router.put('/:id', percepcionController.actualizar);
+router.delete('/:id', percepcionController.eliminar);
 
 export default router;

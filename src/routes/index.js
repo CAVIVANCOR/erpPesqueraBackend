@@ -16,9 +16,6 @@ import documentosOrigenRoutes from './Contabilidad/documentosOrigen.routes.js';
 import tipoAfectacionIGVRoutes from './FacturacionElectronica/tipoAfectacionIGV.routes.js';
 import tipoOperacionSunatRoutes from './FacturacionElectronica/tipoOperacionSunat.routes.js';
 import comprobanteElectronicoRoutes from './FacturacionElectronica/comprobanteElectronico.routes.js';
-import detraccionRoutes from './Contabilidad/detraccion.routes.js';
-import retencionRoutes from './Contabilidad/retencion.routes.js';
-import percepcionRoutes from './Contabilidad/percepcion.routes.js';
 import cuentaPorCobrarRoutes from './CuentasPorCobrarPagar/cuentaPorCobrar.routes.js';
 import cuentaPorPagarRoutes from './CuentasPorCobrarPagar/cuentaPorPagar.routes.js';
 import tipoDetraccionRoutes from './Tesoreria/tipoDetraccion.routes.js';
@@ -244,8 +241,6 @@ import letraCambioTesoreriaRoutes from './Tesoreria/letraCambio.routes.js';
 import pagoLetraCambioRoutes from './Tesoreria/pagoLetraCambio.routes.js';
 import endosoLetraCambioRoutes from './Tesoreria/endosoLetraCambio.routes.js';
 import tipoRetencionPercepcionRoutes from './Tesoreria/tipoRetencionPercepcion.routes.js';
-import retencionTesoreriaRoutes from './Tesoreria/retencion.routes.js';
-import percepcionTesoreriaRoutes from './Tesoreria/percepcion.routes.js';
 import presupuestoAnualRoutes from './Tesoreria/presupuestoAnual.routes.js';
 import ejecucionPresupuestalRoutes from './Tesoreria/ejecucionPresupuestal.routes.js';
 
@@ -272,7 +267,9 @@ import deudaTributariaRoutes from './Tesoreria/deudaTributaria.routes.js';
 import pagoDeudaTributariaRoutes from './Tesoreria/pagoDeudaTributaria.routes.js';
 import pagoEspecializadoCxCRoutes from './CuentasPorCobrarPagar/pagoEspecializadoCuentaPorCobrar.routes.js';
 import tareasAutomaticasRoutes from './Tesoreria/tareasAutomaticas.routes.js';
-
+import detraccionRoutes from './Tesoreria/detraccion.routes.js';
+import retencionRoutes from './Tesoreria/retencion.routes.js';
+import percepcionRoutes from './Tesoreria/percepcion.routes.js';
 
 
 const router = express.Router();
@@ -681,9 +678,6 @@ router.use('/bancos', bancoRoutes);
 router.use('/medio-pago', medioPagoRoutes);
 router.use('/tipos-cuenta-corriente', tipoCuentaCorrienteRoutes);
 // Rutas para Contabilidad - Plan de Cuentas Contable
-router.use('/contabilidad/detraccion', detraccionRoutes);
-router.use('/contabilidad/retencion', retencionRoutes);
-router.use('/contabilidad/percepcion', percepcionRoutes);
 router.use('/contabilidad/plan-cuentas-contable', planCuentasContableRoutes);
 router.use('/contabilidad/periodo-contable', periodoContableRoutes);
 router.use('/contabilidad/asiento-contable', asientoContableRoutes);
@@ -736,12 +730,13 @@ router.use('/tesoreria/tipo-detraccion', tipoDetraccionRoutes);
 router.use('/tesoreria/categorias-tipo-deuda-tributaria', categoriaTipoDeudaTributariaRoutes);
 router.use('/tesoreria/tipos-deuda-tributaria', tipoDeudaTributariaRoutes);
 router.use('/tesoreria/deudas-tributarias', deudaTributariaRoutes);
+router.use('/tesoreria/detracciones', detraccionRoutes);
+router.use('/tesoreria/retenciones', retencionRoutes);
+router.use('/tesoreria/percepciones', percepcionRoutes);
 router.use('/tesoreria/pagos-deuda-tributaria', pagoDeudaTributariaRoutes);
 router.use('/tesoreria/pagos-letra-cambio', pagoLetraCambioRoutes);
 router.use('/tesoreria/endosos-letra-cambio', endosoLetraCambioRoutes);
 router.use('/tesoreria/tipos-retencion-percepcion', tipoRetencionPercepcionRoutes);
-router.use('/tesoreria/retenciones', retencionTesoreriaRoutes);
-router.use('/tesoreria/percepciones', percepcionTesoreriaRoutes);
 router.use('/tesoreria/presupuestos-anuales', presupuestoAnualRoutes);
 router.use('/tesoreria/ejecuciones-presupuestales', ejecucionPresupuestalRoutes);
 router.use('/tesoreria/migracion-asientos-prestamos', migracionAsientosPrestamosRoutes);

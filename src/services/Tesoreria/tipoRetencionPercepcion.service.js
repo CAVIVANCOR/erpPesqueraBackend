@@ -152,11 +152,26 @@ const listarPorTipo = async (tipo) => {
   }
 };
 
+const listarActivos = async () => {
+  try {
+    return await prisma.tipoRetencionPercepcion.findMany({
+      where: { activo: true },
+      orderBy: { codigo: 'asc' }
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos', err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
-  listarPorTipo
+  listarPorTipo,
+  listarActivos
 };

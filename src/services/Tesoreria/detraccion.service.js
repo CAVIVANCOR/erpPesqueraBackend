@@ -2,9 +2,8 @@ import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 
 /**
- * Servicio CRUD para Percepcion
- * Gestiona las percepciones fiscales aplicadas a documentos de compras y ventas
- * Las percepciones son montos adicionales cobrados por el agente de percepción según normativa SUNAT
+ * Servicio CRUD para Detraccion
+ * Gestiona las detracciones fiscales aplicadas a documentos
  */
 
 const incluirRelaciones = {
@@ -36,7 +35,7 @@ const incluirRelaciones = {
       numeroDocumento: true
     }
   },
-  tipoPercepcion: {
+  tipoDetraccion: {
     select: {
       id: true,
       codigo: true,
@@ -66,6 +65,30 @@ const incluirRelaciones = {
       severityColor: true
     }
   },
+  cuentaBNSunatPropia: {
+    select: {
+      id: true,
+      numeroCuenta: true,
+      banco: {
+        select: {
+          id: true,
+          nombre: true
+        }
+      }
+    }
+  },
+  cuentaBNSunatProveedor: {
+    select: {
+      id: true,
+      numeroCuenta: true,
+      banco: {
+        select: {
+          id: true,
+          nombre: true
+        }
+      }
+    }
+  },
   periodoContable: {
     select: {
       id: true,
@@ -76,12 +99,7 @@ const incluirRelaciones = {
   }
 };
 
-/**
- * Valida los datos de una percepción antes de crear o actualizar
- * @param {Object} data - Datos de la percepción a validar
- * @throws {ValidationError} Si alguna validación falla
- */
-async function validarPercepcion(data) {
+async function validarDetraccion(data) {
   if (data.empresaId) {
     const empresa = await prisma.empresa.findUnique({ where: { id: data.empresaId } });
     if (!empresa) throw new ValidationError('La empresa referenciada no existe.');
@@ -102,8 +120,8 @@ async function validarPercepcion(data) {
     if (!estado) throw new ValidationError('El estado referenciado no existe.');
   }
 
-  if (data.importePercibido !== undefined && data.importePercibido < 0) {
-    throw new ValidationError('El importe percibido no puede ser negativo.');
+  if (data.importeRequerido !== undefined && data.importeRequerido < 0) {
+    throw new ValidationError('El importe requerido no puede ser negativo.');
   }
 
   if (data.importePagado !== undefined && data.importePagado < 0) {
@@ -111,13 +129,9 @@ async function validarPercepcion(data) {
   }
 }
 
-/**
- * Lista todas las percepciones con sus relaciones
- * @returns {Promise<Array>} Lista de percepciones
- */
 const listar = async () => {
   try {
-    return await prisma.percepcion.findMany({
+    return await prisma.detraccion.findMany({
       include: incluirRelaciones,
       orderBy: { fechaCreacion: 'desc' }
     });
@@ -129,15 +143,9 @@ const listar = async () => {
   }
 };
 
-/**
- * Obtiene una percepción por su ID con todas sus relaciones
- * @param {BigInt} id - ID de la percepción
- * @returns {Promise<Object>} Percepción encontrada
- * @throws {NotFoundError} Si la percepción no existe
- */
 const obtenerPorId = async (id) => {
   try {
-    const percepcion = await prisma.percepcion.findUnique({
+    const detraccion = await prisma.detraccion.findUnique({
       where: { id },
       include: {
         ...incluirRelaciones,
@@ -166,8 +174,8 @@ const obtenerPorId = async (id) => {
         }
       }
     });
-    if (!percepcion) throw new NotFoundError('Percepción no encontrada');
-    return percepcion;
+    if (!detraccion) throw new NotFoundError('Detracción no encontrada');
+    return detraccion;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) {
@@ -177,12 +185,6 @@ const obtenerPorId = async (id) => {
   }
 };
 
-/**
- * Crea una nueva percepción
- * @param {Object} data - Datos de la percepción a crear
- * @returns {Promise<Object>} Percepción creada
- * @throws {ValidationError} Si faltan campos obligatorios o datos inválidos
- */
 const crear = async (data) => {
   try {
     // Validar campos obligatorios con mensajes específicos
@@ -190,7 +192,7 @@ const crear = async (data) => {
     
     if (!data.empresaId) camposFaltantes.push('Empresa');
     if (!data.entidadComercialId) camposFaltantes.push('Entidad Comercial');
-    if (data.importePercibido === undefined || data.importePercibido === null) camposFaltantes.push('Importe Percibido');
+    if (data.importeRequerido === undefined || data.importeRequerido === null) camposFaltantes.push('Importe Requerido');
     if (!data.monedaId) camposFaltantes.push('Moneda');
     if (!data.estadoPagoId) camposFaltantes.push('Estado');
     
@@ -198,25 +200,27 @@ const crear = async (data) => {
       throw new ValidationError(`Faltan campos obligatorios: ${camposFaltantes.join(', ')}`);
     }
 
-    await validarPercepcion(data);
+    await validarDetraccion(data);
 
-    const percepcionData = {
+    const detraccionData = {
       empresaId: data.empresaId,
       preFacturaId: data.preFacturaId || null,
       ordenCompraId: data.ordenCompraId || null,
       origenOperacionComprasVentas: data.origenOperacionComprasVentas || false,
       entidadComercialId: data.entidadComercialId,
-      tipoRetencionPercepcionId: data.tipoRetencionPercepcionId || null,
-      tasaPercepcion: data.tasaPercepcion || 0,
+      tipoDetraccionId: data.tipoDetraccionId || null,
+      tasaDetraccion: data.tasaDetraccion || 0,
       tipoDocumentoId: data.tipoDocumentoId || null,
       numeroDocumento: data.numeroDocumento || null,
       fechaEmision: data.fechaEmision || null,
       monedaId: data.monedaId,
       importeTotal: data.importeTotal || 0,
-      importePercibido: data.importePercibido,
+      importeRequerido: data.importeRequerido,
       importePagado: data.importePagado || 0,
-      saldoPendiente: data.saldoPendiente || data.importePercibido,
+      saldoPendiente: data.saldoPendiente || data.importeRequerido,
       estadoPagoId: data.estadoPagoId,
+      cuentaBNSunatPropiaId: data.cuentaBNSunatPropiaId || null,
+      cuentaBNSunatProveedorId: data.cuentaBNSunatProveedorId || null,
       aplicado: data.aplicado || false,
       fechaAplicacion: data.fechaAplicacion || null,
       observaciones: data.observaciones || null,
@@ -225,8 +229,8 @@ const crear = async (data) => {
       creadoPor: data.creadoPor || null,
     };
 
-    return await prisma.percepcion.create({
-      data: percepcionData,
+    return await prisma.detraccion.create({
+      data: detraccionData,
       include: incluirRelaciones
     });
   } catch (err) {
@@ -238,37 +242,32 @@ const crear = async (data) => {
   }
 };
 
-/**
- * Actualiza una percepción existente
- * @param {BigInt} id - ID de la percepción a actualizar
- * @param {Object} data - Datos actualizados
- * @returns {Promise<Object>} Percepción actualizada
- * @throws {NotFoundError} Si la percepción no existe
- */
 const actualizar = async (id, data) => {
   try {
-    const existe = await prisma.percepcion.findUnique({ where: { id } });
-    if (!existe) throw new NotFoundError('Percepción no encontrada');
+    const existe = await prisma.detraccion.findUnique({ where: { id } });
+    if (!existe) throw new NotFoundError('Detracción no encontrada');
 
-    await validarPercepcion(data);
+    await validarDetraccion(data);
 
-    const percepcionData = {
+    const detraccionData = {
       empresaId: data.empresaId,
       preFacturaId: data.preFacturaId,
       ordenCompraId: data.ordenCompraId,
       origenOperacionComprasVentas: data.origenOperacionComprasVentas,
       entidadComercialId: data.entidadComercialId,
-      tipoRetencionPercepcionId: data.tipoRetencionPercepcionId,
-      tasaPercepcion: data.tasaPercepcion,
+      tipoDetraccionId: data.tipoDetraccionId,
+      tasaDetraccion: data.tasaDetraccion,
       tipoDocumentoId: data.tipoDocumentoId,
       numeroDocumento: data.numeroDocumento,
       fechaEmision: data.fechaEmision,
       monedaId: data.monedaId,
       importeTotal: data.importeTotal,
-      importePercibido: data.importePercibido,
+      importeRequerido: data.importeRequerido,
       importePagado: data.importePagado,
       saldoPendiente: data.saldoPendiente,
       estadoPagoId: data.estadoPagoId,
+      cuentaBNSunatPropiaId: data.cuentaBNSunatPropiaId,
+      cuentaBNSunatProveedorId: data.cuentaBNSunatProveedorId,
       aplicado: data.aplicado,
       fechaAplicacion: data.fechaAplicacion,
       observaciones: data.observaciones,
@@ -277,9 +276,9 @@ const actualizar = async (id, data) => {
       actualizadoPor: data.actualizadoPor,
     };
 
-    return await prisma.percepcion.update({
+    return await prisma.detraccion.update({
       where: { id },
-      data: percepcionData,
+      data: detraccionData,
       include: incluirRelaciones
     });
   } catch (err) {
@@ -291,18 +290,12 @@ const actualizar = async (id, data) => {
   }
 };
 
-/**
- * Elimina una percepción
- * @param {BigInt} id - ID de la percepción a eliminar
- * @returns {Promise<Object>} Percepción eliminada
- * @throws {NotFoundError} Si la percepción no existe
- */
 const eliminar = async (id) => {
   try {
-    const existe = await prisma.percepcion.findUnique({ where: { id } });
-    if (!existe) throw new NotFoundError('Percepción no encontrada');
+    const existe = await prisma.detraccion.findUnique({ where: { id } });
+    if (!existe) throw new NotFoundError('Detracción no encontrada');
 
-    return await prisma.percepcion.delete({ where: { id } });
+    return await prisma.detraccion.delete({ where: { id } });
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) {

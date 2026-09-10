@@ -55,11 +55,21 @@ const listarPorTipo = async (req, res, next) => {
   }
 };
 
+const listarActivos = async (req, res, next) => {
+  try {
+    const tipos = await tipoRetencionPercepcionService.listarActivos();
+    res.json(toJSONBigInt(tipos));
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
   eliminar,
-  listarPorTipo
+  listarPorTipo,
+  listarActivos
 };

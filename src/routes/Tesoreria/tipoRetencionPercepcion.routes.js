@@ -9,8 +9,27 @@ const router = express.Router();
  * Rutas CRUD para TipoRetencionPercepcion
  * Catálogo de tipos de retención y percepción según SUNAT
  * Ruta del submódulo: 'tipoRetencionPercepcion'
+ * 
+ * IMPORTANTE: Las rutas específicas (/activos, /tipo/:tipo) deben ir ANTES de /:id
+ * para evitar que sean interpretadas como IDs
  */
 
+// Rutas específicas (DEBEN IR PRIMERO)
+router.get(
+  '/activos',
+  autenticarJWT,
+  checkPermission('tipoRetencionPercepcion', 'ver'),
+  tipoRetencionPercepcionController.listarActivos
+);
+
+router.get(
+  '/tipo/:tipo',
+  autenticarJWT,
+  checkPermission('tipoRetencionPercepcion', 'ver'),
+  tipoRetencionPercepcionController.listarPorTipo
+);
+
+// Rutas CRUD básicas
 router.get(
   '/',
   autenticarJWT,
@@ -44,14 +63,6 @@ router.delete(
   autenticarJWT,
   checkPermission('tipoRetencionPercepcion', 'eliminar'),
   tipoRetencionPercepcionController.eliminar
-);
-
-// Rutas específicas
-router.get(
-  '/tipo/:tipo',
-  autenticarJWT,
-  checkPermission('tipoRetencionPercepcion', 'ver'),
-  tipoRetencionPercepcionController.listarPorTipo
 );
 
 export default router;
