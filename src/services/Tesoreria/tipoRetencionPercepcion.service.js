@@ -19,15 +19,17 @@ async function validarTipoRetencionPercepcion(data) {
     throw new ValidationError('La tasa debe estar entre 0 y 100');
   }
 
+  // Validar que la combinación codigo + tipo sea única
   const existente = await prisma.tipoRetencionPercepcion.findFirst({
     where: {
       codigo: data.codigo,
+      tipo: data.tipo,
       id: data.id ? { not: data.id } : undefined
     }
   });
 
   if (existente) {
-    throw new ConflictError(`Ya existe un tipo con el código ${data.codigo}`);
+    throw new ConflictError(`Ya existe un tipo ${data.tipo} con el código ${data.codigo}`);
   }
 }
 
