@@ -20,6 +20,30 @@ import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 // CONSTANTES DE ESTADOS PREFACTURA
 // ========================================
 const TIPO_PROVIENE_PREFACTURA = 14; // Tipo Proviene De: PRE FACTURA
+
+// ========================================
+// CONSTANTES DE ESTADOS IMPUESTOS TRIBUTARIOS
+// Definidos en EstadoMultiFuncion
+// ========================================
+const ESTADOS_DETRACCION = {
+  PENDIENTE: 126,
+  VALIDADO: 127,
+  ASIENTO_GENERADO: 128
+};
+
+const ESTADOS_RETENCION = {
+  PENDIENTE: 129,
+  VALIDADO: 130,
+  ASIENTO_GENERADO: 131
+};
+
+const ESTADOS_PERCEPCION = {
+  PENDIENTE: 132,
+  VALIDADO: 133,
+  ASIENTO_GENERADO: 134
+};
+
+const BANCO_NACION_ID = 7; // Banco de la Nación
 /**
  * Servicio CRUD para PreFactura
  * Gestiona pre-facturas generadas desde cotizaciones aprobadas
@@ -1873,13 +1897,423 @@ const partirPreFactura = async (id) => {
   });
 };
 
+// ============================================================================
+// FUNCIONES AUXILIARES PARA GENERACIÓN AUTOMÁTICA DE IMPUESTOS TRIBUTARIOS
+// ============================================================================
+
+/**
+ * Genera observación detallada para Detracción
+ * Incluye todos los datos del documento fiscal para trazabilidad completa
+ * 
+ * @param {Object} preFactura - PreFactura con relaciones (cliente, moneda, detalles, etc.)
+ * @param {Object} totales - Totales calculados (subtotal, IGV, total, montoDetraccion, etc.)
+ * @returns {String} - Observación formateada con todos los datos del documento
+ */
+function generarObservacionDetraccion(preFactura, totales) {
+  const tipoDoc = preFactura.tipoDocumento?.descripcion || 'DOCUMENTO';
+  const serie = preFactura.serieDoc?.serie || '';
+  const correlativo = preFactura.numeroDocumento || '';
+  const numeroCompleto = `${serie}-${correlativo}`;
+
+  const fechaEmision = preFactura.fechaDocumento
+    ? new Date(preFactura.fechaDocumento).toLocaleDateString('es-PE')
+    : '';
+  const fechaVence = preFactura.fechaVencimiento
+    ? new Date(preFactura.fechaVencimiento).toLocaleDateString('es-PE')
+    : '';
+
+  const ruc = preFactura.cliente?.numeroDocumento || '';
+  const razonSocial = preFactura.cliente?.razonSocial || '';
+
+  const monedaSimbolo = preFactura.moneda?.simbolo || 'S/';
+  const subtotal = Number(totales.subtotal || 0).toFixed(2);
+  const igv = Number(totales.totalIGV || 0).toFixed(2);
+  const total = Number(totales.total || 0).toFixed(2);
+  const montoDetraccion = Number(totales.montoDetraccion || 0).toFixed(2);
+  const porcentaje = Number(totales.porcentajeDetraccion || 0).toFixed(2);
+
+  // Generar detalle de items
+  let detalleItems = '';
+  if (preFactura.detalles && preFactura.detalles.length > 0) {
+    detalleItems = preFactura.detalles
+      .map((det) => {
+        const producto = det.producto?.nombre || 'Sin descripción';
+        const cantidad = Number(det.cantidad || 0).toFixed(2);
+        const precio = Number(det.precioUnitario || 0).toFixed(2);
+        const unidad = det.producto?.unidadMedida?.codigo || 'UND';
+        return `  • ${producto} x ${cantidad} ${unidad} @ ${monedaSimbolo} ${precio}`;
+      })
+      .join('\n');
+  } else {
+    detalleItems = '  • Sin items';
+  }
+
+  const observacion = `DETRACCIÓN GENERADA AUTOMÁTICAMENTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Documento: ${tipoDoc} ${numeroCompleto}
+Fecha Emisión: ${fechaEmision}
+Fecha Vencimiento: ${fechaVence}
+
+Cliente:
+RUC: ${ruc}
+Razón Social: ${razonSocial}
+
+Importes:
+Valor Venta: ${monedaSimbolo} ${subtotal}
+IGV (18%): ${monedaSimbolo} ${igv}
+Total: ${monedaSimbolo} ${total}
+
+Detracción (${porcentaje}%): ${monedaSimbolo} ${montoDetraccion}
+
+Detalle de Items:
+${detalleItems}
+
+Generado desde PreFactura ${preFactura.codigo}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  return observacion;
+}
+
+/**
+ * Genera observación detallada para Retención
+ * 
+ * @param {Object} preFactura - PreFactura con relaciones
+ * @param {Object} totales - Totales calculados
+ * @returns {String} - Observación formateada
+ */
+function generarObservacionRetencion(preFactura, totales) {
+  const tipoDoc = preFactura.tipoDocumento?.descripcion || 'DOCUMENTO';
+  const serie = preFactura.serieDoc?.serie || '';
+  const correlativo = preFactura.numeroDocumento || '';
+  const numeroCompleto = `${serie}-${correlativo}`;
+
+  const fechaEmision = preFactura.fechaDocumento
+    ? new Date(preFactura.fechaDocumento).toLocaleDateString('es-PE')
+    : '';
+  const fechaVence = preFactura.fechaVencimiento
+    ? new Date(preFactura.fechaVencimiento).toLocaleDateString('es-PE')
+    : '';
+
+  const ruc = preFactura.cliente?.numeroDocumento || '';
+  const razonSocial = preFactura.cliente?.razonSocial || '';
+
+  const monedaSimbolo = preFactura.moneda?.simbolo || 'S/';
+  const subtotal = Number(totales.subtotal || 0).toFixed(2);
+  const igv = Number(totales.totalIGV || 0).toFixed(2);
+  const total = Number(totales.total || 0).toFixed(2);
+  const montoRetencion = Number(totales.montoRetencion || 0).toFixed(2);
+  const porcentaje = Number(totales.porcentajeRetencion || 0).toFixed(2);
+
+  let detalleItems = '';
+  if (preFactura.detalles && preFactura.detalles.length > 0) {
+    detalleItems = preFactura.detalles
+      .map((det) => {
+        const producto = det.producto?.nombre || 'Sin descripción';
+        const cantidad = Number(det.cantidad || 0).toFixed(2);
+        const precio = Number(det.precioUnitario || 0).toFixed(2);
+        const unidad = det.producto?.unidadMedida?.codigo || 'UND';
+        return `  • ${producto} x ${cantidad} ${unidad} @ ${monedaSimbolo} ${precio}`;
+      })
+      .join('\n');
+  } else {
+    detalleItems = '  • Sin items';
+  }
+
+  const observacion = `RETENCIÓN GENERADA AUTOMÁTICAMENTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Documento: ${tipoDoc} ${numeroCompleto}
+Fecha Emisión: ${fechaEmision}
+Fecha Vencimiento: ${fechaVence}
+
+Cliente (Agente de Retención):
+RUC: ${ruc}
+Razón Social: ${razonSocial}
+
+Importes:
+Valor Venta: ${monedaSimbolo} ${subtotal}
+IGV (18%): ${monedaSimbolo} ${igv}
+Total: ${monedaSimbolo} ${total}
+
+Retención (${porcentaje}%): ${monedaSimbolo} ${montoRetencion}
+
+Detalle de Items:
+${detalleItems}
+
+Generado desde PreFactura ${preFactura.codigo}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  return observacion;
+}
+
+/**
+ * Genera observación detallada para Percepción
+ * 
+ * @param {Object} preFactura - PreFactura con relaciones
+ * @param {Object} totales - Totales calculados
+ * @returns {String} - Observación formateada
+ */
+function generarObservacionPercepcion(preFactura, totales) {
+  const tipoDoc = preFactura.tipoDocumento?.descripcion || 'DOCUMENTO';
+  const serie = preFactura.serieDoc?.serie || '';
+  const correlativo = preFactura.numeroDocumento || '';
+  const numeroCompleto = `${serie}-${correlativo}`;
+
+  const fechaEmision = preFactura.fechaDocumento
+    ? new Date(preFactura.fechaDocumento).toLocaleDateString('es-PE')
+    : '';
+  const fechaVence = preFactura.fechaVencimiento
+    ? new Date(preFactura.fechaVencimiento).toLocaleDateString('es-PE')
+    : '';
+
+  const ruc = preFactura.cliente?.numeroDocumento || '';
+  const razonSocial = preFactura.cliente?.razonSocial || '';
+
+  const monedaSimbolo = preFactura.moneda?.simbolo || 'S/';
+  const subtotal = Number(totales.subtotal || 0).toFixed(2);
+  const igv = Number(totales.totalIGV || 0).toFixed(2);
+  const total = Number(totales.total || 0).toFixed(2);
+  const montoPercepcion = Number(totales.montoPercepcion || 0).toFixed(2);
+  const porcentaje = Number(totales.porcentajePercepcion || 0).toFixed(2);
+
+  let detalleItems = '';
+  if (preFactura.detalles && preFactura.detalles.length > 0) {
+    detalleItems = preFactura.detalles
+      .map((det) => {
+        const producto = det.producto?.nombre || 'Sin descripción';
+        const cantidad = Number(det.cantidad || 0).toFixed(2);
+        const precio = Number(det.precioUnitario || 0).toFixed(2);
+        const unidad = det.producto?.unidadMedida?.codigo || 'UND';
+        return `  • ${producto} x ${cantidad} ${unidad} @ ${monedaSimbolo} ${precio}`;
+      })
+      .join('\n');
+  } else {
+    detalleItems = '  • Sin items';
+  }
+
+  const observacion = `PERCEPCIÓN GENERADA AUTOMÁTICAMENTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Documento: ${tipoDoc} ${numeroCompleto}
+Fecha Emisión: ${fechaEmision}
+Fecha Vencimiento: ${fechaVence}
+
+Cliente:
+RUC: ${ruc}
+Razón Social: ${razonSocial}
+
+Importes:
+Valor Venta: ${monedaSimbolo} ${subtotal}
+IGV (18%): ${monedaSimbolo} ${igv}
+Total: ${monedaSimbolo} ${total}
+
+Percepción (${porcentaje}%): ${monedaSimbolo} ${montoPercepcion}
+
+Detalle de Items:
+${detalleItems}
+
+Generado desde PreFactura ${preFactura.codigo}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  return observacion;
+}
+
+/**
+ * Crea o regenera registro de Detracción desde PreFactura
+ * 
+ * REGLA DE REGENERACIÓN:
+ * - Solo se regenera si importePagado = 0
+ * - Si importePagado > 0, se preserva el registro existente
+ * 
+ * @param {Object} preFactura - PreFactura con todas las relaciones necesarias
+ * @param {Object} totales - Totales calculados (incluye montoDetraccion, porcentajeDetraccion, etc.)
+ * @param {Object} tx - Transacción de Prisma
+ * @param {BigInt} personalId - ID del Personal que está generando la CxC
+ */
+async function crearDetraccionDesdePreFactura(preFactura, totales, tx, personalId) {
+  // 1. Buscar detracción existente
+  const existente = await tx.detraccion.findUnique({
+    where: { preFacturaId: preFactura.id }
+  });
+
+  // 2. Validar si se puede regenerar
+  if (existente) {
+    // ⭐ ÚNICA VALIDACIÓN: importePagado > 0
+    if (existente.importePagado > 0) {
+      return; // ❌ NO regenerar (tiene pagos)
+    }
+    // ✅ importePagado = 0 → ELIMINAR para recrear
+    await tx.detraccion.delete({
+      where: { id: existente.id }
+    });
+  }
+
+  // 3. Obtener cuenta Banco de la Nación para detracciones
+  const cuentaBN = await tx.cuentaCorriente.findFirst({
+    where: {
+      empresaId: preFactura.empresaId,
+      bancoId: BANCO_NACION_ID, // 7
+      descripcion: "DETRACCIONES"
+    }
+  });
+
+  // 4. Generar observación detallada
+  const observacion = generarObservacionDetraccion(preFactura, totales);
+
+  // 5. CREAR nueva detracción
+  await tx.detraccion.create({
+    data: {
+      // DOCUMENTO ORIGEN
+      empresaId: preFactura.empresaId,
+      preFacturaId: preFactura.id,
+      origenOperacionComprasVentas: false, // false = VENTA
+      entidadComercialId: preFactura.clienteId,
+
+      // TIPO Y TASA
+      tipoDetraccionId: totales.tipoDetraccionId,
+      tasaDetraccion: totales.porcentajeDetraccion,
+
+      // DOCUMENTO
+      tipoDocumentoId: preFactura.tipoDocumentoId,
+      numeroDocumento: preFactura.numeroDocumento,
+      fechaEmision: preFactura.fechaDocumento,
+
+      // ⭐ MONTOS Y SALDO (CRÍTICO)
+      monedaId: preFactura.monedaId,
+      importeTotal: totales.total, // Total del documento original
+      importeRequerido: totales.montoDetraccion, // Monto a detraer (FIJO)
+      importePagado: 0,
+      saldoPendiente: totales.montoDetraccion,
+
+      // ESTADO Y CONTABILIDAD
+      estadoPagoId: ESTADOS_DETRACCION.PENDIENTE, // 126
+      periodoContableId: preFactura.periodoContableId,
+      fechaContable: preFactura.fechaContable,
+
+      // CUENTA BANCO NACIÓN
+      cuentaBNSunatPropiaId: cuentaBN?.id || null,
+
+      // AUDITORÍA
+      observaciones: observacion,
+      creadoPor: personalId, // Personal que está generando la CxC
+      actualizadoPor: personalId
+    }
+  });
+}
+
+/**
+ * Crea o regenera registro de Retención desde PreFactura
+ * 
+ * REGLA DE REGENERACIÓN:
+ * - Solo se regenera si importePagado = 0
+ * 
+ * @param {Object} preFactura - PreFactura con todas las relaciones necesarias
+ * @param {Object} totales - Totales calculados
+ * @param {Object} tx - Transacción de Prisma
+ * @param {BigInt} personalId - ID del Personal que está generando la CxC
+ */
+async function crearRetencionDesdePreFactura(preFactura, totales, tx, personalId) {
+  const existente = await tx.retencion.findUnique({
+    where: { preFacturaId: preFactura.id }
+  });
+
+  if (existente) {
+    if (existente.importePagado > 0) return; // ❌ NO regenerar
+    await tx.retencion.delete({ where: { id: existente.id } });
+  }
+
+  const observacion = generarObservacionRetencion(preFactura, totales);
+
+  const retencion = await tx.retencion.create({
+    data: {
+      empresaId: preFactura.empresaId,
+      preFacturaId: preFactura.id,
+      origenOperacionComprasVentas: false, // false = VENTA
+      entidadComercialId: preFactura.clienteId,
+      tasaRetencion: totales.porcentajeRetencion,
+      tipoDocumentoId: preFactura.tipoDocumentoId,
+      numeroDocumento: preFactura.numeroDocumento,
+      fechaEmision: preFactura.fechaDocumento,
+      monedaId: preFactura.monedaId,
+      importeTotal: totales.total,
+      importeRequerido: totales.montoRetencion,
+      importePagado: 0,
+      saldoPendiente: totales.montoRetencion,
+      estadoPagoId: ESTADOS_RETENCION.PENDIENTE, // 129
+      periodoContableId: preFactura.periodoContableId,
+      fechaContable: preFactura.fechaContable,
+      observaciones: observacion,
+      creadoPor: personalId,
+      actualizadoPor: personalId
+    }
+  });
+}
+
+/**
+ * Crea o regenera registro de Percepción desde PreFactura
+ * 
+ * REGLA DE REGENERACIÓN:
+ * - Solo se regenera si importePagado = 0
+ * 
+ * @param {Object} preFactura - PreFactura con todas las relaciones necesarias
+ * @param {Object} totales - Totales calculados
+ * @param {Object} tx - Transacción de Prisma
+ * @param {BigInt} personalId - ID del Personal que está generando la CxC
+ */
+async function crearPercepcionDesdePreFactura(preFactura, totales, tx, personalId) {
+  const existente = await tx.percepcion.findUnique({
+    where: { preFacturaId: preFactura.id }
+  });
+
+  if (existente) {
+    if (existente.importePagado > 0) return; // ❌ NO regenerar
+    await tx.percepcion.delete({ where: { id: existente.id } });
+  }
+
+  const observacion = generarObservacionPercepcion(preFactura, totales);
+
+  const percepcion = await tx.percepcion.create({
+    data: {
+      empresaId: preFactura.empresaId,
+      preFacturaId: preFactura.id,
+      origenOperacionComprasVentas: false, // false = VENTA
+      entidadComercialId: preFactura.clienteId,
+      tasaPercepcion: totales.porcentajePercepcion,
+      tipoDocumentoId: preFactura.tipoDocumentoId,
+      numeroDocumento: preFactura.numeroDocumento,
+      fechaEmision: preFactura.fechaDocumento,
+      monedaId: preFactura.monedaId,
+      importeTotal: totales.total,
+      importeRequerido: totales.montoPercepcion,
+      importePagado: 0,
+      saldoPendiente: totales.montoPercepcion,
+      estadoPagoId: ESTADOS_PERCEPCION.PENDIENTE, // 132
+      periodoContableId: preFactura.periodoContableId,
+      fechaContable: preFactura.fechaContable,
+      observaciones: observacion,
+      creadoPor: personalId,
+      actualizadoPor: personalId
+    }
+  });
+}
+
 /**
  * Facturar PreFactura Blanca (SUNAT) - Caso 2: Comprobante Electrónico
  * Genera CuentaPorCobrar CON comprobante electrónico SUNAT
+ * @param {BigInt} preFacturaId - ID de la PreFactura
+ * @param {BigInt} userId - ID del usuario que está generando la CxC
  */
-const facturarPreFacturaBlanca = async (preFacturaId) => {
+const facturarPreFacturaBlanca = async (preFacturaId, userId) => {
   try {
     return await prisma.$transaction(async (tx) => {
+      // 0. Buscar el personalId del usuario que está generando la CxC
+      let personalId = null;
+      if (userId) {
+        const usuario = await tx.usuario.findUnique({
+          where: { id: userId },
+          select: { personalId: true }
+        });
+        personalId = usuario?.personalId || null;
+      }
+
       // 1. Obtener PreFactura con todas las relaciones necesarias
       const preFactura = await tx.preFactura.findUnique({
         where: { id: preFacturaId },
@@ -1968,72 +2402,23 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
       const montoFinal = esSaldoInicial ? totalNeto : Number(preFactura.total);
 
       // ========================================
-      // 3. ANALIZAR DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN (REGLAS SUNAT)
+      // 3. OBTENER IMPUESTOS YA CALCULADOS DE LA PREFACTURA
       // ========================================
+      // ⭐ ÚNICA FUENTE DE VERDAD: Los impuestos ya fueron calculados
+      // por calcularTotalesEImpuestos() y están almacenados en la PreFactura.
+      // NO recalcular aquí para evitar inconsistencias.
 
-      // 3.1 Analizar DETRACCIÓN (basado en productos y monto mínimo)
-      let tieneDetraccion = false;
-      let porcentajeDetraccion = null;
-      let montoDetraccion = 0;
+      const tieneDetraccion = Boolean(preFactura.aplicaDetraccion);
+      const porcentajeDetraccion = preFactura.porcentajeDetraccion ? Number(preFactura.porcentajeDetraccion) : null;
+      const montoDetraccion = preFactura.montoDetraccion ? Number(preFactura.montoDetraccion) : 0;
 
-      // Verificar si algún producto está sujeto a detracción
-      for (const detalle of preFactura.detalles) {
-        if (
-          detalle.producto?.sujetoDetraccion &&
-          detalle.producto?.porcentajeDetraccion
-        ) {
-          tieneDetraccion = true;
-          // Usar el porcentaje del primer producto sujeto a detracción
-          if (!porcentajeDetraccion) {
-            porcentajeDetraccion = Number(
-              detalle.producto.porcentajeDetraccion,
-            );
-          }
-        }
-      }
+      const tieneRetencion = Boolean(preFactura.aplicaRetencion);
+      const porcentajeRetencion = preFactura.porcentajeRetencion ? Number(preFactura.porcentajeRetencion) : null;
+      const montoRetencion = preFactura.montoRetencion ? Number(preFactura.montoRetencion) : 0;
 
-      // Calcular monto de detracción si aplica Y monto >= montoMinimoDetraccion
-      const montoMinimoDetraccion =
-        Number(preFactura.empresa.montoMinimoDetraccion) || 700; // Default S/ 700
-
-      if (
-        tieneDetraccion &&
-        porcentajeDetraccion &&
-        montoFinal >= montoMinimoDetraccion
-      ) {
-        montoDetraccion = montoFinal * (porcentajeDetraccion / 100);
-      } else {
-        tieneDetraccion = false;
-        porcentajeDetraccion = null;
-        montoDetraccion = 0;
-      }
-
-      // 3.2 Analizar RETENCIÓN (basado en cliente)
-      let tieneRetencion = false;
-      let porcentajeRetencion = null;
-      let montoRetencion = 0;
-
-      if (preFactura.cliente.esAgenteRetencion) {
-        tieneRetencion = true;
-        porcentajeRetencion = Number(
-          preFactura.cliente.porcentajeRetencion || 3,
-        ); // Default 3%
-        montoRetencion = montoFinal * (porcentajeRetencion / 100);
-      }
-
-      // 3.3 Analizar PERCEPCIÓN (basado en cliente y empresa) - INDEPENDIENTE
-      // REGLA: Percepción puede coexistir con Detracción o Retención
-      let tienePercepcion = false;
-      let porcentajePercepcion = null;
-      let montoPercepcion = 0;
-
-      if (preFactura.empresa.esAgentePercepcion) {
-        tienePercepcion = true;
-        porcentajePercepcion = Number(
-          preFactura.empresa.porcentajePercepcion || 2,
-        ); // Default 2%
-        montoPercepcion = montoFinal * (porcentajePercepcion / 100);
-      }
+      const tienePercepcion = Boolean(preFactura.aplicaPercepcion);
+      const porcentajePercepcion = preFactura.porcentajePercepcion ? Number(preFactura.porcentajePercepcion) : null;
+      const montoPercepcion = preFactura.montoPercepcion ? Number(preFactura.montoPercepcion) : 0;
 
       // ========================================
       // 4. CREAR O ACTUALIZAR CUENTA POR COBRAR
@@ -2141,6 +2526,61 @@ const facturarPreFacturaBlanca = async (preFacturaId) => {
         where: { id: preFactura.id },
         data: dataUpdateBlanca,
       });
+
+      // ========================================
+      // 🆕 6. GENERAR IMPUESTOS TRIBUTARIOS AUTOMÁTICAMENTE
+      // ========================================
+      // Crear registros individuales de Detracción, Retención y Percepción
+      // según corresponda, para control y trazabilidad de pagos SUNAT
+      
+      // 6.1 CREAR DETRACCIÓN si aplica
+      if (tieneDetraccion && montoDetraccion > 0) {
+        await crearDetraccionDesdePreFactura(
+          preFactura,
+          {
+            subtotal: esSaldoInicial ? subtotalNeto : Number(preFactura.subtotal || 0),
+            totalIGV: esSaldoInicial ? igvNeto : Number(preFactura.totalIGV || 0),
+            total: montoFinal,
+            montoDetraccion,
+            porcentajeDetraccion,
+            tipoDetraccionId: preFactura.tipoDetraccionId
+          },
+          tx,
+          personalId
+        );
+      }
+
+      // 6.2 CREAR RETENCIÓN si aplica
+      if (tieneRetencion && montoRetencion > 0) {
+        await crearRetencionDesdePreFactura(
+          preFactura,
+          {
+            subtotal: esSaldoInicial ? subtotalNeto : Number(preFactura.subtotal || 0),
+            totalIGV: esSaldoInicial ? igvNeto : Number(preFactura.totalIGV || 0),
+            total: montoFinal,
+            montoRetencion,
+            porcentajeRetencion
+          },
+          tx,
+          personalId
+        );
+      }
+
+      // 6.3 CREAR PERCEPCIÓN si aplica
+      if (tienePercepcion && montoPercepcion > 0) {
+        await crearPercepcionDesdePreFactura(
+          preFactura,
+          {
+            subtotal: esSaldoInicial ? subtotalNeto : Number(preFactura.subtotal || 0),
+            totalIGV: esSaldoInicial ? igvNeto : Number(preFactura.totalIGV || 0),
+            total: montoFinal,
+            montoPercepcion,
+            porcentajePercepcion
+          },
+          tx,
+          personalId
+        );
+      }
 
       return {
         preFactura,

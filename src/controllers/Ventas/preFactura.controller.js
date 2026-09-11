@@ -253,7 +253,8 @@ export async function facturarPreFacturaNegra(req, res, next) {
 export async function facturarPreFacturaBlanca(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const resultado = await preFacturaService.facturarPreFacturaBlanca(id);
+    const userId = req.user?.id; // Usuario que está generando la CxC
+    const resultado = await preFacturaService.facturarPreFacturaBlanca(id, userId);
 
     res.status(200).json(toJSONBigInt({
       success: true,

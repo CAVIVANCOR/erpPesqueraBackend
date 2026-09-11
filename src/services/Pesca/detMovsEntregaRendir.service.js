@@ -108,6 +108,18 @@ const listar = async () => {
         tipoDocumento: true,
         empresa: true,
         moduloOrigen: true,
+        // ⭐ Incluir activo afecto con tipo para trazabilidad de gastos
+        activoAfecto: {
+          include: {
+            tipo: true,
+          },
+        },
+        // ⭐ AGREGADO: Incluir embarcación con su activo para mostrar nombre en filtros
+        embarcacion: {
+          include: {
+            activo: true,
+          },
+        },
         enlaceGastoPlanificado: {
           include: {
             producto: true,
@@ -141,6 +153,11 @@ const obtenerPorId = async (id) => {
         tipoDocumento: true,
         empresa: true,
         moduloOrigen: true,
+        activoAfecto: {
+          include: {
+            tipo: true,
+          },
+        },
       },
     });
 
@@ -232,6 +249,14 @@ const crear = async (data, usuarioId = null) => {
     // Convertir asignacionOrigenId=0 a null para Prisma (0 es solo indicador lógico, no FK)
     if (data.asignacionOrigenId === 0) {
       data.asignacionOrigenId = null;
+    }
+
+    // Convertir IDs opcionales a BigInt si existen
+    if (data.embarcacionId) {
+      data.embarcacionId = BigInt(data.embarcacionId);
+    }
+    if (data.activoAfectoId) {
+      data.activoAfectoId = BigInt(data.activoAfectoId);
     }
 
     const movimientoCreado = await prisma.detMovsEntregaRendir.create({ data });
@@ -369,6 +394,7 @@ const actualizar = async (id, data, usuarioId = null) => {
       urlLiquidacionEntregaARendir: data.urlLiquidacionEntregaARendir,
       enlaceAOtroDetalleGastoId: data.enlaceAOtroDetalleGastoId,
       embarcacionId: data.embarcacionId,
+      activoAfectoId: data.activoAfectoId,
       saldoInicialAsignacion: data.saldoInicialAsignacion,
       saldoFinalAsignacion: data.saldoFinalAsignacion,
       enlaceGastosPlanificadosId: data.enlaceGastosPlanificadosId,
@@ -378,6 +404,15 @@ const actualizar = async (id, data, usuarioId = null) => {
     if (datosActualizacion.asignacionOrigenId === 0) {
       datosActualizacion.asignacionOrigenId = null;
     }
+
+    // Convertir IDs opcionales a BigInt si existen
+    if (datosActualizacion.embarcacionId) {
+      datosActualizacion.embarcacionId = BigInt(datosActualizacion.embarcacionId);
+    }
+    if (datosActualizacion.activoAfectoId) {
+      datosActualizacion.activoAfectoId = BigInt(datosActualizacion.activoAfectoId);
+    }
+
     const movimientoActualizado = await prisma.detMovsEntregaRendir.update({
       where: { id },
       data: datosActualizacion,
@@ -445,6 +480,11 @@ const obtenerConGastosAsociados = async (id) => {
         tipoDocumento: true,
         empresa: true,
         moduloOrigen: true,
+        activoAfecto: {
+          include: {
+            tipo: true,
+          },
+        },
         embarcacion: {
           include: {
             activo: true,
@@ -1382,6 +1422,15 @@ const liquidarAsignacion = async (
 
 
 
+/**
+ * Asigna un centro de costo a múltiples movimientos de forma masiva
+ * Utiliza updateMany para actualizar todos los registros en una sola transacción
+ * 
+ * @param {number} centroCostoId - ID del centro de costo a asignar
+ * @param {Array<number>} movimientosIds - Array de IDs de movimientos a actualizar
+ * @returns {Promise<Object>} Objeto con success, count y message
+ * @throws {DatabaseError} Si ocurre un error de base de datos
+ */
 const asignarCentroCostoMasivo = async (centroCostoId, movimientosIds) => {
   try {
     const resultado = await prisma.detMovsEntregaRendir.updateMany({
@@ -1407,6 +1456,56 @@ const asignarCentroCostoMasivo = async (centroCostoId, movimientosIds) => {
   }
 };
 
+/**
+ * Asigna un activo a múltiples movimientos de forma masiva
+ * Actualiza el campo activoAfectoId en todos los movimientos seleccionados
+ * Utiliza updateMany para operación atómica en base de datos
+ * 
+ * @param {number} activoId - ID del activo a asignar
+ * @param {Array<number>} movimientosIds - Array de IDs de movimientos a actualizar
+ * @returns {Promise<Object>} Objeto con success, count y message indicando cantidad de registros actualizados
+ * @throws {DatabaseError} Si ocurre un error de base de datos (código P*)
+ * 
+ * @example
+ * const resultado = await asignarActivoMasivo(5, [1, 2, 3]);
+ * // { success: true, count: 3, message: "3 movimientos actualizados correctamente" }
+ */
+const asignarActivoMasivo = async (activoId, movimientosIds) => {
+  try {
+    // Validar que el activo existe antes de asignar
+    const activo = await prisma.activo.findUnique({
+      where: { id: Number(activoId) }
+    });
+
+    if (!activo) {
+      throw new ValidationError("El activo especificado no existe");
+    }
+
+    // Actualizar todos los movimientos seleccionados en una sola operación
+    const resultado = await prisma.detMovsEntregaRendir.updateMany({
+      where: {
+        id: {
+          in: movimientosIds.map(id => Number(id))
+        }
+      },
+      data: {
+        activoAfectoId: Number(activoId)
+      }
+    });
+
+    return {
+      success: true,
+      count: resultado.count,
+      message: `${resultado.count} movimiento(s) actualizado(s) con activo correctamente`
+    };
+  } catch (err) {
+    // Manejo de errores de Prisma (códigos P*)
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos al asignar activo", err.message);
+    throw err;
+  }
+};
+
 
 /**
  * Generar documentos financieros automáticamente desde DetMovsEntregaRendir
@@ -1424,6 +1523,11 @@ async function generarDocumentosFinancieros(detMovId) {
       centroCosto: true,
       moneda: true,
       empresa: true,
+      activoAfecto: {
+        include: {
+          tipo: true,
+        },
+      },
     },
   });
 
@@ -2227,5 +2331,6 @@ export default {
   recalcularSaldosAutomatico,
   liquidarAsignacion,
   asignarCentroCostoMasivo,
+  asignarActivoMasivo,
   generarDocumentosFinancieros
 };

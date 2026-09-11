@@ -210,6 +210,40 @@ const obtenerPorId = async (id) => {
           include: {
             tipoDocumento: true,
             tipoProducto: true,
+            // ✅ AGREGAR: Incluir registros de impuestos tributarios
+            detraccion: {
+              include: {
+                tipoDetraccion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                cuentaBNSunatPropia: {
+                  include: {
+                    banco: true,
+                    moneda: true,
+                  },
+                },
+                periodoContable: true,
+              },
+            },
+            retencion: {
+              include: {
+                tipoRetencion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                periodoContable: true,
+              },
+            },
+            percepcion: {
+              include: {
+                tipoPercepcion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                periodoContable: true,
+              },
+            },
           },
         },
         pagos: {
@@ -229,7 +263,72 @@ const obtenerPorId = async (id) => {
         },
       },
     });
+    
     if (!cuenta) throw new NotFoundError("Cuenta por cobrar no encontrada");
+    // Cargar datos del personal que creó/actualizó los impuestos
+    if (cuenta.preFactura?.detraccion?.creadoPor) {
+      const personalCreador = await prisma.personal.findUnique({
+        where: { id: cuenta.preFactura.detraccion.creadoPor },
+        select: { id: true, nombres: true, apellidos: true }
+      });
+      if (personalCreador) {
+        cuenta.preFactura.detraccion.personalCreador = personalCreador;
+      }
+    }
+
+    if (cuenta.preFactura?.retencion?.creadoPor) {
+      const personalCreador = await prisma.personal.findUnique({
+        where: { id: cuenta.preFactura.retencion.creadoPor },
+        select: { id: true, nombres: true, apellidos: true }
+      });
+      if (personalCreador) {
+        cuenta.preFactura.retencion.personalCreador = personalCreador;
+      }
+    }
+
+    if (cuenta.preFactura?.percepcion?.creadoPor) {
+      const personalCreador = await prisma.personal.findUnique({
+        where: { id: cuenta.preFactura.percepcion.creadoPor },
+        select: { id: true, nombres: true, apellidos: true }
+      });
+      if (personalCreador) {
+        cuenta.preFactura.percepcion.personalCreador = personalCreador;
+      }
+    }
+
+    // Cargar datos del personal que creó/actualizó la CxC
+    if (cuenta.creadoPor) {
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: cuenta.creadoPor },
+        select: { personalId: true }
+      });
+      if (usuario?.personalId) {
+        const personalCreador = await prisma.personal.findUnique({
+          where: { id: usuario.personalId },
+          select: { id: true, nombres: true, apellidos: true }
+        });
+        if (personalCreador) {
+          cuenta.personalCreador = personalCreador;
+        }
+      }
+    }
+
+    if (cuenta.actualizadoPor) {
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: cuenta.actualizadoPor },
+        select: { personalId: true }
+      });
+      if (usuario?.personalId) {
+        const personalActualizador = await prisma.personal.findUnique({
+          where: { id: usuario.personalId },
+          select: { id: true, nombres: true, apellidos: true }
+        });
+        if (personalActualizador) {
+          cuenta.personalActualizador = personalActualizador;
+        }
+      }
+    }
+    
     return cuenta;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
@@ -478,7 +577,7 @@ const listarVencidas = async (empresaId) => {
 };
 
 const obtenerPorPreFacturaId = async (preFacturaId) => {
-  try {
+  try {    
     const cuenta = await prisma.cuentaPorCobrar.findUnique({
       where: { preFacturaId },
       include: {
@@ -492,6 +591,40 @@ const obtenerPorPreFacturaId = async (preFacturaId) => {
           include: {
             tipoDocumento: true,
             tipoProducto: true,
+            // ✅ AGREGAR: Incluir registros de impuestos tributarios
+            detraccion: {
+              include: {
+                tipoDetraccion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                cuentaBNSunatPropia: {
+                  include: {
+                    banco: true,
+                    moneda: true,
+                  },
+                },
+                periodoContable: true,
+              },
+            },
+            retencion: {
+              include: {
+                tipoRetencion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                periodoContable: true,
+              },
+            },
+            percepcion: {
+              include: {
+                tipoPercepcion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                periodoContable: true,
+              },
+            },
           },
         },
         pagos: {
@@ -516,6 +649,67 @@ const obtenerPorPreFacturaId = async (preFacturaId) => {
       throw new NotFoundError(
         `No se encontró una Cuenta por Cobrar asociada a la PreFactura con ID ${preFacturaId}`,
       );
+    }
+    // Cargar datos del personal que creó/actualizó los impuestos
+    if (cuenta.preFactura?.detraccion?.creadoPor) {
+      const personalCreador = await prisma.personal.findUnique({
+        where: { id: cuenta.preFactura.detraccion.creadoPor },
+        select: { id: true, nombres: true, apellidos: true }
+      });
+      if (personalCreador) {
+        cuenta.preFactura.detraccion.personalCreador = personalCreador;
+      }
+    }
+    if (cuenta.preFactura?.retencion?.creadoPor) {
+      const personalCreador = await prisma.personal.findUnique({
+        where: { id: cuenta.preFactura.retencion.creadoPor },
+        select: { id: true, nombres: true, apellidos: true }
+      });
+      if (personalCreador) {
+        cuenta.preFactura.retencion.personalCreador = personalCreador;
+      }
+    }
+    if (cuenta.preFactura?.percepcion?.creadoPor) {
+      const personalCreador = await prisma.personal.findUnique({
+        where: { id: cuenta.preFactura.percepcion.creadoPor },
+        select: { id: true, nombres: true, apellidos: true }
+      });
+      if (personalCreador) {
+        cuenta.preFactura.percepcion.personalCreador = personalCreador;
+      }
+    }
+
+    // Cargar datos del personal que creó/actualizó la CxC
+    if (cuenta.creadoPor) {
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: cuenta.creadoPor },
+        select: { personalId: true }
+      });
+      if (usuario?.personalId) {
+        const personalCreador = await prisma.personal.findUnique({
+          where: { id: usuario.personalId },
+          select: { id: true, nombres: true, apellidos: true }
+        });
+        if (personalCreador) {
+          cuenta.personalCreador = personalCreador;
+        }
+      }
+    }
+
+    if (cuenta.actualizadoPor) {
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: cuenta.actualizadoPor },
+        select: { personalId: true }
+      });
+      if (usuario?.personalId) {
+        const personalActualizador = await prisma.personal.findUnique({
+          where: { id: usuario.personalId },
+          select: { id: true, nombres: true, apellidos: true }
+        });
+        if (personalActualizador) {
+          cuenta.personalActualizador = personalActualizador;
+        }
+      }
     }
 
     return cuenta;

@@ -215,6 +215,15 @@ export async function recalcularSaldosResponsable(req, res, next) {
 }
 
 
+/**
+ * Asigna un centro de costo a múltiples movimientos de forma masiva
+ * 
+ * @route POST /api/det-movs-entrega-rendir/asignar-centro-costo-masivo
+ * @param {Object} req.body - Datos de la asignación
+ * @param {number} req.body.centroCostoId - ID del centro de costo
+ * @param {Array<number>} req.body.movimientosIds - Array de IDs de movimientos
+ * @returns {Object} Resultado de la operación con cantidad de registros actualizados
+ */
 export async function asignarCentroCostoMasivo(req, res, next) {
   try {
     const { centroCostoId, movimientosIds } = req.body;
@@ -227,6 +236,42 @@ export async function asignarCentroCostoMasivo(req, res, next) {
     }
 
     const resultado = await detMovsEntregaRendirService.asignarCentroCostoMasivo(centroCostoId, movimientosIds);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Asigna un activo a múltiples movimientos de forma masiva
+ * Actualiza el campo activoAfectoId en todos los movimientos seleccionados
+ * 
+ * @route POST /api/det-movs-entrega-rendir/asignar-activo-masivo
+ * @param {Object} req.body - Datos de la asignación
+ * @param {number} req.body.activoId - ID del activo a asignar
+ * @param {Array<number>} req.body.movimientosIds - Array de IDs de movimientos a actualizar
+ * @returns {Object} Resultado de la operación con success, count y message
+ * 
+ * @example
+ * POST /api/det-movs-entrega-rendir/asignar-activo-masivo
+ * Body: { activoId: 5, movimientosIds: [1, 2, 3] }
+ * Response: { success: true, count: 3, message: "3 movimiento(s) actualizado(s) con activo correctamente" }
+ */
+export async function asignarActivoMasivo(req, res, next) {
+  try {
+    const { activoId, movimientosIds } = req.body;
+
+    // Validación de parámetros requeridos
+    if (!activoId || !movimientosIds || !Array.isArray(movimientosIds) || movimientosIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "activoId y movimientosIds (array no vacío) son requeridos"
+      });
+    }
+
+    // Ejecutar asignación masiva
+    const resultado = await detMovsEntregaRendirService.asignarActivoMasivo(activoId, movimientosIds);
+    
     res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
@@ -259,5 +304,6 @@ export default {
   calcularSaldoFinal,
   recalcularSaldosResponsable,
   asignarCentroCostoMasivo,
+  asignarActivoMasivo,
   generarDocumentosFinancieros
 };

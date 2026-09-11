@@ -67,14 +67,38 @@ router.post(
 );
 
 // ========================================
-// RUTA DE ASIGNACIÓN MASIVA CENTRO COSTO
-// (Operación propia del modelo)
+// RUTAS DE ASIGNACIÓN MASIVA
+// (Operaciones propias del modelo)
 // ========================================
+
+/**
+ * PUT /api/ordenes-compra/asignar-centro-costo-masivo
+ * Asigna un centro de costo a múltiples órdenes de compra seleccionadas
+ * Body: { centroCostoId: number, ordenesIds: number[] }
+ */
 router.put(
   '/asignar-centro-costo-masivo',
   autenticarJWT,
   checkPermission('ordenCompra', 'editar'),
   ordenCompraController.asignarCentroCostoMasivo
+);
+
+/**
+ * PUT /api/ordenes-compra/asignar-activo-masivo
+ * Asigna un activo a múltiples órdenes de compra seleccionadas
+ * Actualiza el campo activoAfectoId en todos los registros especificados
+ * 
+ * PROPÓSITO: Permite identificar a qué activo pertenece el gasto de cada orden de compra,
+ * facilitando la trazabilidad de gastos que afectan activos específicos de la empresa.
+ * 
+ * Body: { activoId: number, ordenesIds: number[] }
+ * Response: { success: boolean, count: number, message: string }
+ */
+router.put(
+  '/asignar-activo-masivo',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'editar'),
+  ordenCompraController.asignarActivoMasivo
 );
 
 router.put(

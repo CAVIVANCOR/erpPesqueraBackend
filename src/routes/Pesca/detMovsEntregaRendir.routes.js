@@ -107,11 +107,27 @@ router.post('/', detMovsEntregaRendirController.crear);
 router.put('/:id', detMovsEntregaRendirController.actualizar);
 router.delete('/:id', detMovsEntregaRendirController.eliminar);
 
-// ⭐ NUEVAS RUTAS PARA CONTROL DE SALDO
+// ⭐ NUEVAS RUTAS PARA CONTROL DE SALDO Y ASIGNACIONES MASIVAS
 router.post('/:id/liquidar', autenticarJWT, detMovsEntregaRendirController.liquidarAsignacion);
 router.get('/saldo-inicial', autenticarJWT, detMovsEntregaRendirController.obtenerSaldoInicial);
 router.get('/:id/saldo-final', autenticarJWT, detMovsEntregaRendirController.calcularSaldoFinal);
+
+/**
+ * POST /api/det-movs-entrega-rendir/asignar-centro-costo-masivo
+ * Asigna un centro de costo a múltiples movimientos seleccionados
+ * Body: { centroCostoId: number, movimientosIds: number[] }
+ */
 router.post('/asignar-centro-costo-masivo', autenticarJWT, detMovsEntregaRendirController.asignarCentroCostoMasivo);
+
+/**
+ * POST /api/det-movs-entrega-rendir/asignar-activo-masivo
+ * Asigna un activo a múltiples movimientos seleccionados
+ * Actualiza el campo activoAfectoId en todos los registros especificados
+ * Body: { activoId: number, movimientosIds: number[] }
+ * Response: { success: boolean, count: number, message: string }
+ */
+router.post('/asignar-activo-masivo', autenticarJWT, detMovsEntregaRendirController.asignarActivoMasivo);
+
 router.post('/recalcular-saldos/:responsableId', autenticarJWT, detMovsEntregaRendirController.recalcularSaldosResponsable);
 router.post('/:id/generar-documentos-financieros', autenticarJWT, detMovsEntregaRendirController.generarDocumentosFinancieros);
 /**

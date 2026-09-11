@@ -311,6 +311,15 @@ export async function eliminarAsientoContable(req, res, next) {
 }
 
 
+/**
+ * Asigna un centro de costo a múltiples órdenes de compra de forma masiva
+ * 
+ * @route POST /api/ordenes-compra/asignar-centro-costo-masivo
+ * @param {Object} req.body - Datos de la asignación
+ * @param {number} req.body.centroCostoId - ID del centro de costo
+ * @param {Array<number>} req.body.ordenesIds - Array de IDs de órdenes de compra
+ * @returns {Object} Resultado de la operación con cantidad de registros actualizados
+ */
 export async function asignarCentroCostoMasivo(req, res, next) {
   try {
     const { centroCostoId, ordenesIds } = req.body;
@@ -323,6 +332,45 @@ export async function asignarCentroCostoMasivo(req, res, next) {
     }
 
     const resultado = await ordenCompraService.asignarCentroCostoMasivo(centroCostoId, ordenesIds);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Asigna un activo a múltiples órdenes de compra de forma masiva
+ * Actualiza el campo activoAfectoId en todas las órdenes seleccionadas
+ * 
+ * PROPÓSITO: Permite identificar a qué activo pertenece el gasto de cada orden de compra,
+ * facilitando la trazabilidad de gastos que afectan activos específicos de la empresa.
+ * 
+ * @route POST /api/ordenes-compra/asignar-activo-masivo
+ * @param {Object} req.body - Datos de la asignación
+ * @param {number} req.body.activoId - ID del activo a asignar
+ * @param {Array<number>} req.body.ordenesIds - Array de IDs de órdenes de compra a actualizar
+ * @returns {Object} Resultado de la operación con success, count y message
+ * 
+ * @example
+ * POST /api/ordenes-compra/asignar-activo-masivo
+ * Body: { activoId: 5, ordenesIds: [1, 2, 3] }
+ * Response: { success: true, count: 3, message: "3 orden(es) de compra actualizada(s) con activo correctamente" }
+ */
+export async function asignarActivoMasivo(req, res, next) {
+  try {
+    const { activoId, ordenesIds } = req.body;
+
+    // Validación de parámetros requeridos
+    if (!activoId || !ordenesIds || !Array.isArray(ordenesIds) || ordenesIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "activoId y ordenesIds (array no vacío) son requeridos"
+      });
+    }
+
+    // Ejecutar asignación masiva
+    const resultado = await ordenCompraService.asignarActivoMasivo(activoId, ordenesIds);
+    
     res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);

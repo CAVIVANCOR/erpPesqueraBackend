@@ -95,6 +95,13 @@ const listar = async () => {
             tipoDocumentoFinal: true
           }
         },
+        // ⭐ AGREGADO: Incluir activo afecto con tipo para trazabilidad de gastos
+        // Permite identificar a qué activo pertenece el gasto de esta orden de compra
+        activoAfecto: {
+          include: {
+            tipo: true
+          }
+        },
         detalles: {
           include: {
             producto: {
@@ -214,7 +221,14 @@ const obtenerPorId = async (id) => {
         formaPago: true,
         moneda: true,
         unidadNegocio: true,
-        periodoContable: true, // ✅ AGREGADO
+        periodoContable: true,
+        // ⭐ AGREGADO: Incluir activo afecto con tipo para edición y visualización
+        // Necesario para cargar el activo cuando se edita una orden de compra
+        activoAfecto: {
+          include: {
+            tipo: true
+          }
+        },
         asientosContables: {
           include: {
             estado: true,
@@ -412,6 +426,7 @@ const crear = async (data) => {
           aprobadoPorId: data.aprobadoPorId,
           estadoId: estadoInicial.id,
           centroCostoId: data.centroCostoId,
+          activoAfectoId: data.activoAfectoId, // ⭐ AGREGADO: Activo afecto para trazabilidad de gastos
           movIngresoAlmacenId: data.movIngresoAlmacenId,
           observaciones: data.observaciones,
           urlOrdenCompraPdf: data.urlOrdenCompraPdf,
@@ -525,6 +540,7 @@ const actualizar = async (id, data) => {
           aprobadoPorId: data.aprobadoPorId,
           estadoId: data.estadoId,
           centroCostoId: data.centroCostoId,
+          activoAfectoId: data.activoAfectoId, // ⭐ AGREGADO: Activo afecto para trazabilidad de gastos
           unidadNegocioId: data.unidadNegocioId,
           movIngresoAlmacenId: data.movIngresoAlmacenId,
           observaciones: data.observaciones,
@@ -4153,6 +4169,15 @@ const eliminarAsientoContable = async (asientoId) => {
   }
 };
 
+/**
+ * Asigna un centro de costo a múltiples órdenes de compra de forma masiva
+ * Utiliza updateMany para actualizar todos los registros en una sola transacción
+ * 
+ * @param {number} centroCostoId - ID del centro de costo a asignar
+ * @param {Array<number>} ordenesIds - Array de IDs de órdenes de compra a actualizar
+ * @returns {Promise<Object>} Objeto con success, count y message
+ * @throws {DatabaseError} Si ocurre un error de base de datos
+ */
 const asignarCentroCostoMasivo = async (centroCostoId, ordenesIds) => {
   try {
     const resultado = await prisma.ordenCompra.updateMany({
@@ -4174,6 +4199,60 @@ const asignarCentroCostoMasivo = async (centroCostoId, ordenesIds) => {
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Asigna un activo a múltiples órdenes de compra de forma masiva
+ * Actualiza el campo activoAfectoId en todas las órdenes seleccionadas
+ * Utiliza updateMany para operación atómica en base de datos
+ * 
+ * PROPÓSITO: Permite identificar a qué activo pertenece el gasto de cada orden de compra,
+ * facilitando la trazabilidad de gastos que afectan activos específicos de la empresa.
+ * 
+ * @param {number} activoId - ID del activo a asignar
+ * @param {Array<number>} ordenesIds - Array de IDs de órdenes de compra a actualizar
+ * @returns {Promise<Object>} Objeto con success, count y message indicando cantidad de registros actualizados
+ * @throws {ValidationError} Si el activo especificado no existe
+ * @throws {DatabaseError} Si ocurre un error de base de datos (código P*)
+ * 
+ * @example
+ * const resultado = await asignarActivoMasivo(5, [1, 2, 3]);
+ * // { success: true, count: 3, message: "3 orden(es) de compra actualizada(s) con activo correctamente" }
+ */
+const asignarActivoMasivo = async (activoId, ordenesIds) => {
+  try {
+    // Validar que el activo existe antes de asignar
+    const activo = await prisma.activo.findUnique({
+      where: { id: BigInt(activoId) }
+    });
+
+    if (!activo) {
+      throw new ValidationError("El activo especificado no existe");
+    }
+
+    // Actualizar todas las órdenes seleccionadas en una sola operación
+    const resultado = await prisma.ordenCompra.updateMany({
+      where: {
+        id: {
+          in: ordenesIds.map(id => BigInt(id))
+        }
+      },
+      data: {
+        activoAfectoId: BigInt(activoId)
+      }
+    });
+
+    return {
+      success: true,
+      count: resultado.count,
+      message: `${resultado.count} orden(es) de compra actualizada(s) con activo correctamente`
+    };
+  } catch (err) {
+    // Manejo de errores de Prisma (códigos P*)
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos al asignar activo", err.message);
     throw err;
   }
 };
@@ -4460,17 +4539,18 @@ export default {
   reactivarDocumentoOrdenCompra,
   generarKardex,
   regenerarKardex,
-  partirOrdenCompra, // ⭐ NUEVO
+  partirOrdenCompra,
   generarDesdeRequerimiento,
   obtenerSeriesDoc,
   generarCuentaPorPagar,
   generarBorradorAsiento,
   generarAsientoDestinoCentroCosto,
-  guardarAsientoContable, // ⭐ NUEVO
-  eliminarAsientoContable, // ⭐ NUEVO
-  calcularTotalesEImpuestos, // ⭐ AGREGAR
+  guardarAsientoContable,
+  eliminarAsientoContable,
+  calcularTotalesEImpuestos,
   asignarCentroCostoMasivo,
+  asignarActivoMasivo, // ⭐ AGREGADO: Asignación masiva de activo a órdenes de compra
   actualizarTipoCambio,
-  obtenerTodos, // ← AGREGAR ESTA LÍNEA
+  obtenerTodos,
   exportarRegistroComprasSUNAT
 };
