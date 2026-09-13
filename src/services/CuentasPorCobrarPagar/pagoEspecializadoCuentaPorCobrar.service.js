@@ -63,7 +63,9 @@ const ESTADOS_PERCEPCION = {
 
 const TIPOS_MOVIMIENTO = {
   ITF: 163,                    // GASTOS FINANCIEROS - ITF
-  COMISION_BANCARIA: 164       // GASTOS FINANCIEROS - INTERESES FINANCIEROS
+  COMISION_BANCARIA: 164,      // GASTOS FINANCIEROS - INTERESES FINANCIEROS
+  DETRACCION_INGRESO: 165,     // INGRESO DETRACCIÓN BANCO NACIÓN
+  DETRACCION_SALIDA: 166       // SALIDA AUTODETRACCIÓN
 };
 
 // ════════════════════════════════════════════════════════════
@@ -92,8 +94,11 @@ const SUBMODULOS = {
 
 /**
  * Validar datos completos para procesamiento de pago especializado
+ * @param {Object} data - Datos del pago
+ * @param {Object} tx - Transacción de Prisma (opcional, usa prisma si no se proporciona)
  */
-async function validarDatosPagoEspecializado(data) {
+async function validarDatosPagoEspecializado(data, tx = null) {
+  const db = tx || prisma;
   // ========================================
   // VALIDAR CAMPOS OBLIGATORIOS
   // ========================================
@@ -142,7 +147,7 @@ async function validarDatosPagoEspecializado(data) {
   // ========================================
   // VALIDAR CUENTA POR COBRAR
   // ========================================
-  const cuentaPorCobrar = await prisma.cuentaPorCobrar.findUnique({
+  const cuentaPorCobrar = await db.cuentaPorCobrar.findUnique({
     where: { id: Number(data.cuentaPorCobrarId) },
     include: {
       cliente: {
@@ -179,18 +184,19 @@ async function validarDatosPagoEspecializado(data) {
     throw new ValidationError('La cuenta por cobrar ya está completamente pagada.');
   }
 
-  // Validar que el monto no exceda el saldo
+  // Advertencia de sobrepago (no bloquea la operación)
   if (Number(data.montoAplicadoDeuda) > Number(cuentaPorCobrar.saldoPendiente)) {
-    throw new ValidationError(
-      `El monto aplicado a la deuda (${data.montoAplicadoDeuda}) no puede ser mayor al saldo pendiente (${cuentaPorCobrar.saldoPendiente}).`
+    console.warn(
+      `⚠️ SOBREPAGO DETECTADO: Monto aplicado (${data.montoAplicadoDeuda}) > Saldo pendiente (${cuentaPorCobrar.saldoPendiente})`
     );
+    // No lanzar error, permitir sobrepagos
   }
 
   // ========================================
   // VALIDAR CUENTA CORRIENTE
   // ========================================
   if (data.cuentaBancariaId) {
-    const cuentaCorriente = await prisma.cuentaCorriente.findUnique({
+    const cuentaCorriente = await db.cuentaCorriente.findUnique({
       where: { id: Number(data.cuentaBancariaId) },
       include: {
         banco: true,
@@ -335,11 +341,14 @@ function generarGlosaPagoCxC(cuentaPorCobrar, data, monedaPago) {
   const numDoc = cuentaPorCobrar.cliente?.numeroDocumento || '';
   const razonSocial = cuentaPorCobrar.cliente?.razonSocial || '';
   const simboloMoneda = monedaPago.simbolo || '';
+  
+  // Monto a mostrar en glosa: solo el monto neto pagado (no incluye detracción)
   const montoPagado = formatearMonto(data.montoPagado);
+  
   const fechaPago = formatearFecha(data.fechaPago);
   const tipoCambio = formatearTipoCambio(data.tipoCambio);
 
-  return `Pago CxC de Dcmto: ${numeroPreFactura} ${fechaEmision} Cliente: ${tipoDoc} ${numDoc} ${razonSocial} Monto Pagado: ${simboloMoneda} ${montoPagado} ${fechaPago} T/C: ${tipoCambio}`;
+  return `Pago CxC de Dcmto: ${numeroPreFactura} ${fechaEmision} Cliente: ${tipoDoc} ${numDoc} ${razonSocial} Monto Neto: ${simboloMoneda} ${montoPagado} ${fechaPago} T/C: ${tipoCambio}`;
 }
 
 
@@ -641,23 +650,25 @@ async function generarAsientoComision(data, movimientoComision, pagoCuentaPorCob
  * Crea todos los registros necesarios en una transacción atómica
  */
 const procesarPagoEspecializado = async (data) => {
-  // Validar datos
-  const cuentaPorCobrar = await validarDatosPagoEspecializado(data);
-
-  // Cargar moneda de pago para glosa
-  const monedaPago = await prisma.moneda.findUnique({
-    where: { id: Number(data.monedaPagoId) }
-  });
-
-  if (!monedaPago) {
-    throw new NotFoundError('Moneda de pago no encontrada.');
-  }
-
-  // Generar glosa completa
-  const glosa = generarGlosaPagoCxC(cuentaPorCobrar, data, monedaPago);
-
   try {
     return await prisma.$transaction(async (tx) => {
+      // ════════════════════════════════════════════════════════════
+      // VALIDACIONES DENTRO DE LA TRANSACCIÓN
+      // ════════════════════════════════════════════════════════════
+      // Validar datos (dentro de la transacción para lectura consistente)
+      const cuentaPorCobrar = await validarDatosPagoEspecializado(data, tx);
+
+      // Cargar moneda de pago para glosa
+      const monedaPago = await tx.moneda.findUnique({
+        where: { id: Number(data.monedaPagoId) }
+      });
+
+      if (!monedaPago) {
+        throw new NotFoundError('Moneda de pago no encontrada.');
+      }
+
+      // Generar glosa completa
+      const glosa = generarGlosaPagoCxC(cuentaPorCobrar, data, monedaPago);
       // ════════════════════════════════════════════════════════════
       // PASO 1: GENERAR CORRELATIVO DE OPERACIÓN
       // ════════════════════════════════════════════════════════════
@@ -725,12 +736,15 @@ const procesarPagoEspecializado = async (data) => {
           cuentaCorrienteDestinoId: data.cuentaBancariaId ? Number(data.cuentaBancariaId) : null,
           fechaOperacionMovCaja: new Date(data.fechaPago),
           descripcion: glosa,
+          numeroOperacionPagoBanco: data.numeroOperacion || null,
+          fechaOperacionPagoBanco: data.fechaPago ? new Date(data.fechaPago) : null,  // ← AGREGADO
           estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
           esGerencial: cuentaPorCobrar.esGerencial || false,
           tipoCambio: Number(data.tipoCambio),
           usuarioId: Number(data.usuarioId),
           moduloOrigenMotivoOperacionId: 116,
-          origenMotivoOperacionId: pagoCuentaPorCobrar.id  // ⭐ AHORA SÍ EXISTE
+          origenMotivoOperacionId: pagoCuentaPorCobrar.id,
+          cuentaPorCobrarId: cuentaPorCobrar.id
         }
       });
 
@@ -870,45 +884,238 @@ const procesarPagoEspecializado = async (data) => {
       }
 
       // ════════════════════════════════════════════════════════════
-      // PASO 6: CREAR DETRACCIÓN (si aplica)
+      // PASO 5.0: BUSCAR/ACTUALIZAR DETRACCIÓN PRIMERO (para obtener el ID)
       // ════════════════════════════════════════════════════════════
-      let detraccion = null;
-      if (data.aplicaDetraccion && data.detraccion) {
-        const det = data.detraccion;
+      let detraccionActualizada = null;
+      let cuentaBN = null;
+      
+      if (cuentaPorCobrar.preFacturaId && data.montoDetraccionIngresado && Number(data.montoDetraccionIngresado) > 0) {
+        // Buscar la detracción por preFacturaId
+        const detraccionActual = await tx.detraccion.findUnique({
+          where: { preFacturaId: cuentaPorCobrar.preFacturaId }
+        });
 
-        detraccion = await tx.detraccion.create({
+        if (detraccionActual) {
+          console.log('📋 Actualizando Detracción ID:', detraccionActual.id);
+          console.log('   PreFactura ID:', cuentaPorCobrar.preFacturaId);
+          console.log('   Importe Pagado Anterior:', detraccionActual.importePagado);
+          console.log('   Monto a Agregar:', data.montoDetraccionIngresado);
+
+          const nuevoImportePagado = Number(detraccionActual.importePagado) + Number(data.montoDetraccionIngresado);
+          const nuevoSaldoPendiente = Number(detraccionActual.importeRequerido) - nuevoImportePagado;
+
+          console.log('   Nuevo Importe Pagado:', nuevoImportePagado);
+          console.log('   Nuevo Saldo Pendiente:', nuevoSaldoPendiente);
+
+          // Determinar nuevo estado
+          let nuevoEstadoDetraccion = ESTADOS_DETRACCION.PENDIENTE;
+          if (nuevoSaldoPendiente <= 0) {
+            nuevoEstadoDetraccion = ESTADOS_DETRACCION.VALIDADO; // PAGADO
+          } else if (nuevoImportePagado > 0) {
+            nuevoEstadoDetraccion = 126; // PARCIAL (ajustar según tu catálogo)
+          }
+
+          console.log('   Nuevo Estado:', nuevoEstadoDetraccion);
+
+          detraccionActualizada = await tx.detraccion.update({
+            where: { id: detraccionActual.id },
+            data: {
+              importePagado: nuevoImportePagado,
+              saldoPendiente: nuevoSaldoPendiente,
+              estadoPagoId: nuevoEstadoDetraccion,
+              numeroDocumento: data.numeroOperacionBN || data.numeroConstanciaDetraccion || detraccionActual.numeroDocumento,
+              fechaEmision: data.fechaPago ? new Date(data.fechaPago) : detraccionActual.fechaEmision
+            }
+          });
+
+          console.log('✅ Detracción actualizada correctamente');
+          
+          // Guardar cuenta BN para los movimientos
+          cuentaBN = detraccionActual.cuentaBNSunatPropiaId ? Number(detraccionActual.cuentaBNSunatPropiaId) : null;
+        } else {
+          console.warn('⚠️ No se encontró detracción para PreFactura ID:', cuentaPorCobrar.preFacturaId);
+        }
+      }
+
+      // ════════════════════════════════════════════════════════════
+      // PASO 5.1: MOVIMIENTO DETRACCIÓN - INGRESO BANCO NACIÓN (solo si NO es autodetracción)
+      // ════════════════════════════════════════════════════════════
+      let movimientoDetraccionIngreso = null;
+      if (!data.esAutodetraccion && detraccionActualizada) {
+        movimientoDetraccionIngreso = await tx.movimientoCaja.create({
           data: {
-            empresaId: Number(data.empresaId),
-            numeroConstancia: det.numeroConstancia,
-            fechaDeposito: new Date(det.fechaDeposito),
-            clienteId: Number(cuentaPorCobrar.clienteId),
-            tipoDetraccionId: det.tipoDetraccionId ? Number(det.tipoDetraccionId) : null,
-            tasaDetraccion: Number(det.tasaDetraccion),
-            monedaId: Number(data.monedaPagoId),
-            importeTotal: Number(det.importeTotal),
-            importeDetraido: Number(det.importeDetraido),
-            cuentaSunatId: det.cuentaSunatId ? Number(det.cuentaSunatId) : null,
-            estadoId: ESTADOS_DETRACCION.VALIDADO,
-            aplicado: false,
-            observaciones: det.observaciones || `Detracción - Operación #${correlativo}`,
-            fechaContable: new Date(data.fechaPago),
-            periodoContableId: data.periodoContableId ? Number(data.periodoContableId) : null,
             refOperacionEspecializadaMovCaja: correlativo,
-            creadoPor: data.creadoPor || null
+            tipoMovimientoId: TIPOS_MOVIMIENTO.DETRACCION_INGRESO,
+            empresaId: Number(data.empresaId),
+            entidadComercialId: Number(cuentaPorCobrar.clienteId),
+            monto: Number(data.montoDetraccionIngresado),
+            monedaId: Number(data.monedaPagoId),
+            medioPagoId: Number(data.medioPagoId),
+            cuentaCorrienteDestinoId: cuentaBN,
+            fechaOperacionMovCaja: new Date(data.fechaPago),
+            descripcion: `Detracción - ${glosa}`,
+            numeroOperacionPagoBancoImpuesto: data.numeroOperacionBN || null,  // ← Número de constancia SUNAT
+            fechaOperacionPagoBancoImpuesto: data.fechaPago ? new Date(data.fechaPago) : null,  // ← Fecha depósito impuesto
+            estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
+            esGerencial: cuentaPorCobrar.esGerencial || false,
+            tipoCambio: Number(data.tipoCambio),
+            usuarioId: Number(data.usuarioId),
+            moduloOrigenMotivoOperacionId: 116,
+            origenMotivoOperacionId: pagoCuentaPorCobrar.id,
+            cuentaPorCobrarId: cuentaPorCobrar.id,
+            detraccionId: detraccionActualizada.id
           }
         });
 
-        if (cuentaPorCobrar.preFacturaId) {
-          await tx.detalleDetraccion.create({
+        // Actualizar saldo Banco Nación (INGRESO)
+        if (cuentaBN) {
+          const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
+            where: { cuentaCorrienteId: cuentaBN },
+            orderBy: { fecha: 'desc' }
+          });
+
+          const saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
+          const montoIngreso = Number(data.montoDetraccionIngresado);
+          const nuevoSaldoActual = saldoAnterior + montoIngreso;
+
+          await tx.saldoCuentaCorriente.create({
             data: {
-              detraccionId: detraccion.id,
-              preFacturaOrigenId: cuentaPorCobrar.preFacturaId,
-              importeTotal: Number(det.importeTotal),
-              importeDetraido: Number(det.importeDetraido)
+              cuentaCorrienteId: cuentaBN,
+              empresaId: Number(data.empresaId),
+              fecha: pagoCuentaPorCobrar.fechaContable,
+              saldoAnterior,
+              ingresos: montoIngreso,
+              egresos: 0,
+              saldoActual: nuevoSaldoActual,
+              movimientoCajaId: movimientoDetraccionIngreso.id,
+              centroCostoId: null,
+              conciliado: false
             }
           });
         }
       }
+
+      // ════════════════════════════════════════════════════════════
+      // PASO 5.2: AUTODETRACCIÓN - SALIDA + INGRESO (si aplica)
+      // ════════════════════════════════════════════════════════════
+      let movimientoAutodetraccionSalida = null;
+      let movimientoAutodetraccionIngreso = null;
+
+      if (data.esAutodetraccion && detraccionActualizada) {
+        // Movimiento SALIDA de cuenta comercial
+        movimientoAutodetraccionSalida = await tx.movimientoCaja.create({
+          data: {
+            refOperacionEspecializadaMovCaja: correlativo,
+            tipoMovimientoId: TIPOS_MOVIMIENTO.DETRACCION_SALIDA,
+            empresaId: Number(data.empresaId),
+            entidadComercialId: Number(cuentaPorCobrar.clienteId),
+            monto: Number(data.montoDetraccionIngresado),
+            monedaId: Number(data.monedaPagoId),
+            medioPagoId: Number(data.medioPagoId),
+            cuentaCorrienteOrigenId: data.cuentaBancariaId ? Number(data.cuentaBancariaId) : null,
+            fechaOperacionMovCaja: new Date(data.fechaPago),
+            descripcion: `Autodetracción - Salida - ${glosa}`,
+            numeroOperacionPagoBancoImpuesto: data.numeroConstanciaDetraccion || null,  // ← Número constancia autodetracción
+            fechaOperacionPagoBancoImpuesto: data.fechaPago ? new Date(data.fechaPago) : null,  // ← Fecha autodetracción
+            estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
+            esGerencial: cuentaPorCobrar.esGerencial || false,
+            tipoCambio: Number(data.tipoCambio),
+            usuarioId: Number(data.usuarioId),
+            moduloOrigenMotivoOperacionId: 135,
+            origenMotivoOperacionId: pagoCuentaPorCobrar.id,
+            cuentaPorCobrarId: cuentaPorCobrar.id,
+            detraccionId: detraccionActualizada.id
+          }
+        });
+
+        // Actualizar saldo cuenta comercial (EGRESO)
+        if (data.cuentaBancariaId) {
+          const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
+            where: { cuentaCorrienteId: Number(data.cuentaBancariaId) },
+            orderBy: { fecha: 'desc' }
+          });
+
+          const saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
+          const montoEgreso = Number(data.montoDetraccionIngresado);
+          const nuevoSaldoActual = saldoAnterior - montoEgreso;
+
+          await tx.saldoCuentaCorriente.create({
+            data: {
+              cuentaCorrienteId: Number(data.cuentaBancariaId),
+              empresaId: Number(data.empresaId),
+              fecha: pagoCuentaPorCobrar.fechaContable,
+              saldoAnterior,
+              ingresos: 0,
+              egresos: montoEgreso,
+              saldoActual: nuevoSaldoActual,
+              movimientoCajaId: movimientoAutodetraccionSalida.id,
+              centroCostoId: null,
+              conciliado: false
+            }
+          });
+        }
+
+        // Movimiento INGRESO a Banco Nación
+        movimientoAutodetraccionIngreso = await tx.movimientoCaja.create({
+          data: {
+            refOperacionEspecializadaMovCaja: correlativo,
+            tipoMovimientoId: TIPOS_MOVIMIENTO.DETRACCION_INGRESO,
+            empresaId: Number(data.empresaId),
+            entidadComercialId: Number(cuentaPorCobrar.clienteId),
+            monto: Number(data.montoDetraccionIngresado),
+            monedaId: Number(data.monedaPagoId),
+            medioPagoId: Number(data.medioPagoId),
+            cuentaCorrienteDestinoId: cuentaBN,
+            fechaOperacionMovCaja: new Date(data.fechaPago),
+            descripcion: `Autodetracción - Ingreso BN - ${glosa}`,
+            numeroOperacionPagoBancoImpuesto: data.numeroOperacionBN || null,  // ← Número operación BN
+            fechaOperacionPagoBancoImpuesto: data.fechaPago ? new Date(data.fechaPago) : null,  // ← Fecha ingreso BN
+            estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
+            esGerencial: cuentaPorCobrar.esGerencial || false,
+            tipoCambio: Number(data.tipoCambio),
+            usuarioId: Number(data.usuarioId),
+            moduloOrigenMotivoOperacionId: 116,
+            origenMotivoOperacionId: pagoCuentaPorCobrar.id,
+            cuentaPorCobrarId: cuentaPorCobrar.id,
+            detraccionId: detraccionActualizada.id
+          }
+        });
+
+        // Actualizar saldo Banco Nación (INGRESO)
+        if (cuentaBN) {
+          const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
+            where: { cuentaCorrienteId: cuentaBN },
+            orderBy: { fecha: 'desc' }
+          });
+
+          const saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
+          const montoIngreso = Number(data.montoDetraccionIngresado);
+          const nuevoSaldoActual = saldoAnterior + montoIngreso;
+
+          await tx.saldoCuentaCorriente.create({
+            data: {
+              cuentaCorrienteId: cuentaBN,
+              empresaId: Number(data.empresaId),
+              fecha: pagoCuentaPorCobrar.fechaContable,
+              saldoAnterior,
+              ingresos: montoIngreso,
+              egresos: 0,
+              saldoActual: nuevoSaldoActual,
+              movimientoCajaId: movimientoAutodetraccionIngreso.id,
+              centroCostoId: null,
+              conciliado: false
+            }
+          });
+        }
+      }
+
+      // ════════════════════════════════════════════════════════════
+      // PASO 6: CREAR DETRACCIÓN (si aplica) - LEGACY - DESHABILITADO
+      // ════════════════════════════════════════════════════════════
+      // NOTA: Este código legacy ya no se usa porque las detracciones
+      // se generan automáticamente al crear la PreFactura/CxC.
+      // El PASO 5.0 actualiza la detracción existente en lugar de crear una nueva.
+      // Código legacy comentado - no crear nuevas detracciones aquí
 
       // ════════════════════════════════════════════════════════════
       // PASO 7: CREAR RETENCIÓN (si aplica)
@@ -1014,7 +1221,7 @@ const procesarPagoEspecializado = async (data) => {
         where: { id: pagoCuentaPorCobrar.id },
         data: {
           movimientoCajaId: movimientoIngreso.id,
-          detraccionId: detraccion ? detraccion.id : null
+          detraccionId: detraccionActualizada ? detraccionActualizada.id : null
         },
         include: {
           cuentaPorCobrar: {
@@ -1125,7 +1332,10 @@ const procesarPagoEspecializado = async (data) => {
               in: [
                 movimientoIngreso.id,
                 movimientoITF?.id,
-                movimientoComision?.id
+                movimientoComision?.id,
+                movimientoDetraccionIngreso?.id,
+                movimientoAutodetraccionSalida?.id,
+                movimientoAutodetraccionIngreso?.id
               ].filter(Boolean)
             }
           },
@@ -1137,6 +1347,9 @@ const procesarPagoEspecializado = async (data) => {
           if (saldo.movimientoCajaId === movimientoIngreso.id) tipo = 'Ingreso';
           else if (movimientoITF && saldo.movimientoCajaId === movimientoITF.id) tipo = 'ITF';
           else if (movimientoComision && saldo.movimientoCajaId === movimientoComision.id) tipo = 'Comisión';
+          else if (movimientoDetraccionIngreso && saldo.movimientoCajaId === movimientoDetraccionIngreso.id) tipo = 'Detracción Ingreso';
+          else if (movimientoAutodetraccionSalida && saldo.movimientoCajaId === movimientoAutodetraccionSalida.id) tipo = 'Autodetracción Salida';
+          else if (movimientoAutodetraccionIngreso && saldo.movimientoCajaId === movimientoAutodetraccionIngreso.id) tipo = 'Autodetracción Ingreso';
 
           saldosCuentaCorriente.push({
             tipo,
@@ -1155,10 +1368,13 @@ const procesarPagoEspecializado = async (data) => {
         movimientos: {
           ingreso: movimientoIngreso,
           itf: movimientoITF,
-          comision: movimientoComision
+          comision: movimientoComision,
+          detraccionIngreso: movimientoDetraccionIngreso,
+          autodetraccionSalida: movimientoAutodetraccionSalida,
+          autodetraccionIngreso: movimientoAutodetraccionIngreso
         },
         conceptosSunat: {
-          detraccion: detraccion,
+          detraccion: detraccionActualizada, // ← Usar la detracción actualizada en lugar de la legacy
           retencion: retencion,
           percepcion: percepcion
         },
@@ -1170,14 +1386,12 @@ const procesarPagoEspecializado = async (data) => {
         saldosCuentaCorriente: saldosCuentaCorriente,  // ← AGREGADO
         resumen: {
           montoBruto: Number(data.montoPagado),
-          montoITF: movimientoITF ? Number(data.montoITF) : 0,
-          montoComision: movimientoComision ? Number(data.montoComision) : 0,
-          montoDetraccion: detraccion ? Number(data.detraccion.importeDetraido) : 0,
-          montoRetencion: retencion ? Number(data.retencion.importeRetenido) : 0,
-          montoPercepcion: percepcion ? Number(data.percepcion.importePercibido) : 0,
+          itf: movimientoITF ? Number(data.montoITF) : 0,
+          comision: movimientoComision ? Number(data.montoComision) : 0,
           montoNetoCaja: Number(data.montoPagado) -
             (movimientoITF ? Number(data.montoITF) : 0) -
             (movimientoComision ? Number(data.montoComision) : 0),
+          detraccion: data.montoDetraccionIngresado ? Number(data.montoDetraccionIngresado) : 0,
           deudaCancelada: Number(data.montoAplicadoDeuda),
           saldoPendiente: saldoPendiente
         }

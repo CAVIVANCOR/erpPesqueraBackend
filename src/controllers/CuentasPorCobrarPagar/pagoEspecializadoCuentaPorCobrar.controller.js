@@ -211,7 +211,7 @@ export const actualizarUrlVoucherConsolidado = async (req, res, next) => {
     const { movimientoIngresoId } = req.params;
     const { urlPdf } = req.body;
     
-    const resultado = await pagoEspecializadoCuentaPorCobrarService.actualizarUrlVoucherConsolidado(
+    const resultado = await pagoEspecializadoService.actualizarUrlVoucherConsolidado(
       movimientoIngresoId,
       urlPdf
     );
@@ -230,7 +230,7 @@ export const actualizarUrlVoucherIndividual = async (req, res, next) => {
     const { movimientoId } = req.params;
     const { urlPdf } = req.body;
     
-    const resultado = await pagoEspecializadoCuentaPorCobrarService.actualizarUrlVoucherIndividual(
+    const resultado = await pagoEspecializadoService.actualizarUrlVoucherIndividual(
       movimientoId,
       urlPdf
     );
