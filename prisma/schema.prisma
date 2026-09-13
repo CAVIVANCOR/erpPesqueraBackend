@@ -6842,6 +6842,8 @@ model PagoCuentaPorCobrar {
   
   refOperacionEspecializadaMovCaja  BigInt?
   detraccionId                      BigInt?
+  urlVoucherOperacionConsolidado    String?
+  urlPagoImpuesto                   String?
 
   // ========================================
   // RELACIONES
@@ -7078,7 +7080,11 @@ model PagoCuentaPorPagar {
   fechaActualizacion    DateTime?   @updatedAt                       // Fecha de última actualización
   creadoPor             BigInt?                                      // Usuario que creó el registro
   actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
+
   refOperacionEspecializadaMovCaja  BigInt?
+  urlVoucherOperacionConsolidado    String?
+  urlPagoImpuesto                   String?
+
 
   // ========================================
   // RELACIONES
