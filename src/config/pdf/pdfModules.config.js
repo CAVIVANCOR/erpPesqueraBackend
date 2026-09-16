@@ -582,7 +582,7 @@ const PDF_MODULES_CONFIG = {
     maxFiles: 20,
     database: {
       table: "MovimientoCaja",
-      field: "urlDocumentoMovCaja", // ✅ CORREGIDO
+      field: "urlComprobanteOperacionMovCaja", // ✅ COMPROBANTE DEL DOCUMENTO (Factura, etc.)
     },
   },
 
@@ -595,7 +595,7 @@ const PDF_MODULES_CONFIG = {
     maxFiles: 20,
     database: {
       table: "MovimientoCaja",
-      field: "urlComprobanteOperacionMovCaja", // ✅ CORREGIDO
+      field: "urlDocumentoMovCaja", // ✅ VOUCHER CONTABLE (Asiento Contable)
     },
   },
 
@@ -664,16 +664,70 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
-  "movimiento-caja": {
-    uploadPath: "uploads/pdf-system/movimiento-caja",
+  "pago-cxc-voucher-consolidado": {
+    uploadPath: "uploads/pdf-system/pago-cxc-voucher-consolidado",
     oldPaths: [],
-    apiEndpoint: "/api/pdf/movimiento-caja",
+    apiEndpoint: "/api/pdf/pago-cxc-voucher-consolidado",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf"],
+    maxFiles: 20,
+    database: {
+      table: "PagoCuentaPorCobrar",
+      field: "urlVoucherOperacionConsolidado",
+    },
+  },
+
+  "pago-cxc-comprobante-impuesto": {
+    uploadPath: "uploads/pdf-system/pago-cxc-comprobante-impuesto",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-cxc-comprobante-impuesto",
     maxFileSize: 10 * 1024 * 1024,
     allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
     maxFiles: 20,
     database: {
+      table: "PagoCuentaPorCobrar",
+      field: "urlPagoImpuesto",
+    },
+  },
+
+  // ❌ DUPLICADO - Usar "movimiento-caja-operacion" en su lugar
+  // "movimiento-caja": {
+  //   uploadPath: "uploads/pdf-system/movimiento-caja",
+  //   oldPaths: [],
+  //   apiEndpoint: "/api/pdf/movimiento-caja",
+  //   maxFileSize: 10 * 1024 * 1024,
+  //   allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+  //   maxFiles: 20,
+  //   database: {
+  //     table: "MovimientoCaja",
+  //     field: "urlDocumentoMovCaja",
+  //   },
+  // },
+
+  // ❌ DUPLICADO - Usar "movimiento-caja-operacion" en su lugar
+  // "voucher-contable-movimiento": {
+  //   uploadPath: "uploads/pdf-system/voucher-contable-movimiento",
+  //   oldPaths: [],
+  //   apiEndpoint: "/api/pdf/voucher-contable-movimiento",
+  //   maxFileSize: 10 * 1024 * 1024,
+  //   allowedTypes: ["application/pdf"],
+  //   maxFiles: 20,
+  //   database: {
+  //     table: "MovimientoCaja",
+  //     field: "urlDocumentoMovCaja",
+  //   },
+  // },
+
+  "movimiento-caja-voucher-individual": {
+    uploadPath: "uploads/pdf-system/movimiento-caja-voucher-individual",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/movimiento-caja-voucher-individual",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf"],
+    maxFiles: 20,
+    database: {
       table: "MovimientoCaja",
-      field: "urlDocumentoMovCaja",
+      field: "urlOperacionIndividualOperacionCaja",
     },
   },
 };

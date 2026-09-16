@@ -61,12 +61,12 @@ router.get(
   asientoContableController.listarPorPeriodo
 );
 
-// Ruta para obtener asientos por movimiento de caja
+// Ruta para obtener asiento por movimiento de caja (único asiento)
 router.get(
-  '/por-movimiento/:movimientoCajaId', 
+  '/por-movimiento/:movimientoId', 
   autenticarJWT, 
   checkPermission('asientoContable', 'ver'),
-  asientoContableController.listarPorMovimiento
+  asientoContableController.obtenerPorMovimiento
 );
 
 // Rutas de gestión de asientos

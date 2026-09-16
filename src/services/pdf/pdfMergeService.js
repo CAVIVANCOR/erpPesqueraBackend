@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import { getModuleConfig } from '../../config/pdf/pdfModules.config.js';
+import prisma from '../../config/prismaClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,6 +74,26 @@ class PDFMergeService {
       const filePath = path.join(uploadDir, fileName);
       fs.writeFileSync(filePath, pdfBytes);
       const urlRelativa = `/${config.uploadPath}/${fileName}`;
+
+      // ✅ PATRÓN PROFESIONAL: Actualizar automáticamente la BD si está configurado
+      if (config.database && metadata.entityId) {
+        try {
+          const updateData = {};
+          updateData[config.database.field] = urlRelativa;
+          
+          const tableName = config.database.table.charAt(0).toLowerCase() + config.database.table.slice(1);
+          
+          await prisma[tableName].update({
+            where: { id: Number(metadata.entityId) },
+            data: updateData
+          });
+          
+        } catch (dbError) {
+          console.error(`❌ Error al actualizar BD para ${moduleName}:`, dbError.message);
+          // No lanzar error, solo advertencia - el archivo ya se subió correctamente
+        }
+      } 
+
       const result = {
         success: true,
         url: urlRelativa,

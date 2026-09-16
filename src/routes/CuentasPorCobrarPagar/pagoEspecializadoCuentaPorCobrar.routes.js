@@ -51,4 +51,19 @@ router.patch('/voucher-consolidado/:movimientoIngresoId', autenticarJWT, pagoEsp
 // ════════════════════════════════════════════════════════════
 router.patch('/voucher-individual/:movimientoId', autenticarJWT, pagoEspecializadoController.actualizarUrlVoucherIndividual);
 
+// ════════════════════════════════════════════════════════════
+// PATCH: ACTUALIZAR URL VOUCHER CONSOLIDADO EN PAGO
+// ════════════════════════════════════════════════════════════
+router.patch('/pago/:pagoId/voucher-consolidado', autenticarJWT, pagoEspecializadoController.actualizarUrlVoucherConsolidadoPago);
+
+// ════════════════════════════════════════════════════════════
+// PATCH: ACTUALIZAR URL COMPROBANTE IMPUESTO EN PAGO
+// ════════════════════════════════════════════════════════════
+router.patch('/pago/:pagoId/comprobante-impuesto', autenticarJWT, pagoEspecializadoController.actualizarUrlComprobanteImpuesto);
+
+// ════════════════════════════════════════════════════════════
+// PUT: ACTUALIZAR URL VOUCHER CONTABLE EN MOVIMIENTO
+// ════════════════════════════════════════════════════════════
+router.put('/movimiento/:movimientoId/voucher-contable', autenticarJWT, pagoEspecializadoController.actualizarUrlVoucherContable);
+
 export default router;

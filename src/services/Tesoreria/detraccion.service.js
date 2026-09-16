@@ -181,16 +181,7 @@ const obtenerPorId = async (id) => {
       }
     });
     if (!detraccion) throw new NotFoundError('Detracción no encontrada');
-    
-    console.log('🔍 DEBUG Backend - obtenerPorId detraccion ID:', id);
-    console.log('🔍 DEBUG Backend - movimientosCaja encontrados:', detraccion.movimientosCaja?.length || 0);
-    if (detraccion.movimientosCaja?.length > 0) {
-      console.log('🔍 DEBUG Backend - Primer movimiento:', {
-        id: detraccion.movimientosCaja[0].id,
-        monto: detraccion.movimientosCaja[0].monto,
-        detraccionId: detraccion.movimientosCaja[0].detraccionId
-      });
-    }
+  
     
     return detraccion;
   } catch (err) {

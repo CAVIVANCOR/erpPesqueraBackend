@@ -146,3 +146,26 @@ export async function unirAsientos(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Obtiene el asiento contable generado por un movimiento de caja
+ */
+export async function obtenerPorMovimiento(req, res, next) {
+  try {
+    const movimientoCajaId = Number(req.params.movimientoId);
+    const asientos = await asientoContableService.listarPorMovimiento(movimientoCajaId);
+    
+    // Retornar el primer asiento (debería ser único)
+    const asiento = asientos && asientos.length > 0 ? asientos[0] : null;
+    
+    if (!asiento) {
+      return res.status(404).json({
+        message: "No se encontró asiento contable para este movimiento."
+      });
+    }
+    
+    res.json(toJSONBigInt(asiento));
+  } catch (err) {
+    next(err);
+  }
+}

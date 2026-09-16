@@ -240,3 +240,60 @@ export const actualizarUrlVoucherIndividual = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Actualizar URL del voucher consolidado en PagoCuentaPorCobrar
+ */
+export const actualizarUrlVoucherConsolidadoPago = async (req, res, next) => {
+  try {
+    const { pagoId } = req.params;
+    const { urlPdf } = req.body;
+    
+    const resultado = await pagoEspecializadoService.actualizarUrlVoucherConsolidadoPago(
+      pagoId,
+      urlPdf
+    );
+    
+    res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Actualizar URL del comprobante de impuesto en PagoCuentaPorCobrar
+ */
+export const actualizarUrlComprobanteImpuesto = async (req, res, next) => {
+  try {
+    const { pagoId } = req.params;
+    const { urlPdf } = req.body;
+    
+    const resultado = await pagoEspecializadoService.actualizarUrlComprobanteImpuesto(
+      pagoId,
+      urlPdf
+    );
+    
+    res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Actualizar URL del voucher contable en MovimientoCaja
+ */
+export const actualizarUrlVoucherContable = async (req, res, next) => {
+  try {
+    const { movimientoId } = req.params;
+    const { urlPdf } = req.body;
+    
+    const resultado = await pagoEspecializadoService.actualizarUrlVoucherContable(
+      movimientoId,
+      urlPdf
+    );
+    
+    res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+};
