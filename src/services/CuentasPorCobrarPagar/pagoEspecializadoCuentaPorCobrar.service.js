@@ -363,6 +363,155 @@ function generarGlosaPagoCxC(cuentaPorCobrar, data, monedaPago) {
   return `Pago CxC de Dcmto: ${numeroPreFactura} ${fechaEmision} Cliente: ${tipoDoc} ${numDoc} ${razonSocial} Monto Neto: ${simboloMoneda} ${montoPagado} ${fechaPago} T/C: ${tipoCambio}`;
 }
 
+// ════════════════════════════════════════════════════════════
+// GENERACIÓN DE GLOSAS PROFESIONALES PARA ASIENTOS CONTABLES
+// ════════════════════════════════════════════════════════════
+
+/**
+ * Genera glosa profesional para asientos contables siguiendo el estándar:
+ * Línea 1: TIPO - PAGO CXC - FAC E001-2258 del 01/09/2026
+ * Línea 2: Cliente: RUC 20517650871 - EXACTA OPERADOR LOGISTICO S.A.C.
+ * Línea 3: Pago: 17/09/2026 | S/ 3,894.00 | T/C: 3.3610 | BCP 310-9846998-0-36 | Op: 001234567
+ * Línea 4: Detalle: (1) PRODUCTO 10.00 TN x S/ 350.00 = S/ 3,500.00; (2) SERVICIO...
+ * 
+ * @param {Object} params - Parámetros para generar la glosa
+ * @param {string} params.tipoOperacion - Tipo: 'PAGO CXC', 'AUTODETRACCIÓN', 'ITF', 'COMISIÓN BANCARIA', 'DETRACCIÓN CLIENTE'
+ * @param {Object} params.cuentaPorCobrar - Cuenta por cobrar con relaciones (cliente, preFactura)
+ * @param {Object} params.movimiento - Movimiento de caja con relaciones (cuentaCorriente, moneda)
+ * @param {string} params.fechaPago - Fecha del pago (formato Date o string)
+ * @param {number} params.tipoCambio - Tipo de cambio
+ * @param {Array} params.detallesFactura - Array de detalles de la factura (opcional)
+ * @param {string} params.detalleConcepto - Descripción del concepto (para ITF/Comisión)
+ * @returns {string} Glosa formateada profesionalmente
+ */
+function generarGlosaAsientoContable({
+  tipoOperacion,
+  cuentaPorCobrar,
+  movimiento,
+  fechaPago,
+  tipoCambio,
+  detallesFactura = [],
+  detalleConcepto = null
+}) {
+  
+  // ========================================
+  // HELPERS DE FORMATO
+  // ========================================
+  
+  const formatearFecha = (fecha) => {
+    if (!fecha) return '';
+    const d = new Date(fecha);
+    const dia = String(d.getDate()).padStart(2, '0');
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const anio = d.getFullYear();
+    return `${dia}/${mes}/${anio}`;
+  };
+
+  const formatearMonto = (monto) => {
+    return Number(monto).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const formatearTipoCambio = (tc) => {
+    return Number(tc).toFixed(4);
+  };
+
+  const abreviarRazonSocial = (razonSocial) => {
+    if (!razonSocial) return '';
+    return razonSocial
+      .replace(/SOCIEDAD ANONIMA CERRADA/gi, 'S.A.C.')
+      .replace(/SOCIEDAD ANONIMA/gi, 'S.A.')
+      .replace(/EMPRESA INDIVIDUAL DE RESPONSABILIDAD LIMITADA/gi, 'E.I.R.L.')
+      .replace(/SOCIEDAD COMERCIAL DE RESPONSABILIDAD LIMITADA/gi, 'S.R.L.')
+      .trim();
+  };
+
+  // ========================================
+  // LÍNEA 1: ENCABEZADO
+  // ========================================
+  
+  const numeroDocumento = cuentaPorCobrar.preFactura?.numeroDocumentoFinal || 
+                          cuentaPorCobrar.numeroPreFactura || 
+                          'S/N';
+  const fechaEmisionDoc = formatearFecha(cuentaPorCobrar.preFactura?.fechaFacturacion || 
+                                         cuentaPorCobrar.fechaEmision);
+  
+  const linea1 = `${tipoOperacion} - PAGO CXC - FAC ${numeroDocumento} del ${fechaEmisionDoc}`;
+
+  // ========================================
+  // LÍNEA 2: CLIENTE
+  // ========================================
+  
+  const tipoDocCliente = cuentaPorCobrar.cliente?.tipoDocumento?.codigo || 'RUC';
+  const numDocCliente = cuentaPorCobrar.cliente?.numeroDocumento || '';
+  const razonSocialCompleta = cuentaPorCobrar.cliente?.razonSocial || '';
+  const razonSocialAbreviada = abreviarRazonSocial(razonSocialCompleta);
+  
+  const linea2 = `Cliente: ${tipoDocCliente} ${numDocCliente} - ${razonSocialAbreviada}`;
+
+  // ========================================
+  // LÍNEA 3: DATOS FINANCIEROS Y BANCARIOS
+  // ========================================
+  
+  const fechaPagoFormateada = formatearFecha(fechaPago);
+  const simboloMoneda = movimiento.moneda?.simbolo || 'S/';
+  const montoFormateado = formatearMonto(movimiento.monto);
+  const tcFormateado = formatearTipoCambio(tipoCambio);
+  
+  // Datos bancarios del movimiento
+  let infoBancaria = '';
+  
+  // Para movimientos con cuenta destino (ingresos)
+  if (movimiento.cuentaCorrienteDestino) {
+    const banco = movimiento.cuentaCorrienteDestino.banco?.nombre || 'BANCO';
+    const numeroCuenta = movimiento.cuentaCorrienteDestino.numeroCuenta || '';
+    infoBancaria = `${banco} ${numeroCuenta}`;
+  }
+  // Para movimientos con cuenta origen (egresos como autodetracción)
+  else if (movimiento.cuentaCorrienteOrigen) {
+    const banco = movimiento.cuentaCorrienteOrigen.banco?.nombre || 'BANCO';
+    const numeroCuenta = movimiento.cuentaCorrienteOrigen.numeroCuenta || '';
+    infoBancaria = `${banco} ${numeroCuenta}`;
+  }
+  
+  const numeroOperacion = movimiento.numeroOperacion || 'S/N';
+  
+  const linea3 = `Pago: ${fechaPagoFormateada} | ${simboloMoneda} ${montoFormateado} | T/C: ${tcFormateado} | ${infoBancaria} | Op: ${numeroOperacion}`;
+
+  // ========================================
+  // LÍNEA 4: DETALLE
+  // ========================================
+  
+  let linea4 = '';
+  
+  if (detalleConcepto) {
+    // Para ITF, Comisión, etc. - usar descripción del concepto
+    linea4 = `Detalle: ${detalleConcepto}`;
+  } else if (detallesFactura && detallesFactura.length > 0) {
+    // Para pagos normales - mostrar productos/servicios
+    const itemsDetalle = detallesFactura.map((detalle, index) => {
+      const numero = index + 1;
+      const descripcion = detalle.descripcion || detalle.producto?.descripcionArmada || 'PRODUCTO/SERVICIO';
+      const cantidad = formatearMonto(detalle.cantidad || 0);
+      const unidad = detalle.unidadMedida?.simbolo || detalle.producto?.unidadMedida?.simbolo || '';
+      const precioUnitario = formatearMonto(detalle.precioUnitario || 0);
+      const subtotal = formatearMonto(detalle.subtotal || (detalle.cantidad * detalle.precioUnitario) || 0);
+      
+      return `(${numero}) ${descripcion} ${cantidad} ${unidad} x ${simboloMoneda} ${precioUnitario} = ${simboloMoneda} ${subtotal}`.trim();
+    });
+    
+    linea4 = `Detalle: ${itemsDetalle.join('; ')}`;
+  } else {
+    // Sin detalle disponible
+    linea4 = `Detalle: Pago de factura ${numeroDocumento}`;
+  }
+
+  // ========================================
+  // GLOSA COMPLETA
+  // ========================================
+  
+  return `${linea1}\n${linea2}\n${linea3}\n${linea4}`;
+}
+
 
 // ════════════════════════════════════════════════════════════
 // GENERACIÓN DE ASIENTOS CONTABLES PARA MOVIMIENTOS DE CAJA
@@ -434,9 +583,48 @@ async function generarAsientosContablesPagoCxC(
       throw new ValidationError(`No se encontró la cuenta contable con código ${CODIGOS_CUENTAS_CONTABLES.BN_DETRACCION}`);
     }
 
+    // 4. Cargar detalles de la factura para las glosas
+    let detallesFactura = [];
+    try {
+      // Obtener el ID de la preFactura desde el primer movimiento
+      const primerMovimiento = movimientos[0];
+      if (primerMovimiento) {
+        const movTemp = await tx.movimientoCaja.findUnique({
+          where: { id: primerMovimiento.id },
+          include: {
+            cuentaPorCobrar: {
+              include: {
+                preFactura: true
+              }
+            }
+          }
+        });
+        
+        const preFacturaId = movTemp?.cuentaPorCobrar?.preFacturaId;
+        
+        if (preFacturaId) {
+          detallesFactura = await tx.detallePreFactura.findMany({
+            where: { preFacturaId: preFacturaId },
+            include: {
+              producto: {
+                include: {
+                  unidadMedida: true
+                }
+              },
+              unidadMedida: true
+            },
+            orderBy: { id: 'asc' }
+          });
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ No se pudieron cargar los detalles de la factura para la glosa:', error.message);
+      // Continuar sin detalles - la glosa usará descripción genérica
+    }
+
     const asientosCreados = [];
 
-    // 3. Por cada movimiento con monto > 0, generar asiento
+    // 5. Por cada movimiento con monto > 0, generar asiento
     for (const movimiento of movimientos) {
       
       if (!movimiento || Number(movimiento.monto) <= 0) {
@@ -448,16 +636,26 @@ async function generarAsientosContablesPagoCxC(
         where: { id: movimiento.id },
         include: {
           cuentaCorrienteOrigen: {
-            include: { cuentaContable: true }
+            include: { 
+              cuentaContable: true,
+              banco: true  // ✅ Para glosa profesional
+            }
           },
           cuentaCorrienteDestino: {
-            include: { cuentaContable: true }
+            include: { 
+              cuentaContable: true,
+              banco: true  // ✅ Para glosa profesional
+            }
           },
           moneda: true,
           tipoMovimiento: true,
           cuentaPorCobrar: {
             include: {
-              cliente: true,
+              cliente: {
+                include: {
+                  tipoDocumento: true  // ✅ Para glosa profesional (RUC, DNI, etc.)
+                }
+              },
               moneda: true,  // ✅ CRÍTICO: Necesitamos la moneda de la factura
               preFactura: {
                 include: {
@@ -632,8 +830,36 @@ async function generarAsientosContablesPagoCxC(
       const nuevoCorrelativo = ultimoAsiento ? ultimoAsiento.correlativo + 1 : 1;
       const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(nuevoCorrelativo).padStart(5, "0")}`;
 
-      // Glosa del asiento
-      const glosa = movimientoCompleto.descripcion || `Movimiento de caja ${movimiento.id}`;
+      // ========================================
+      // GENERAR GLOSA PROFESIONAL
+      // ========================================
+      
+      let tipoOperacion = 'PAGO CXC';
+      let detalleConcepto = null;
+      
+      if (esDetraccion) {
+        if (movimientoCompleto.cuentaCorrienteOrigenId) {
+          tipoOperacion = 'AUTODETRACCIÓN';
+        } else {
+          tipoOperacion = 'DETRACCIÓN CLIENTE';
+        }
+      } else if (Number(movimientoCompleto.tipoMovimientoId) === TIPOS_MOVIMIENTO.ITF) {
+        tipoOperacion = 'ITF';
+        detalleConcepto = 'Impuesto a las Transacciones Financieras';
+      } else if (Number(movimientoCompleto.tipoMovimientoId) === TIPOS_MOVIMIENTO.COMISION) {
+        tipoOperacion = 'COMISIÓN BANCARIA';
+        detalleConcepto = 'Comisión por transferencia bancaria';
+      }
+      
+      const glosa = generarGlosaAsientoContable({
+        tipoOperacion,
+        cuentaPorCobrar,
+        movimiento: movimientoCompleto,
+        fechaPago: pagoCuentaPorCobrar.fechaPago,
+        tipoCambio: pagoCuentaPorCobrar.tipoCambio,
+        detallesFactura: detallesFactura,
+        detalleConcepto
+      });
 
       // Calcular montos en moneda extranjera si aplica
       const montoSoles = Number(movimientoCompleto.monto);
