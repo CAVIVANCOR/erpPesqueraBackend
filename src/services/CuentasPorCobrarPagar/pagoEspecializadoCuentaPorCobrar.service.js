@@ -458,6 +458,7 @@ async function generarAsientosContablesPagoCxC(
           cuentaPorCobrar: {
             include: {
               cliente: true,
+              moneda: true,  // ✅ CRÍTICO: Necesitamos la moneda de la factura
               preFactura: {
                 include: {
                   tipoDocumento: true
@@ -512,9 +513,13 @@ async function generarAsientosContablesPagoCxC(
         }
         
         cuentaDebe = movimientoCompleto.cuentaCorrienteDestino.cuentaContable.id;
-        cuentaHaber = movimientoCompleto.monedaId === 1 
+        // ✅ Usar la moneda de la FACTURA (CuentaPorCobrar), NO del movimiento de caja
+        const monedaFactura = movimientoCompleto.cuentaPorCobrar?.monedaId || movimientoCompleto.monedaId;
+        cuentaHaber = Number(monedaFactura) === 1 
           ? cuentaCxCSoles.id 
           : cuentaCxCDolares.id;
+        
+        console.log(`   🔍 DEBUG: Moneda Factura: ${monedaFactura}, Moneda Movimiento: ${movimientoCompleto.monedaId}`);
   
       } else if (esDetraccion) {
         
@@ -538,9 +543,10 @@ async function generarAsientosContablesPagoCxC(
 
         } else {
           // Cliente paga
-
           
-          cuentaHaber = movimientoCompleto.monedaId === 1 
+          // ✅ Usar la moneda de la FACTURA (CuentaPorCobrar), NO del movimiento de caja
+          const monedaFactura = movimientoCompleto.cuentaPorCobrar?.monedaId || movimientoCompleto.monedaId;
+          cuentaHaber = Number(monedaFactura) === 1 
             ? cuentaCxCSoles.id 
             : cuentaCxCDolares.id;
           
