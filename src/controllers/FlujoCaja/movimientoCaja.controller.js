@@ -1,5 +1,6 @@
 // c:\Proyectos\megui\erp\erp-pesquera-backend\src\controllers\FlujoCaja\movimientoCaja.controller.js
 import movimientoCajaService from '../../services/FlujoCaja/movimientoCaja.service.js';
+import { generarVoucherContableMovimientoCaja } from '../../services/FlujoCaja/voucherContableMovimientoCaja.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import multer from 'multer';
 import path from 'path';
@@ -146,7 +147,23 @@ const crear = async (req, res, next) => {
 
 const actualizar = async (req, res, next) => {
   try {
-    const actualizado = await movimientoCajaService.actualizar(Number(req.params.id), req.body);
+    const id = Number(req.params.id);
+    
+    // 🔍 DEBUG: Ver qué datos recibe el backend
+    console.log('\n═══════════════════════════════════════════════════════');
+    console.log('📥 BACKEND - DATOS RECIBIDOS EN ACTUALIZACIÓN:');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('ID del movimiento:', id);
+    console.log('Datos recibidos (req.body):');
+    console.log(JSON.stringify(req.body, null, 2));
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🔍 CAMPOS PROBLEMÁTICOS:');
+    console.log('  - moduloOrigenMotivoOperacionId:', req.body.moduloOrigenMotivoOperacionId);
+    console.log('  - origenMotivoOperacionId:', req.body.origenMotivoOperacionId);
+    console.log('  - usuarioMotivoOperacionId:', req.body.usuarioMotivoOperacionId);
+    console.log('═══════════════════════════════════════════════════════\n');
+    
+    const actualizado = await movimientoCajaService.actualizar(id, req.body);
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
     next(err);
@@ -432,6 +449,35 @@ export const obtenerPorCorrelativo = async (req, res, next) => {
   }
 };
 
+/**
+ * Generar voucher contable (comprobante de diario) de un MovimientoCaja
+ * GET /api/movimiento-caja/:id/generar-voucher-contable
+ */
+export const generarVoucherContable = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`📄 Generando voucher contable para MovimientoCaja ${id}...`);
+    
+    // Generar PDF
+    const pdfBuffer = await generarVoucherContableMovimientoCaja(Number(id));
+    
+    // Configurar headers para descarga
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="voucher-contable-mov-${id}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    
+    // Enviar PDF
+    res.send(pdfBuffer);
+    
+    console.log(`✅ Voucher contable generado exitosamente para MovimientoCaja ${id}`);
+    
+  } catch (error) {
+    console.error(`❌ Error al generar voucher contable:`, error);
+    next(error);
+  }
+};
+
 
 
 export default {
@@ -447,6 +493,7 @@ export default {
   subirComprobante,
   subirDocumento,
   servirArchivoComprobante,
+  generarVoucherContable,
   servirArchivoDocumento,
   listarConFiltrosAvanzados,
   obtenerPorCorrelativo,

@@ -1,4 +1,5 @@
 import productoService from '../../services/Maestros/producto.service.js';
+import productoClonerService from '../../services/Producto/productoCloner.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
 /**
@@ -71,6 +72,30 @@ export async function eliminar(req, res, next) {
     const id = Number(req.params.id);
     await productoService.eliminar(id);
     res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Clona productos a múltiples empresas
+ * @param {Object} req - Request de Express
+ * @param {Object} req.body.productosIds - Array de IDs de productos a clonar
+ * @param {Object} req.body.empresasDestinoIds - Array de IDs de empresas destino
+ * @param {Object} res - Response de Express
+ * @param {Function} next - Función next de Express
+ */
+export async function clonarAEmpresas(req, res, next) {
+  try {
+    const { productosIds, empresasDestinoIds, clienteId } = req.body;
+    
+    const resultado = await productoClonerService.clonarProductosAEmpresas(
+      productosIds,
+      empresasDestinoIds,
+      clienteId || null
+    );
+    
+    res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }

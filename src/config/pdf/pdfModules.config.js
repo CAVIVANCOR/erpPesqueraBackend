@@ -730,6 +730,17 @@ const PDF_MODULES_CONFIG = {
       field: "urlOperacionIndividualOperacionCaja",
     },
   },
+
+  // Voucher contable de MovimientoCaja (generado dinámicamente, no se sube)
+  "movimiento-caja-voucher-contable": {
+    uploadPath: "uploads/pdf-system/movimiento-caja-voucher-contable",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/movimiento-caja-voucher-contable",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf"],
+    maxFiles: 1,
+    database: null, // No se guarda en BD, se genera bajo demanda
+  },
 };
 
 export function getModuleConfig(moduleName) {

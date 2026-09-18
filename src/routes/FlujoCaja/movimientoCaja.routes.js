@@ -73,6 +73,14 @@ router.get(
   movimientoCajaController.obtenerPorCorrelativo
 );
 
+// Generar voucher contable (comprobante de diario) - DEBE IR ANTES DE /:id
+router.get(
+  "/:id/generar-voucher-contable",
+  autenticarJWT,
+  checkPermission("movimientoCaja", "ver"),
+  movimientoCajaController.generarVoucherContable
+);
+
 router.get(
   "/:id",
   autenticarJWT,

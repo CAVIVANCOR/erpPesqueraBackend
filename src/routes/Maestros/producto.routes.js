@@ -18,12 +18,20 @@ router.get(
   productoController.listar
 );
 
-// ✅ ESTA RUTA ESPECIAL SÍ LA MANTUVE CORRECTAMENTE
+// ✅ RUTA ESPECIAL: Obtener productos por entidad y empresa
 router.get(
   '/entidad/:entidadComercialId/empresa/:empresaId',
   autenticarJWT,
   checkPermission('producto', 'ver'),
   productoController.obtenerPorEntidadYEmpresa
+);
+
+// ✅ RUTA ESPECIAL: Clonar productos a múltiples empresas
+router.post(
+  '/clonar-a-empresas',
+  autenticarJWT,
+  checkPermission('producto', 'crear'),
+  productoController.clonarAEmpresas
 );
 
 router.get(
