@@ -7082,6 +7082,7 @@ model PagoCuentaPorPagar {
   actualizadoPor        BigInt?                                      // Usuario que actualizó el registro
 
   refOperacionEspecializadaMovCaja  BigInt?
+  detraccionId                      BigInt?                          // ✅ NUEVO
   urlVoucherOperacionConsolidado    String?
   urlPagoImpuesto                   String?
 
@@ -7100,6 +7101,7 @@ model PagoCuentaPorPagar {
   periodoContable       PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
   prestamoBancario      PrestamoBancario?   @relation(fields: [prestamoBancarioId], references: [id])
   asientosContables     AsientoContable[]  // Relación inversa
+  detraccion            Detraccion?         @relation(fields: [detraccionId], references: [id])  // ✅ NUEVO
 
   // ========================================
   // ÍNDICES
@@ -7114,6 +7116,8 @@ model PagoCuentaPorPagar {
   @@index([tieneDetraccion])                                         // ✅ AGREGADO
   @@index([tieneRetencion])                                          // ✅ AGREGADO
   @@index([tienePercepcion])                                         // ✅ AGREGADO
+  @@index([detraccionId])                                            // ✅ NUEVO
+  @@index([refOperacionEspecializadaMovCaja])                        // ✅ NUEVO
 }
 
 
@@ -7919,6 +7923,7 @@ model Detraccion {
   // Contabilidad
   asientosContables     AsientoContable[]           // Asientos contables generados
   pagosCuentaPorCobrar  PagoCuentaPorCobrar[]       // ✅ AGREGAR ESTA LÍNEA
+  pagosCuentaPorPagar   PagoCuentaPorPagar[]      // ✅ AGREGAR ESTA LÍNEA
 
   // ========================================
   // ÍNDICES
