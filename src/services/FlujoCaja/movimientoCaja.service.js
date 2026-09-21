@@ -7,6 +7,10 @@ import {
 } from "../../utils/errors.js";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const incluirRelaciones = {
   cuentaCorrienteOrigen: {
@@ -625,7 +629,12 @@ const crear = async (data) => {
 
 const actualizar = async (id, data) => {
   try {
-    const existente = await prisma.movimientoCaja.findUnique({ where: { id } });
+    const existente = await prisma.movimientoCaja.findUnique({ 
+      where: { id },
+      include: {
+        pagosCuentaPorCobrar: true  // ✅ Incluir relación con PagoCuentaPorCobrar
+      }
+    });
     if (!existente) throw new NotFoundError("Movimiento de Caja No Encontrado");
 
     const soloActualizacionPDF =
@@ -641,6 +650,46 @@ const actualizar = async (id, data) => {
       where: { id },
       data,
     });
+
+    // ✅ SINCRONIZACIÓN AUTOMÁTICA: Si se actualiza urlComprobanteOperacionMovCaja,
+    // copiar el archivo a la ruta de PagoCuentaPorCobrar y actualizar urlPagoImpuesto
+    if (data.urlComprobanteOperacionMovCaja && existente.pagosCuentaPorCobrar && existente.pagosCuentaPorCobrar.length > 0) {
+      try {
+        const pagoCuentaPorCobrarId = existente.pagosCuentaPorCobrar[0].id;
+        
+        // Rutas de origen y destino
+        const archivoOrigen = path.join(__dirname, '../../../', data.urlComprobanteOperacionMovCaja);
+        const directorioDestino = path.join(__dirname, '../../../uploads/pdf-system/pago-cxc-comprobante-impuesto');
+        const nombreArchivo = `PAGO-CXC-COMPROBANTE-IMPUESTO-${pagoCuentaPorCobrarId}.pdf`;
+        const archivoDestino = path.join(directorioDestino, nombreArchivo);
+        
+        // Crear directorio si no existe
+        if (!fs.existsSync(directorioDestino)) {
+          fs.mkdirSync(directorioDestino, { recursive: true });
+        }
+        
+        // Copiar archivo
+        fs.copyFileSync(archivoOrigen, archivoDestino);
+        
+        // URL relativa para PagoCuentaPorCobrar
+        const urlPagoImpuesto = `/uploads/pdf-system/pago-cxc-comprobante-impuesto/${nombreArchivo}`;
+        
+        // Actualizar PagoCuentaPorCobrar
+        await prisma.pagoCuentaPorCobrar.update({
+          where: { id: pagoCuentaPorCobrarId },
+          data: { urlPagoImpuesto }
+        });
+        
+        console.log(`✅ Archivo copiado y sincronizado:`);
+        console.log(`   Origen: ${data.urlComprobanteOperacionMovCaja}`);
+        console.log(`   Destino: ${urlPagoImpuesto}`);
+        console.log(`   PagoCuentaPorCobrar ID: ${pagoCuentaPorCobrarId}`);
+      } catch (syncError) {
+        console.warn(`⚠️ No se pudo sincronizar archivo con PagoCuentaPorCobrar:`, syncError.message);
+        // No lanzar error, la actualización del movimiento ya se hizo correctamente
+      }
+    }
+
     return actualizado;
   } catch (err) {
     if (err.code === "P2025")

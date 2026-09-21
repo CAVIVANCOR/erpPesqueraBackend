@@ -586,18 +586,19 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
-  "movimiento-caja-operacion": {
-    uploadPath: "uploads/pdf-system/movimiento-caja-operacion",
-    oldPaths: [],
-    apiEndpoint: "/api/pdf/movimiento-caja-operacion",
-    maxFileSize: 10 * 1024 * 1024,
-    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
-    maxFiles: 20,
-    database: {
-      table: "MovimientoCaja",
-      field: "urlDocumentoMovCaja", // ✅ VOUCHER CONTABLE (Asiento Contable)
-    },
-  },
+  // ❌ OBSOLETO - Usar "movimiento-caja-voucher-contable" en su lugar
+  // "movimiento-caja-operacion": {
+  //   uploadPath: "uploads/pdf-system/movimiento-caja-operacion",
+  //   oldPaths: [],
+  //   apiEndpoint: "/api/pdf/movimiento-caja-operacion",
+  //   maxFileSize: 10 * 1024 * 1024,
+  //   allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+  //   maxFiles: 20,
+  //   database: {
+  //     table: "MovimientoCaja",
+  //     field: "urlDocumentoMovCaja",
+  //   },
+  // },
 
   "descarga-faena-pesca-comprobante-wincha": {
     uploadPath: "uploads/pdf-system/descarga-faena-pesca-comprobante-wincha",
@@ -651,18 +652,19 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
-  "pago-cuenta-por-cobrar": {
-    uploadPath: "uploads/pdf-system/pago-cuenta-por-cobrar",
-    oldPaths: [],
-    apiEndpoint: "/api/pdf/pago-cuenta-por-cobrar",
-    maxFileSize: 10 * 1024 * 1024,
-    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
-    maxFiles: 20,
-    database: {
-      table: "PagoCuentaPorCobrar",
-      field: "urlVoucherConsolidado",
-    },
-  },
+  // ❌ OBSOLETO - Usar "pago-cxc-voucher-consolidado" en su lugar
+  // "pago-cuenta-por-cobrar": {
+  //   uploadPath: "uploads/pdf-system/pago-cuenta-por-cobrar",
+  //   oldPaths: [],
+  //   apiEndpoint: "/api/pdf/pago-cuenta-por-cobrar",
+  //   maxFileSize: 10 * 1024 * 1024,
+  //   allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+  //   maxFiles: 20,
+  //   database: {
+  //     table: "PagoCuentaPorCobrar",
+  //     field: "urlVoucherConsolidado",  // ❌ Campo no existe en schema
+  //   },
+  // },
 
   "pago-cxc-voucher-consolidado": {
     uploadPath: "uploads/pdf-system/pago-cxc-voucher-consolidado",
@@ -686,6 +688,36 @@ const PDF_MODULES_CONFIG = {
     maxFiles: 20,
     database: {
       table: "PagoCuentaPorCobrar",
+      field: "urlPagoImpuesto",
+    },
+  },
+
+  // ════════════════════════════════════════════════════════════
+  // PAGO CUENTA POR PAGAR (CxP)
+  // ════════════════════════════════════════════════════════════
+
+  "pago-cxp-voucher-consolidado": {
+    uploadPath: "uploads/pdf-system/pago-cxp-voucher-consolidado",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-cxp-voucher-consolidado",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf"],
+    maxFiles: 20,
+    database: {
+      table: "PagoCuentaPorPagar",
+      field: "urlVoucherOperacionConsolidado",
+    },
+  },
+
+  "pago-cxp-comprobante-impuesto": {
+    uploadPath: "uploads/pdf-system/pago-cxp-comprobante-impuesto",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-cxp-comprobante-impuesto",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "PagoCuentaPorPagar",
       field: "urlPagoImpuesto",
     },
   },
@@ -731,15 +763,18 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
-  // Voucher contable de MovimientoCaja (generado dinámicamente, no se sube)
+  // ✅ Voucher contable de MovimientoCaja (generado automáticamente con asientos)
   "movimiento-caja-voucher-contable": {
     uploadPath: "uploads/pdf-system/movimiento-caja-voucher-contable",
-    oldPaths: [],
+    oldPaths: ["uploads/pdf-system/voucher-contable"],  // ✅ Ruta antigua para compatibilidad
     apiEndpoint: "/api/pdf/movimiento-caja-voucher-contable",
     maxFileSize: 10 * 1024 * 1024,
     allowedTypes: ["application/pdf"],
     maxFiles: 1,
-    database: null, // No se guarda en BD, se genera bajo demanda
+    database: {
+      table: "MovimientoCaja",
+      field: "urlDocumentoMovCaja",  // ✅ Campo correcto
+    },
   },
 };
 

@@ -168,9 +168,54 @@ const obtenerPorId = async (id) => {
       include: {
         empresa: true,
         proveedor: true,
-        ordenCompra: true,
+        ordenCompra: {
+          include: {
+            tipoDocumento: true,
+            // ✅ Incluir detalles con productos
+            detalles: {
+              include: {
+                producto: true,
+              },
+            },
+            // ✅ Incluir registros de impuestos tributarios generados
+            detraccion: {
+              include: {
+                tipoDetraccion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                cuentaBNSunatProveedor: {
+                  include: {
+                    banco: true,
+                    moneda: true,
+                  },
+                },
+                periodoContable: true,
+              },
+            },
+            retencion: {
+              include: {
+                tipoRetencion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                periodoContable: true,
+              },
+            },
+            percepcion: {
+              include: {
+                tipoPercepcion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                periodoContable: true,
+              },
+            },
+          },
+        },
         moneda: true,
         estado: true,
+        periodoContable: true,
         pagos: {
           include: {
             medioPago: true
@@ -430,6 +475,46 @@ const obtenerPorOrdenCompraId = async (ordenCompraId) => {
         ordenCompra: {
           include: {
             tipoDocumento: true,
+            // ✅ Incluir detalles con productos
+            detalles: {
+              include: {
+                producto: true,
+              },
+            },
+            // ✅ Incluir registros de impuestos tributarios generados
+            detraccion: {
+              include: {
+                tipoDetraccion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                cuentaBNSunatProveedor: {
+                  include: {
+                    banco: true,
+                    moneda: true,
+                  },
+                },
+                periodoContable: true,
+              },
+            },
+            retencion: {
+              include: {
+                tipoRetencion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                periodoContable: true,
+              },
+            },
+            percepcion: {
+              include: {
+                tipoPercepcion: true,
+                tipoDocumento: true,
+                moneda: true,
+                estadoPago: true,
+                periodoContable: true,
+              },
+            },
           },
         },
         pagos: {

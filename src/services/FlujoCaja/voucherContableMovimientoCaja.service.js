@@ -58,16 +58,6 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
             cuentaContable: true
           }
         },
-        asientosContables: {
-          include: {
-            detalles: {
-              include: {
-                planCuenta: true,
-                entidadComercial: true
-              }
-            }
-          }
-        },
         // Relaciones de origen
         pagosCuentaPorCobrar: true
       }
@@ -77,11 +67,45 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
       throw new Error(`MovimientoCaja ${movimientoId} no encontrado`);
     }
 
+    // ✅ CONSULTA MANUAL: Obtener asientos contables por procesoOrigenId
+    // La relación polimórfica no funciona automáticamente con Prisma
+    // ⚠️ IMPORTANTE: Solo traer el asiento MÁS RECIENTE (último creado)
+    const asientosContables = await prisma.asientoContable.findMany({
+      where: {
+        procesoOrigenId: Number(movimientoId),
+        origenAsiento: 'AUTOMATICO'
+      },
+      include: {
+        detalles: {
+          include: {
+            planCuenta: true,
+            entidadComercial: true
+          }
+        }
+      },
+      orderBy: { id: 'desc' },  // Ordenar por ID descendente
+      take: 1  // ✅ TOMAR SOLO EL MÁS RECIENTE
+    });
+
+    // Asignar asientos al movimiento
+    movimiento.asientosContables = asientosContables;
+
     // Debug: Verificar datos cargados
     console.log('📊 Datos del movimiento cargados:');
+    console.log('  - Movimiento ID:', movimientoId);
     console.log('  - Moneda:', movimiento.moneda ? `${movimiento.moneda.nombre} (${movimiento.moneda.simbolo})` : 'NO CARGADA');
     console.log('  - Tipo Movimiento:', movimiento.tipoMovimiento ? movimiento.tipoMovimiento.nombre : 'NO CARGADO');
-    console.log('  - Asientos:', movimiento.asientosContables ? `${movimiento.asientosContables.length} asientos` : 'NO CARGADOS');
+    console.log('  - Asientos:', asientosContables.length, 'asientos encontrados');
+    if (asientosContables.length > 0) {
+      console.log('  - IDs de asientos:', asientosContables.map(a => a.id).join(', '));
+      console.log('  - procesoOrigenId de asientos:', asientosContables.map(a => a.procesoOrigenId).join(', '));
+      console.log('  - Primer asiento tiene detalles:', asientosContables[0].detalles ? `${asientosContables[0].detalles.length} detalles` : 'NO CARGADOS');
+      if (asientosContables[0].detalles && asientosContables[0].detalles.length > 0) {
+        console.log('  - Primer detalle tiene planCuenta:', asientosContables[0].detalles[0].planCuenta ? 'SÍ' : 'NO');
+        console.log('  - Código cuenta:', asientosContables[0].detalles[0].planCuenta?.codigoCuenta);
+        console.log('  - Nombre cuenta:', asientosContables[0].detalles[0].planCuenta?.nombreCuenta);
+      }
+    }
     console.log('  - Cuenta Origen:', movimiento.cuentaCorrienteOrigen ? 'Cargada' : 'No cargada');
     console.log('  - Empresa:', movimiento.empresa ? movimiento.empresa.razonSocial : 'NO CARGADA');
 
@@ -101,43 +125,89 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
 
     let yPosition = height - 50;
 
-    // 5. HEADER - Datos de la empresa
-    page.drawText(movimiento.empresa.razonSocial || 'MEGUI INVESTMENT S.A.C.', {
-      x: 50,
-      y: yPosition,
-      size: 14,
-      font: fontBold,
-      color: colorPrimario
+    // 5. CARGAR LOGO DE LA EMPRESA
+    // ✅ PATRÓN DEL VOUCHER INDIVIDUAL: Cargar logo mediante petición HTTP a la API
+    let logoImage = null;
+    if (movimiento.empresa?.logo && movimiento.empresa?.id) {
+      try {
+        // Construir URL del endpoint de logo
+        const logoUrl = `http://localhost:3000/api/empresas-logo/${movimiento.empresa.id}/logo`;
+        
+        // Hacer petición HTTP al endpoint
+        const response = await fetch(logoUrl);
+        
+        if (response.ok) {
+          const logoBytes = await response.arrayBuffer();
+          
+          if (movimiento.empresa.logo.toLowerCase().includes('.png')) {
+            logoImage = await pdfDoc.embedPng(logoBytes);
+          } else {
+            logoImage = await pdfDoc.embedJpg(logoBytes);
+          }
+          
+          console.log('  ✅ Logo cargado correctamente');
+        } else {
+          console.warn('  ⚠️ Logo no disponible (HTTP', response.status, ')');
+        }
+      } catch (error) {
+        console.warn('  ⚠️ No se pudo cargar el logo:', error.message);
+      }
+    }
+
+    // 6. HEADER - Logo y datos de la empresa
+    if (logoImage) {
+      const logoHeight = 50;
+      const logoWidth = (logoImage.width / logoImage.height) * logoHeight;
+      page.drawImage(logoImage, {
+        x: 50,
+        y: yPosition - logoHeight,
+        width: logoWidth,
+        height: logoHeight
+      });
+    }
+
+    // Información de la empresa (derecha, alineada a la derecha)
+    const empresaInfo = [
+      movimiento.empresa.razonSocial || 'MEGUI INVESTMENT S.A.C.',
+      movimiento.empresa.ruc ? `RUC: ${movimiento.empresa.ruc}` : 'RUC: 20603686498',
+      movimiento.empresa.direccion || ''
+    ].filter(Boolean);
+
+    let empresaY = yPosition - 10;
+    empresaInfo.forEach((line) => {
+      const textWidth = fontNormal.widthOfTextAtSize(line, 9);
+      page.drawText(line, {
+        x: width - 50 - textWidth,  // Alineado a la derecha
+        y: empresaY,
+        size: 9,
+        font: fontNormal,
+        color: colorSecundario
+      });
+      empresaY -= 12;
     });
 
-    yPosition -= 15;
-    page.drawText(`RUC: ${movimiento.empresa.ruc || '20603686498'}`, {
-      x: 50,
-      y: yPosition,
-      size: 10,
-      font: fontNormal,
-      color: colorSecundario
-    });
-
-    // ID y Fecha en la esquina superior derecha
-    page.drawText(`ID: ${String(movimiento.id).padStart(10, '0')}`, {
-      x: width - 150,
-      y: height - 50,
-      size: 10,
+    // ID y Fecha DEBAJO de los datos de empresa (no superpuestos)
+    const idText = `ID: ${String(movimiento.id).padStart(10, '0')}`;
+    const idWidth = fontNormal.widthOfTextAtSize(idText, 9);
+    page.drawText(idText, {
+      x: width - 50 - idWidth,  // Alineado a la derecha
+      y: empresaY - 5,
+      size: 9,
       font: fontNormal,
       color: colorSecundario
     });
 
     const fechaFormateada = new Date(movimiento.fechaOperacionMovCaja || movimiento.fecha).toLocaleDateString('es-PE');
+    const fechaWidth = fontNormal.widthOfTextAtSize(fechaFormateada, 9);
     page.drawText(fechaFormateada, {
-      x: width - 150,
-      y: height - 65,
-      size: 10,
+      x: width - 50 - fechaWidth,  // Alineado a la derecha
+      y: empresaY - 17,
+      size: 9,
       font: fontNormal,
       color: colorSecundario
     });
 
-    yPosition -= 30;
+    yPosition -= 80;
 
     // 6. TÍTULO
     const titulo = 'COMPROBANTE DE DIARIO - MOVIMIENTO DE CAJA';
@@ -166,7 +236,7 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
 
     const infoMovimiento = [
       { label: 'ID Movimiento:', value: String(movimiento.id) },
-      { label: 'Tipo:', value: `${movimiento.tipoMovimiento.nombre} (${movimiento.tipoMovimiento.tipoOperacion})` },
+      { label: 'Tipo:', value: `${movimiento.tipoMovimiento.nombre} (${movimiento.moneda?.simbolo || 'PEN'})` },
       { label: 'Fecha:', value: fechaFormateada },
       { label: 'Glosa:', value: movimiento.descripcion || 'N/A' },
       { label: 'Estado:', value: 'APROBADO' }
@@ -206,7 +276,7 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
         { label: 'Cuenta Contable:', value: `${cuentaBancaria.cuentaContable?.codigoCuenta || ''} - ${cuentaBancaria.cuentaContable?.nombre || ''}` },
         { label: 'N° Cuenta:', value: cuentaBancaria.numeroCuenta || 'N/A' },
         { label: 'Moneda:', value: movimiento.moneda ? `${movimiento.moneda.codigoSunat} (${movimiento.moneda.nombre})` : 'N/A' },
-        { label: 'N° Operación:', value: movimiento.numeroOperacion || 'S/N' }
+        { label: 'N° Operación:', value: movimiento.numeroOperacionPagoBanco || 'S/N' }
       ];
 
       infoCuenta.forEach(item => {
@@ -305,7 +375,10 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
 
       // Tabla de asientos
       dibujarTablaAsientos(page, movimiento.asientosContables, 50, yPosition, width - 100, fontBold, fontNormal, colorPrimario, colorSecundario, colorBorde);
-      yPosition -= (movimiento.asientosContables[0].detalles.length * 15 + 60);
+      
+      // ✅ VALIDACIÓN: Calcular espacio solo si hay detalles
+      const numDetalles = movimiento.asientosContables[0]?.detalles?.length || 0;
+      yPosition -= (numDetalles * 15 + 60);
     }
 
     // 11. ORIGEN DEL MOVIMIENTO
@@ -426,6 +499,20 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
 
   // Detalles del primer asiento (asumimos que todos los asientos del movimiento tienen la misma estructura)
   const asiento = asientos[0];
+  
+  // ✅ VALIDACIÓN: Verificar que el asiento tiene detalles
+  if (!asiento.detalles || asiento.detalles.length === 0) {
+    console.warn('⚠️ El asiento no tiene detalles cargados');
+    page.drawText('Sin detalles disponibles', {
+      x: x + 3,
+      y: y - 10,
+      size: 8,
+      font: fontNormal,
+      color: rgb(0.5, 0.5, 0.5)
+    });
+    return;
+  }
+  
   let totalDebe = 0;
   let totalHaber = 0;
 
@@ -433,7 +520,8 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
     xPos = x;
 
     // Cuenta
-    page.drawText(detalle.planCuenta.codigoCuenta, {
+    const codigoCuenta = detalle.planCuenta?.codigoCuenta || '-';
+    page.drawText(codigoCuenta, {
       x: xPos + 3,
       y: y,
       size: 8,
@@ -443,9 +531,10 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
     xPos += colWidths[0];
 
     // Descripción (truncar si es muy largo)
-    const desc = detalle.planCuenta.nombre.length > 20 
-      ? detalle.planCuenta.nombre.substring(0, 20) + '...'
-      : detalle.planCuenta.nombre;
+    const nombreCuenta = detalle.planCuenta?.nombreCuenta || 'Sin nombre';
+    const desc = nombreCuenta.length > 20 
+      ? nombreCuenta.substring(0, 20) + '...'
+      : nombreCuenta;
     page.drawText(desc, {
       x: xPos + 3,
       y: y,

@@ -103,6 +103,13 @@ app.use(
   express.static(path.join(process.cwd(), "uploads/sire")),
 );
 
+// Middleware para servir archivos del Sistema PDF V2
+app.use(
+  "/uploads/pdf-system",
+  cors(), // Habilitar CORS para archivos PDF
+  express.static(path.join(process.cwd(), "uploads/pdf-system")),
+);
+
 // Middlewares globales
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));

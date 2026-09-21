@@ -266,6 +266,7 @@ import categoriaTipoDeudaTributariaRoutes from './Tesoreria/categoriaTipoDeudaTr
 import deudaTributariaRoutes from './Tesoreria/deudaTributaria.routes.js';
 import pagoDeudaTributariaRoutes from './Tesoreria/pagoDeudaTributaria.routes.js';
 import pagoEspecializadoCxCRoutes from './CuentasPorCobrarPagar/pagoEspecializadoCuentaPorCobrar.routes.js';
+import pagoEspecializadoCxPRoutes from './CuentasPorCobrarPagar/pagoEspecializadoCuentaPorPagar.routes.js';
 import tareasAutomaticasRoutes from './Tesoreria/tareasAutomaticas.routes.js';
 import detraccionRoutes from './Tesoreria/detraccion.routes.js';
 import retencionRoutes from './Tesoreria/retencion.routes.js';
@@ -559,6 +560,7 @@ router.use('/det-docs-req-cotiza-ventas', detDocsReqCotizaVentasRoutes);
 router.use('/entrega-a-rendir-p-ventas', entregaARendirPVentasRoutes);
 router.use('/entregas-rendir-ventas', entregaARendirPVentasImpresionRoutes);
 router.use('/pagos-especializados-cxc', pagoEspecializadoCxCRoutes);
+router.use('/pagos-especializados-cxp', pagoEspecializadoCxPRoutes);
 
 // Rutas para DetMovsEntregaRendirPVentas
 router.use('/det-movs-entrega-rendir-p-ventas', detMovsEntregaRendirPVentasRoutes);

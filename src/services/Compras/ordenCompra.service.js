@@ -15,6 +15,30 @@ import {
 import { aplicarSignoMonto } from '../../utils/tiposDocumento.constants.js';
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 
+// ========================================
+// CONSTANTES PARA IMPUESTOS TRIBUTARIOS
+// Definidos en EstadoMultiFuncion
+// ========================================
+const ESTADOS_DETRACCION = {
+  PENDIENTE: 126,
+  VALIDADO: 127,
+  PARCIAL: 128
+};
+
+const ESTADOS_RETENCION = {
+  PENDIENTE: 129,
+  VALIDADO: 130,
+  PARCIAL: 131
+};
+
+const ESTADOS_PERCEPCION = {
+  PENDIENTE: 132,
+  VALIDADO: 133,
+  PARCIAL: 134
+};
+
+const BANCO_NACION_ID = 7; // Banco de la Nación
+
 async function validarForaneas(data) {
   if (data.empresaId) {
     const empresa = await prisma.empresa.findUnique({
@@ -702,6 +726,16 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     // VALIDAR: Solo calcular impuestos para Facturas (01) y Boletas (03)
     const codigoSunat = orden.tipoDocumentoFinal?.codigoSunat || orden.tipoDocumento?.codigoSunat || '';
     const aplicaImpuestos = codigoSunat === '01' || codigoSunat === '03';
+    
+    console.log('🔍 [calcularTotalesEImpuestos] Validación de documento:', {
+      ordenCompraId: orden.id,
+      numeroDocumento: orden.numeroDocumento,
+      tipoDocumento: orden.tipoDocumento?.descripcion,
+      codigoSunat,
+      aplicaImpuestos,
+      total
+    });
+
     // ========================================
     // PASO 5: EVALUAR DETRACCIÓN (solo Facturas y Boletas)
     // ========================================
@@ -715,6 +749,17 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       (d) => d.producto?.tipoDetraccionId
     );
 
+    console.log('🔍 [calcularTotalesEImpuestos] Detalles con detracción:', {
+      totalDetalles: orden.detalles.length,
+      detallesConDetraccion: detallesConDetraccion.length,
+      productos: orden.detalles.map(d => ({
+        productoId: d.productoId,
+        nombre: d.producto?.nombre,
+        tipoDetraccionId: d.producto?.tipoDetraccionId,
+        porcentajeDetraccion: d.producto?.porcentajeDetraccion
+      }))
+    });
+
     if (aplicaImpuestos && detallesConDetraccion.length > 0) {
       let porcentajeMax = 0;
       let tipoDetraccionMax = null;
@@ -727,6 +772,11 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
         }
       }
 
+      console.log('🔍 [calcularTotalesEImpuestos] Porcentaje máximo encontrado:', {
+        porcentajeMax,
+        tipoDetraccionMax: tipoDetraccionMax?.nombre
+      });
+
       if (porcentajeMax > 0 && tipoDetraccionMax) {
         // Convertir total a soles si es necesario
         const esSoles = orden.moneda.codigoSunat === 'PEN';
@@ -736,17 +786,34 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
           tipoDetraccionMax.montoMinimo || orden.empresa.montoMinimoDetraccion || 700
         );
 
+        console.log('🔍 [calcularTotalesEImpuestos] Validación de umbral:', {
+          totalEnSoles,
+          umbralMinimo,
+          cumpleUmbral: totalEnSoles > umbralMinimo,
+          moneda: orden.moneda.codigoSunat,
+          tipoCambio: orden.tipoCambio
+        });
+
         if (totalEnSoles > umbralMinimo) {
           aplicaDetraccion = true;
           tipoDetraccionId = tipoDetraccionMax.id;
           porcentajeDetraccion = porcentajeMax;
           montoDetraccion = Math.round(totalEnSoles * (porcentajeMax / 100));
           mensajeDetraccion = `✅ Detracción aplicada: ${porcentajeMax}% (S/ ${montoDetraccion}) - Total: S/ ${totalEnSoles.toFixed(2)} > Umbral: S/ ${umbralMinimo}`;
+          
+          console.log('✅ [calcularTotalesEImpuestos] Detracción APLICADA:', {
+            aplicaDetraccion,
+            tipoDetraccionId,
+            porcentajeDetraccion,
+            montoDetraccion
+          });
         } else {
           mensajeDetraccion = `⚠️ No aplica detracción: Total S/ ${totalEnSoles.toFixed(2)} ≤ Umbral S/ ${umbralMinimo}`;
+          console.log('⚠️ [calcularTotalesEImpuestos] NO aplica detracción (umbral):', mensajeDetraccion);
         }
       } else {
         mensajeDetraccion = '⚠️ No aplica detracción: Producto sin porcentaje o tipo de detracción configurado';
+        console.log('⚠️ [calcularTotalesEImpuestos] NO aplica detracción (config):', mensajeDetraccion);
       }
     } else {
       if (!aplicaImpuestos) {
@@ -810,12 +877,17 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     // ========================================
     // RETORNAR TODOS LOS CAMPOS CALCULADOS
     // ========================================
-    return {
+    // ⭐ IMPORTANTE: OrdenCompra usa nombres diferentes a CuentaPorCobrar/CuentaPorPagar
+    // Schema OrdenCompra: aplicaDetraccion, montoDetraccion
+    // Schema CuentaPorPagar: tieneDetraccion, montoDetraccionTotal
+    const resultado = {
       subtotal: subtotalFinal,
       totalIGV: totalIGVFinal,
       total: totalFinal,
       montoImpuestoRenta,
+      // ⭐ Nombres del schema OrdenCompra
       aplicaDetraccion,
+      tipoDetraccionId,
       porcentajeDetraccion,
       montoDetraccion,
       aplicaRetencion,
@@ -825,6 +897,16 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       porcentajePercepcion,
       montoPercepcion,
     };
+
+    console.log('📤 [calcularTotalesEImpuestos] Resultado final:', {
+      ordenCompraId: orden.id,
+      aplicaDetraccion: resultado.aplicaDetraccion,
+      tipoDetraccionId: resultado.tipoDetraccionId,
+      porcentajeDetraccion: resultado.porcentajeDetraccion,
+      montoDetraccion: resultado.montoDetraccion
+    });
+
+    return resultado;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
     throw new DatabaseError("Error al calcular totales e impuestos", err.message);
@@ -2491,6 +2573,438 @@ async function crearOrdenCompraConCotizacion(
   return ordenCompra;
 }
 
+// ============================================================================
+// FUNCIONES AUXILIARES PARA GENERACIÓN AUTOMÁTICA DE IMPUESTOS TRIBUTARIOS
+// ============================================================================
+
+/**
+ * Genera observación detallada para Detracción de Compra
+ * Incluye todos los datos del documento fiscal para trazabilidad completa
+ *
+ * @param {Object} ordenCompra - OrdenCompra con relaciones (proveedor, moneda, detalles, etc.)
+ * @param {Object} totales - Totales calculados (subtotal, IGV, total, montoDetraccion, etc.)
+ * @returns {String} - Observación formateada con todos los datos del documento
+ */
+function generarObservacionDetraccionCompra(ordenCompra, totales) {
+  const tipoDoc = ordenCompra.tipoDocumento?.descripcion || 'DOCUMENTO';
+  const numeroCompleto = ordenCompra.numeroDocumento || '';
+
+  const fechaEmision = ordenCompra.fechaDocumento
+    ? new Date(ordenCompra.fechaDocumento).toLocaleDateString('es-PE')
+    : '';
+  const fechaVence = ordenCompra.fechaVencimiento
+    ? new Date(ordenCompra.fechaVencimiento).toLocaleDateString('es-PE')
+    : '';
+
+  const ruc = ordenCompra.proveedor?.numeroDocumento || '';
+  const razonSocial = ordenCompra.proveedor?.razonSocial || '';
+
+  const monedaSimbolo = ordenCompra.moneda?.simbolo || 'S/';
+  const subtotal = Number(totales.subtotal || 0).toFixed(2);
+  const igv = Number(totales.totalIGV || 0).toFixed(2);
+  const total = Number(totales.total || 0).toFixed(2);
+  const montoDetraccion = Number(totales.montoDetraccion || 0).toFixed(2);
+  const porcentaje = Number(totales.porcentajeDetraccion || 0).toFixed(2);
+
+  // Generar detalle de items
+  let detalleItems = '';
+  if (ordenCompra.detalles && ordenCompra.detalles.length > 0) {
+    detalleItems = ordenCompra.detalles
+      .map((det) => {
+        const producto = det.producto?.nombre || 'Sin descripción';
+        const cantidad = Number(det.cantidad || 0).toFixed(2);
+        const precio = Number(det.precioUnitario || 0).toFixed(2);
+        const unidad = det.producto?.unidadMedida?.codigo || 'UND';
+        return `  • ${producto} x ${cantidad} ${unidad} @ ${monedaSimbolo} ${precio}`;
+      })
+      .join('\n');
+  } else {
+    detalleItems = '  • Sin items';
+  }
+
+  const observacion = `DETRACCIÓN GENERADA AUTOMÁTICAMENTE (COMPRA)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Documento: ${tipoDoc} ${numeroCompleto}
+Fecha Emisión: ${fechaEmision}
+Fecha Vencimiento: ${fechaVence}
+
+Proveedor:
+RUC: ${ruc}
+Razón Social: ${razonSocial}
+
+Importes:
+Valor Compra: ${monedaSimbolo} ${subtotal}
+IGV (18%): ${monedaSimbolo} ${igv}
+Total: ${monedaSimbolo} ${total}
+
+Detracción (${porcentaje}%): ${monedaSimbolo} ${montoDetraccion}
+
+Detalle de Items:
+${detalleItems}
+
+Generado desde OrdenCompra ${ordenCompra.numeroDocumento}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  return observacion;
+}
+
+/**
+ * Genera observación detallada para Retención de Compra
+ *
+ * @param {Object} ordenCompra - OrdenCompra con relaciones
+ * @param {Object} totales - Totales calculados
+ * @returns {String} - Observación formateada
+ */
+function generarObservacionRetencionCompra(ordenCompra, totales) {
+  const tipoDoc = ordenCompra.tipoDocumento?.descripcion || 'DOCUMENTO';
+  const numeroCompleto = ordenCompra.numeroDocumento || '';
+
+  const fechaEmision = ordenCompra.fechaDocumento
+    ? new Date(ordenCompra.fechaDocumento).toLocaleDateString('es-PE')
+    : '';
+  const fechaVence = ordenCompra.fechaVencimiento
+    ? new Date(ordenCompra.fechaVencimiento).toLocaleDateString('es-PE')
+    : '';
+
+  const ruc = ordenCompra.proveedor?.numeroDocumento || '';
+  const razonSocial = ordenCompra.proveedor?.razonSocial || '';
+
+  const monedaSimbolo = ordenCompra.moneda?.simbolo || 'S/';
+  const subtotal = Number(totales.subtotal || 0).toFixed(2);
+  const igv = Number(totales.totalIGV || 0).toFixed(2);
+  const total = Number(totales.total || 0).toFixed(2);
+  const montoRetencion = Number(totales.montoRetencion || 0).toFixed(2);
+  const porcentaje = Number(totales.porcentajeRetencion || 0).toFixed(2);
+
+  let detalleItems = '';
+  if (ordenCompra.detalles && ordenCompra.detalles.length > 0) {
+    detalleItems = ordenCompra.detalles
+      .map((det) => {
+        const producto = det.producto?.nombre || 'Sin descripción';
+        const cantidad = Number(det.cantidad || 0).toFixed(2);
+        const precio = Number(det.precioUnitario || 0).toFixed(2);
+        const unidad = det.producto?.unidadMedida?.codigo || 'UND';
+        return `  • ${producto} x ${cantidad} ${unidad} @ ${monedaSimbolo} ${precio}`;
+      })
+      .join('\n');
+  } else {
+    detalleItems = '  • Sin items';
+  }
+
+  const observacion = `RETENCIÓN GENERADA AUTOMÁTICAMENTE (COMPRA)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Documento: ${tipoDoc} ${numeroCompleto}
+Fecha Emisión: ${fechaEmision}
+Fecha Vencimiento: ${fechaVence}
+
+Proveedor (Sujeto a Retención):
+RUC: ${ruc}
+Razón Social: ${razonSocial}
+
+Importes:
+Valor Compra: ${monedaSimbolo} ${subtotal}
+IGV (18%): ${monedaSimbolo} ${igv}
+Total: ${monedaSimbolo} ${total}
+
+Retención (${porcentaje}%): ${monedaSimbolo} ${montoRetencion}
+
+Detalle de Items:
+${detalleItems}
+
+Generado desde OrdenCompra ${ordenCompra.numeroDocumento}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  return observacion;
+}
+
+/**
+ * Genera observación detallada para Percepción de Compra
+ *
+ * @param {Object} ordenCompra - OrdenCompra con relaciones
+ * @param {Object} totales - Totales calculados
+ * @returns {String} - Observación formateada
+ */
+function generarObservacionPercepcionCompra(ordenCompra, totales) {
+  const tipoDoc = ordenCompra.tipoDocumento?.descripcion || 'DOCUMENTO';
+  const numeroCompleto = ordenCompra.numeroDocumento || '';
+
+  const fechaEmision = ordenCompra.fechaDocumento
+    ? new Date(ordenCompra.fechaDocumento).toLocaleDateString('es-PE')
+    : '';
+  const fechaVence = ordenCompra.fechaVencimiento
+    ? new Date(ordenCompra.fechaVencimiento).toLocaleDateString('es-PE')
+    : '';
+
+  const ruc = ordenCompra.proveedor?.numeroDocumento || '';
+  const razonSocial = ordenCompra.proveedor?.razonSocial || '';
+
+  const monedaSimbolo = ordenCompra.moneda?.simbolo || 'S/';
+  const subtotal = Number(totales.subtotal || 0).toFixed(2);
+  const igv = Number(totales.totalIGV || 0).toFixed(2);
+  const total = Number(totales.total || 0).toFixed(2);
+  const montoPercepcion = Number(totales.montoPercepcion || 0).toFixed(2);
+  const porcentaje = Number(totales.porcentajePercepcion || 0).toFixed(2);
+
+  let detalleItems = '';
+  if (ordenCompra.detalles && ordenCompra.detalles.length > 0) {
+    detalleItems = ordenCompra.detalles
+      .map((det) => {
+        const producto = det.producto?.nombre || 'Sin descripción';
+        const cantidad = Number(det.cantidad || 0).toFixed(2);
+        const precio = Number(det.precioUnitario || 0).toFixed(2);
+        const unidad = det.producto?.unidadMedida?.codigo || 'UND';
+        return `  • ${producto} x ${cantidad} ${unidad} @ ${monedaSimbolo} ${precio}`;
+      })
+      .join('\n');
+  } else {
+    detalleItems = '  • Sin items';
+  }
+
+  const observacion = `PERCEPCIÓN GENERADA AUTOMÁTICAMENTE (COMPRA)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Documento: ${tipoDoc} ${numeroCompleto}
+Fecha Emisión: ${fechaEmision}
+Fecha Vencimiento: ${fechaVence}
+
+Proveedor (Agente de Percepción):
+RUC: ${ruc}
+Razón Social: ${razonSocial}
+
+Importes:
+Valor Compra: ${monedaSimbolo} ${subtotal}
+IGV (18%): ${monedaSimbolo} ${igv}
+Total: ${monedaSimbolo} ${total}
+
+Percepción (${porcentaje}%): ${monedaSimbolo} ${montoPercepcion}
+
+Detalle de Items:
+${detalleItems}
+
+Generado desde OrdenCompra ${ordenCompra.numeroDocumento}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  return observacion;
+}
+
+/**
+ * Crea o regenera registro de Detracción desde OrdenCompra
+ * 
+ * REGLA DE REGENERACIÓN:
+ * - Solo se regenera si importePagado = 0
+ * - Si importePagado > 0, se preserva el registro existente
+ * 
+ * @param {Object} ordenCompra - OrdenCompra con todas las relaciones necesarias
+ * @param {Object} totales - Totales calculados (incluye montoDetraccion, porcentajeDetraccion, etc.)
+ * @param {Object} tx - Transacción de Prisma
+ * @param {BigInt} personalId - ID del Personal que está generando la CxP
+ */
+async function crearDetraccionDesdeOrdenCompra(ordenCompra, totales, tx, personalId) {
+  console.log('🔵 [crearDetraccionDesdeOrdenCompra] Iniciando creación:', {
+    ordenCompraId: ordenCompra.id,
+    numeroDocumento: ordenCompra.numeroDocumento,
+    montoDetraccion: totales.montoDetraccion,
+    porcentajeDetraccion: totales.porcentajeDetraccion,
+    tipoDetraccionId: totales.tipoDetraccionId
+  });
+
+  // 1. Buscar detracción existente
+  const existente = await tx.detraccion.findUnique({
+    where: { ordenCompraId: ordenCompra.id }
+  });
+
+  // 2. Validar si se puede regenerar
+  if (existente) {
+    console.log('⚠️ [crearDetraccionDesdeOrdenCompra] Detracción existente encontrada:', {
+      id: existente.id,
+      importePagado: existente.importePagado
+    });
+    // ⭐ ÚNICA VALIDACIÓN: importePagado > 0
+    if (existente.importePagado > 0) {
+      console.log('❌ [crearDetraccionDesdeOrdenCompra] NO regenerar (tiene pagos)');
+      return; // ❌ NO regenerar (tiene pagos)
+    }
+    // ✅ importePagado = 0 → ELIMINAR para recrear
+    console.log('🗑️ [crearDetraccionDesdeOrdenCompra] Eliminando detracción sin pagos');
+    await tx.detraccion.delete({
+      where: { id: existente.id }
+    });
+  }
+
+  // 3. Obtener cuenta Banco de la Nación del proveedor para detracciones
+  // ⚠️ NOTA: En CxP, la cuenta BN es del PROVEEDOR, no de la empresa
+  // El proveedor puede tener su cuenta BN registrada en EntidadComercial.cuentaBNSunat
+  // pero NO en CuentaCorriente (que solo almacena cuentas de la empresa)
+  // Por ahora, dejamos cuentaBNSunatProveedorId en null
+  // TODO: Implementar campo cuentaBNSunat en EntidadComercial si se requiere
+  const cuentaBNProveedor = null;
+
+  // 4. Generar observación detallada
+  const observacion = generarObservacionDetraccionCompra(ordenCompra, totales);
+
+  // 5. CREAR nueva detracción
+  const nuevaDetraccion = await tx.detraccion.create({
+    data: {
+      // DOCUMENTO ORIGEN
+      empresaId: ordenCompra.empresaId,
+      ordenCompraId: ordenCompra.id,
+      origenOperacionComprasVentas: true, // true = COMPRA
+      entidadComercialId: ordenCompra.proveedorId,
+
+      // TIPO Y TASA
+      tipoDetraccionId: totales.tipoDetraccionId,
+      tasaDetraccion: totales.porcentajeDetraccion,
+
+      // DOCUMENTO
+      tipoDocumentoId: ordenCompra.tipoDocumentoId,
+      numeroDocumento: ordenCompra.numeroDocumento,
+      fechaEmision: ordenCompra.fechaDocumento,
+
+      // ⭐ MONTOS Y SALDO (CRÍTICO)
+      monedaId: ordenCompra.monedaId,
+      importeTotal: totales.total, // Total del documento original
+      importeRequerido: totales.montoDetraccion, // Monto a detraer (FIJO)
+      importePagado: 0,
+      saldoPendiente: totales.montoDetraccion,
+
+      // ESTADO Y CONTABILIDAD
+      estadoPagoId: ESTADOS_DETRACCION.PENDIENTE, // 126
+      periodoContableId: ordenCompra.periodoContableId,
+      fechaContable: ordenCompra.fechaContable,
+
+      // CUENTA BANCO NACIÓN DEL PROVEEDOR
+      cuentaBNSunatProveedorId: cuentaBNProveedor?.id || null,
+
+      // AUDITORÍA
+      observaciones: observacion,
+      creadoPor: personalId,
+      actualizadoPor: personalId
+    }
+  });
+
+  console.log('✅ [crearDetraccionDesdeOrdenCompra] Detracción creada exitosamente:', {
+    id: nuevaDetraccion.id,
+    importeRequerido: nuevaDetraccion.importeRequerido,
+    saldoPendiente: nuevaDetraccion.saldoPendiente,
+    estadoPagoId: nuevaDetraccion.estadoPagoId
+  });
+}
+
+/**
+ * Crea o regenera registro de Retención desde OrdenCompra
+ * 
+ * REGLA DE REGENERACIÓN:
+ * - Solo se regenera si importePagado = 0
+ * 
+ * @param {Object} ordenCompra - OrdenCompra con todas las relaciones necesarias
+ * @param {Object} totales - Totales calculados
+ * @param {Object} tx - Transacción de Prisma
+ * @param {BigInt} personalId - ID del Personal que está generando la CxP
+ */
+async function crearRetencionDesdeOrdenCompra(ordenCompra, totales, tx, personalId) {
+  console.log('🟡 [crearRetencionDesdeOrdenCompra] Iniciando creación:', {
+    ordenCompraId: ordenCompra.id,
+    montoRetencion: totales.montoRetencion,
+    porcentajeRetencion: totales.porcentajeRetencion
+  });
+
+  const existente = await tx.retencion.findUnique({
+    where: { ordenCompraId: ordenCompra.id }
+  });
+
+  if (existente) {
+    console.log('⚠️ [crearRetencionDesdeOrdenCompra] Retención existente:', {
+      id: existente.id,
+      importePagado: existente.importePagado
+    });
+    if (existente.importePagado > 0) return; // ❌ NO regenerar
+    await tx.retencion.delete({ where: { id: existente.id } });
+  }
+
+  const observacion = generarObservacionRetencionCompra(ordenCompra, totales);
+
+  await tx.retencion.create({
+    data: {
+      empresaId: ordenCompra.empresaId,
+      ordenCompraId: ordenCompra.id,
+      origenOperacionComprasVentas: true, // true = COMPRA
+      entidadComercialId: ordenCompra.proveedorId,
+      tasaRetencion: totales.porcentajeRetencion,
+      tipoDocumentoId: ordenCompra.tipoDocumentoId,
+      numeroDocumento: ordenCompra.numeroDocumento,
+      fechaEmision: ordenCompra.fechaDocumento,
+      monedaId: ordenCompra.monedaId,
+      importeTotal: totales.total,
+      importeRequerido: totales.montoRetencion,
+      importePagado: 0,
+      saldoPendiente: totales.montoRetencion,
+      estadoPagoId: ESTADOS_RETENCION.PENDIENTE, // 129
+      periodoContableId: ordenCompra.periodoContableId,
+      fechaContable: ordenCompra.fechaContable,
+      observaciones: observacion,
+      creadoPor: personalId,
+      actualizadoPor: personalId
+    }
+  });
+}
+
+/**
+ * Crea o regenera registro de Percepción desde OrdenCompra
+ * 
+ * REGLA DE REGENERACIÓN:
+ * - Solo se regenera si importePagado = 0
+ * 
+ * @param {Object} ordenCompra - OrdenCompra con relaciones
+ * @param {Object} totales - Totales calculados
+ * @param {Object} tx - Transacción de Prisma
+ * @param {BigInt} personalId - ID del Personal que está generando la CxP
+ */
+async function crearPercepcionDesdeOrdenCompra(ordenCompra, totales, tx, personalId) {
+  console.log('🟢 [crearPercepcionDesdeOrdenCompra] Iniciando creación:', {
+    ordenCompraId: ordenCompra.id,
+    montoPercepcion: totales.montoPercepcion,
+    porcentajePercepcion: totales.porcentajePercepcion
+  });
+
+  const existente = await tx.percepcion.findUnique({
+    where: { ordenCompraId: ordenCompra.id }
+  });
+
+  if (existente) {
+    console.log('⚠️ [crearPercepcionDesdeOrdenCompra] Percepción existente:', {
+      id: existente.id,
+      importePagado: existente.importePagado
+    });
+    if (existente.importePagado > 0) return; // ❌ NO regenerar
+    await tx.percepcion.delete({ where: { id: existente.id } });
+  }
+
+  const observacion = generarObservacionPercepcionCompra(ordenCompra, totales);
+
+  await tx.percepcion.create({
+    data: {
+      empresaId: ordenCompra.empresaId,
+      ordenCompraId: ordenCompra.id,
+      origenOperacionComprasVentas: true, // true = COMPRA
+      entidadComercialId: ordenCompra.proveedorId,
+      tasaPercepcion: totales.porcentajePercepcion,
+      tipoDocumentoId: ordenCompra.tipoDocumentoId,
+      numeroDocumento: ordenCompra.numeroDocumento,
+      fechaEmision: ordenCompra.fechaDocumento,
+      monedaId: ordenCompra.monedaId,
+      importeTotal: totales.total,
+      importeRequerido: totales.montoPercepcion,
+      importePagado: 0,
+      saldoPendiente: totales.montoPercepcion,
+      estadoPagoId: ESTADOS_PERCEPCION.PENDIENTE, // 132
+      periodoContableId: ordenCompra.periodoContableId,
+      fechaContable: ordenCompra.fechaContable,
+      observaciones: observacion,
+      creadoPor: personalId,
+      actualizadoPor: personalId
+    }
+  });
+}
+
 /**
  * Generar CuentaPorPagar desde OrdenCompra
  * Crea una CxP y actualiza el estado de la OC a FACTURADA (113)
@@ -2618,25 +3132,127 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
       }
 
       // ========================================
-      // 6. DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN
+      // 6. OBTENER IMPUESTOS YA CALCULADOS DE LA ORDENCOMPRA
       // ========================================
-      // TODO: Implementar lógica de detracción/retención/percepción según proveedor
-      // Por ahora se dejan en false
-      const tieneDetraccion = false;
-      const montoDetraccion = 0;
-      const porcentajeDetraccion = null;
+      // ⭐ ÚNICA FUENTE DE VERDAD: Los impuestos ya fueron calculados
+      // por calcularTotalesEImpuestos() y están almacenados en la OrdenCompra.
+      // NO recalcular aquí para evitar inconsistencias.
 
-      const tieneRetencion = false;
-      const montoRetencion = 0;
-      const porcentajeRetencion = null;
+      console.log('🔍 [generarCuentaPorPagar] Valores en OrdenCompra:', {
+        ordenCompraId: ordenCompra.id,
+        aplicaDetraccion: ordenCompra.aplicaDetraccion,
+        montoDetraccion: ordenCompra.montoDetraccion,
+        porcentajeDetraccion: ordenCompra.porcentajeDetraccion,
+        tipoDetraccionId: ordenCompra.tipoDetraccionId,
+        total: ordenCompra.total
+      });
 
-      const tienePercepcion = false;
-      const montoPercepcion = 0;
-      const porcentajePercepcion = null;
+      // Calcular subtotal e IGV para el objeto totales
+      const subtotal = ordenCompra.detalles?.reduce((sum, detalle) => {
+        const cantidad = Number(detalle.cantidad || 0);
+        const precioUnitario = Number(detalle.precioUnitario || 0);
+        return sum + (cantidad * precioUnitario);
+      }, 0) || 0;
+
+      const porcentajeIGV = Number(ordenCompra.porcentajeIGV) || 0;
+      const totalIGV = ordenCompra.esExoneradoAlIGV ? 0 : subtotal * (porcentajeIGV / 100);
+
+      // Objeto totales para las funciones de creación
+      // ⭐ MAPEO: OrdenCompra usa aplicaDetraccion/montoDetraccion
+      //           CuentaPorPagar usa tieneDetraccion/montoDetraccionTotal
+      const totales = {
+        subtotal,
+        totalIGV,
+        total: montoFinal,
+        // Detracción - Mapear nombres de OrdenCompra a formato esperado
+        tieneDetraccion: ordenCompra.aplicaDetraccion || false,
+        montoDetraccion: Number(ordenCompra.montoDetraccion) || 0,
+        porcentajeDetraccion: Number(ordenCompra.porcentajeDetraccion) || null,
+        tipoDetraccionId: ordenCompra.tipoDetraccionId || null,
+        // Retención
+        tieneRetencion: ordenCompra.aplicaRetencion || false,
+        montoRetencion: Number(ordenCompra.montoRetencion) || 0,
+        porcentajeRetencion: Number(ordenCompra.porcentajeRetencion) || null,
+        // Percepción
+        tienePercepcion: ordenCompra.aplicaPercepcion || false,
+        montoPercepcion: Number(ordenCompra.montoPercepcion) || 0,
+        porcentajePercepcion: Number(ordenCompra.porcentajePercepcion) || null
+      };
+
+      console.log('📊 [generarCuentaPorPagar] Totales calculados:', {
+        ordenCompraId: ordenCompra.id,
+        numeroDocumento: ordenCompra.numeroDocumento,
+        subtotal,
+        totalIGV,
+        total: montoFinal,
+        detraccion: {
+          tiene: totales.tieneDetraccion,
+          monto: totales.montoDetraccion,
+          porcentaje: totales.porcentajeDetraccion,
+          tipoId: totales.tipoDetraccionId
+        },
+        retencion: {
+          tiene: totales.tieneRetencion,
+          monto: totales.montoRetencion,
+          porcentaje: totales.porcentajeRetencion
+        },
+        percepcion: {
+          tiene: totales.tienePercepcion,
+          monto: totales.montoPercepcion,
+          porcentaje: totales.porcentajePercepcion
+        }
+      });
 
       // ========================================
-      // 7. CREAR CUENTA POR PAGAR
+      // 7. CREAR REGISTROS DE IMPUESTOS TRIBUTARIOS
       // ========================================
+      // Obtener personalId del usuario que está generando (si existe)
+      const personalId = ordenCompra.creadoPor || null;
+
+      // Crear Detracción si aplica
+      if (totales.tieneDetraccion && totales.montoDetraccion > 0) {
+        await crearDetraccionDesdeOrdenCompra(ordenCompra, totales, tx, personalId);
+      }
+
+      // Crear Retención si aplica
+      if (totales.tieneRetencion && totales.montoRetencion > 0) {
+        await crearRetencionDesdeOrdenCompra(ordenCompra, totales, tx, personalId);
+      }
+
+      // Crear Percepción si aplica
+      if (totales.tienePercepcion && totales.montoPercepcion > 0) {
+        await crearPercepcionDesdeOrdenCompra(ordenCompra, totales, tx, personalId);
+      }
+
+      // Variables para la CxP
+      const tieneDetraccion = totales.tieneDetraccion;
+      const montoDetraccion = totales.montoDetraccion;
+      const porcentajeDetraccion = totales.porcentajeDetraccion;
+
+      const tieneRetencion = totales.tieneRetencion;
+      const montoRetencion = totales.montoRetencion;
+      const porcentajeRetencion = totales.porcentajeRetencion;
+
+      const tienePercepcion = totales.tienePercepcion;
+      const montoPercepcion = totales.montoPercepcion;
+      const porcentajePercepcion = totales.porcentajePercepcion;
+
+      // ========================================
+      // 8. CREAR CUENTA POR PAGAR
+      // ========================================
+      console.log('💾 [generarCuentaPorPagar] Creando CxP con impuestos:', {
+        ordenCompraId: ordenCompra.id,
+        tieneDetraccion,
+        montoDetraccionTotal: montoDetraccion,
+        porcentajeDetraccion,
+        tieneRetencion,
+        montoRetencionTotal: montoRetencion,
+        porcentajeRetencion,
+        tienePercepcion,
+        montoPercepcionTotal: montoPercepcion,
+        porcentajePercepcion
+      });
+
       const cuentaPorPagar = await tx.cuentaPorPagar.create({
         data: {
           // ORIGEN DEL DOCUMENTO
@@ -2688,7 +3304,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
       });
 
       // ========================================
-      // 8. ACTUALIZAR ORDEN DE COMPRA A FACTURADA (113)
+      // 9. ACTUALIZAR ORDEN DE COMPRA A FACTURADA (113)
       // ========================================
       const ordenCompraActualizada = await tx.ordenCompra.update({
         where: { id: ordenCompraId },
@@ -2705,7 +3321,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
       });
 
       // ========================================
-      // 9. RETORNAR RESULTADO
+      // 10. RETORNAR RESULTADO
       // ========================================
       return {
         ordenCompra: ordenCompraActualizada,

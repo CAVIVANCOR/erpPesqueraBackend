@@ -385,31 +385,42 @@ const crear = async (data) => {
       if (!tipoCambio || tipoCambio === null || tipoCambio === 0 || tipoCambio < 1) {
         tipoCambio = await obtenerTipoCambioSunat(new Date(data.fechaAsiento));
       }
+      // ✅ Preparar data del asiento
+      const asientoCreateData = {
+        empresaId: data.empresaId,
+        periodoContableId: data.periodoContableId,
+        numeroAsiento,
+        correlativo,
+        fechaAsiento: new Date(data.fechaAsiento),
+        glosa: data.glosa || "",
+        tipoLibro: data.tipoLibro || "FISCAL",
+        tipoLibroId: data.tipoLibroId ? Number(data.tipoLibroId) : null,
+        esGerencial: data.esGerencial || false,
+        origenAsiento: data.origenAsiento || "MANUAL",
+        submoduloOrigenId: data.submoduloOrigenId || null,
+        procesoOrigenId: data.procesoOrigenId || null,
+        estadoId: data.estadoId,
+        totalDebe: data.totalDebe || 0,
+        totalHaber: data.totalHaber || 0,
+        diferencia: data.diferencia || 0,
+        estaCuadrado: data.estaCuadrado || false,
+        monedaId: data.monedaId,
+        tipoCambio: tipoCambio,
+        esSaldoInicial: data.esSaldoInicial || false,
+        creadoPor: data.creadoPor,
+        actualizadoPor: data.creadoPor,
+      };
+
+      // ✅ CONECTAR RELACIÓN CON MovimientoCaja SI APLICA
+      // Esto permite que Prisma actualice automáticamente la relación inversa
+      if (data.procesoOrigenId && data.submoduloOrigenId) {
+        asientoCreateData.movimientosCaja = {
+          connect: { id: Number(data.procesoOrigenId) }
+        };
+      }
+
       const asiento = await tx.asientoContable.create({
-        data: {
-          empresaId: data.empresaId,
-          periodoContableId: data.periodoContableId,
-          numeroAsiento,
-          correlativo,
-          fechaAsiento: new Date(data.fechaAsiento),
-          glosa: data.glosa || "",
-          tipoLibro: data.tipoLibro || "FISCAL",
-          tipoLibroId: data.tipoLibroId ? Number(data.tipoLibroId) : null,
-          esGerencial: data.esGerencial || false,
-          origenAsiento: data.origenAsiento || "MANUAL",
-          submoduloOrigenId: data.submoduloOrigenId || null,
-          procesoOrigenId: data.procesoOrigenId || null,
-          estadoId: data.estadoId,
-          totalDebe: data.totalDebe || 0,
-          totalHaber: data.totalHaber || 0,
-          diferencia: data.diferencia || 0,
-          estaCuadrado: data.estaCuadrado || false,
-          monedaId: data.monedaId,
-          tipoCambio: tipoCambio,
-          esSaldoInicial: data.esSaldoInicial || false,
-          creadoPor: data.creadoPor,
-          actualizadoPor: data.creadoPor,
-        },
+        data: asientoCreateData,
       });
 
       // Crear detalles solo si vienen
