@@ -498,6 +498,54 @@ const eliminar = async (id) => {
       totalOperaciones += detalleMovsEntregaRendir;
     }
 
+    const detMovsEntregaRendirPescaConsumo = await prisma.detMovsEntRendirPescaConsumo.count({
+      where: { entidadComercialId: id },
+    });
+    if (detMovsEntregaRendirPescaConsumo > 0) {
+      detalleUso.detMovsEntregaRendirPescaConsumo = detMovsEntregaRendirPescaConsumo;
+      totalOperaciones += detMovsEntregaRendirPescaConsumo;
+    }
+
+    const detMovsEntregaRendirPCompras = await prisma.detMovsEntregaRendirPCompras.count({
+      where: { entidadComercialId: id },
+    });
+    if (detMovsEntregaRendirPCompras > 0) {
+      detalleUso.detMovsEntregaRendirPCompras = detMovsEntregaRendirPCompras;
+      totalOperaciones += detMovsEntregaRendirPCompras;
+    }
+
+    const detMovsEntregaRendirPVentas = await prisma.detMovsEntregaRendirPVentas.count({
+      where: { entidadComercialId: id },
+    });
+    if (detMovsEntregaRendirPVentas > 0) {
+      detalleUso.detMovsEntregaRendirPVentas = detMovsEntregaRendirPVentas;
+      totalOperaciones += detMovsEntregaRendirPVentas;
+    }
+
+    const detMovsEntregaRendirMovAlmacen = await prisma.detMovsEntregaRendirMovAlmacen.count({
+      where: { entidadComercialId: id },
+    });
+    if (detMovsEntregaRendirMovAlmacen > 0) {
+      detalleUso.detMovsEntregaRendirMovAlmacen = detMovsEntregaRendirMovAlmacen;
+      totalOperaciones += detMovsEntregaRendirMovAlmacen;
+    }
+
+    const detMovsEntregaRendirContratoServicios = await prisma.detMovsEntregaRendirContratoServicios.count({
+      where: { entidadComercialId: id },
+    });
+    if (detMovsEntregaRendirContratoServicios > 0) {
+      detalleUso.detMovsEntregaRendirContratoServicios = detMovsEntregaRendirContratoServicios;
+      totalOperaciones += detMovsEntregaRendirContratoServicios;
+    }
+
+    const detMovsEntregaOTMantenimiento = await prisma.detMovsEntregaRendirOTMantenimiento.count({
+      where: { entidadComercialId: id },
+    });
+    if (detMovsEntregaOTMantenimiento > 0) {
+      detalleUso.detMovsEntregaOTMantenimiento = detMovsEntregaOTMantenimiento;
+      totalOperaciones += detMovsEntregaOTMantenimiento;
+    }
+
     // 🔍 PESCA (5 modelos)
     const descargasFaenaPesca = await prisma.descargaFaenaPesca.count({
       where: { clienteId: id },
@@ -607,7 +655,7 @@ const eliminar = async (id) => {
     }
 
     const retenciones = await prisma.retencion.count({
-      where: { proveedorId: id },
+      where: { entidadComercialId: id },
     });
     if (retenciones > 0) {
       detalleUso.retenciones = retenciones;
@@ -615,11 +663,58 @@ const eliminar = async (id) => {
     }
 
     const percepciones = await prisma.percepcion.count({
-      where: { proveedorId: id },
+      where: { entidadComercialId: id },
     });
     if (percepciones > 0) {
       detalleUso.percepciones = percepciones;
       totalOperaciones += percepciones;
+    }
+
+    const detracciones = await prisma.detraccion.count({
+      where: { entidadComercialId: id },
+    });
+    if (detracciones > 0) {
+      detalleUso.detracciones = detracciones;
+      totalOperaciones += detracciones;
+    }
+
+    // Validar MovimientoCaja vinculados a Detracciones de esta entidad
+    const movimientosCajaDetraccion = await prisma.movimientoCaja.count({
+      where: {
+        detraccion: {
+          entidadComercialId: id,
+        },
+      },
+    });
+    if (movimientosCajaDetraccion > 0) {
+      detalleUso.movimientosCajaDetraccion = movimientosCajaDetraccion;
+      totalOperaciones += movimientosCajaDetraccion;
+    }
+
+    // Validar MovimientoCaja vinculados a Retenciones de esta entidad
+    const movimientosCajaRetencion = await prisma.movimientoCaja.count({
+      where: {
+        retencion: {
+          entidadComercialId: id,
+        },
+      },
+    });
+    if (movimientosCajaRetencion > 0) {
+      detalleUso.movimientosCajaRetencion = movimientosCajaRetencion;
+      totalOperaciones += movimientosCajaRetencion;
+    }
+
+    // Validar MovimientoCaja vinculados a Percepciones de esta entidad
+    const movimientosCajaPercepcion = await prisma.movimientoCaja.count({
+      where: {
+        percepcion: {
+          entidadComercialId: id,
+        },
+      },
+    });
+    if (movimientosCajaPercepcion > 0) {
+      detalleUso.movimientosCajaPercepcion = movimientosCajaPercepcion;
+      totalOperaciones += movimientosCajaPercepcion;
     }
 
     const detallesAsientos = await prisma.detalleAsientoContable.count({
@@ -677,6 +772,22 @@ const eliminar = async (id) => {
     if (detContratistasOT > 0) {
       detalleUso.detContratistasOT = detContratistasOT;
       totalOperaciones += detContratistasOT;
+    }
+
+    const detPlataformaRecepcionPesca = await prisma.detPlataformaRecepcionPesca.count({
+      where: { entidadComercialId: id },
+    });
+    if (detPlataformaRecepcionPesca > 0) {
+      detalleUso.detPlataformaRecepcionPesca = detPlataformaRecepcionPesca;
+      totalOperaciones += detPlataformaRecepcionPesca;
+    }
+
+    const detComisionFidelizacionEntidad = await prisma.detComisionFidelizacionEntidad.count({
+      where: { entidadComercialFidelizacionId: id },
+    });
+    if (detComisionFidelizacionEntidad > 0) {
+      detalleUso.detComisionFidelizacionEntidad = detComisionFidelizacionEntidad;
+      totalOperaciones += detComisionFidelizacionEntidad;
     }
 
     // ========================================

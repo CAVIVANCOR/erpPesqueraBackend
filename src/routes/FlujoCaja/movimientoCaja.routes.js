@@ -81,6 +81,14 @@ router.get(
   movimientoCajaController.generarVoucherContable
 );
 
+// Regenerar y guardar voucher contable - DEBE IR ANTES DE /:id
+router.post(
+  "/:id/regenerar-voucher-contable",
+  autenticarJWT,
+  checkPermission("movimientoCaja", "editar"),
+  movimientoCajaController.regenerarVoucherContable
+);
+
 router.get(
   "/:id",
   autenticarJWT,

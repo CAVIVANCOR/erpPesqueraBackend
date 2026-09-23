@@ -3240,19 +3240,6 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
       // ========================================
       // 8. CREAR CUENTA POR PAGAR
       // ========================================
-      console.log('💾 [generarCuentaPorPagar] Creando CxP con impuestos:', {
-        ordenCompraId: ordenCompra.id,
-        tieneDetraccion,
-        montoDetraccionTotal: montoDetraccion,
-        porcentajeDetraccion,
-        tieneRetencion,
-        montoRetencionTotal: montoRetencion,
-        porcentajeRetencion,
-        tienePercepcion,
-        montoPercepcionTotal: montoPercepcion,
-        porcentajePercepcion
-      });
-
       const cuentaPorPagar = await tx.cuentaPorPagar.create({
         data: {
           // ORIGEN DEL DOCUMENTO

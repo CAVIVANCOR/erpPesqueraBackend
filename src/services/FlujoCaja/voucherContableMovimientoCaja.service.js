@@ -48,18 +48,21 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
           include: {
             banco: true,
             tipoCuentaCorriente: true,
-            cuentaContable: true
+            cuentaContable: true,
+            moneda: true  // ✅ INCLUIR MONEDA DE LA CUENTA
           }
         },
         cuentaCorrienteDestino: {
           include: {
             banco: true,
             tipoCuentaCorriente: true,
-            cuentaContable: true
+            cuentaContable: true,
+            moneda: true  // ✅ INCLUIR MONEDA DE LA CUENTA
           }
         },
         // Relaciones de origen
-        pagosCuentaPorCobrar: true
+        pagosCuentaPorCobrar: true,
+        pagosCuentaPorPagar: true
       }
     });
 
@@ -70,9 +73,19 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
     // ✅ CONSULTA MANUAL: Obtener asientos contables por procesoOrigenId
     // La relación polimórfica no funciona automáticamente con Prisma
     // ⚠️ IMPORTANTE: Solo traer el asiento MÁS RECIENTE (último creado)
+    
+    // Buscar el submódulo MovimientoCaja para filtrar correctamente
+    const submoduloMovCaja = await prisma.submoduloSistema.findFirst({
+      where: {
+        nombreModeloOrigen: 'MovimientoCaja',
+        activo: true
+      }
+    });
+    
     const asientosContables = await prisma.asientoContable.findMany({
       where: {
         procesoOrigenId: Number(movimientoId),
+        submoduloOrigenId: submoduloMovCaja?.id,  // ✅ Filtrar por submódulo correcto
         origenAsiento: 'AUTOMATICO'
       },
       include: {
@@ -167,19 +180,27 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
     }
 
     // Información de la empresa (derecha, alineada a la derecha)
+    let direccion = movimiento.empresa.direccion || '';
+    // ✅ Truncar dirección si es muy larga (máximo 60 caracteres)
+    if (direccion.length > 60) {
+      direccion = direccion.substring(0, 57) + '...';
+    }
+    
     const empresaInfo = [
       movimiento.empresa.razonSocial || 'MEGUI INVESTMENT S.A.C.',
       movimiento.empresa.ruc ? `RUC: ${movimiento.empresa.ruc}` : 'RUC: 20603686498',
-      movimiento.empresa.direccion || ''
+      direccion
     ].filter(Boolean);
 
     let empresaY = yPosition - 10;
-    empresaInfo.forEach((line) => {
-      const textWidth = fontNormal.widthOfTextAtSize(line, 9);
+    empresaInfo.forEach((line, index) => {
+      // Usar tamaño de fuente más pequeño para la dirección
+      const fontSize = index === 2 ? 7 : 9;
+      const textWidth = fontNormal.widthOfTextAtSize(line, fontSize);
       page.drawText(line, {
         x: width - 50 - textWidth,  // Alineado a la derecha
         y: empresaY,
-        size: 9,
+        size: fontSize,
         font: fontNormal,
         color: colorSecundario
       });
@@ -271,11 +292,14 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
       dibujarSeccion(page, 'CUENTA BANCARIA', 50, yPosition, width - 100, fontBold, colorPrimario, colorBorde);
       yPosition -= 25;
 
+      // ✅ CORRECCIÓN: Usar la moneda de la cuenta corriente ya incluida
+      const monedaCuenta = cuentaBancaria.moneda;
+
       const infoCuenta = [
         { label: 'Banco:', value: cuentaBancaria.banco?.nombre || 'N/A' },
         { label: 'Cuenta Contable:', value: `${cuentaBancaria.cuentaContable?.codigoCuenta || ''} - ${cuentaBancaria.cuentaContable?.nombre || ''}` },
         { label: 'N° Cuenta:', value: cuentaBancaria.numeroCuenta || 'N/A' },
-        { label: 'Moneda:', value: movimiento.moneda ? `${movimiento.moneda.codigoSunat} (${movimiento.moneda.nombre})` : 'N/A' },
+        { label: 'Moneda:', value: monedaCuenta ? `${monedaCuenta.codigoSunat} (${monedaCuenta.nombre})` : 'N/A' },
         { label: 'N° Operación:', value: movimiento.numeroOperacionPagoBanco || 'S/N' }
       ];
 
@@ -382,18 +406,20 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
     }
 
     // 11. ORIGEN DEL MOVIMIENTO
-    if (movimiento.pagosCuentaPorCobrar && movimiento.pagosCuentaPorCobrar.length > 0) {
+    const tienePagoCxC = movimiento.pagosCuentaPorCobrar && movimiento.pagosCuentaPorCobrar.length > 0;
+    const tienePagoCxP = movimiento.pagosCuentaPorPagar && movimiento.pagosCuentaPorPagar.length > 0;
+    
+    if (tienePagoCxC || tienePagoCxP) {
       yPosition -= 10;
       dibujarSeccion(page, 'ORIGEN DEL MOVIMIENTO', 50, yPosition, width - 100, fontBold, colorPrimario, colorBorde);
       yPosition -= 25;
 
-      const pago = movimiento.pagosCuentaPorCobrar[0];
-      // Nota: pagosCuentaPorCobrar es un array, pero no incluye las relaciones anidadas
-      // Por ahora mostramos solo el ID del pago
+      const pago = tienePagoCxC ? movimiento.pagosCuentaPorCobrar[0] : movimiento.pagosCuentaPorPagar[0];
+      const tipoPago = tienePagoCxC ? 'Pago Cuenta Por Cobrar' : 'Pago Cuenta Por Pagar';
 
       const infoOrigen = [
         { label: 'ID Pago Origen:', value: String(pago.id) },
-        { label: 'Tipo:', value: 'Pago Cuenta Por Cobrar' }
+        { label: 'Tipo:', value: tipoPago }
       ];
 
       infoOrigen.forEach(item => {
@@ -417,17 +443,26 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
       });
     }
 
-    // 12. FIRMAS (al final de la página)
-    yPosition = 100;
-    dibujarFirmas(page, 50, yPosition, width - 100, fontBold, fontNormal, colorSecundario);
+    // 12. FIRMAS EN FOOTER (posición fija)
+    const footerY = 120;
+    const margin = 20;
+    dibujarFirmas(page, margin, footerY + 40, width - 2 * margin, fontBold, fontNormal, colorSecundario);
 
-    // 13. Footer
-    page.drawText('Documento generado automáticamente - Sistema ERP Megui', {
-      x: (width - fontNormal.widthOfTextAtSize('Documento generado automáticamente - Sistema ERP Megui', 8)) / 2,
-      y: 30,
-      size: 8,
+    // 13. Footer (debajo de la tabla de firmas)
+    const fechaGeneracion = new Date().toLocaleString("es-PE", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const piePagina = `Documento generado automáticamente - ${fechaGeneracion}`;
+    page.drawText(piePagina, {
+      x: (width - fontNormal.widthOfTextAtSize(piePagina, 7)) / 2,
+      y: footerY - 15,
+      size: 7,
       font: fontNormal,
-      color: colorSecundario
+      color: rgb(0.5, 0.5, 0.5)
     });
 
     // 14. Generar PDF
@@ -476,7 +511,7 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
   headers.forEach((header, i) => {
     page.drawRectangle({
       x: xPos,
-      y: y - 15,
+      y: y - 18,
       width: colWidths[i],
       height: 20,
       color: rgb(0.9, 0.9, 0.9),
@@ -486,7 +521,7 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
 
     page.drawText(header, {
       x: xPos + 3,
-      y: y - 10,
+      y: y - 12,
       size: 8,
       font: fontBold,
       color: colorPrimario
@@ -495,7 +530,7 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
     xPos += colWidths[i];
   });
 
-  y -= 20;
+  y -= 25;
 
   // Detalles del primer asiento (asumimos que todos los asientos del movimiento tienen la misma estructura)
   const asiento = asientos[0];
@@ -516,14 +551,17 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
   let totalDebe = 0;
   let totalHaber = 0;
 
-  asiento.detalles.forEach(detalle => {
+  asiento.detalles.forEach((detalle, index) => {
     xPos = x;
+    
+    // ✅ Añadir espacio adicional después del header
+    const yData = y - (index * 15);
 
     // Cuenta
     const codigoCuenta = detalle.planCuenta?.codigoCuenta || '-';
     page.drawText(codigoCuenta, {
       x: xPos + 3,
-      y: y,
+      y: yData,
       size: 8,
       font: fontNormal,
       color: rgb(0, 0, 0)
@@ -537,7 +575,7 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
       : nombreCuenta;
     page.drawText(desc, {
       x: xPos + 3,
-      y: y,
+      y: yData,
       size: 8,
       font: fontNormal,
       color: rgb(0, 0, 0)
@@ -549,7 +587,7 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
     const clienteCorto = cliente.length > 12 ? cliente.substring(0, 12) + '...' : cliente;
     page.drawText(clienteCorto, {
       x: xPos + 3,
-      y: y,
+      y: yData,
       size: 8,
       font: fontNormal,
       color: rgb(0, 0, 0)
@@ -559,7 +597,7 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
     // Documento
     page.drawText(detalle.numeroDocumento || '', {
       x: xPos + 3,
-      y: y,
+      y: yData,
       size: 8,
       font: fontNormal,
       color: rgb(0, 0, 0)
@@ -572,7 +610,7 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
     if (debe > 0) {
       page.drawText(debe.toLocaleString('es-PE', { minimumFractionDigits: 2 }), {
         x: xPos + 3,
-        y: y,
+        y: yData,
         size: 8,
         font: fontNormal,
         color: rgb(0, 0, 0)
@@ -586,15 +624,16 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
     if (haber > 0) {
       page.drawText(haber.toLocaleString('es-PE', { minimumFractionDigits: 2 }), {
         x: xPos + 3,
-        y: y,
+        y: yData,
         size: 8,
         font: fontNormal,
         color: rgb(0, 0, 0)
       });
     }
-
-    y -= 15;
   });
+  
+  // ✅ Actualizar Y después del bucle
+  y -= (asiento.detalles.length * 15);
 
   // Totales
   y -= 5;
@@ -634,51 +673,84 @@ function dibujarTablaAsientos(page, asientos, x, y, width, fontBold, fontNormal,
 }
 
 /**
- * Dibujar sección de firmas
+ * Dibujar sección de firmas en formato tabla
+ * ┌──────────────────┬──────────────┬──────────────┬──────────────────┐
+ * │  Elaborado por   │ V°B° Admin   │ V°B° Contador│ Recibí conforme  │
+ * │  ___________     │ ___________  │ ___________  │ DNI: _________   │
+ * └──────────────────┴──────────────┴──────────────┴──────────────────┘
  */
 function dibujarFirmas(page, x, y, width, fontBold, fontNormal, colorSecundario) {
-  const colWidth = width / 4;
-  const firmas = ['Elaborado por', 'V°B° Admin', 'V°B° Contador', 'Recibí conforme'];
+  const tableHeight = 40;
+  const colWidths = [
+    width * 0.25, // Elaborado por (25%)
+    width * 0.25, // V°B° Admin (25%)
+    width * 0.25, // V°B° Contador (25%)
+    width * 0.25, // Recibí conforme (25%)
+  ];
 
-  firmas.forEach((firma, i) => {
-    const xPos = x + (i * colWidth);
+  const firmaLabels = [
+    { label: "Elaborado por", linea: "___________" },
+    { label: "V°B° Admin", linea: "___________" },
+    { label: "V°B° Contador", linea: "___________" },
+    { label: "Recibí conforme", linea: "DNI: _________" },
+  ];
 
-    // Rectángulo
-    page.drawRectangle({
-      x: xPos,
-      y: y - 40,
-      width: colWidth - 5,
-      height: 50,
-      borderColor: rgb(0.8, 0.8, 0.8),
-      borderWidth: 1
+  // Dibujar borde superior de la tabla
+  page.drawLine({
+    start: { x: x, y: y },
+    end: { x: x + width, y: y },
+    thickness: 1,
+    color: rgb(0, 0, 0),
+  });
+
+  // Dibujar borde inferior de la tabla
+  page.drawLine({
+    start: { x: x, y: y - tableHeight },
+    end: { x: x + width, y: y - tableHeight },
+    thickness: 1,
+    color: rgb(0, 0, 0),
+  });
+
+  // Dibujar bordes verticales y contenido
+  let xPos = x;
+  firmaLabels.forEach((firma, index) => {
+    // Borde izquierdo de la celda
+    page.drawLine({
+      start: { x: xPos, y: y },
+      end: { x: xPos, y: y - tableHeight },
+      thickness: 1,
+      color: rgb(0, 0, 0),
     });
 
-    // Título
-    page.drawText(firma, {
-      x: xPos + 5,
-      y: y - 10,
+    // Etiqueta (centrada, parte superior)
+    const labelWidth = fontBold.widthOfTextAtSize(firma.label, 8);
+    page.drawText(firma.label, {
+      x: xPos + (colWidths[index] - labelWidth) / 2,
+      y: y - 15,
       size: 8,
       font: fontBold,
-      color: colorSecundario
+      color: rgb(0, 0, 0),
     });
 
-    // Línea para firma
-    page.drawLine({
-      start: { x: xPos + 5, y: y - 30 },
-      end: { x: xPos + colWidth - 10, y: y - 30 },
-      thickness: 0.5,
-      color: colorSecundario
+    // Línea de firma (centrada, parte inferior)
+    const lineaWidth = fontNormal.widthOfTextAtSize(firma.linea, 7);
+    page.drawText(firma.linea, {
+      x: xPos + (colWidths[index] - lineaWidth) / 2,
+      y: y - 32,
+      size: 7,
+      font: fontNormal,
+      color: colorSecundario,
     });
 
-    if (i === 3) {
-      page.drawText('DNI: _________', {
-        x: xPos + 5,
-        y: y - 38,
-        size: 7,
-        font: fontNormal,
-        color: colorSecundario
-      });
-    }
+    xPos += colWidths[index];
+  });
+
+  // Borde derecho final
+  page.drawLine({
+    start: { x: xPos, y: y },
+    end: { x: xPos, y: y - tableHeight },
+    thickness: 1,
+    color: rgb(0, 0, 0),
   });
 }
 

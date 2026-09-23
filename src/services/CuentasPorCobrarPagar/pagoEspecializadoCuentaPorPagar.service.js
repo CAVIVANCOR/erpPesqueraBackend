@@ -102,9 +102,14 @@ const SUBMODULOS = {
 // ════════════════════════════════════════════════════════════
 
 const CODIGOS_CUENTAS_CONTABLES = {
-  FACTURAS_POR_COBRAR_SOLES: '121201',      // FACTURAS POR COBRAR SOLES
-  FACTURAS_POR_COBRAR_DOLARES: '121202',    // FACTURAS POR COBRAR DÓLARES
-  BN_DETRACCION: '107111'                    // CUENTA DETRACCION DL 940 - BANCO DE LA NACIÓN
+  FACTURAS_POR_PAGAR_SOLES: '421201',      // ✅ FACTURAS EMITIDAS POR PAGAR M.N. TERCEROS
+  FACTURAS_POR_PAGAR_DOLARES: '421202',    // ✅ FACTURAS EMITIDAS POR PAGAR M.E. TERCEROS
+  BN_DETRACCION: '107111',                 // ✅ CUENTA DETRACCION DL 940 (Banco de la Nación)
+  HONORARIOS_POR_PAGAR_SOLES: '424101',    // ✅ HONORARIOS POR PAGAR MN
+  HONORARIOS_POR_PAGAR_DOLARES: '424102',  // ✅ HONORARIOS POR PAGAR ME
+  GASTOS_SUMINISTROS: '656101',            // ✅ SUMINISTROS (cuenta por defecto para gastos sin factura)
+  ITF: '641101',                           // ✅ ITF
+  COMISIONES_BANCARIAS: '679401'           // ✅ COMISIONES BANCARIAS
 };
 
 // ════════════════════════════════════════════════════════════
@@ -335,9 +340,9 @@ async function validarDatosPagoEspecializado(data, tx = null) {
 }
 
 /**
- * Generar glosa completa para movimientos y asientos
+ * Generar glosa completa para movimientos y asientos de CxP
  */
-function generarGlosaPagoCxC(cuentaPorPagar, data, monedaPago) {
+function generarGlosaPagoCxP(cuentaPorPagar, data, monedaPago) {
   const formatearFecha = (fecha) => {
     const f = new Date(fecha);
     const dia = String(f.getDate()).padStart(2, '0');
@@ -367,7 +372,7 @@ function generarGlosaPagoCxC(cuentaPorPagar, data, monedaPago) {
   const fechaPago = formatearFecha(data.fechaPago);
   const tipoCambio = formatearTipoCambio(data.tipoCambio);
 
-  return `Pago CxC de Dcmto: ${numeroPreFactura} ${fechaEmision} Proveedor: ${tipoDoc} ${numDoc} ${razonSocial} Monto Neto: ${simboloMoneda} ${montoPagado} ${fechaPago} T/C: ${tipoCambio}`;
+  return `Pago CxP de Dcmto: ${numeroPreFactura} ${fechaEmision} Proveedor: ${tipoDoc} ${numDoc} ${razonSocial} Monto Neto: ${simboloMoneda} ${montoPagado} ${fechaPago} T/C: ${tipoCambio}`;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -383,11 +388,11 @@ function generarGlosaPagoCxC(cuentaPorPagar, data, monedaPago) {
  * 
  * @param {Object} params - Parámetros para generar la glosa
  * @param {string} params.tipoOperacion - Tipo: 'PAGO CXP', 'AUTODETRACCIÓN', 'ITF', 'COMISIÓN BANCARIA', 'DETRACCIÓN CLIENTE'
- * @param {Object} params.cuentaPorPagar - Cuenta por cobrar con relaciones (proveedor, preFactura)
+ * @param {Object} params.cuentaPorPagar - Cuenta por pagar con relaciones (proveedor, ordenCompra)
  * @param {Object} params.movimiento - Movimiento de caja con relaciones (cuentaCorriente, moneda)
  * @param {string} params.fechaPago - Fecha del pago (formato Date o string)
  * @param {number} params.tipoCambio - Tipo de cambio
- * @param {Array} params.detallesFactura - Array de detalles de la factura (opcional)
+ * @param {Array} params.detallesOrdenCompra - Array de detalles de la orden de compra (opcional)
  * @param {string} params.detalleConcepto - Descripción del concepto (para ITF/Comisión)
  * @returns {string} Glosa formateada profesionalmente
  */
@@ -397,7 +402,7 @@ function generarGlosaAsientoContable({
   movimiento,
   fechaPago,
   tipoCambio,
-  detallesFactura = [],
+  detallesOrdenCompra = [],
   detalleConcepto = null
 }) {
   
@@ -436,10 +441,10 @@ function generarGlosaAsientoContable({
   // LÍNEA 1: ENCABEZADO
   // ========================================
   
-  const numeroDocumento = cuentaPorPagar.preFactura?.numeroDocumentoFinal || 
-                          cuentaPorPagar.numeroPreFactura || 
+  const numeroDocumento = cuentaPorPagar.ordenCompra?.numeroDocumento || 
+                          cuentaPorPagar.numeroDocumento || 
                           'S/N';
-  const fechaEmisionDoc = formatearFecha(cuentaPorPagar.preFactura?.fechaFacturacion || 
+  const fechaEmisionDoc = formatearFecha(cuentaPorPagar.ordenCompra?.fechaEmision || 
                                          cuentaPorPagar.fechaEmision);
   
   const linea1 = `${tipoOperacion} - PAGO CXP - FAC ${numeroDocumento} del ${fechaEmisionDoc}`;
@@ -493,9 +498,9 @@ function generarGlosaAsientoContable({
   if (detalleConcepto) {
     // Para ITF, Comisión, etc. - usar descripción del concepto
     linea4 = `Detalle: ${detalleConcepto}`;
-  } else if (detallesFactura && detallesFactura.length > 0) {
+  } else if (detallesOrdenCompra && detallesOrdenCompra.length > 0) {
     // Para pagos normales - mostrar productos/servicios
-    const itemsDetalle = detallesFactura.map((detalle, index) => {
+    const itemsDetalle = detallesOrdenCompra.map((detalle, index) => {
       const numero = index + 1;
       const descripcion = detalle.descripcion || detalle.producto?.descripcionArmada || 'PRODUCTO/SERVICIO';
       const cantidad = formatearMonto(detalle.cantidad || 0);
@@ -527,46 +532,45 @@ function generarGlosaAsientoContable({
 /**
  * Función helper privada: Genera un asiento contable para UN movimiento de caja específico
  * 
- * ⚠️ FUNCIÓN CRÍTICA: Esta es la ÚNICA VERDAD para generar asientos de MovimientoCaja
+ * ⚠️ FUNCIÓN CRÍTICA: Esta es la ÚNICA VERDAD para generar asientos de MovimientoCaja (CxP)
  * 
  * @param {Object} params - Parámetros necesarios
  * @param {Object} params.movimiento - MovimientoCaja básico (solo id y monto)
  * @param {Object} params.pagoCuentaPorPagar - Pago relacionado
- * @param {Object} params.cuentaCxCSoles - Cuenta contable CxC Soles
- * @param {Object} params.cuentaCxCDolares - Cuenta contable CxC Dólares
- * @param {Object} params.cuentaBNDetraccion - Cuenta contable BN Detracción
+ * @param {Object} params.cuentaCxPSoles - Cuenta contable CxP Soles (421201)
+ * @param {Object} params.cuentaCxPDolares - Cuenta contable CxP Dólares (421202)
+ * @param {Object} params.cuentaBNDetraccion - Cuenta contable BN Detracción (104201)
  * @param {Object} params.submodulo - Submódulo del sistema
  * @param {Object} params.estadoPendiente - Estado pendiente
  * @param {Object} params.periodoContable - Período contable
  * @param {Number} params.empresaId - ID de la empresa
  * @param {Number} params.creadoPor - ID del usuario
- * @param {Array} params.detallesFactura - Detalles de la factura para glosa
+ * @param {Array} params.detallesOrdenCompra - Detalles de la orden de compra para glosa
  * @param {Object} params.tx - Transacción Prisma
  * @returns {Promise<Object|null>} - Asiento creado o null si se omite
  */
 async function generarAsientoParaMovimiento({
   movimiento,
   pagoCuentaPorPagar,
-  cuentaCxCSoles,
-  cuentaCxCDolares,
+  cuentaCxPSoles,
+  cuentaCxPDolares,
   cuentaBNDetraccion,
   submodulo,
   estadoPendiente,
   periodoContable,
   empresaId,
   creadoPor,
-  detallesFactura,
+  detallesOrdenCompra,
   tx
 }) {
   
-  console.log(`\n════════════════════════════════════════════════════════════`);
-  console.log(`📝 GENERANDO ASIENTO PARA MOVIMIENTO ID: ${movimiento.id}`);
-  console.log(`════════════════════════════════════════════════════════════`);
+  console.log('\n╔════════════════════════════════════════════════════════════╗');
+  console.log(`║ ASIENTO CONTABLE - MOVIMIENTO #${movimiento.id}`.padEnd(61) + '║');
+  console.log('╚════════════════════════════════════════════════════════════╝');
   
   // Validación inicial
   if (!movimiento || Number(movimiento.monto) <= 0) {
-    console.log(`   ⏭️ OMITIDO: monto <= 0 (monto: ${movimiento?.monto})`);
-    console.log(`════════════════════════════════════════════════════════════\n`);
+    console.log(`⏭️  OMITIDO: Monto <= 0 (${movimiento?.monto || 'N/A'})\n`);
     return null;
   }
 
@@ -599,7 +603,7 @@ async function generarAsientoParaMovimiento({
             }
           },
           moneda: true,
-          preFactura: {
+          ordenCompra: {
             include: {
               tipoDocumento: true
             }
@@ -610,32 +614,25 @@ async function generarAsientoParaMovimiento({
   });
 
   if (!movimientoCompleto) {
-    console.error(`   ❌ ERROR: Movimiento ${movimiento.id} no encontrado en BD`);
-    console.log(`════════════════════════════════════════════════════════════\n`);
+    console.error(`❌ ERROR: Movimiento no encontrado en BD\n`);
     return null;
   }
 
-  console.log(`   ✅ Movimiento cargado correctamente`);
-  console.log(`   📊 Datos del movimiento:`);
-  console.log(`      - Tipo Movimiento ID: ${movimientoCompleto.tipoMovimientoId}`);
-  console.log(`      - Monto: ${movimientoCompleto.monto}`);
-  console.log(`      - Moneda ID: ${movimientoCompleto.monedaId}`);
-  console.log(`      - Cuenta Origen ID: ${movimientoCompleto.cuentaCorrienteOrigenId || 'N/A'}`);
-  console.log(`      - Cuenta Destino ID: ${movimientoCompleto.cuentaCorrienteDestinoId || 'N/A'}`);
-  console.log(`      - Tiene CuentaPorPagar: ${!!movimientoCompleto.cuentaPorPagar}`);
-  console.log(`      - CuentaPorPagar ID: ${movimientoCompleto.cuentaPorCobrId || 'N/A'}`);
+  console.log(`📊 Datos básicos:`);
+  console.log(`   Tipo Mov: ${movimientoCompleto.tipoMovimientoId} | Monto: ${movimientoCompleto.monto} | Moneda: ${movimientoCompleto.monedaId}`);
+  console.log(`   Cta Origen: ${movimientoCompleto.cuentaCorrienteOrigenId || 'N/A'} | Cta Destino: ${movimientoCompleto.cuentaCorrienteDestinoId || 'N/A'}`);
 
   // ========================================
   // 2. EXTRAER DATOS DEL DOCUMENTO ORIGEN
   // ========================================
   
   const cuentaPorPagar = movimientoCompleto.cuentaPorPagar;
-  const preFactura = cuentaPorPagar?.preFactura;
+  const ordenCompra = cuentaPorPagar?.ordenCompra;
   const proveedorId = cuentaPorPagar?.proveedorId || movimientoCompleto.entidadComercialId;
-  const tipoDocumentoOrigenId = preFactura?.tipoDocumentoFinalId || null;
-  const numeroDocumentoOrigen = preFactura?.numeroDocumentoFinal || null;
-  const fechaDocumentoOrigen = preFactura?.fechaFacturacion || null;
-  const fechaVenceDocumentoOrigen = preFactura?.fechaVencimiento || null;
+  const tipoDocumentoOrigenId = ordenCompra?.tipoDocumentoId || null;
+  const numeroDocumentoOrigen = ordenCompra?.numeroDocumento || null;
+  const fechaDocumentoOrigen = ordenCompra?.fechaEmision || null;
+  const fechaVenceDocumentoOrigen = ordenCompra?.fechaVencimiento || null;
   
   const esGerencial = cuentaPorPagar?.esGerencial || false;
   const tipoLibro = esGerencial ? "GERENCIAL" : "FISCAL";
@@ -657,24 +654,160 @@ async function generarAsientoParaMovimiento({
   const esAutodetraccionEgreso = Number(movimientoCompleto.tipoMovimientoId) === TIPOS_MOVIMIENTO.DETRACCION_SALIDA && 
                                   descripcionUpper.startsWith('AUTODETRACCIÓN EGRESO');
   
-  console.log(`\n   🔍 Clasificación del movimiento:`);
-  console.log(`      - Es Egreso: ${esEgreso}`);
-  console.log(`      - Es Detracción: ${esDetraccion}`);
-  console.log(`      - Tipo Mov ID: ${movimientoCompleto.tipoMovimientoId} (ITF/Comisión compartido: ${tipoMovimientoEsITFoComision})`);
-  console.log(`      - Descripción: "${movimientoCompleto.descripcion?.substring(0, 60)}..."`);
-  console.log(`      - Es ITF: ${esITF}`);
-  console.log(`      - Es Comisión: ${esComision}`);
-  console.log(`      - Es Autodetracción Egreso: ${esAutodetraccionEgreso}`);
+  // ✅ NUEVO: Detectar HONORARIOS por tipoDocumentoFinalId = 3 (Recibo por Honorarios)
+  const tipoDocumentoFinalId = ordenCompra?.tipoDocumentoFinalId || null;
+  const esHonorarios = tipoDocumentoFinalId ? Number(tipoDocumentoFinalId) === 3 : false; // ID 3 = RECIBO POR HONORARIOS
+  
+  // ✅ NUEVO: Detectar GASTOS SIN FACTURA por CuentaPorPagar.esGerencial = true (Compra Negra/Gerencial/No SUNAT)
+  const esGerencialCxP = Boolean(cuentaPorPagar?.esGerencial);
+  const esGastoSinFactura = esGerencialCxP && esEgreso && !esDetraccion && !esHonorarios;
+  
+  const tipoAsiento = esHonorarios ? 'HONORARIOS' :
+                      esGastoSinFactura ? 'GASTO SIN FACTURA' :
+                      esDetraccion ? 'DETRACCIÓN' :
+                      esAutodetraccionEgreso ? 'AUTODETRACCIÓN EGRESO' :
+                      esITF ? 'ITF' :
+                      esComision ? 'COMISIÓN' :
+                      esEgreso ? 'PAGO FACTURA' : 'OTRO';
+  
+  console.log(`\n🎯 Tipo de asiento: ${tipoAsiento}`);
 
   // ========================================
   // 4. DETERMINAR CUENTAS CONTABLES
   // ========================================
   
+  console.log(`\n📖 Referencia: asientos-contables-referencia.json`);
+  console.log(`   Grupo: ${tipoAsiento}`);
+  console.log(`   Moneda Factura: ${cuentaPorPagar?.monedaId === 1 ? 'PEN' : cuentaPorPagar?.monedaId === 2 ? 'USD' : 'N/A'}`);
+  console.log(`   Moneda Pago: ${movimientoCompleto.monedaId === 1 ? 'PEN' : 'USD'}`);
+  
   let cuentaDebe, cuentaHaber;
+  let cuentasDebeMultiples = null; // Para gastos sin factura (múltiples líneas DEBE)
 
-  if (esEgreso && !esDetraccion) {
-    // EGRESO: Proveedor paga
-    console.log(`\n   💰 Procesando EGRESO (Proveedor paga)`);
+  // ✅ CRÍTICO: Evaluar casos ESPECÍFICOS primero, luego el genérico
+  if (esHonorarios && esEgreso) {
+    if (!movimientoCompleto.cuentaCorrienteDestino?.cuentaContable) {
+      console.error(`❌ ERROR: Cuenta destino sin cuenta contable\n`);
+      return null;
+    }
+    
+    const monedaFactura = movimientoCompleto.cuentaPorPagar?.monedaId || movimientoCompleto.monedaId;
+    const codigoCuentaHonorarios = Number(monedaFactura) === 1 
+      ? CODIGOS_CUENTAS_CONTABLES.HONORARIOS_POR_PAGAR_SOLES 
+      : CODIGOS_CUENTAS_CONTABLES.HONORARIOS_POR_PAGAR_DOLARES;
+    
+    const cuentaHonorarios = await tx.planCuentasContable.findFirst({
+      where: { codigoCuenta: codigoCuentaHonorarios }
+    });
+    
+    if (!cuentaHonorarios) {
+      console.error(`❌ ERROR: Cuenta ${codigoCuentaHonorarios} no encontrada\n`);
+      return null;
+    }
+    
+    cuentaDebe = cuentaHonorarios.id;
+    cuentaHaber = movimientoCompleto.cuentaCorrienteDestino.cuentaContable.id;
+
+  } else if (esGastoSinFactura && esEgreso) {
+    // ═══════════════════════════════════════════════════════════
+    // GASTOS SIN FACTURA: Compra Negra/Gerencial
+    // Asiento con MÚLTIPLES DEBE (uno por cada cuenta diferente)
+    // ═══════════════════════════════════════════════════════════
+    console.log(`\n   🛒 Procesando GASTO SIN FACTURA (Compra Negra)`);
+    
+    if (!movimientoCompleto.cuentaCorrienteDestino?.cuentaContable) {
+      console.error(`   ❌ ERROR: La cuenta destino no tiene cuenta contable asociada`);
+      console.log(`════════════════════════════════════════════════════════════\n`);
+      return null;
+    }
+    
+    // ✅ HABER: Banco destino (una sola línea)
+    cuentaHaber = movimientoCompleto.cuentaCorrienteDestino.cuentaContable.id;
+    
+    // ✅ DEBE: Múltiples cuentas de gasto (agrupar por cuenta)
+    if (!ordenCompra?.id) {
+      console.error(`   ❌ ERROR: No hay orden de compra asociada`);
+      console.log(`════════════════════════════════════════════════════════════\n`);
+      return null;
+    }
+    
+    // Cargar TODOS los detalles de la orden de compra
+    const detalles = await tx.detalleOrdenCompra.findMany({
+      where: { ordenCompraId: ordenCompra.id },
+      include: {
+        producto: true
+      },
+      orderBy: { id: 'asc' }
+    });
+    
+    if (!detalles || detalles.length === 0) {
+      console.error(`   ❌ ERROR: No hay detalles en la orden de compra`);
+      console.log(`════════════════════════════════════════════════════════════\n`);
+      return null;
+    }
+    
+    console.log(`      📦 Total detalles encontrados: ${detalles.length}`);
+    
+    // Agrupar por cuenta contable y sumar montos
+    const cuentasAgrupadas = new Map();
+    
+    for (const detalle of detalles) {
+      let cuentaId = null;
+      let origen = '';
+      
+      // Prioridad 1: DetalleOrdenCompra.cuentaContableId
+      if (detalle.cuentaContableId) {
+        cuentaId = detalle.cuentaContableId;
+        origen = 'DetalleOC';
+      }
+      // Prioridad 2: Producto.cuentaComprasId
+      else if (detalle.producto?.cuentaComprasId) {
+        cuentaId = detalle.producto.cuentaComprasId;
+        origen = 'Producto.cuentaComprasId';
+      }
+      // Prioridad 3: Cuenta por defecto (656101)
+      else {
+        const cuentaDefecto = await tx.planCuentasContable.findFirst({
+          where: { codigoCuenta: CODIGOS_CUENTAS_CONTABLES.GASTOS_SUMINISTROS }
+        });
+        if (cuentaDefecto) {
+          cuentaId = cuentaDefecto.id;
+          origen = 'Defecto (656101)';
+        }
+      }
+      
+      if (cuentaId) {
+        const monto = Number(detalle.subtotal || 0);
+        const cuentaKey = String(cuentaId); // Convertir BigInt a String para usar como clave
+        
+        if (cuentasAgrupadas.has(cuentaKey)) {
+          cuentasAgrupadas.get(cuentaKey).monto += monto;
+        } else {
+          cuentasAgrupadas.set(cuentaKey, { cuentaId, monto, origen });
+        }
+      }
+    }
+    
+    // Convertir a array para usar en la creación del asiento
+    cuentasDebeMultiples = Array.from(cuentasAgrupadas.values());
+    
+    console.log(`      ✅ Cuentas agrupadas: ${cuentasDebeMultiples.length}`);
+    cuentasDebeMultiples.forEach((cuenta, index) => {
+      console.log(`         ${index + 1}. Cuenta ID: ${cuenta.cuentaId}, Monto: S/ ${cuenta.monto.toFixed(2)}, Origen: ${cuenta.origen}`);
+    });
+    console.log(`      ✅ HABER: Banco (${movimientoCompleto.cuentaCorrienteDestino.banco?.nombre || 'N/A'})`);
+
+  } else if (esEgreso && !esDetraccion) {
+    // ═══════════════════════════════════════════════════════════
+    // EGRESO NORMAL: Pago de factura estándar
+    // Este es el caso GENÉRICO que se aplica cuando NO es:
+    // - Honorarios
+    // - Gasto sin factura
+    // - Detracción
+    // - ITF
+    // - Comisión
+    // ═══════════════════════════════════════════════════════════
+    console.log(`\n   💰 Procesando EGRESO NORMAL (Pago de factura)`);
     
     if (!movimientoCompleto.cuentaCorrienteDestino) {
       console.error(`   ❌ ERROR: No hay cuenta destino en el movimiento`);
@@ -689,16 +822,19 @@ async function generarAsientoParaMovimiento({
       return null;
     }
     
-    cuentaDebe = movimientoCompleto.cuentaCorrienteDestino.cuentaContable.id;
-    
     // ✅ CRÍTICO: Usar la moneda de la FACTURA, NO del movimiento
     const monedaFactura = movimientoCompleto.cuentaPorPagar?.monedaId || movimientoCompleto.monedaId;
-    cuentaHaber = Number(monedaFactura) === 1 
-      ? cuentaCxCSoles.id 
-      : cuentaCxCDolares.id;
     
-    console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (Banco)`);
-    console.log(`      ✅ Cuenta HABER: ${cuentaHaber} (CxC ${Number(monedaFactura) === 1 ? 'Soles' : 'Dólares'})`);
+    // ✅ DEBE: Cuenta por Pagar (disminuye pasivo)
+    cuentaDebe = Number(monedaFactura) === 1 
+      ? cuentaCxPSoles.id 
+      : cuentaCxPDolares.id;
+    
+    // ✅ HABER: Banco destino (disminuye activo)
+    cuentaHaber = movimientoCompleto.cuentaCorrienteDestino.cuentaContable.id;
+    
+    console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (CxP ${Number(monedaFactura) === 1 ? 'Soles' : 'Dólares'})`);
+    console.log(`      ✅ Cuenta HABER: ${cuentaHaber} (Banco)`);
     console.log(`      🔍 Moneda Factura: ${monedaFactura}, Moneda Movimiento: ${movimientoCompleto.monedaId}`);
 
   } else if (esAutodetraccionEgreso) {
@@ -727,8 +863,6 @@ async function generarAsientoParaMovimiento({
   } else if (esDetraccion) {
     console.log(`\n   🏦 Procesando DETRACCIÓN EGRESO`);
     
-    cuentaDebe = cuentaBNDetraccion.id;
-    
     if (movimientoCompleto.cuentaCorrienteOrigenId) {
       // Este caso ya no debería ocurrir porque ahora usamos 2 movimientos separados
       console.warn(`   ⚠️ ADVERTENCIA: Detracción con cuenta origen (debería ser autodetracción egreso)`);
@@ -746,22 +880,31 @@ async function generarAsientoParaMovimiento({
         return null;
       }
       
+      // ✅ DEBE: Banco de la Nación (aumenta activo)
+      cuentaDebe = cuentaBNDetraccion.id;
+      // ✅ HABER: Banco empresa (disminuye activo)
       cuentaHaber = movimientoCompleto.cuentaCorrienteOrigen.cuentaContable.id;
+      
       console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (BN Detracción)`);
       console.log(`      ✅ Cuenta HABER: ${cuentaHaber} (Banco Empresa)`);
 
     } else {
-      // Proveedor paga
-      console.log(`      📥 Tipo: DETRACCIÓN CLIENTE (Proveedor paga)`);
+      // Proveedor paga la detracción
+      console.log(`      📥 Tipo: DETRACCIÓN PROVEEDOR (Proveedor paga)`);
       
       // ✅ CRÍTICO: Usar la moneda de la FACTURA, NO del movimiento
       const monedaFactura = movimientoCompleto.cuentaPorPagar?.monedaId || movimientoCompleto.monedaId;
-      cuentaHaber = Number(monedaFactura) === 1 
-        ? cuentaCxCSoles.id 
-        : cuentaCxCDolares.id;
       
-      console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (BN Detracción)`);
-      console.log(`      ✅ Cuenta HABER: ${cuentaHaber} (CxC ${Number(monedaFactura) === 1 ? 'Soles' : 'Dólares'})`);
+      // ✅ DEBE: Cuenta por Pagar (disminuye pasivo)
+      cuentaDebe = Number(monedaFactura) === 1 
+        ? cuentaCxPSoles.id 
+        : cuentaCxPDolares.id;
+      
+      // ✅ HABER: Banco de la Nación (aumenta activo)
+      cuentaHaber = cuentaBNDetraccion.id;
+      
+      console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (CxP ${Number(monedaFactura) === 1 ? 'Soles' : 'Dólares'})`);
+      console.log(`      ✅ Cuenta HABER: ${cuentaHaber} (BN Detracción)`);
     }
     
   } else if (esITF) {
@@ -770,12 +913,12 @@ async function generarAsientoParaMovimiento({
     
     const cuentaGastoITF = await tx.planCuentasContable.findFirst({
       where: {
-        codigoCuenta: '641101'
+        codigoCuenta: CODIGOS_CUENTAS_CONTABLES.ITF
       }
     });
     
     if (!cuentaGastoITF) {
-      console.error(`   ❌ ERROR: No se encontró la cuenta contable 641101 (Gasto ITF)`);
+      console.error(`   ❌ ERROR: No se encontró la cuenta contable ${CODIGOS_CUENTAS_CONTABLES.ITF} (Gasto ITF)`);
       console.log(`════════════════════════════════════════════════════════════\n`);
       return null;
     }
@@ -783,7 +926,7 @@ async function generarAsientoParaMovimiento({
     console.log(`      ✅ Cuenta Gasto ITF encontrada: ${cuentaGastoITF.id}`);
     
     if (!cuentaGastoITF.centroCostoId) {
-      console.error(`   ❌ ERROR: La cuenta 641101 no tiene centro de costo asignado`);
+      console.error(`   ❌ ERROR: La cuenta ${CODIGOS_CUENTAS_CONTABLES.ITF} no tiene centro de costo asignado`);
       console.log(`════════════════════════════════════════════════════════════\n`);
       return null;
     }
@@ -799,7 +942,7 @@ async function generarAsientoParaMovimiento({
     cuentaDebe = cuentaGastoITF.id;
     cuentaHaber = movimientoCompleto.cuentaCorrienteOrigen.cuentaContable.id;
     
-    console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (Gasto ITF 641101)`);
+    console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (Gasto ITF ${CODIGOS_CUENTAS_CONTABLES.ITF})`);
     console.log(`      ✅ Cuenta HABER: ${cuentaHaber} (Banco)`);
     console.log(`      ✅ Centro Costo: ${cuentaGastoITF.centroCostoId}`);
     
@@ -809,12 +952,12 @@ async function generarAsientoParaMovimiento({
     
     const cuentaGastoComision = await tx.planCuentasContable.findFirst({
       where: {
-        codigoCuenta: '679401'
+        codigoCuenta: CODIGOS_CUENTAS_CONTABLES.COMISIONES_BANCARIAS
       }
     });
     
     if (!cuentaGastoComision) {
-      console.error(`   ❌ ERROR: No se encontró la cuenta contable 679401 (Gasto Comisión Bancaria)`);
+      console.error(`   ❌ ERROR: No se encontró la cuenta contable ${CODIGOS_CUENTAS_CONTABLES.COMISIONES_BANCARIAS} (Gasto Comisión Bancaria)`);
       console.log(`════════════════════════════════════════════════════════════\n`);
       return null;
     }
@@ -822,7 +965,7 @@ async function generarAsientoParaMovimiento({
     console.log(`      ✅ Cuenta Gasto Comisión encontrada: ${cuentaGastoComision.id}`);
     
     if (!cuentaGastoComision.centroCostoId) {
-      console.error(`   ❌ ERROR: La cuenta 679401 no tiene centro de costo asignado`);
+      console.error(`   ❌ ERROR: La cuenta ${CODIGOS_CUENTAS_CONTABLES.COMISIONES_BANCARIAS} no tiene centro de costo asignado`);
       console.log(`════════════════════════════════════════════════════════════\n`);
       return null;
     }
@@ -838,7 +981,7 @@ async function generarAsientoParaMovimiento({
     cuentaDebe = cuentaGastoComision.id;
     cuentaHaber = movimientoCompleto.cuentaCorrienteOrigen.cuentaContable.id;
     
-    console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (Gasto Comisión 679401)`);
+    console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (Gasto Comisión ${CODIGOS_CUENTAS_CONTABLES.COMISIONES_BANCARIAS})`);
     console.log(`      ✅ Cuenta HABER: ${cuentaHaber} (Banco)`);
     console.log(`      ✅ Centro Costo: ${cuentaGastoComision.centroCostoId}`);
     
@@ -846,7 +989,16 @@ async function generarAsientoParaMovimiento({
     // Otros movimientos - omitir
     console.error(`   ⏭️ OMITIDO: Tipo de movimiento no soportado`);
     console.error(`      Tipo Movimiento ID: ${movimientoCompleto.tipoMovimientoId}`);
-    console.error(`      Tipos soportados: EGRESO, DETRACCIÓN (${TIPOS_MOVIMIENTO.DETRACCION_EGRESO}), ITF (${TIPOS_MOVIMIENTO.ITF}), COMISIÓN (${TIPOS_MOVIMIENTO.COMISION_BANCARIA})`);
+    console.error(`      Descripción: ${movimientoCompleto.descripcion}`);
+    console.error(`      Tipo Documento Final ID: ${tipoDocumentoFinalId || 'N/A'}`);
+    console.error(`      CuentaPorPagar.esGerencial: ${esGerencialCxP}`);
+    console.error(`      Tipos soportados:`);
+    console.error(`        - EGRESO (Facturas normales - CuentaPorPagar.esGerencial=false)`);
+    console.error(`        - HONORARIOS (OrdenCompra.tipoDocumentoFinalId=3)`);
+    console.error(`        - GASTOS SIN FACTURA (CuentaPorPagar.esGerencial=true - Compra Negra)`);
+    console.error(`        - DETRACCIÓN (${TIPOS_MOVIMIENTO.DETRACCION_EGRESO})`);
+    console.error(`        - ITF (${TIPOS_MOVIMIENTO.ITF})`);
+    console.error(`        - COMISIÓN (${TIPOS_MOVIMIENTO.COMISION_BANCARIA})`);
     console.log(`════════════════════════════════════════════════════════════\n`);
     return null;
   }
@@ -873,7 +1025,13 @@ async function generarAsientoParaMovimiento({
   let tipoOperacion = 'PAGO CXP';
   let detalleConcepto = null;
   
-  if (esDetraccion) {
+  if (esHonorarios) {
+    tipoOperacion = 'PAGO HONORARIOS';
+    detalleConcepto = 'Pago de Recibo por Honorarios';
+  } else if (esGastoSinFactura) {
+    tipoOperacion = 'GASTO SIN FACTURA';
+    detalleConcepto = 'Compra Negra/Gerencial';
+  } else if (esDetraccion) {
     if (movimientoCompleto.cuentaCorrienteOrigenId) {
       tipoOperacion = 'AUTODETRACCIÓN';
     } else {
@@ -893,7 +1051,7 @@ async function generarAsientoParaMovimiento({
     movimiento: movimientoCompleto,
     fechaPago: pagoCuentaPorPagar.fechaPago,
     tipoCambio: pagoCuentaPorPagar.tipoCambio,
-    detallesFactura: detallesFactura,
+    detallesOrdenCompra: detallesOrdenCompra,
     detalleConcepto
   });
 
@@ -901,10 +1059,37 @@ async function generarAsientoParaMovimiento({
   // 7. CALCULAR MONTOS
   // ========================================
   
-  const montoSoles = Number(movimientoCompleto.monto);
-  const montoMonedaExtranjera = movimientoCompleto.monedaId !== 1 
-    ? montoSoles / Number(movimientoCompleto.tipoCambio)
-    : null;
+  // ✅ CRÍTICO: Para asientos contables, usar la moneda de la FACTURA, NO del movimiento
+  // El movimiento puede estar en PEN pero la factura en USD
+  const monedaFactura = movimientoCompleto.cuentaPorPagar?.monedaId || movimientoCompleto.monedaId;
+  const tipoCambioAsiento = Number(movimientoCompleto.tipoCambio) || 1;
+  
+  let montoSoles, montoMonedaExtranjera;
+  
+  if (Number(monedaFactura) === 1) {
+    // Factura en SOLES
+    montoSoles = Number(movimientoCompleto.monto);
+    montoMonedaExtranjera = null;
+  } else {
+    // Factura en DÓLARES
+    // Si el movimiento está en soles, convertir a dólares
+    if (Number(movimientoCompleto.monedaId) === 1) {
+      montoSoles = Number(movimientoCompleto.monto);
+      montoMonedaExtranjera = montoSoles / tipoCambioAsiento;
+    } else {
+      // Si el movimiento está en dólares, convertir a soles
+      montoMonedaExtranjera = Number(movimientoCompleto.monto);
+      montoSoles = montoMonedaExtranjera * tipoCambioAsiento;
+    }
+  }
+  
+  console.log(`\n   💰 Cálculo de montos para asiento:`);
+  console.log(`      Moneda Factura: ${monedaFactura} (${Number(monedaFactura) === 1 ? 'PEN' : 'USD'})`);
+  console.log(`      Moneda Movimiento: ${movimientoCompleto.monedaId} (${Number(movimientoCompleto.monedaId) === 1 ? 'PEN' : 'USD'})`);
+  console.log(`      Monto Movimiento: ${movimientoCompleto.monto}`);
+  console.log(`      Tipo Cambio: ${tipoCambioAsiento}`);
+  console.log(`      Monto Soles (asiento): ${montoSoles}`);
+  console.log(`      Monto ME (asiento): ${montoMonedaExtranjera || 'N/A'}`);
 
   // ========================================
   // 8. VALIDAR FOREIGN KEYS
@@ -916,10 +1101,12 @@ async function generarAsientoParaMovimiento({
   const estadoExists = await tx.estadoMultiFuncion.findUnique({ where: { id: estadoPendiente.id } });
   const submoduloExists = await tx.submoduloSistema.findUnique({ where: { id: submodulo.id } });
   const monedaExists = await tx.moneda.findUnique({ where: { id: BigInt(1) } });
-  const cuentaDebeExists = await tx.planCuentasContable.findUnique({ where: { id: cuentaDebe } });
   const cuentaHaberExists = await tx.planCuentasContable.findUnique({ where: { id: cuentaHaber } });
   const entidadExists = await tx.entidadComercial.findUnique({ where: { id: proveedorId } });
   const tipoDocExists = tipoDocumentoOrigenId ? await tx.tipoDocumento.findUnique({ where: { id: tipoDocumentoOrigenId } }) : null;
+  
+  // Validar cuenta DEBE solo si no hay múltiples cuentas
+  const cuentaDebeExists = cuentasDebeMultiples ? true : await tx.planCuentasContable.findUnique({ where: { id: cuentaDebe } });
   
   const faltantes = [];
   if (!empresaExists) faltantes.push(`empresaId: ${Number(empresaId)}`);
@@ -928,7 +1115,7 @@ async function generarAsientoParaMovimiento({
   if (!estadoExists) faltantes.push(`estadoId: ${estadoPendiente.id}`);
   if (!submoduloExists) faltantes.push(`submoduloOrigenId: ${submodulo.id}`);
   if (!monedaExists) faltantes.push(`monedaId: 1`);
-  if (!cuentaDebeExists) faltantes.push(`planCuentaId DEBE: ${cuentaDebe}`);
+  if (!cuentasDebeMultiples && !cuentaDebeExists) faltantes.push(`planCuentaId DEBE: ${cuentaDebe}`);
   if (!cuentaHaberExists) faltantes.push(`planCuentaId HABER: ${cuentaHaber}`);
   if (!entidadExists) faltantes.push(`entidadComercialId: ${proveedorId}`);
   if (tipoDocumentoOrigenId && !tipoDocExists) faltantes.push(`tipoDocumentoOrigenId: ${tipoDocumentoOrigenId}`);
@@ -941,6 +1128,127 @@ async function generarAsientoParaMovimiento({
   // 9. CREAR ASIENTO CONTABLE
   // ========================================
   
+  // Preparar detalles del asiento
+  let detallesAsiento = [];
+  let numeroLinea = 1;
+  
+  if (cuentasDebeMultiples) {
+    // ═══════════════════════════════════════════════════════════
+    // CASO: GASTOS SIN FACTURA - Múltiples líneas DEBE
+    // ═══════════════════════════════════════════════════════════
+    console.log(`\n   📝 Creando asiento con ${cuentasDebeMultiples.length} líneas DEBE`);
+    
+    for (const cuentaDebe of cuentasDebeMultiples) {
+      let montoLineaSoles, montoLineaME;
+      
+      if (Number(monedaFactura) === 1) {
+        // Factura en SOLES
+        montoLineaSoles = Number(cuentaDebe.monto);
+        montoLineaME = null;
+      } else {
+        // Factura en DÓLARES
+        if (Number(movimientoCompleto.monedaId) === 1) {
+          montoLineaSoles = Number(cuentaDebe.monto);
+          montoLineaME = montoLineaSoles / tipoCambioAsiento;
+        } else {
+          montoLineaME = Number(cuentaDebe.monto);
+          montoLineaSoles = montoLineaME * tipoCambioAsiento;
+        }
+      }
+      
+      detallesAsiento.push({
+        numeroLinea: numeroLinea++,
+        planCuentaId: cuentaDebe.cuentaId,
+        glosa: glosa,
+        debe: montoLineaSoles,
+        haber: 0,
+        monedaId: 1,
+        tipoCambio: tipoCambioAsiento,
+        debeMonedaExtranjera: montoLineaME,
+        haberMonedaExtranjera: null,
+        centroCostoId: null,
+        entidadComercialId: proveedorId,
+        tipoDocumentoOrigenId: tipoDocumentoOrigenId,
+        numeroDocumentoOrigen: numeroDocumentoOrigen,
+        fechaDocumentoOrigen: fechaDocumentoOrigen,
+        fechaVenceDocumentoOrigen: fechaVenceDocumentoOrigen,
+        submoduloOrigenLineaId: submodulo.id,
+        procesoOrigenLineaId: pagoCuentaPorPagar.id,
+        creadoPor: creadoPor
+      });
+    }
+    
+    // Línea HABER (banco)
+    detallesAsiento.push({
+      numeroLinea: numeroLinea++,
+      planCuentaId: cuentaHaber,
+      glosa: glosa,
+      debe: 0,
+      haber: montoSoles,
+      monedaId: 1,
+      tipoCambio: tipoCambioAsiento,
+      debeMonedaExtranjera: null,
+      haberMonedaExtranjera: montoMonedaExtranjera,
+      centroCostoId: null,
+      entidadComercialId: proveedorId,
+      tipoDocumentoOrigenId: tipoDocumentoOrigenId,
+      numeroDocumentoOrigen: numeroDocumentoOrigen,
+      fechaDocumentoOrigen: fechaDocumentoOrigen,
+      fechaVenceDocumentoOrigen: fechaVenceDocumentoOrigen,
+      submoduloOrigenLineaId: submodulo.id,
+      procesoOrigenLineaId: pagoCuentaPorPagar.id,
+      creadoPor: creadoPor
+    });
+    
+  } else {
+    // ═══════════════════════════════════════════════════════════
+    // CASO: ASIENTO SIMPLE - Una línea DEBE, una línea HABER
+    // ═══════════════════════════════════════════════════════════
+    detallesAsiento = [
+      {
+        numeroLinea: 1,
+        planCuentaId: cuentaDebe,
+        glosa: glosa,
+        debe: montoSoles,
+        haber: 0,
+        monedaId: 1,
+        tipoCambio: tipoCambioAsiento,
+        debeMonedaExtranjera: montoMonedaExtranjera,
+        haberMonedaExtranjera: null,
+        centroCostoId: null,
+        entidadComercialId: proveedorId,
+        tipoDocumentoOrigenId: tipoDocumentoOrigenId,
+        numeroDocumentoOrigen: numeroDocumentoOrigen,
+        fechaDocumentoOrigen: fechaDocumentoOrigen,
+        fechaVenceDocumentoOrigen: fechaVenceDocumentoOrigen,
+        submoduloOrigenLineaId: submodulo.id,
+        procesoOrigenLineaId: pagoCuentaPorPagar.id,
+        creadoPor: creadoPor
+      },
+      {
+        numeroLinea: 2,
+        planCuentaId: cuentaHaber,
+        glosa: glosa,
+        debe: 0,
+        haber: montoSoles,
+        monedaId: 1,
+        tipoCambio: tipoCambioAsiento,
+        debeMonedaExtranjera: null,
+        haberMonedaExtranjera: montoMonedaExtranjera,
+        centroCostoId: null,
+        entidadComercialId: proveedorId,
+        tipoDocumentoOrigenId: tipoDocumentoOrigenId,
+        numeroDocumentoOrigen: numeroDocumentoOrigen,
+        fechaDocumentoOrigen: fechaDocumentoOrigen,
+        fechaVenceDocumentoOrigen: fechaVenceDocumentoOrigen,
+        submoduloOrigenLineaId: submodulo.id,
+        procesoOrigenLineaId: pagoCuentaPorPagar.id,
+        creadoPor: creadoPor
+      }
+    ];
+  }
+  
+  // Crear asiento contable
   const asiento = await tx.asientoContable.create({
     data: {
       empresaId: Number(empresaId),
@@ -955,74 +1263,54 @@ async function generarAsientoParaMovimiento({
       esSaldoInicial: false,
       origenAsiento: "AUTOMATICO",
       submoduloOrigenId: submodulo.id,
-      procesoOrigenId: movimientoCompleto.id,  // ✅ ID del movimiento
+      procesoOrigenId: movimientoCompleto.id,
       estadoId: estadoPendiente.id,
       totalDebe: montoSoles,
       totalHaber: montoSoles,
       diferencia: 0,
       estaCuadrado: true,
       monedaId: 1,
-      tipoCambio: Number(movimientoCompleto.tipoCambio),
+      tipoCambio: tipoCambioAsiento,
       creadoPor: creadoPor,
       detalles: {
-        create: [
-          {
-            numeroLinea: 1,
-            planCuentaId: cuentaDebe,
-            glosa: glosa,
-            debe: montoSoles,
-            haber: 0,
-            monedaId: 1,
-            tipoCambio: Number(movimientoCompleto.tipoCambio),
-            debeMonedaExtranjera: montoMonedaExtranjera,
-            haberMonedaExtranjera: null,
-            centroCostoId: null,
-            entidadComercialId: proveedorId,
-            tipoDocumentoOrigenId: tipoDocumentoOrigenId,
-            numeroDocumentoOrigen: numeroDocumentoOrigen,
-            fechaDocumentoOrigen: fechaDocumentoOrigen,
-            fechaVenceDocumentoOrigen: fechaVenceDocumentoOrigen,
-            submoduloOrigenLineaId: submodulo.id,
-            procesoOrigenLineaId: pagoCuentaPorPagar.id,
-            creadoPor: creadoPor
-          },
-          {
-            numeroLinea: 2,
-            planCuentaId: cuentaHaber,
-            glosa: glosa,
-            debe: 0,
-            haber: montoSoles,
-            monedaId: 1,
-            tipoCambio: Number(movimientoCompleto.tipoCambio),
-            debeMonedaExtranjera: null,
-            haberMonedaExtranjera: montoMonedaExtranjera,
-            centroCostoId: null,
-            entidadComercialId: proveedorId,
-            tipoDocumentoOrigenId: tipoDocumentoOrigenId,
-            numeroDocumentoOrigen: numeroDocumentoOrigen,
-            fechaDocumentoOrigen: fechaDocumentoOrigen,
-            fechaVenceDocumentoOrigen: fechaVenceDocumentoOrigen,
-            submoduloOrigenLineaId: submodulo.id,
-            procesoOrigenLineaId: pagoCuentaPorPagar.id,
-            creadoPor: creadoPor
-          }
-        ]
+        create: detallesAsiento
       }
     }
   });
 
-  console.log(`\n   ✅✅✅ ASIENTO CREADO EXITOSAMENTE ✅✅✅`);
-  console.log(`      Número: ${numeroAsiento}`);
-  console.log(`      ID: ${asiento.id}`);
-  console.log(`      Monto: S/ ${montoSoles}`);
-  console.log(`════════════════════════════════════════════════════════════\n`);
+  // Mostrar asiento creado
+  console.log(`\n✅ ASIENTO CREADO: ${numeroAsiento} (ID: ${asiento.id})`);
+  console.log(`   Fecha: ${new Date(movimientoCompleto.fechaOperacionMovCaja).toLocaleDateString()}`);
+  console.log(`   Glosa: ${glosa.substring(0, 60)}${glosa.length > 60 ? '...' : ''}`);
+  console.log(`\n   DEBE                                  HABER`);
+  console.log(`   ────────────────────────────────────  ────────────────────────────────────`);
+  
+  for (const detalle of detallesAsiento) {
+    const planCuenta = await tx.planCuentasContable.findUnique({ where: { id: detalle.planCuentaId } });
+    const debe = detalle.debe > 0 ? `S/ ${detalle.debe.toFixed(2)}`.padEnd(15) : ''.padEnd(15);
+    const haber = detalle.haber > 0 ? `S/ ${detalle.haber.toFixed(2)}` : '';
+    const cuenta = `${planCuenta.codigoCuenta} ${planCuenta.nombreCuenta}`.substring(0, 35);
+    
+    if (detalle.debe > 0) {
+      console.log(`   ${cuenta.padEnd(35)} ${debe}`);
+    } else {
+      console.log(`   ${' '.repeat(35)}                      ${cuenta.padEnd(35)} ${haber}`);
+    }
+  }
+  
+  console.log(`   ────────────────────────────────────  ────────────────────────────────────`);
+  console.log(`   TOTAL: S/ ${montoSoles.toFixed(2)}`.padEnd(38) + `S/ ${montoSoles.toFixed(2)}`);
+  if (montoMonedaExtranjera) {
+    console.log(`   (USD ${montoMonedaExtranjera.toFixed(2)} × TC ${tipoCambioAsiento})`);
+  }
+  console.log('');
   
   return asiento;
 }
 
 /**
  * Genera asientos contables para todos los movimientos de caja de un pago
- * Patrón: Igual a preFactura.guardarAsientoContable()
+ * Patrón: Igual a ordenCompra.guardarAsientoContable()
  * 
  * @param {Object} pagoCuentaPorPagar - Pago creado
  * @param {Array} movimientos - Array de MovimientoCaja creados
@@ -1042,19 +1330,19 @@ async function generarAsientosContablesPagoCxC(
 ) {
   try {
   
-    // 1. Buscar submódulo "PagoCuentaPorPagar"
+    // 1. Buscar submódulo "MovimientoCaja" (origen del asiento contable)
     const submodulo = await tx.submoduloSistema.findFirst({
       where: {
-        nombreModeloOrigen: "PagoCuentaPorPagar",
+        nombreModeloOrigen: "MovimientoCaja",
         activo: true
       }
     });
 
     if (!submodulo) {
-      throw new ValidationError('No se encontró el submódulo "PagoCuentaPorPagar"');
+      throw new ValidationError('No se encontró el submódulo "MovimientoCaja"');
     }
     
-    // 2. Buscar estado PENDIENTE para asientos contables (siguiendo patrón de preFactura)
+    // 2. Buscar estado PENDIENTE para asientos contables (siguiendo patrón de ordenCompra)
     const estadoPendiente = await tx.estadoMultiFuncion.findFirst({
       where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) }
     });
@@ -1063,33 +1351,46 @@ async function generarAsientosContablesPagoCxC(
       throw new ValidationError('No se encontró el estado PENDIENTE para asientos contables');
     }
 
-    // 3. Buscar cuentas contables por código
-    const cuentaCxCSoles = await tx.planCuentasContable.findFirst({
-      where: { codigoCuenta: CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_COBRAR_SOLES }
+    // 3. Buscar cuentas contables por código (CxP - Cuentas por Pagar)
+    console.log('\n╔════════════════════════════════════════════════════════════╗');
+    console.log('║ PASO 1: CARGAR CUENTAS CONTABLES BASE                     ║');
+    console.log('╚════════════════════════════════════════════════════════════╝');
+    console.log(`📋 Códigos a buscar:`);
+    console.log(`   - CxP Soles:     ${CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_PAGAR_SOLES}`);
+    console.log(`   - CxP Dólares:   ${CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_PAGAR_DOLARES}`);
+    console.log(`   - BN Detracción: ${CODIGOS_CUENTAS_CONTABLES.BN_DETRACCION}`);
+    
+    const cuentaCxPSoles = await tx.planCuentasContable.findFirst({
+      where: { codigoCuenta: CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_PAGAR_SOLES }
     });
     
-    const cuentaCxCDolares = await tx.planCuentasContable.findFirst({
-      where: { codigoCuenta: CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_COBRAR_DOLARES }
+    const cuentaCxPDolares = await tx.planCuentasContable.findFirst({
+      where: { codigoCuenta: CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_PAGAR_DOLARES }
     });
     
     const cuentaBNDetraccion = await tx.planCuentasContable.findFirst({
       where: { codigoCuenta: CODIGOS_CUENTAS_CONTABLES.BN_DETRACCION }
     });
 
-    if (!cuentaCxCSoles) {
-      throw new ValidationError(`No se encontró la cuenta contable con código ${CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_COBRAR_SOLES}`);
+    console.log(`\n✅ Resultados:`);
+    console.log(`   - CxP Soles:     ${cuentaCxPSoles ? `ID ${cuentaCxPSoles.id} - ${cuentaCxPSoles.nombreCuenta}` : '❌ NO ENCONTRADA'}`);
+    console.log(`   - CxP Dólares:   ${cuentaCxPDolares ? `ID ${cuentaCxPDolares.id} - ${cuentaCxPDolares.nombreCuenta}` : '❌ NO ENCONTRADA'}`);
+    console.log(`   - BN Detracción: ${cuentaBNDetraccion ? `ID ${cuentaBNDetraccion.id} - ${cuentaBNDetraccion.nombreCuenta}` : '❌ NO ENCONTRADA'}`);
+
+    if (!cuentaCxPSoles) {
+      throw new ValidationError(`No se encontró la cuenta contable con código ${CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_PAGAR_SOLES}`);
     }
-    if (!cuentaCxCDolares) {
-      throw new ValidationError(`No se encontró la cuenta contable con código ${CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_COBRAR_DOLARES}`);
+    if (!cuentaCxPDolares) {
+      throw new ValidationError(`No se encontró la cuenta contable con código ${CODIGOS_CUENTAS_CONTABLES.FACTURAS_POR_PAGAR_DOLARES}`);
     }
     if (!cuentaBNDetraccion) {
       throw new ValidationError(`No se encontró la cuenta contable con código ${CODIGOS_CUENTAS_CONTABLES.BN_DETRACCION}`);
     }
 
-    // 4. Cargar detalles de la factura para las glosas
-    let detallesFactura = [];
+    // 4. Cargar detalles de la orden de compra para las glosas
+    let detallesOrdenCompra = [];
     try {
-      // Obtener el ID de la preFactura desde el primer movimiento
+      // Obtener el ID de la ordenCompra desde el primer movimiento
       const primerMovimiento = movimientos[0];
       if (primerMovimiento) {
         const movTemp = await tx.movimientoCaja.findUnique({
@@ -1097,17 +1398,17 @@ async function generarAsientosContablesPagoCxC(
           include: {
             cuentaPorPagar: {
               include: {
-                preFactura: true
+                ordenCompra: true
               }
             }
           }
         });
         
-        const preFacturaId = movTemp?.cuentaPorPagar?.preFacturaId;
+        const ordenCompraId = movTemp?.cuentaPorPagar?.ordenCompraId;
         
-        if (preFacturaId) {
-          detallesFactura = await tx.detallePreFactura.findMany({
-            where: { preFacturaId: preFacturaId },
+        if (ordenCompraId) {
+          detallesOrdenCompra = await tx.detalleOrdenCompra.findMany({
+            where: { ordenCompraId: ordenCompraId },
             include: {
               producto: {
                 include: {
@@ -1141,15 +1442,15 @@ async function generarAsientosContablesPagoCxC(
       const asiento = await generarAsientoParaMovimiento({
         movimiento,
         pagoCuentaPorPagar,
-        cuentaCxCSoles,
-        cuentaCxCDolares,
+        cuentaCxPSoles,
+        cuentaCxPDolares,
         cuentaBNDetraccion,
         submodulo,
         estadoPendiente,
         periodoContable,
         empresaId,
         creadoPor,
-        detallesFactura,
+        detallesOrdenCompra,
         tx
       });
 
@@ -1184,14 +1485,16 @@ async function generarAsientosContablesPagoCxC(
 // FUNCIÓN HELPER: ACTUALIZAR SALDO DE CUENTA CORRIENTE
 // ════════════════════════════════════════════════════════════
 /**
- * ✅ UNA SOLA VERDAD: Actualizar saldo de cuenta corriente
+ * ✅ UNA SOLA VERDAD: Actualizar saldo de cuenta corriente CON CONVERSIÓN DE MONEDA
  * @param {Object} params - Parámetros
  * @param {Object} params.tx - Transacción Prisma
  * @param {Number} params.cuentaCorrienteId - ID de la cuenta
  * @param {Number} params.empresaId - ID de la empresa
  * @param {Date} params.fecha - Fecha del movimiento
- * @param {Number} params.ingresos - Monto de ingresos
- * @param {Number} params.egresos - Monto de egresos
+ * @param {Number} params.ingresos - Monto de ingresos EN LA MONEDA DEL MOVIMIENTO
+ * @param {Number} params.egresos - Monto de egresos EN LA MONEDA DEL MOVIMIENTO
+ * @param {Number} params.monedaMovimientoId - ID de la moneda del movimiento
+ * @param {Number} params.tipoCambio - Tipo de cambio (si aplica conversión)
  * @param {Number} params.movimientoCajaId - ID del movimiento de caja
  * @param {Number} params.centroCostoId - ID del centro de costo (opcional)
  * @returns {Promise<Object>} - Saldo creado
@@ -1203,28 +1506,73 @@ async function actualizarSaldoCuentaCorriente({
   fecha,
   ingresos = 0,
   egresos = 0,
+  monedaMovimientoId,
+  tipoCambio = 1,
   movimientoCajaId,
-  centroCostoId = null
+  centroCostoId = null,
+  saldoAnteriorManual = null  // ✅ NUEVO: Permite pasar el saldo anterior manualmente
 }) {
-  // 1. Obtener último saldo de la cuenta
-  const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
-    where: { cuentaCorrienteId: Number(cuentaCorrienteId) },
-    orderBy: { fecha: 'desc' }
+  // 1. Obtener cuenta corriente con su moneda
+  const cuentaCorriente = await tx.cuentaCorriente.findUnique({
+    where: { id: Number(cuentaCorrienteId) },
+    select: { monedaId: true }
   });
 
-  // 2. Calcular nuevo saldo
-  const saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
-  const nuevoSaldoActual = saldoAnterior + Number(ingresos) - Number(egresos);
+  if (!cuentaCorriente) {
+    throw new Error(`Cuenta corriente ${cuentaCorrienteId} no encontrada`);
+  }
 
-  // 3. Crear registro de saldo
+  // 2. Convertir montos a la moneda de la cuenta corriente
+  let ingresosEnMonedaCuenta = Number(ingresos);
+  let egresosEnMonedaCuenta = Number(egresos);
+
+  const monedaCuentaId = Number(cuentaCorriente.monedaId);
+  const monedaMovId = Number(monedaMovimientoId);
+
+  // Solo convertir si las monedas son diferentes
+  if (monedaCuentaId !== monedaMovId) {
+    const tc = Number(tipoCambio);
+    
+    // Asumiendo: ID 1 = PEN (Soles), ID 2 = USD (Dólares)
+    if (monedaMovId === 1 && monedaCuentaId === 2) {
+      // Movimiento en Soles, Cuenta en Dólares: dividir entre TC
+      ingresosEnMonedaCuenta = ingresosEnMonedaCuenta / tc;
+      egresosEnMonedaCuenta = egresosEnMonedaCuenta / tc;
+    } else if (monedaMovId === 2 && monedaCuentaId === 1) {
+      // Movimiento en Dólares, Cuenta en Soles: multiplicar por TC
+      ingresosEnMonedaCuenta = ingresosEnMonedaCuenta * tc;
+      egresosEnMonedaCuenta = egresosEnMonedaCuenta * tc;
+    }
+    // Para otras monedas, se podría extender la lógica aquí
+  }
+
+  // 3. Obtener saldo anterior
+  let saldoAnterior;
+  
+  if (saldoAnteriorManual !== null) {
+    // ✅ Usar saldo manual si se proporciona (para movimientos secuenciales)
+    saldoAnterior = Number(saldoAnteriorManual);
+  } else {
+    // Buscar último saldo en la BD
+    const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
+      where: { cuentaCorrienteId: Number(cuentaCorrienteId) },
+      orderBy: { fecha: 'desc' }
+    });
+    saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
+  }
+
+  // 4. Calcular nuevo saldo EN LA MONEDA DE LA CUENTA
+  const nuevoSaldoActual = saldoAnterior + ingresosEnMonedaCuenta - egresosEnMonedaCuenta;
+
+  // 5. Crear registro de saldo
   return await tx.saldoCuentaCorriente.create({
     data: {
       cuentaCorrienteId: Number(cuentaCorrienteId),
       empresaId: Number(empresaId),
       fecha,
       saldoAnterior,
-      ingresos: Number(ingresos),
-      egresos: Number(egresos),
+      ingresos: ingresosEnMonedaCuenta,
+      egresos: egresosEnMonedaCuenta,
       saldoActual: nuevoSaldoActual,
       movimientoCajaId: Number(movimientoCajaId),
       centroCostoId: centroCostoId ? Number(centroCostoId) : null,
@@ -1259,8 +1607,20 @@ const procesarPagoEspecializado = async (data) => {
         throw new NotFoundError('Moneda de pago no encontrada.');
       }
 
+      // ✅ Cargar cuenta corriente con su moneda (para ITF y Comisión)
+      let cuentaCorriente = null;
+      let monedaCuentaCorriente = null;
+      if (data.cuentaBancariaId) {
+        cuentaCorriente = await tx.cuentaCorriente.findUnique({
+          where: { id: Number(data.cuentaBancariaId) },
+          include: { moneda: true }
+        });
+        monedaCuentaCorriente = cuentaCorriente?.moneda;
+      }
+
       // Generar glosa completa
-      const glosa = generarGlosaPagoCxC(cuentaPorPagar, data, monedaPago);
+      const glosa = generarGlosaPagoCxP(cuentaPorPagar, data, monedaPago);
+
       // ════════════════════════════════════════════════════════════
       // PASO 1: GENERAR CORRELATIVO DE OPERACIÓN
       // ════════════════════════════════════════════════════════════
@@ -1314,6 +1674,7 @@ const procesarPagoEspecializado = async (data) => {
           fechaContable: fechaContable,                    // ← CALCULADO
           periodoContableId: Number(periodoContable.id),   // ← CALCULADO
           refOperacionEspecializadaMovCaja: correlativo,
+          detraccionId: null,  // ✅ Se actualizará después si aplica
           creadoPor: data.creadoPor || null
         }
       });
@@ -1335,7 +1696,7 @@ const procesarPagoEspecializado = async (data) => {
           descripcion: glosa,
           numeroOperacionPagoBanco: data.numeroOperacion || null,
           fechaOperacionPagoBanco: data.fechaPago ? new Date(data.fechaPago) : null,
-          urlComprobanteOperacionMovCaja: cuentaPorPagar.preFactura?.urlPreFacturaPdf || null,  // ✅ URL del PDF de la PreFactura
+          urlComprobanteOperacionMovCaja: cuentaPorPagar.ordenCompra?.urlOrdenCompraPdf || null,  // ✅ URL del PDF de la Orden de Compra
           estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
           esGerencial: cuentaPorPagar.esGerencial || false,
           tipoCambio: Number(data.tipoCambio),
@@ -1346,17 +1707,24 @@ const procesarPagoEspecializado = async (data) => {
         }
       });
 
+      // ✅ Variables para rastrear saldos en cascada (PAGO PRINCIPAL)
+      let saldoDespuesEgreso = null;
+      let saldoDespuesITF = null;
+
       // ✅ Actualizar saldo de cuenta corriente (EGRESO)
       if (data.cuentaBancariaId) {
-        await actualizarSaldoCuentaCorriente({
+        const registroSaldo = await actualizarSaldoCuentaCorriente({
           tx,
           cuentaCorrienteId: data.cuentaBancariaId,
           empresaId: data.empresaId,
           fecha: pagoCuentaPorPagar.fechaContable,
+          ingresos: 0,
           egresos: data.montoPagado,
-          egresos: 0,
+          monedaMovimientoId: data.monedaPagoId,
+          tipoCambio: data.tipoCambio,
           movimientoCajaId: movimientoEgreso.id
         });
+        saldoDespuesEgreso = registroSaldo.saldoActual;
       }
 
       // ════════════════════════════════════════════════════════════
@@ -1364,6 +1732,9 @@ const procesarPagoEspecializado = async (data) => {
       // ════════════════════════════════════════════════════════════
       let movimientoITF = null;
       if (data.montoITF && Number(data.montoITF) > 0) {
+        // ✅ CORRECCIÓN: ITF usa la moneda de la cuenta corriente, NO la moneda de pago
+        const monedaITF = monedaCuentaCorriente?.id || data.monedaPagoId;
+        
         movimientoITF = await tx.movimientoCaja.create({
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
@@ -1372,7 +1743,7 @@ const procesarPagoEspecializado = async (data) => {
             entidadComercialId: Number(cuentaPorPagar.proveedorId),
             cuentaPorPagarId: cuentaPorPagar.id,  // ✅ CRÍTICO: Asociar a la CxC para glosa
             monto: Number(data.montoITF),
-            monedaId: Number(data.monedaPagoId),
+            monedaId: Number(monedaITF),  // ✅ CORREGIDO: Moneda de la cuenta corriente
             medioPagoId: Number(data.medioPagoId),
             cuentaCorrienteOrigenId: data.cuentaBancariaId ? Number(data.cuentaBancariaId) : null,
             fechaOperacionMovCaja: new Date(data.fechaPago),
@@ -1388,15 +1759,19 @@ const procesarPagoEspecializado = async (data) => {
 
         // ✅ Actualizar saldo de cuenta corriente (EGRESO por ITF)
         if (data.cuentaBancariaId) {
-          await actualizarSaldoCuentaCorriente({
+          const registroSaldo = await actualizarSaldoCuentaCorriente({
             tx,
             cuentaCorrienteId: data.cuentaBancariaId,
             empresaId: data.empresaId,
             fecha: pagoCuentaPorPagar.fechaContable,
             ingresos: 0,
             egresos: data.montoITF,
-            movimientoCajaId: movimientoITF.id
+            monedaMovimientoId: monedaITF,  // ✅ CORREGIDO: Moneda de la cuenta corriente
+            tipoCambio: data.tipoCambio,
+            movimientoCajaId: movimientoITF.id,
+            saldoAnteriorManual: saldoDespuesEgreso  // ✅ Usar saldo del movimiento anterior
           });
+          saldoDespuesITF = registroSaldo.saldoActual;
         }
       }
 
@@ -1405,6 +1780,9 @@ const procesarPagoEspecializado = async (data) => {
       // ════════════════════════════════════════════════════════════
       let movimientoComision = null;
       if (data.montoComision && Number(data.montoComision) > 0) {
+        // ✅ CORRECCIÓN: Comisión usa la moneda de la cuenta corriente, NO la moneda de pago
+        const monedaComision = monedaCuentaCorriente?.id || data.monedaPagoId;
+        
         movimientoComision = await tx.movimientoCaja.create({
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
@@ -1413,7 +1791,7 @@ const procesarPagoEspecializado = async (data) => {
             entidadComercialId: Number(cuentaPorPagar.proveedorId),
             cuentaPorPagarId: cuentaPorPagar.id,  // ✅ CRÍTICO: Asociar a la CxC para glosa
             monto: Number(data.montoComision),
-            monedaId: Number(data.monedaPagoId),
+            monedaId: Number(monedaComision),  // ✅ CORREGIDO: Moneda de la cuenta corriente
             medioPagoId: Number(data.medioPagoId),
             cuentaCorrienteOrigenId: data.cuentaBancariaId ? Number(data.cuentaBancariaId) : null,
             fechaOperacionMovCaja: new Date(data.fechaPago),
@@ -1436,7 +1814,10 @@ const procesarPagoEspecializado = async (data) => {
             fecha: pagoCuentaPorPagar.fechaContable,
             ingresos: 0,
             egresos: data.montoComision,
-            movimientoCajaId: movimientoComision.id
+            monedaMovimientoId: monedaComision,  // ✅ CORREGIDO: Moneda de la cuenta corriente
+            tipoCambio: data.tipoCambio,
+            movimientoCajaId: movimientoComision.id,
+            saldoAnteriorManual: saldoDespuesITF || saldoDespuesEgreso  // ✅ Usar saldo del ITF o del egreso si no hay ITF
           });
         }
       }
@@ -1497,7 +1878,17 @@ const procesarPagoEspecializado = async (data) => {
         // ✅ USAR CAMPOS ESPECÍFICOS DE DETRACCIÓN
         const cuentaBancariaDetraccion = det.cuentaBancariaDetraccionId ? Number(det.cuentaBancariaDetraccionId) : null;
         const medioPagoDetraccion = det.medioPagoDetraccionId ? Number(det.medioPagoDetraccionId) : null;
-        const monedaDetraccion = det.monedaDetraccionId ? Number(det.monedaDetraccionId) : Number(data.monedaPagoId);
+        
+        // ✅ CORRECCIÓN: Obtener moneda de la cuenta corriente de detracción
+        let monedaDetraccion = Number(data.monedaPagoId);
+        if (cuentaBancariaDetraccion) {
+          const cuentaCorrienteDetraccion = await tx.cuentaCorriente.findUnique({
+            where: { id: cuentaBancariaDetraccion },
+            include: { moneda: true }
+          });
+          monedaDetraccion = cuentaCorrienteDetraccion?.moneda?.id || monedaDetraccion;
+        }
+        
         const tipoMovimientoDetraccion = det.tipoMovimientoDetraccionId ? Number(det.tipoMovimientoDetraccionId) : TIPOS_MOVIMIENTO.DETRACCION_EGRESO;
         const fechaDepositoDetraccion = det.fechaDeposito ? new Date(det.fechaDeposito) : new Date(data.fechaPago);
         const tipoCambioDetraccion = det.tipoCambioDetraccion ? Number(det.tipoCambioDetraccion) : Number(data.tipoCambio);
@@ -1527,17 +1918,24 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
 
+        // ✅ Variables para rastrear saldos en cascada (DETRACCIÓN)
+        let saldoDespuesDetraccion = null;
+        let saldoDespuesITFDetraccion = null;
+
         // ✅ Actualizar saldo de la cuenta bancaria de detracción (EGRESO)
         if (cuentaBancariaDetraccion) {
-          await actualizarSaldoCuentaCorriente({
+          const registroSaldo = await actualizarSaldoCuentaCorriente({
             tx,
             cuentaCorrienteId: cuentaBancariaDetraccion,
             empresaId: data.empresaId,
             fecha: pagoCuentaPorPagar.fechaContable,
             ingresos: 0,
             egresos: det.montoDetraccion,
+            monedaMovimientoId: monedaDetraccion,
+            tipoCambio: tipoCambioDetraccion,
             movimientoCajaId: movimientoDetraccionEgreso.id
           });
+          saldoDespuesDetraccion = registroSaldo.saldoActual;
         }
         
         // ✅ CREAR MOVIMIENTO ITF DE DETRACCIÓN (si aplica)
@@ -1566,15 +1964,19 @@ const procesarPagoEspecializado = async (data) => {
 
           // Actualizar saldo (EGRESO por ITF)
           if (cuentaBancariaDetraccion) {
-            await actualizarSaldoCuentaCorriente({
+            const registroSaldo = await actualizarSaldoCuentaCorriente({
               tx,
               cuentaCorrienteId: cuentaBancariaDetraccion,
               empresaId: data.empresaId,
               fecha: pagoCuentaPorPagar.fechaContable,
               ingresos: 0,
               egresos: det.itfDetraccion,
-              movimientoCajaId: movimientoITFDetraccion.id
+              monedaMovimientoId: monedaDetraccion,
+              tipoCambio: tipoCambioDetraccion,
+              movimientoCajaId: movimientoITFDetraccion.id,
+              saldoAnteriorManual: saldoDespuesDetraccion  // ✅ Usar saldo después de detracción
             });
+            saldoDespuesITFDetraccion = registroSaldo.saldoActual;
           }
         }
         
@@ -1611,7 +2013,10 @@ const procesarPagoEspecializado = async (data) => {
               fecha: pagoCuentaPorPagar.fechaContable,
               ingresos: 0,
               egresos: det.comisionDetraccion,
-              movimientoCajaId: movimientoComisionDetraccion.id
+              monedaMovimientoId: monedaDetraccion,
+              tipoCambio: tipoCambioDetraccion,
+              movimientoCajaId: movimientoComisionDetraccion.id,
+              saldoAnteriorManual: saldoDespuesITFDetraccion || saldoDespuesDetraccion  // ✅ Usar saldo del ITF o detracción
             });
           }
         }
@@ -1671,6 +2076,8 @@ const procesarPagoEspecializado = async (data) => {
             fecha: pagoCuentaPorPagar.fechaContable,
             ingresos: 0,
             egresos: data.montoDetraccionIngresado,
+            monedaMovimientoId: 1, // Autodetracción siempre en soles
+            tipoCambio: 1,
             movimientoCajaId: movimientoAutodetraccionEgreso.id
           });
         }
@@ -1711,6 +2118,8 @@ const procesarPagoEspecializado = async (data) => {
             fecha: pagoCuentaPorPagar.fechaContable,
             ingresos: data.montoDetraccionIngresado,
             egresos: 0,
+            monedaMovimientoId: 1, // Autodetracción siempre en soles
+            tipoCambio: 1,
             movimientoCajaId: movimientoAutodetraccionEgreso.id
           });
         }
@@ -1757,12 +2166,12 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
 
-        if (cuentaPorPagar.preFactura) {
+        if (cuentaPorPagar.ordenCompra) {
           await tx.detalleRetencion.create({
             data: {
               retencionId: retencion.id,
-              tipoDocumentoId: cuentaPorPagar.preFactura.tipoDocumentoId,
-              numeroDocumento: cuentaPorPagar.numeroPreFactura,
+              tipoDocumentoId: cuentaPorPagar.ordenCompra.tipoDocumentoId,
+              numeroDocumento: cuentaPorPagar.numeroDocumento,
               fechaEmision: cuentaPorPagar.fechaEmision,
               importeTotal: Number(ret.importeTotal),
               importeRetenido: Number(ret.importeRetenido),
@@ -1807,12 +2216,12 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
 
-        if (cuentaPorPagar.preFactura) {
+        if (cuentaPorPagar.ordenCompra) {
           await tx.detallePercepcion.create({
             data: {
               percepcionId: percepcion.id,
-              tipoDocumentoId: cuentaPorPagar.preFactura.tipoDocumentoId,
-              numeroDocumento: cuentaPorPagar.numeroPreFactura,
+              tipoDocumentoId: cuentaPorPagar.ordenCompra.tipoDocumentoId,
+              numeroDocumento: cuentaPorPagar.numeroDocumento,
               fechaEmision: cuentaPorPagar.fechaEmision,
               importeTotal: Number(per.importeTotal),
               importePercibido: Number(per.importePercibido)
@@ -1827,7 +2236,8 @@ const procesarPagoEspecializado = async (data) => {
       const pagoCuentaPorPagarActualizado = await tx.pagoCuentaPorPagar.update({
         where: { id: pagoCuentaPorPagar.id },
         data: {
-          movimientoCajaId: movimientoEgreso.id
+          movimientoCajaId: movimientoEgreso.id,
+          detraccionId: detraccionActualizada ? detraccionActualizada.id : null  // ✅ Vincula con Detraccion
         },
         include: {
           cuentaPorPagar: {
@@ -1952,8 +2362,10 @@ const procesarPagoEspecializado = async (data) => {
         movimientoITF,
         movimientoComision,
         movimientoDetraccionEgreso,
+        movimientoITFDetraccion,          // ✅ AGREGADO
+        movimientoComisionDetraccion,     // ✅ AGREGADO
         movimientoAutodetraccionEgreso,   // ✅ Egreso de cuenta empresa
-        movimientoAutodetraccionEgreso   // ✅ Egreso a Banco Nación
+        movimientoAutodetraccionIngreso   // ✅ CORREGIDO: Ingreso a Banco Nación
       ].filter(Boolean);
 
       if (todosLosMovimientos.length > 0) {
@@ -1986,10 +2398,14 @@ const procesarPagoEspecializado = async (data) => {
             tipo = 'Comisión';
           } else if (movimientoDetraccionEgreso && saldo.movimientoCajaId === movimientoDetraccionEgreso.id) {
             tipo = 'Detracción';
+          } else if (movimientoITFDetraccion && saldo.movimientoCajaId === movimientoITFDetraccion.id) {
+            tipo = 'ITF Detracción';
+          } else if (movimientoComisionDetraccion && saldo.movimientoCajaId === movimientoComisionDetraccion.id) {
+            tipo = 'Comisión Detracción';
           } else if (movimientoAutodetraccionEgreso && saldo.movimientoCajaId === movimientoAutodetraccionEgreso.id) {
             tipo = 'Autodetracción (Egreso)';
-          } else if (movimientoAutodetraccionEgreso && saldo.movimientoCajaId === movimientoAutodetraccionEgreso.id) {
-            tipo = 'Autodetracción (Egreso)';
+          } else if (movimientoAutodetraccionIngreso && saldo.movimientoCajaId === movimientoAutodetraccionIngreso.id) {
+            tipo = 'Autodetracción (Ingreso)';
           }
 
           saldosCuentaCorriente.push({
@@ -2011,8 +2427,10 @@ const procesarPagoEspecializado = async (data) => {
           itf: movimientoITF,
           comision: movimientoComision,
           detraccionEgreso: movimientoDetraccionEgreso,
+          itfDetraccion: movimientoITFDetraccion,                  // ✅ AGREGADO
+          comisionDetraccion: movimientoComisionDetraccion,        // ✅ AGREGADO
           autodetraccionEgreso: movimientoAutodetraccionEgreso,    // ✅ Egreso cuenta empresa
-          autodetraccionEgreso: movimientoAutodetraccionEgreso   // ✅ Egreso Banco Nación
+          autodetraccionIngreso: movimientoAutodetraccionIngreso   // ✅ CORREGIDO: Ingreso Banco Nación
         },
         conceptosSunat: {
           detraccion: detraccionActualizada, // ← Usar la detracción actualizada en lugar de la legacy
@@ -2095,20 +2513,18 @@ const procesarPagoEspecializado = async (data) => {
       });
     }
 
-    if (resultado.movimientos.autodetraccionEgreso) {
-      resultado.movimientos.autodetraccionEgreso = await prisma.movimientoCaja.findUnique({
-        where: { id: resultado.movimientos.autodetraccionEgreso.id },
+    if (resultado.movimientos.itfDetraccion) {
+      resultado.movimientos.itfDetraccion = await prisma.movimientoCaja.findUnique({
+        where: { id: resultado.movimientos.itfDetraccion.id },
         include: includeMovimiento
       });
-      
-      console.log('\n🔍 DEBUG Autodetracción Egreso recargado:');
-      console.log('  ID:', resultado.movimientos.autodetraccionEgreso.id);
-      console.log('  cuentaCorrienteOrigenId:', resultado.movimientos.autodetraccionEgreso.cuentaCorrienteOrigenId);
-      console.log('  cuentaCorrienteOrigen:', resultado.movimientos.autodetraccionEgreso.cuentaCorrienteOrigen ? 'CARGADO' : 'NULL');
-      if (resultado.movimientos.autodetraccionEgreso.cuentaCorrienteOrigen) {
-        console.log('    - banco:', resultado.movimientos.autodetraccionEgreso.cuentaCorrienteOrigen.banco?.nombre);
-        console.log('    - tipoCuenta:', resultado.movimientos.autodetraccionEgreso.cuentaCorrienteOrigen.tipoCuentaCorriente?.nombre);
-      }
+    }
+
+    if (resultado.movimientos.comisionDetraccion) {
+      resultado.movimientos.comisionDetraccion = await prisma.movimientoCaja.findUnique({
+        where: { id: resultado.movimientos.comisionDetraccion.id },
+        include: includeMovimiento
+      });
     }
 
     if (resultado.movimientos.autodetraccionEgreso) {
@@ -2116,15 +2532,13 @@ const procesarPagoEspecializado = async (data) => {
         where: { id: resultado.movimientos.autodetraccionEgreso.id },
         include: includeMovimiento
       });
-      
-      console.log('\n🔍 DEBUG Autodetracción Egreso recargado:');
-      console.log('  ID:', resultado.movimientos.autodetraccionEgreso.id);
-      console.log('  cuentaCorrienteDestinoId:', resultado.movimientos.autodetraccionEgreso.cuentaCorrienteDestinoId);
-      console.log('  cuentaCorrienteDestino:', resultado.movimientos.autodetraccionEgreso.cuentaCorrienteDestino ? 'CARGADO' : 'NULL');
-      if (resultado.movimientos.autodetraccionEgreso.cuentaCorrienteDestino) {
-        console.log('    - banco:', resultado.movimientos.autodetraccionEgreso.cuentaCorrienteDestino.banco?.nombre);
-        console.log('    - tipoCuenta:', resultado.movimientos.autodetraccionEgreso.cuentaCorrienteDestino.tipoCuentaCorriente?.nombre);
-      }
+    }
+
+    if (resultado.movimientos.autodetraccionIngreso) {
+      resultado.movimientos.autodetraccionIngreso = await prisma.movimientoCaja.findUnique({
+        where: { id: resultado.movimientos.autodetraccionIngreso.id },
+        include: includeMovimiento
+      });
     }
 
     // ════════════════════════════════════════════════════════════
@@ -2144,8 +2558,10 @@ const procesarPagoEspecializado = async (data) => {
       resultado.movimientos.itf,
       resultado.movimientos.comision,
       resultado.movimientos.detraccionEgreso,
+      resultado.movimientos.itfDetraccion,           // ✅ AGREGADO
+      resultado.movimientos.comisionDetraccion,      // ✅ AGREGADO
       resultado.movimientos.autodetraccionEgreso,    // ✅ Egreso cuenta empresa
-      resultado.movimientos.autodetraccionEgreso    // ✅ Egreso Banco Nación
+      resultado.movimientos.autodetraccionIngreso    // ✅ CORREGIDO: Ingreso Banco Nación
     ].filter(m => m !== null && m !== undefined);
 
     console.log(`🎯 Total de movimientos a procesar: ${movimientosConAsientos.length}`);
@@ -2236,7 +2652,7 @@ const obtenerDetallePago = async (pagoId) => {
             empresa: true,
             moneda: true,
             estado: true,
-            preFactura: {
+            ordenCompra: {
               include: {
                 tipoDocumento: true
               }
@@ -2263,7 +2679,7 @@ const obtenerDetallePago = async (pagoId) => {
             estado: true,
             detalles: {
               include: {
-                preFacturaOrigen: true
+                ordenCompraOrigen: true
               }
             }
           }

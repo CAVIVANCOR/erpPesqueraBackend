@@ -478,6 +478,32 @@ export const generarVoucherContable = async (req, res, next) => {
   }
 };
 
+/**
+ * Regenerar y guardar voucher contable de un MovimientoCaja
+ * POST /api/movimientos-caja/:id/regenerar-voucher-contable
+ */
+export const regenerarVoucherContable = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`🔄 Regenerando voucher contable para MovimientoCaja ${id}...`);
+    
+    const resultado = await movimientoCajaService.regenerarVoucherContable(Number(id));
+    
+    console.log(`✅ Voucher contable regenerado exitosamente para MovimientoCaja ${id}`);
+    
+    res.json(toJSONBigInt({
+      success: true,
+      message: 'Voucher contable regenerado exitosamente',
+      data: resultado
+    }));
+    
+  } catch (error) {
+    console.error(`❌ Error al regenerar voucher contable:`, error);
+    next(error);
+  }
+};
+
 
 
 export default {
@@ -494,6 +520,7 @@ export default {
   subirDocumento,
   servirArchivoComprobante,
   generarVoucherContable,
+  regenerarVoucherContable,
   servirArchivoDocumento,
   listarConFiltrosAvanzados,
   obtenerPorCorrelativo,

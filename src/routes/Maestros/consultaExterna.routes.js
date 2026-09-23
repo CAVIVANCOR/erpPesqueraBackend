@@ -215,6 +215,11 @@ router.get('/sunat/tipo-cambio', async (req, res) => {
           error: 'Tipo de cambio no disponible para la fecha indicada'
         });
       }
+      if (response.status === 429) {
+        return res.status(429).json({
+          error: 'Demasiadas solicitudes a la API de SUNAT. Por favor, espere un momento e intente nuevamente.'
+        });
+      }
       throw new Error(`Error API SUNAT: ${response.status}`);
     }
     const data = await response.json();

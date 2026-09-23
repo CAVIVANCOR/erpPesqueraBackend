@@ -481,40 +481,6 @@ const obtenerPorOrdenCompraId = async (ordenCompraId) => {
                 producto: true,
               },
             },
-            // ✅ Incluir registros de impuestos tributarios generados
-            detraccion: {
-              include: {
-                tipoDetraccion: true,
-                tipoDocumento: true,
-                moneda: true,
-                estadoPago: true,
-                cuentaBNSunatProveedor: {
-                  include: {
-                    banco: true,
-                    moneda: true,
-                  },
-                },
-                periodoContable: true,
-              },
-            },
-            retencion: {
-              include: {
-                tipoRetencion: true,
-                tipoDocumento: true,
-                moneda: true,
-                estadoPago: true,
-                periodoContable: true,
-              },
-            },
-            percepcion: {
-              include: {
-                tipoPercepcion: true,
-                tipoDocumento: true,
-                moneda: true,
-                estadoPago: true,
-                periodoContable: true,
-              },
-            },
           },
         },
         pagos: {
@@ -528,6 +494,13 @@ const obtenerPorOrdenCompraId = async (ordenCompraId) => {
 
     return cuenta;
   } catch (err) {
+    console.error('❌ [obtenerPorOrdenCompraId] Error completo:', {
+      message: err.message,
+      code: err.code,
+      meta: err.meta,
+      stack: err.stack
+    });
+    
     if (err instanceof NotFoundError) throw err;
     if (err.code && err.code.startsWith('P')) {
       throw new DatabaseError('Error de base de datos', err.message);

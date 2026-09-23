@@ -1042,16 +1042,16 @@ async function generarAsientosContablesPagoCxC(
 ) {
   try {
   
-    // 1. Buscar submódulo "PagoCuentaPorCobrar"
+    // 1. Buscar submódulo "MovimientoCaja" (origen del asiento contable)
     const submodulo = await tx.submoduloSistema.findFirst({
       where: {
-        nombreModeloOrigen: "PagoCuentaPorCobrar",
+        nombreModeloOrigen: "MovimientoCaja",
         activo: true
       }
     });
 
     if (!submodulo) {
-      throw new ValidationError('No se encontró el submódulo "PagoCuentaPorCobrar"');
+      throw new ValidationError('No se encontró el submódulo "MovimientoCaja"');
     }
     
     // 2. Buscar estado PENDIENTE para asientos contables (siguiendo patrón de preFactura)
@@ -1184,14 +1184,16 @@ async function generarAsientosContablesPagoCxC(
 // FUNCIÓN HELPER: ACTUALIZAR SALDO DE CUENTA CORRIENTE
 // ════════════════════════════════════════════════════════════
 /**
- * ✅ UNA SOLA VERDAD: Actualizar saldo de cuenta corriente
+ * ✅ UNA SOLA VERDAD: Actualizar saldo de cuenta corriente CON CONVERSIÓN DE MONEDA
  * @param {Object} params - Parámetros
  * @param {Object} params.tx - Transacción Prisma
  * @param {Number} params.cuentaCorrienteId - ID de la cuenta
  * @param {Number} params.empresaId - ID de la empresa
  * @param {Date} params.fecha - Fecha del movimiento
- * @param {Number} params.ingresos - Monto de ingresos
- * @param {Number} params.egresos - Monto de egresos
+ * @param {Number} params.ingresos - Monto de ingresos EN LA MONEDA DEL MOVIMIENTO
+ * @param {Number} params.egresos - Monto de egresos EN LA MONEDA DEL MOVIMIENTO
+ * @param {Number} params.monedaMovimientoId - ID de la moneda del movimiento
+ * @param {Number} params.tipoCambio - Tipo de cambio (si aplica conversión)
  * @param {Number} params.movimientoCajaId - ID del movimiento de caja
  * @param {Number} params.centroCostoId - ID del centro de costo (opcional)
  * @returns {Promise<Object>} - Saldo creado
@@ -1203,28 +1205,65 @@ async function actualizarSaldoCuentaCorriente({
   fecha,
   ingresos = 0,
   egresos = 0,
+  monedaMovimientoId,
+  tipoCambio = 1,
   movimientoCajaId,
   centroCostoId = null
 }) {
-  // 1. Obtener último saldo de la cuenta
+  // 1. Obtener cuenta corriente con su moneda
+  const cuentaCorriente = await tx.cuentaCorriente.findUnique({
+    where: { id: Number(cuentaCorrienteId) },
+    select: { monedaId: true }
+  });
+
+  if (!cuentaCorriente) {
+    throw new Error(`Cuenta corriente ${cuentaCorrienteId} no encontrada`);
+  }
+
+  // 2. Convertir montos a la moneda de la cuenta corriente
+  let ingresosEnMonedaCuenta = Number(ingresos);
+  let egresosEnMonedaCuenta = Number(egresos);
+
+  const monedaCuentaId = Number(cuentaCorriente.monedaId);
+  const monedaMovId = Number(monedaMovimientoId);
+
+  // Solo convertir si las monedas son diferentes
+  if (monedaCuentaId !== monedaMovId) {
+    const tc = Number(tipoCambio);
+    
+    // Asumiendo: ID 1 = PEN (Soles), ID 2 = USD (Dólares)
+    if (monedaMovId === 1 && monedaCuentaId === 2) {
+      // Movimiento en Soles, Cuenta en Dólares: dividir entre TC
+      ingresosEnMonedaCuenta = ingresosEnMonedaCuenta / tc;
+      egresosEnMonedaCuenta = egresosEnMonedaCuenta / tc;
+    } else if (monedaMovId === 2 && monedaCuentaId === 1) {
+      // Movimiento en Dólares, Cuenta en Soles: multiplicar por TC
+      ingresosEnMonedaCuenta = ingresosEnMonedaCuenta * tc;
+      egresosEnMonedaCuenta = egresosEnMonedaCuenta * tc;
+    }
+    // Para otras monedas, se podría extender la lógica aquí
+  }
+
+  // 3. Obtener último saldo de la cuenta
   const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
     where: { cuentaCorrienteId: Number(cuentaCorrienteId) },
     orderBy: { fecha: 'desc' }
   });
 
-  // 2. Calcular nuevo saldo
   const saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
-  const nuevoSaldoActual = saldoAnterior + Number(ingresos) - Number(egresos);
 
-  // 3. Crear registro de saldo
+  // 4. Calcular nuevo saldo EN LA MONEDA DE LA CUENTA
+  const nuevoSaldoActual = saldoAnterior + ingresosEnMonedaCuenta - egresosEnMonedaCuenta;
+
+  // 5. Crear registro de saldo
   return await tx.saldoCuentaCorriente.create({
     data: {
       cuentaCorrienteId: Number(cuentaCorrienteId),
       empresaId: Number(empresaId),
       fecha,
       saldoAnterior,
-      ingresos: Number(ingresos),
-      egresos: Number(egresos),
+      ingresos: ingresosEnMonedaCuenta,
+      egresos: egresosEnMonedaCuenta,
       saldoActual: nuevoSaldoActual,
       movimientoCajaId: Number(movimientoCajaId),
       centroCostoId: centroCostoId ? Number(centroCostoId) : null,
@@ -1257,6 +1296,17 @@ const procesarPagoEspecializado = async (data) => {
 
       if (!monedaPago) {
         throw new NotFoundError('Moneda de pago no encontrada.');
+      }
+
+      // ✅ Cargar cuenta corriente con su moneda (para ITF y Comisión)
+      let cuentaCorriente = null;
+      let monedaCuentaCorriente = null;
+      if (data.cuentaBancariaId) {
+        cuentaCorriente = await tx.cuentaCorriente.findUnique({
+          where: { id: Number(data.cuentaBancariaId) },
+          include: { moneda: true }
+        });
+        monedaCuentaCorriente = cuentaCorriente?.moneda;
       }
 
       // Generar glosa completa
@@ -1350,6 +1400,8 @@ const procesarPagoEspecializado = async (data) => {
           fecha: pagoCuentaPorCobrar.fechaContable,
           ingresos: data.montoPagado,
           egresos: 0,
+          monedaMovimientoId: data.monedaPagoId,
+          tipoCambio: data.tipoCambio,
           movimientoCajaId: movimientoIngreso.id
         });
       }
@@ -1359,6 +1411,9 @@ const procesarPagoEspecializado = async (data) => {
       // ════════════════════════════════════════════════════════════
       let movimientoITF = null;
       if (data.montoITF && Number(data.montoITF) > 0) {
+        // ✅ CORRECCIÓN: ITF usa la moneda de la cuenta corriente, NO la moneda de pago
+        const monedaITF = monedaCuentaCorriente?.id || data.monedaPagoId;
+        
         movimientoITF = await tx.movimientoCaja.create({
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
@@ -1367,7 +1422,7 @@ const procesarPagoEspecializado = async (data) => {
             entidadComercialId: Number(cuentaPorCobrar.clienteId),
             cuentaPorCobrarId: cuentaPorCobrar.id,  // ✅ CRÍTICO: Asociar a la CxC para glosa
             monto: Number(data.montoITF),
-            monedaId: Number(data.monedaPagoId),
+            monedaId: Number(monedaITF),  // ✅ CORREGIDO: Moneda de la cuenta corriente
             medioPagoId: Number(data.medioPagoId),
             cuentaCorrienteOrigenId: data.cuentaBancariaId ? Number(data.cuentaBancariaId) : null,
             fechaOperacionMovCaja: new Date(data.fechaPago),
@@ -1390,6 +1445,8 @@ const procesarPagoEspecializado = async (data) => {
             fecha: pagoCuentaPorCobrar.fechaContable,
             ingresos: 0,
             egresos: data.montoITF,
+            monedaMovimientoId: monedaITF,  // ✅ CORREGIDO: Moneda de la cuenta corriente
+            tipoCambio: data.tipoCambio,
             movimientoCajaId: movimientoITF.id
           });
         }
@@ -1400,6 +1457,9 @@ const procesarPagoEspecializado = async (data) => {
       // ════════════════════════════════════════════════════════════
       let movimientoComision = null;
       if (data.montoComision && Number(data.montoComision) > 0) {
+        // ✅ CORRECCIÓN: Comisión usa la moneda de la cuenta corriente, NO la moneda de pago
+        const monedaComision = monedaCuentaCorriente?.id || data.monedaPagoId;
+        
         movimientoComision = await tx.movimientoCaja.create({
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
@@ -1408,7 +1468,7 @@ const procesarPagoEspecializado = async (data) => {
             entidadComercialId: Number(cuentaPorCobrar.clienteId),
             cuentaPorCobrarId: cuentaPorCobrar.id,  // ✅ CRÍTICO: Asociar a la CxC para glosa
             monto: Number(data.montoComision),
-            monedaId: Number(data.monedaPagoId),
+            monedaId: Number(monedaComision),  // ✅ CORREGIDO: Moneda de la cuenta corriente
             medioPagoId: Number(data.medioPagoId),
             cuentaCorrienteOrigenId: data.cuentaBancariaId ? Number(data.cuentaBancariaId) : null,
             fechaOperacionMovCaja: new Date(data.fechaPago),
@@ -1431,6 +1491,8 @@ const procesarPagoEspecializado = async (data) => {
             fecha: pagoCuentaPorCobrar.fechaContable,
             ingresos: 0,
             egresos: data.montoComision,
+            monedaMovimientoId: monedaComision,  // ✅ CORREGIDO: Moneda de la cuenta corriente
+            tipoCambio: data.tipoCambio,
             movimientoCajaId: movimientoComision.id
           });
         }
@@ -1522,6 +1584,8 @@ const procesarPagoEspecializado = async (data) => {
             fecha: pagoCuentaPorCobrar.fechaContable,
             ingresos: data.montoDetraccionIngresado,
             egresos: 0,
+            monedaMovimientoId: 1, // Detracción siempre en PEN
+            tipoCambio: data.tipoCambio,
             movimientoCajaId: movimientoDetraccionIngreso.id
           });
         }
@@ -1581,6 +1645,8 @@ const procesarPagoEspecializado = async (data) => {
             fecha: pagoCuentaPorCobrar.fechaContable,
             ingresos: 0,
             egresos: data.montoDetraccionIngresado,
+            monedaMovimientoId: 1, // Autodetracción siempre en PEN
+            tipoCambio: data.tipoCambio,
             movimientoCajaId: movimientoAutodetraccionEgreso.id
           });
         }
@@ -1621,6 +1687,8 @@ const procesarPagoEspecializado = async (data) => {
             fecha: pagoCuentaPorCobrar.fechaContable,
             ingresos: data.montoDetraccionIngresado,
             egresos: 0,
+            monedaMovimientoId: 1, // Autodetracción siempre en PEN
+            tipoCambio: data.tipoCambio,
             movimientoCajaId: movimientoAutodetraccionIngreso.id
           });
         }

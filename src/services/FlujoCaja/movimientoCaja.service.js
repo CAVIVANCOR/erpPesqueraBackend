@@ -1094,6 +1094,89 @@ const revertir = async (id, motivoReversion, usuarioId) => {
 };
 
 /**
+ * Regenerar y guardar voucher contable de un MovimientoCaja
+ * @param {Number} movimientoId - ID del MovimientoCaja
+ * @returns {Object} - URL del voucher regenerado
+ */
+const regenerarVoucherContable = async (movimientoId) => {
+  try {
+    // Importar servicio de generación de voucher
+    const { generarVoucherContableMovimientoCaja } = await import('./voucherContableMovimientoCaja.service.js');
+    
+    // 1. Verificar que el movimiento existe
+    const movimiento = await prisma.movimientoCaja.findUnique({
+      where: { id: Number(movimientoId) }
+    });
+    
+    if (!movimiento) {
+      throw new NotFoundError(`MovimientoCaja ${movimientoId} no encontrado`);
+    }
+    
+    // 2. Verificar que existe AsientoContable para este movimiento
+    const submoduloMovCaja = await prisma.submoduloSistema.findFirst({
+      where: {
+        nombreModeloOrigen: 'MovimientoCaja',
+        activo: true
+      }
+    });
+    
+    const asientoContable = await prisma.asientoContable.findFirst({
+      where: {
+        procesoOrigenId: Number(movimientoId),
+        submoduloOrigenId: submoduloMovCaja?.id,
+        origenAsiento: 'AUTOMATICO'
+      }
+    });
+    
+    if (!asientoContable) {
+      throw new NotFoundError('No existe asiento contable para este movimiento');
+    }
+    
+    // 3. Generar PDF
+    console.log(`📄 Generando PDF del voucher contable...`);
+    const pdfBuffer = await generarVoucherContableMovimientoCaja(Number(movimientoId));
+    
+    // 4. Guardar PDF en servidor
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'pdf-system', 'movimiento-caja-voucher-contable');
+    
+    // Crear directorio si no existe
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    
+    const fileName = `MOVIMIENTO-CAJA-VOUCHER-CONTABLE-${movimientoId}.pdf`;
+    const filePath = path.join(uploadsDir, fileName);
+    
+    fs.writeFileSync(filePath, pdfBuffer);
+    
+    const urlRelativa = `/uploads/pdf-system/movimiento-caja-voucher-contable/${fileName}`;
+    
+    console.log(`💾 PDF guardado en: ${filePath}`);
+    
+    // 5. Actualizar MovimientoCaja con la nueva URL
+    const movimientoActualizado = await prisma.movimientoCaja.update({
+      where: { id: Number(movimientoId) },
+      data: {
+        urlDocumentoMovCaja: urlRelativa
+      }
+    });
+    
+    console.log(`✅ Voucher contable regenerado y guardado exitosamente`);
+    
+    return {
+      urlDocumentoMovCaja: urlRelativa,
+      fechaGeneracion: new Date().toISOString(),
+      asientoContableId: asientoContable.id,
+      numeroAsiento: asientoContable.numeroAsiento
+    };
+    
+  } catch (error) {
+    console.error(`❌ Error al regenerar voucher contable:`, error);
+    throw error;
+  }
+};
+
+/**
  * Listar movimientos con filtros avanzados para vista de Tesorería
  * @param {Object} filtros - Filtros opcionales
  * @param {Number} filtros.empresaId - ID de empresa
@@ -1214,8 +1297,9 @@ export default {
   aprobar,
   rechazar,
   revertir,
-  listarConFiltrosAvanzados, // ✅ AGREGAR ESTA LÍNEA
-  crearMovimientoCajaDesdeTesoreria,  // ✅ NUEVA FUNCIÓN
-  actualizarSaldosCuentasCorrientes,  // ✅ EXPORTAR EXISTENTE
-  ORIGENES_MOVIMIENTO_TESORERIA,  // ✅ EXPORTAR CONSTANTES
+  listarConFiltrosAvanzados,
+  crearMovimientoCajaDesdeTesoreria,
+  actualizarSaldosCuentasCorrientes,
+  regenerarVoucherContable,  // ✅ NUEVA FUNCIÓN
+  ORIGENES_MOVIMIENTO_TESORERIA,
 };
