@@ -13,6 +13,53 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ════════════════════════════════════════════════════════════
+// HELPER: COPIAR COMPROBANTE DE FACTURA A MOVIMIENTO DE CAJA
+// ════════════════════════════════════════════════════════════
+/**
+ * Copia el PDF del comprobante de factura al directorio de comprobantes de movimiento de caja
+ * @param {string} urlPreFacturaPdf - URL del PDF de la pre-factura (ej: /uploads/pdf-system/pre-facturas/PRE-FACTURA-511.pdf)
+ * @param {number} movimientoId - ID del movimiento de caja
+ * @returns {Promise<string>} URL del comprobante copiado
+ */
+async function copiarComprobanteFacturaAMovimiento(urlPreFacturaPdf, movimientoId) {
+  try {
+    if (!urlPreFacturaPdf) {
+      console.log(`⚠️  No hay PDF de factura para copiar al movimiento ${movimientoId}`);
+      return null;
+    }
+
+    // Construir rutas absolutas
+    const archivoOrigen = path.join(__dirname, '../../..', urlPreFacturaPdf);
+    const directorioDestino = path.join(__dirname, '../../../uploads/pdf-system/movimiento-caja-comprobante');
+    const nombreArchivoDestino = `MOVIMIENTO-CAJA-COMPROBANTE-${movimientoId}.pdf`;
+    const archivoDestino = path.join(directorioDestino, nombreArchivoDestino);
+
+    // Verificar que el archivo origen existe
+    try {
+      await fs.access(archivoOrigen);
+    } catch (error) {
+      console.log(`⚠️  Archivo origen no existe: ${archivoOrigen}`);
+      return null;
+    }
+
+    // Crear directorio destino si no existe
+    await fs.mkdir(directorioDestino, { recursive: true });
+
+    // Copiar archivo
+    await fs.copyFile(archivoOrigen, archivoDestino);
+
+    const urlDestino = `/uploads/pdf-system/movimiento-caja-comprobante/${nombreArchivoDestino}`;
+    console.log(`✅ Comprobante copiado: ${urlPreFacturaPdf} → ${urlDestino}`);
+
+    return urlDestino;
+  } catch (error) {
+    console.error(`❌ Error al copiar comprobante de factura al movimiento ${movimientoId}:`, error);
+    // No lanzar error para no interrumpir el flujo del pago
+    return null;
+  }
+}
+
 /**
  * ════════════════════════════════════════════════════════════
  * SERVICIO PROFESIONAL: PAGO ESPECIALIZADO CUENTA POR COBRAR
@@ -901,9 +948,15 @@ async function generarAsientoParaMovimiento({
   // 7. CALCULAR MONTOS
   // ========================================
   
-  const montoSoles = Number(movimientoCompleto.monto);
-  const montoMonedaExtranjera = movimientoCompleto.monedaId !== 1 
-    ? montoSoles / Number(movimientoCompleto.tipoCambio)
+  // ✅ CORRECCIÓN: Si el movimiento es en moneda extranjera, convertir a soles
+  // El monto del movimiento está en la moneda del pago (USD, EUR, etc.)
+  // El asiento contable siempre debe estar en soles (monedaId = 1)
+  const montoSoles = movimientoCompleto.monedaId !== 1
+    ? Number(movimientoCompleto.monto) * Number(movimientoCompleto.tipoCambio)
+    : Number(movimientoCompleto.monto);
+  
+  const montoMonedaExtranjera = movimientoCompleto.monedaId !== 1
+    ? Number(movimientoCompleto.monto)
     : null;
 
   // ========================================
@@ -1391,6 +1444,19 @@ const procesarPagoEspecializado = async (data) => {
         }
       });
 
+      // ✅ Copiar comprobante de factura al movimiento de ingreso
+      const urlComprobanteIngreso = await copiarComprobanteFacturaAMovimiento(
+        cuentaPorCobrar.preFactura?.urlPreFacturaPdf,
+        movimientoIngreso.id
+      );
+      
+      if (urlComprobanteIngreso) {
+        await tx.movimientoCaja.update({
+          where: { id: movimientoIngreso.id },
+          data: { urlComprobanteOperacionMovCaja: urlComprobanteIngreso }
+        });
+      }
+
       // ✅ Actualizar saldo de cuenta corriente (INGRESO)
       if (data.cuentaBancariaId) {
         await actualizarSaldoCuentaCorriente({
@@ -1435,6 +1501,19 @@ const procesarPagoEspecializado = async (data) => {
             origenMotivoOperacionId: pagoCuentaPorCobrar.id
           }
         });
+
+        // ✅ Copiar comprobante de factura al movimiento de ITF
+        const urlComprobanteITF = await copiarComprobanteFacturaAMovimiento(
+          cuentaPorCobrar.preFactura?.urlPreFacturaPdf,
+          movimientoITF.id
+        );
+        
+        if (urlComprobanteITF) {
+          await tx.movimientoCaja.update({
+            where: { id: movimientoITF.id },
+            data: { urlComprobanteOperacionMovCaja: urlComprobanteITF }
+          });
+        }
 
         // ✅ Actualizar saldo de cuenta corriente (EGRESO por ITF)
         if (data.cuentaBancariaId) {
@@ -1481,6 +1560,19 @@ const procesarPagoEspecializado = async (data) => {
             origenMotivoOperacionId: pagoCuentaPorCobrar.id
           }
         });
+
+        // ✅ Copiar comprobante de factura al movimiento de Comisión
+        const urlComprobanteComision = await copiarComprobanteFacturaAMovimiento(
+          cuentaPorCobrar.preFactura?.urlPreFacturaPdf,
+          movimientoComision.id
+        );
+        
+        if (urlComprobanteComision) {
+          await tx.movimientoCaja.update({
+            where: { id: movimientoComision.id },
+            data: { urlComprobanteOperacionMovCaja: urlComprobanteComision }
+          });
+        }
 
         // ✅ Actualizar saldo de cuenta corriente (EGRESO por Comisión)
         if (data.cuentaBancariaId) {

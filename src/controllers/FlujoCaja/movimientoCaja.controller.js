@@ -149,20 +149,6 @@ const actualizar = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     
-    // 🔍 DEBUG: Ver qué datos recibe el backend
-    console.log('\n═══════════════════════════════════════════════════════');
-    console.log('📥 BACKEND - DATOS RECIBIDOS EN ACTUALIZACIÓN:');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('ID del movimiento:', id);
-    console.log('Datos recibidos (req.body):');
-    console.log(JSON.stringify(req.body, null, 2));
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('🔍 CAMPOS PROBLEMÁTICOS:');
-    console.log('  - moduloOrigenMotivoOperacionId:', req.body.moduloOrigenMotivoOperacionId);
-    console.log('  - origenMotivoOperacionId:', req.body.origenMotivoOperacionId);
-    console.log('  - usuarioMotivoOperacionId:', req.body.usuarioMotivoOperacionId);
-    console.log('═══════════════════════════════════════════════════════\n');
-    
     const actualizado = await movimientoCajaService.actualizar(id, req.body);
     res.json(toJSONBigInt(actualizado));
   } catch (err) {
@@ -456,9 +442,7 @@ export const obtenerPorCorrelativo = async (req, res, next) => {
 export const generarVoucherContable = async (req, res, next) => {
   try {
     const { id } = req.params;
-    
-    console.log(`📄 Generando voucher contable para MovimientoCaja ${id}...`);
-    
+        
     // Generar PDF
     const pdfBuffer = await generarVoucherContableMovimientoCaja(Number(id));
     
@@ -470,7 +454,6 @@ export const generarVoucherContable = async (req, res, next) => {
     // Enviar PDF
     res.send(pdfBuffer);
     
-    console.log(`✅ Voucher contable generado exitosamente para MovimientoCaja ${id}`);
     
   } catch (error) {
     console.error(`❌ Error al generar voucher contable:`, error);
@@ -486,11 +469,9 @@ export const regenerarVoucherContable = async (req, res, next) => {
   try {
     const { id } = req.params;
     
-    console.log(`🔄 Regenerando voucher contable para MovimientoCaja ${id}...`);
     
     const resultado = await movimientoCajaService.regenerarVoucherContable(Number(id));
     
-    console.log(`✅ Voucher contable regenerado exitosamente para MovimientoCaja ${id}`);
     
     res.json(toJSONBigInt({
       success: true,

@@ -727,14 +727,6 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
     const codigoSunat = orden.tipoDocumentoFinal?.codigoSunat || orden.tipoDocumento?.codigoSunat || '';
     const aplicaImpuestos = codigoSunat === '01' || codigoSunat === '03';
     
-    console.log('🔍 [calcularTotalesEImpuestos] Validación de documento:', {
-      ordenCompraId: orden.id,
-      numeroDocumento: orden.numeroDocumento,
-      tipoDocumento: orden.tipoDocumento?.descripcion,
-      codigoSunat,
-      aplicaImpuestos,
-      total
-    });
 
     // ========================================
     // PASO 5: EVALUAR DETRACCIÓN (solo Facturas y Boletas)
@@ -749,16 +741,6 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       (d) => d.producto?.tipoDetraccionId
     );
 
-    console.log('🔍 [calcularTotalesEImpuestos] Detalles con detracción:', {
-      totalDetalles: orden.detalles.length,
-      detallesConDetraccion: detallesConDetraccion.length,
-      productos: orden.detalles.map(d => ({
-        productoId: d.productoId,
-        nombre: d.producto?.nombre,
-        tipoDetraccionId: d.producto?.tipoDetraccionId,
-        porcentajeDetraccion: d.producto?.porcentajeDetraccion
-      }))
-    });
 
     if (aplicaImpuestos && detallesConDetraccion.length > 0) {
       let porcentajeMax = 0;
@@ -772,10 +754,6 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
         }
       }
 
-      console.log('🔍 [calcularTotalesEImpuestos] Porcentaje máximo encontrado:', {
-        porcentajeMax,
-        tipoDetraccionMax: tipoDetraccionMax?.nombre
-      });
 
       if (porcentajeMax > 0 && tipoDetraccionMax) {
         // Convertir total a soles si es necesario
@@ -786,13 +764,6 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
           tipoDetraccionMax.montoMinimo || orden.empresa.montoMinimoDetraccion || 700
         );
 
-        console.log('🔍 [calcularTotalesEImpuestos] Validación de umbral:', {
-          totalEnSoles,
-          umbralMinimo,
-          cumpleUmbral: totalEnSoles > umbralMinimo,
-          moneda: orden.moneda.codigoSunat,
-          tipoCambio: orden.tipoCambio
-        });
 
         if (totalEnSoles > umbralMinimo) {
           aplicaDetraccion = true;
@@ -801,19 +772,11 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
           montoDetraccion = Math.round(totalEnSoles * (porcentajeMax / 100));
           mensajeDetraccion = `✅ Detracción aplicada: ${porcentajeMax}% (S/ ${montoDetraccion}) - Total: S/ ${totalEnSoles.toFixed(2)} > Umbral: S/ ${umbralMinimo}`;
           
-          console.log('✅ [calcularTotalesEImpuestos] Detracción APLICADA:', {
-            aplicaDetraccion,
-            tipoDetraccionId,
-            porcentajeDetraccion,
-            montoDetraccion
-          });
         } else {
           mensajeDetraccion = `⚠️ No aplica detracción: Total S/ ${totalEnSoles.toFixed(2)} ≤ Umbral S/ ${umbralMinimo}`;
-          console.log('⚠️ [calcularTotalesEImpuestos] NO aplica detracción (umbral):', mensajeDetraccion);
         }
       } else {
         mensajeDetraccion = '⚠️ No aplica detracción: Producto sin porcentaje o tipo de detracción configurado';
-        console.log('⚠️ [calcularTotalesEImpuestos] NO aplica detracción (config):', mensajeDetraccion);
       }
     } else {
       if (!aplicaImpuestos) {
@@ -897,14 +860,6 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma) => {
       porcentajePercepcion,
       montoPercepcion,
     };
-
-    console.log('📤 [calcularTotalesEImpuestos] Resultado final:', {
-      ordenCompraId: orden.id,
-      aplicaDetraccion: resultado.aplicaDetraccion,
-      tipoDetraccionId: resultado.tipoDetraccionId,
-      porcentajeDetraccion: resultado.porcentajeDetraccion,
-      montoDetraccion: resultado.montoDetraccion
-    });
 
     return resultado;
   } catch (err) {
@@ -2799,13 +2754,7 @@ Generado desde OrdenCompra ${ordenCompra.numeroDocumento}
  * @param {BigInt} personalId - ID del Personal que está generando la CxP
  */
 async function crearDetraccionDesdeOrdenCompra(ordenCompra, totales, tx, personalId) {
-  console.log('🔵 [crearDetraccionDesdeOrdenCompra] Iniciando creación:', {
-    ordenCompraId: ordenCompra.id,
-    numeroDocumento: ordenCompra.numeroDocumento,
-    montoDetraccion: totales.montoDetraccion,
-    porcentajeDetraccion: totales.porcentajeDetraccion,
-    tipoDetraccionId: totales.tipoDetraccionId
-  });
+
 
   // 1. Buscar detracción existente
   const existente = await tx.detraccion.findUnique({
@@ -2814,17 +2763,12 @@ async function crearDetraccionDesdeOrdenCompra(ordenCompra, totales, tx, persona
 
   // 2. Validar si se puede regenerar
   if (existente) {
-    console.log('⚠️ [crearDetraccionDesdeOrdenCompra] Detracción existente encontrada:', {
-      id: existente.id,
-      importePagado: existente.importePagado
-    });
+
     // ⭐ ÚNICA VALIDACIÓN: importePagado > 0
     if (existente.importePagado > 0) {
-      console.log('❌ [crearDetraccionDesdeOrdenCompra] NO regenerar (tiene pagos)');
       return; // ❌ NO regenerar (tiene pagos)
     }
     // ✅ importePagado = 0 → ELIMINAR para recrear
-    console.log('🗑️ [crearDetraccionDesdeOrdenCompra] Eliminando detracción sin pagos');
     await tx.detraccion.delete({
       where: { id: existente.id }
     });
@@ -2881,12 +2825,6 @@ async function crearDetraccionDesdeOrdenCompra(ordenCompra, totales, tx, persona
     }
   });
 
-  console.log('✅ [crearDetraccionDesdeOrdenCompra] Detracción creada exitosamente:', {
-    id: nuevaDetraccion.id,
-    importeRequerido: nuevaDetraccion.importeRequerido,
-    saldoPendiente: nuevaDetraccion.saldoPendiente,
-    estadoPagoId: nuevaDetraccion.estadoPagoId
-  });
 }
 
 /**
@@ -2901,21 +2839,13 @@ async function crearDetraccionDesdeOrdenCompra(ordenCompra, totales, tx, persona
  * @param {BigInt} personalId - ID del Personal que está generando la CxP
  */
 async function crearRetencionDesdeOrdenCompra(ordenCompra, totales, tx, personalId) {
-  console.log('🟡 [crearRetencionDesdeOrdenCompra] Iniciando creación:', {
-    ordenCompraId: ordenCompra.id,
-    montoRetencion: totales.montoRetencion,
-    porcentajeRetencion: totales.porcentajeRetencion
-  });
+
 
   const existente = await tx.retencion.findUnique({
     where: { ordenCompraId: ordenCompra.id }
   });
 
   if (existente) {
-    console.log('⚠️ [crearRetencionDesdeOrdenCompra] Retención existente:', {
-      id: existente.id,
-      importePagado: existente.importePagado
-    });
     if (existente.importePagado > 0) return; // ❌ NO regenerar
     await tx.retencion.delete({ where: { id: existente.id } });
   }
@@ -2959,21 +2889,14 @@ async function crearRetencionDesdeOrdenCompra(ordenCompra, totales, tx, personal
  * @param {BigInt} personalId - ID del Personal que está generando la CxP
  */
 async function crearPercepcionDesdeOrdenCompra(ordenCompra, totales, tx, personalId) {
-  console.log('🟢 [crearPercepcionDesdeOrdenCompra] Iniciando creación:', {
-    ordenCompraId: ordenCompra.id,
-    montoPercepcion: totales.montoPercepcion,
-    porcentajePercepcion: totales.porcentajePercepcion
-  });
+
 
   const existente = await tx.percepcion.findUnique({
     where: { ordenCompraId: ordenCompra.id }
   });
 
   if (existente) {
-    console.log('⚠️ [crearPercepcionDesdeOrdenCompra] Percepción existente:', {
-      id: existente.id,
-      importePagado: existente.importePagado
-    });
+
     if (existente.importePagado > 0) return; // ❌ NO regenerar
     await tx.percepcion.delete({ where: { id: existente.id } });
   }
@@ -3138,14 +3061,6 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
       // por calcularTotalesEImpuestos() y están almacenados en la OrdenCompra.
       // NO recalcular aquí para evitar inconsistencias.
 
-      console.log('🔍 [generarCuentaPorPagar] Valores en OrdenCompra:', {
-        ordenCompraId: ordenCompra.id,
-        aplicaDetraccion: ordenCompra.aplicaDetraccion,
-        montoDetraccion: ordenCompra.montoDetraccion,
-        porcentajeDetraccion: ordenCompra.porcentajeDetraccion,
-        tipoDetraccionId: ordenCompra.tipoDetraccionId,
-        total: ordenCompra.total
-      });
 
       // Calcular subtotal e IGV para el objeto totales
       const subtotal = ordenCompra.detalles?.reduce((sum, detalle) => {
@@ -3179,29 +3094,7 @@ const generarCuentaPorPagar = async (ordenCompraId) => {
         porcentajePercepcion: Number(ordenCompra.porcentajePercepcion) || null
       };
 
-      console.log('📊 [generarCuentaPorPagar] Totales calculados:', {
-        ordenCompraId: ordenCompra.id,
-        numeroDocumento: ordenCompra.numeroDocumento,
-        subtotal,
-        totalIGV,
-        total: montoFinal,
-        detraccion: {
-          tiene: totales.tieneDetraccion,
-          monto: totales.montoDetraccion,
-          porcentaje: totales.porcentajeDetraccion,
-          tipoId: totales.tipoDetraccionId
-        },
-        retencion: {
-          tiene: totales.tieneRetencion,
-          monto: totales.montoRetencion,
-          porcentaje: totales.porcentajeRetencion
-        },
-        percepcion: {
-          tiene: totales.tienePercepcion,
-          monto: totales.montoPercepcion,
-          porcentaje: totales.porcentajePercepcion
-        }
-      });
+  
 
       // ========================================
       // 7. CREAR REGISTROS DE IMPUESTOS TRIBUTARIOS

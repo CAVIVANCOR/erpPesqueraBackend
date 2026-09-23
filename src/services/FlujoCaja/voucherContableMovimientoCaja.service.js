@@ -299,8 +299,9 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
         { label: 'Banco:', value: cuentaBancaria.banco?.nombre || 'N/A' },
         { label: 'Cuenta Contable:', value: `${cuentaBancaria.cuentaContable?.codigoCuenta || ''} - ${cuentaBancaria.cuentaContable?.nombre || ''}` },
         { label: 'N° Cuenta:', value: cuentaBancaria.numeroCuenta || 'N/A' },
-        { label: 'Moneda:', value: monedaCuenta ? `${monedaCuenta.codigoSunat} (${monedaCuenta.nombre})` : 'N/A' },
-        { label: 'N° Operación:', value: movimiento.numeroOperacionPagoBanco || 'S/N' }
+        { label: 'Moneda:', value: monedaCuenta?.codigoSunat || 'N/A' },
+        { label: 'N° Operación:', value: movimiento.numeroOperacionPagoBanco || 'S/N' },
+        { label: 'Tipo de Cambio:', value: movimiento.tipoCambio ? Number(movimiento.tipoCambio).toFixed(3) : '1.000' }
       ];
 
       infoCuenta.forEach(item => {
@@ -349,7 +350,19 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
 
     yPosition -= 20;
 
-    const montoEnLetras = numeroALetras(Number(movimiento.monto), movimiento.moneda?.nombre?.toUpperCase() || 'SOLES');
+    // ✅ CORRECCIÓN: Determinar el nombre de la moneda correctamente
+    let nombreMoneda = 'SOLES';
+    if (movimiento.moneda) {
+      // Mapeo de códigos SUNAT a nombres para numeroALetras
+      const mapeMonedas = {
+        'PEN': 'SOLES',
+        'USD': 'DÓLARES',
+        'EUR': 'EUROS'
+      };
+      nombreMoneda = mapeMonedas[movimiento.moneda.codigoSunat] || movimiento.moneda.nombre?.toUpperCase() || 'SOLES';
+    }
+    
+    const montoEnLetras = numeroALetras(Number(movimiento.monto), nombreMoneda);
     page.drawText('Son:', {
       x: 60,
       y: yPosition,

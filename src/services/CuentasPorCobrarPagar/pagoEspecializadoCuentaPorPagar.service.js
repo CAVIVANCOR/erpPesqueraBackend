@@ -13,6 +13,53 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ════════════════════════════════════════════════════════════
+// HELPER: COPIAR COMPROBANTE DE ORDEN DE COMPRA A MOVIMIENTO DE CAJA
+// ════════════════════════════════════════════════════════════
+/**
+ * Copia el PDF del comprobante de orden de compra al directorio de comprobantes de movimiento de caja
+ * @param {string} urlDocumentoRef - URL del PDF de la orden de compra (ej: /uploads/pdf-system/orden-compra-comprobante-proveedor/ORDEN-COMPRA-COMPROBANTE-PROVEEDOR-2957.pdf)
+ * @param {number} movimientoId - ID del movimiento de caja
+ * @returns {Promise<string>} URL del comprobante copiado
+ */
+async function copiarComprobanteOrdenCompraAMovimiento(urlDocumentoRef, movimientoId) {
+  try {
+    if (!urlDocumentoRef) {
+      console.log(`⚠️  No hay PDF de orden de compra para copiar al movimiento ${movimientoId}`);
+      return null;
+    }
+
+    // Construir rutas absolutas
+    const archivoOrigen = path.join(__dirname, '../../..', urlDocumentoRef);
+    const directorioDestino = path.join(__dirname, '../../../uploads/pdf-system/movimiento-caja-comprobante');
+    const nombreArchivoDestino = `MOVIMIENTO-CAJA-COMPROBANTE-${movimientoId}.pdf`;
+    const archivoDestino = path.join(directorioDestino, nombreArchivoDestino);
+
+    // Verificar que el archivo origen existe
+    try {
+      await fs.access(archivoOrigen);
+    } catch (error) {
+      console.log(`⚠️  Archivo origen no existe: ${archivoOrigen}`);
+      return null;
+    }
+
+    // Crear directorio destino si no existe
+    await fs.mkdir(directorioDestino, { recursive: true });
+
+    // Copiar archivo
+    await fs.copyFile(archivoOrigen, archivoDestino);
+
+    const urlDestino = `/uploads/pdf-system/movimiento-caja-comprobante/${nombreArchivoDestino}`;
+    console.log(`✅ Comprobante copiado: ${urlDocumentoRef} → ${urlDestino}`);
+
+    return urlDestino;
+  } catch (error) {
+    console.error(`❌ Error al copiar comprobante de orden de compra al movimiento ${movimientoId}:`, error);
+    // No lanzar error para no interrumpir el flujo del pago
+    return null;
+  }
+}
+
 /**
  * ════════════════════════════════════════════════════════════
  * SERVICIO PROFESIONAL: PAGO ESPECIALIZADO CUENTA POR PAGAR
@@ -1707,6 +1754,19 @@ const procesarPagoEspecializado = async (data) => {
         }
       });
 
+      // ✅ Copiar comprobante de orden de compra al movimiento de egreso
+      const urlComprobanteEgreso = await copiarComprobanteOrdenCompraAMovimiento(
+        cuentaPorPagar.ordenCompra?.urlDocumentoRef,
+        movimientoEgreso.id
+      );
+      
+      if (urlComprobanteEgreso) {
+        await tx.movimientoCaja.update({
+          where: { id: movimientoEgreso.id },
+          data: { urlComprobanteOperacionMovCaja: urlComprobanteEgreso }
+        });
+      }
+
       // ✅ Variables para rastrear saldos en cascada (PAGO PRINCIPAL)
       let saldoDespuesEgreso = null;
       let saldoDespuesITF = null;
@@ -1757,6 +1817,19 @@ const procesarPagoEspecializado = async (data) => {
           }
         });
 
+        // ✅ Copiar comprobante de orden de compra al movimiento de ITF
+        const urlComprobanteITF = await copiarComprobanteOrdenCompraAMovimiento(
+          cuentaPorPagar.ordenCompra?.urlDocumentoRef,
+          movimientoITF.id
+        );
+        
+        if (urlComprobanteITF) {
+          await tx.movimientoCaja.update({
+            where: { id: movimientoITF.id },
+            data: { urlComprobanteOperacionMovCaja: urlComprobanteITF }
+          });
+        }
+
         // ✅ Actualizar saldo de cuenta corriente (EGRESO por ITF)
         if (data.cuentaBancariaId) {
           const registroSaldo = await actualizarSaldoCuentaCorriente({
@@ -1804,6 +1877,19 @@ const procesarPagoEspecializado = async (data) => {
             origenMotivoOperacionId: pagoCuentaPorPagar.id
           }
         });
+
+        // ✅ Copiar comprobante de orden de compra al movimiento de Comisión
+        const urlComprobanteComision = await copiarComprobanteOrdenCompraAMovimiento(
+          cuentaPorPagar.ordenCompra?.urlDocumentoRef,
+          movimientoComision.id
+        );
+        
+        if (urlComprobanteComision) {
+          await tx.movimientoCaja.update({
+            where: { id: movimientoComision.id },
+            data: { urlComprobanteOperacionMovCaja: urlComprobanteComision }
+          });
+        }
 
         // ✅ Actualizar saldo de cuenta corriente (EGRESO por Comisión)
         if (data.cuentaBancariaId) {
