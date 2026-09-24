@@ -239,7 +239,7 @@ async function importarDocumentos(empresaId, documentos, usuarioId) {
   for (const doc of documentos) {
     let proveedor = await prisma.entidadComercial.findFirst({
       where: {
-        empresaId: BigInt(empresaId),
+        empresaId: 1,
         numeroDocumento: doc.rucProveedor
       }
     });
@@ -259,7 +259,7 @@ async function importarDocumentos(empresaId, documentos, usuarioId) {
       
       proveedor = await prisma.entidadComercial.create({
         data: {
-          empresaId: BigInt(empresaId),
+          empresaId: 1,
           tipoDocumentoId: tipoDocRUC.id,
           tipoEntidadId: tipoEntidadProveedor.id,
           formaPagoId: formaPagoContado.id,
@@ -273,7 +273,7 @@ async function importarDocumentos(empresaId, documentos, usuarioId) {
     
     const ordenCompra = await prisma.ordenCompra.create({
       data: {
-        empresaId: BigInt(empresaId),
+        empresaId: Number(empresaId),
         tipoDocumentoId: tipoDocFactura.id,
         proveedorId: proveedor.id,
         estadoId: estadoPendiente.id,

@@ -10,11 +10,22 @@ import entidadComercialService from '../Maestros/entidadComercial.service.js';
 
 /**
  * Parsea fecha SIRE (DD/MM/YYYY) a Date
- */
 function parseFechaSIRE(fechaStr) {
   if (!fechaStr) return new Date();
   const [dia, mes, año] = fechaStr.split('/');
   return new Date(`${año}-${mes}-${dia}`);
+}
+ */
+
+function parseFechaSIRE(fechaStr) {
+  if (!fechaStr) return new Date();
+
+  // "07/09/2026" pasa a ser dia = 7, mes = 9, año = 2026
+  const [dia, mes, año] = fechaStr.split('/').map(Number);
+
+  // new Date(año, mesIndex, dia) crea la fecha a las 00:00:00 HORA LOCAL
+  // Restamos 1 al mes porque en JS Septiembre (mes 9) es el índice 8
+  return new Date(año, mes - 1, dia);
 }
 
 /**
@@ -74,7 +85,7 @@ async function crearProveedorAutomatico(numeroDocumento, razonSocialSIRE, empres
     const datosAPI = await consultarSunatAPI(numeroDocumento);
     const nuevoProveedor = await entidadComercialService.crear({
       // Obligatorios del contexto
-      empresaId: Number(empresaId),
+      empresaId: 1,
       tipoDocumentoId: 2, // RUC
       numeroDocumento: numeroDocumento,
       
@@ -108,7 +119,7 @@ async function crearProveedorAutomatico(numeroDocumento, razonSocialSIRE, empres
   } catch (error) {
     
     const proveedorMinimo = await entidadComercialService.crear({
-      empresaId: Number(empresaId),
+      empresaId: 1,
       tipoDocumentoId: 2,
       numeroDocumento: numeroDocumento,
       razonSocial: razonSocialSIRE,
@@ -172,8 +183,7 @@ export async function crearOrdenCompraDesdeCAR(car, empresaId, periodo, usuarioI
     let proveedor = await prisma.entidadComercial.findFirst({
       where: {
         numeroDocumento: documentoSIRE.rucProveedor,
-        empresaId: Number(empresaId),
-        esProveedor: true
+        empresaId: 1,
       }
     });
 
@@ -182,7 +192,7 @@ export async function crearOrdenCompraDesdeCAR(car, empresaId, periodo, usuarioI
         proveedor = await crearProveedorAutomatico(
           documentoSIRE.rucProveedor,
           documentoSIRE.razonSocial,
-          empresaId
+          1
         );
 
       } catch (errorCreacion) {

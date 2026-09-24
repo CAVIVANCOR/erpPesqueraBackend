@@ -132,6 +132,7 @@ import requerimientoCompraRoutes from '../routes/Compras/requerimientoCompra.rou
 import detalleReqCompraRoutes from '../routes/Compras/detalleReqCompra.routes.js';
 import ordenCompraRoutes from '../routes/Compras/ordenCompra.routes.js';
 import sireComprasRoutes from './SIRE/sireCompras.routes.js';
+import ventasRoutes from './Ventas/ventas.routes.js';
 import detalleOrdenCompraRoutes from '../routes/Compras/detalleOrdenCompra.routes.js';
 import detDatosAdicionalesOrdenCompraRoutes from '../routes/Compras/detDatosAdicionalesOrdenCompra.routes.js';
 import entregaARendirPComprasRoutes from '../routes/Compras/entregaARendirPCompras.routes.js';
@@ -509,6 +510,8 @@ router.use('/tesoreria/registrar-pago', registrarMovimientoPagoRoutes);
 router.use('/ordenes-compra', ordenCompraRoutes);
 // Rutas para SIRE Compras (SUNAT)
 router.use('/sire/compras', sireComprasRoutes);
+// Rutas para Ventas (Descargar PDFs SUNAT)
+router.use('/ventas', ventasRoutes);
 // Rutas para DetalleOrdenCompra
 router.use('/detalles-orden-compra', detalleOrdenCompraRoutes);
 // Rutas para DetDatosAdicionalesOrdenCompra
