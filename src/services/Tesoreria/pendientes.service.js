@@ -32,6 +32,144 @@ import {
 
 // 🔵 CATEGORÍA DE GASTOS A RENDIR
 const CATEGORIA_GASTOS_A_RENDIR = 17; // Categoría "Gastos a Rendir" en TipoMovEntregaRendir
+/**
+ * Aplicar filtros avanzados a la cláusula WHERE de Prisma
+ * Utiliza sintaxis correcta de Prisma para filtrar por relaciones anidadas
+ * @param {Object} where - Cláusula WHERE base
+ * @param {Object} filtros - Filtros avanzados
+ * @param {String} tipoEntidad - 'cliente' | 'proveedor' para filtrar correctamente
+ * @returns {Object} WHERE actualizado con filtros avanzados
+ */
+const aplicarFiltrosAvanzados = (where, filtros, tipoEntidad = null) => {
+  const whereActualizado = { ...where };
+
+  // ========================================
+  // FILTRO POR RANGO DE FECHAS
+  // ========================================
+  // Para CxP: filtra por ordenCompra.fechaFacturacion usando sintaxis de relación de Prisma
+  // Para CxC: filtra por fechaEmision directamente
+  if (filtros.fechaDesde || filtros.fechaHasta) {
+    if (tipoEntidad === 'proveedor') {
+      // Para CxP: usar sintaxis de relación de Prisma
+      const fechaCondiciones = {};
+      if (filtros.fechaDesde) {
+        const fechaDesde = new Date(filtros.fechaDesde);
+        fechaDesde.setHours(0, 0, 0, 0);
+        fechaCondiciones.gte = fechaDesde;
+      }
+      if (filtros.fechaHasta) {
+        const fechaHasta = new Date(filtros.fechaHasta);
+        fechaHasta.setHours(23, 59, 59, 999);
+        fechaCondiciones.lte = fechaHasta;
+      }
+      
+      // Sintaxis correcta de Prisma para filtrar por campo de relación
+      whereActualizado.ordenCompra = {
+        fechaFacturacion: fechaCondiciones
+      };
+    } else {
+      // Para CxC: filtrar directamente por fechaEmision
+      whereActualizado.fechaEmision = {};
+      if (filtros.fechaDesde) {
+        const fechaDesde = new Date(filtros.fechaDesde);
+        fechaDesde.setHours(0, 0, 0, 0);
+        whereActualizado.fechaEmision.gte = fechaDesde;
+      }
+      if (filtros.fechaHasta) {
+        const fechaHasta = new Date(filtros.fechaHasta);
+        fechaHasta.setHours(23, 59, 59, 999);
+        whereActualizado.fechaEmision.lte = fechaHasta;
+      }
+    }
+  }
+
+  // ========================================
+  // FILTRO POR CLIENTES (solo CxC)
+  // ========================================
+  if (filtros.clienteIds && filtros.clienteIds.length > 0 && tipoEntidad === 'cliente') {
+    whereActualizado.clienteId = { in: filtros.clienteIds };
+  }
+
+  // ========================================
+  // FILTRO POR PROVEEDORES (solo CxP)
+  // ========================================
+  if (filtros.proveedorIds && filtros.proveedorIds.length > 0 && tipoEntidad === 'proveedor') {
+    whereActualizado.proveedorId = { in: filtros.proveedorIds };
+  }
+
+  // ========================================
+  // FILTRO POR ENTIDADES COMERCIALES (TODOS)
+  // ========================================
+  if (filtros.entidadComercialIds && filtros.entidadComercialIds.length > 0) {
+    if (tipoEntidad === 'cliente') {
+      whereActualizado.clienteId = { in: filtros.entidadComercialIds };
+    } else if (tipoEntidad === 'proveedor') {
+      whereActualizado.proveedorId = { in: filtros.entidadComercialIds };
+    }
+  }
+
+  // ========================================
+  // FILTRO POR TIPOS DE DOCUMENTO
+  // ========================================
+  if (filtros.tipoDocumentoIds && filtros.tipoDocumentoIds.length > 0) {
+    whereActualizado.tipoDocumentoId = { in: filtros.tipoDocumentoIds };
+  }
+
+  // ========================================
+  // FILTRO POR NÚMERO DE DOCUMENTO
+  // ========================================
+  // Para CxP: busca en ordenCompra.numeroDocumentoFinal usando sintaxis de relación
+  // Para CxC: busca en serie y número
+  if (filtros.numeroDocumento && filtros.numeroDocumento.trim() !== '') {
+    const busqueda = filtros.numeroDocumento.trim();
+    if (tipoEntidad === 'proveedor') {
+      // Para CxP: sintaxis correcta de Prisma para filtrar por campo de relación
+      whereActualizado.ordenCompra = {
+        ...whereActualizado.ordenCompra,
+        numeroDocumentoFinal: {
+          contains: busqueda,
+          mode: 'insensitive'
+        }
+      };
+    } else {
+      // Para CxC: buscar en serie y número
+      whereActualizado.OR = [
+        { serie: { contains: busqueda, mode: 'insensitive' } },
+        { numero: { contains: busqueda, mode: 'insensitive' } },
+      ];
+    }
+  }
+
+  // ========================================
+  // FILTRO POR MONEDAS
+  // ========================================
+  if (filtros.monedaIds && filtros.monedaIds.length > 0) {
+    whereActualizado.monedaId = { in: filtros.monedaIds };
+  }
+
+  // ========================================
+  // FILTRO POR ESTADOS
+  // ========================================
+  if (filtros.estadoIds && filtros.estadoIds.length > 0) {
+    whereActualizado.estadoId = { in: filtros.estadoIds };
+  }
+
+  // ========================================
+  // FILTRO POR RANGO DE MONTOS
+  // ========================================
+  if (filtros.montoDesde !== null || filtros.montoHasta !== null) {
+    whereActualizado.saldoPendiente = { ...whereActualizado.saldoPendiente };
+    if (filtros.montoDesde !== null) {
+      whereActualizado.saldoPendiente.gte = Number(filtros.montoDesde);
+    }
+    if (filtros.montoHasta !== null) {
+      whereActualizado.saldoPendiente.lte = Number(filtros.montoHasta);
+    }
+  }
+
+  return whereActualizado;
+};
+
 const listarPendientes = async (filtros = {}) => {
   try {
     const {
@@ -45,7 +183,7 @@ const listarPendientes = async (filtros = {}) => {
     // ========================================
     // CONSTRUIR WHERE PARA CxC
     // ========================================
-    const whereCxC = {
+    let whereCxC = {
       saldoPendiente: { gt: 0 },
     };
 
@@ -57,20 +195,20 @@ const listarPendientes = async (filtros = {}) => {
       whereCxC.monedaId = Number(monedaId);
     }
 
-    if (vencimiento) {
+    if (vencimiento && vencimiento !== TIPO_VENCIMIENTO_TESORERIA.TODOS) {
       const hoy = new Date();
       hoy.setHours(0, 0, 0, 0);
 
-      if (vencimiento === 'VENCIDOS') {
+      if (vencimiento === TIPO_VENCIMIENTO_TESORERIA.VENCIDOS) {
         whereCxC.fechaVencimiento = { lt: hoy };
-      } else if (vencimiento === 'HOY') {
+      } else if (vencimiento === TIPO_VENCIMIENTO_TESORERIA.HOY) {
         const manana = new Date(hoy);
         manana.setDate(manana.getDate() + 1);
         whereCxC.fechaVencimiento = {
           gte: hoy,
           lt: manana,
         };
-      } else if (vencimiento === 'SEMANA') {
+      } else if (vencimiento === TIPO_VENCIMIENTO_TESORERIA.SEMANA) {
         const finSemana = new Date(hoy);
         finSemana.setDate(finSemana.getDate() + 7);
         whereCxC.fechaVencimiento = {
@@ -80,10 +218,13 @@ const listarPendientes = async (filtros = {}) => {
       }
     }
 
+    // Aplicar filtros avanzados para CxC
+    whereCxC = aplicarFiltrosAvanzados(whereCxC, filtros, 'cliente');
+
     // ========================================
     // CONSTRUIR WHERE PARA CxP (mismo patrón)
     // ========================================
-    const whereCxP = {
+    let whereCxP = {
       saldoPendiente: { gt: 0 },
     };
 
@@ -95,20 +236,20 @@ const listarPendientes = async (filtros = {}) => {
       whereCxP.monedaId = Number(monedaId);
     }
 
-    if (vencimiento) {
+    if (vencimiento && vencimiento !== TIPO_VENCIMIENTO_TESORERIA.TODOS) {
       const hoy = new Date();
       hoy.setHours(0, 0, 0, 0);
 
-      if (vencimiento === 'VENCIDOS') {
+      if (vencimiento === TIPO_VENCIMIENTO_TESORERIA.VENCIDOS) {
         whereCxP.fechaVencimiento = { lt: hoy };
-      } else if (vencimiento === 'HOY') {
+      } else if (vencimiento === TIPO_VENCIMIENTO_TESORERIA.HOY) {
         const manana = new Date(hoy);
         manana.setDate(manana.getDate() + 1);
         whereCxP.fechaVencimiento = {
           gte: hoy,
           lt: manana,
         };
-      } else if (vencimiento === 'SEMANA') {
+      } else if (vencimiento === TIPO_VENCIMIENTO_TESORERIA.SEMANA) {
         const finSemana = new Date(hoy);
         finSemana.setDate(finSemana.getDate() + 7);
         whereCxP.fechaVencimiento = {
@@ -118,11 +259,16 @@ const listarPendientes = async (filtros = {}) => {
       }
     }
 
+    // Aplicar filtros avanzados para CxP
+    whereCxP = aplicarFiltrosAvanzados(whereCxP, filtros, 'proveedor');
+
     // ========================================
-    // CONSULTAR CxC (solo si tipo no es 'PAGAR')
+    // CONSULTAR CxC (solo si tipo es COBRAR o TODOS, y NO hay tipoDeuda)
     // ========================================
     let cuentasPorCobrar = [];
-    if (!tipo || tipo === TIPO_FILTRO_TESORERIA.COBRAR) {
+    const hayFiltroDeuda = tipoDeuda && tipoDeuda !== TIPO_DEUDA_TESORERIA.NINGUNO;
+    
+    if (!hayFiltroDeuda && (!tipo || tipo === TIPO_FILTRO_TESORERIA.COBRAR)) {
       cuentasPorCobrar = await prisma.cuentaPorCobrar.findMany({
         where: whereCxC,
         include: {
@@ -187,10 +333,10 @@ const listarPendientes = async (filtros = {}) => {
     }
 
     // ========================================
-    // CONSULTAR CxP (solo si tipo no es 'COBRAR')
+    // CONSULTAR CxP (solo si tipo es PAGAR o TODOS, y NO hay tipoDeuda)
     // ========================================
     let cuentasPorPagar = [];
-    if (!tipo || tipo === TIPO_FILTRO_TESORERIA.PAGAR || tipo === TIPO_FILTRO_TESORERIA.ASIGNACIONES || tipo === TIPO_FILTRO_TESORERIA.GASTOS_DIRECTOS) {
+    if (!hayFiltroDeuda && (!tipo || tipo === TIPO_FILTRO_TESORERIA.PAGAR)) {
       cuentasPorPagar = await prisma.cuentaPorPagar.findMany({
         where: whereCxP,
         include: {
@@ -225,6 +371,9 @@ const listarPendientes = async (filtros = {}) => {
             select: {
               id: true,
               numeroDocumento: true,
+              numeroDocumentoFinal: true,
+              fechaFacturacion: true,
+              fechaVencimiento: true,
             },
           },
           estado: {
@@ -256,10 +405,10 @@ const listarPendientes = async (filtros = {}) => {
 
 
     // ========================================
-    // CONSULTAR ENTREGAS A RENDIR (solo si tipo no es 'COBRAR')
+    // CONSULTAR ENTREGAS A RENDIR (solo si tipo es ASIGNACIONES/GASTOS_DIRECTOS o TODOS, y NO hay tipoDeuda)
     // ========================================
     let entregasARendir = [];
-    if (!tipo || tipo === TIPO_FILTRO_TESORERIA.ASIGNACIONES || tipo === TIPO_FILTRO_TESORERIA.GASTOS_DIRECTOS) {
+    if (!hayFiltroDeuda && (!tipo || tipo === TIPO_FILTRO_TESORERIA.ASIGNACIONES || tipo === TIPO_FILTRO_TESORERIA.GASTOS_DIRECTOS)) {
       // Construir WHERE para Entregas a Rendir
       const whereEntregas = {
         validadoTesoreria: false,
@@ -650,9 +799,7 @@ const listarPendientes = async (filtros = {}) => {
       tipoDocumento: 'CXP',
       origen: 'Cuentas por Pagar',
       origenId: cxp.id,
-      documentoNumero: cxp.ordenCompra
-        ? `OC-${cxp.ordenCompra.numeroOrdenCompra}`
-        : `CxP-${cxp.id}`,
+      documentoNumero: cxp.ordenCompra?.numeroDocumentoFinal || `CxP-${cxp.id}`,
       documentoTipo: 'Orden de Compra',
       entidadComercial: {
         id: cxp.proveedor?.id,
@@ -661,8 +808,8 @@ const listarPendientes = async (filtros = {}) => {
         tipo: cxp.proveedor?.tipoEntidad?.nombre || 'Proveedor',
       },
       empresa: cxp.empresa,
-      fechaEmision: cxp.fechaEmision,
-      fechaVencimiento: cxp.fechaVencimiento,
+      fechaEmision: cxp.ordenCompra?.fechaFacturacion || cxp.fechaEmision,
+      fechaVencimiento: cxp.ordenCompra?.fechaVencimiento || cxp.fechaVencimiento,
       moneda: cxp.moneda,
       montoTotal: cxp.montoTotal,
       montoPagado: cxp.montoPagado,
