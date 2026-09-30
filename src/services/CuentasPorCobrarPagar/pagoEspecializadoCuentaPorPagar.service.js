@@ -25,7 +25,6 @@ const __dirname = path.dirname(__filename);
 async function copiarComprobanteOrdenCompraAMovimiento(urlDocumentoRef, movimientoId) {
   try {
     if (!urlDocumentoRef) {
-      console.log(`⚠️  No hay PDF de orden de compra para copiar al movimiento ${movimientoId}`);
       return null;
     }
 
@@ -39,7 +38,6 @@ async function copiarComprobanteOrdenCompraAMovimiento(urlDocumentoRef, movimien
     try {
       await fs.access(archivoOrigen);
     } catch (error) {
-      console.log(`⚠️  Archivo origen no existe: ${archivoOrigen}`);
       return null;
     }
 
@@ -50,11 +48,9 @@ async function copiarComprobanteOrdenCompraAMovimiento(urlDocumentoRef, movimien
     await fs.copyFile(archivoOrigen, archivoDestino);
 
     const urlDestino = `/uploads/pdf-system/movimiento-caja-comprobante/${nombreArchivoDestino}`;
-    console.log(`✅ Comprobante copiado: ${urlDocumentoRef} → ${urlDestino}`);
 
     return urlDestino;
   } catch (error) {
-    console.error(`❌ Error al copiar comprobante de orden de compra al movimiento ${movimientoId}:`, error);
     // No lanzar error para no interrumpir el flujo del pago
     return null;
   }
@@ -610,14 +606,10 @@ async function generarAsientoParaMovimiento({
   detallesOrdenCompra,
   tx
 }) {
-  
-  console.log('\n╔════════════════════════════════════════════════════════════╗');
-  console.log(`║ ASIENTO CONTABLE - MOVIMIENTO #${movimiento.id}`.padEnd(61) + '║');
-  console.log('╚════════════════════════════════════════════════════════════╝');
+
   
   // Validación inicial
   if (!movimiento || Number(movimiento.monto) <= 0) {
-    console.log(`⏭️  OMITIDO: Monto <= 0 (${movimiento?.monto || 'N/A'})\n`);
     return null;
   }
 
@@ -665,9 +657,6 @@ async function generarAsientoParaMovimiento({
     return null;
   }
 
-  console.log(`📊 Datos básicos:`);
-  console.log(`   Tipo Mov: ${movimientoCompleto.tipoMovimientoId} | Monto: ${movimientoCompleto.monto} | Moneda: ${movimientoCompleto.monedaId}`);
-  console.log(`   Cta Origen: ${movimientoCompleto.cuentaCorrienteOrigenId || 'N/A'} | Cta Destino: ${movimientoCompleto.cuentaCorrienteDestinoId || 'N/A'}`);
 
   // ========================================
   // 2. EXTRAER DATOS DEL DOCUMENTO ORIGEN
@@ -717,16 +706,11 @@ async function generarAsientoParaMovimiento({
                       esComision ? 'COMISIÓN' :
                       esEgreso ? 'PAGO FACTURA' : 'OTRO';
   
-  console.log(`\n🎯 Tipo de asiento: ${tipoAsiento}`);
 
   // ========================================
   // 4. DETERMINAR CUENTAS CONTABLES
   // ========================================
   
-  console.log(`\n📖 Referencia: asientos-contables-referencia.json`);
-  console.log(`   Grupo: ${tipoAsiento}`);
-  console.log(`   Moneda Factura: ${cuentaPorPagar?.monedaId === 1 ? 'PEN' : cuentaPorPagar?.monedaId === 2 ? 'USD' : 'N/A'}`);
-  console.log(`   Moneda Pago: ${movimientoCompleto.monedaId === 1 ? 'PEN' : 'USD'}`);
   
   let cuentaDebe, cuentaHaber;
   let cuentasDebeMultiples = null; // Para gastos sin factura (múltiples líneas DEBE)
@@ -760,11 +744,9 @@ async function generarAsientoParaMovimiento({
     // GASTOS SIN FACTURA: Compra Negra/Gerencial
     // Asiento con MÚLTIPLES DEBE (uno por cada cuenta diferente)
     // ═══════════════════════════════════════════════════════════
-    console.log(`\n   🛒 Procesando GASTO SIN FACTURA (Compra Negra)`);
     
     if (!movimientoCompleto.cuentaCorrienteDestino?.cuentaContable) {
-      console.error(`   ❌ ERROR: La cuenta destino no tiene cuenta contable asociada`);
-      console.log(`════════════════════════════════════════════════════════════\n`);
+
       return null;
     }
     
@@ -773,8 +755,7 @@ async function generarAsientoParaMovimiento({
     
     // ✅ DEBE: Múltiples cuentas de gasto (agrupar por cuenta)
     if (!ordenCompra?.id) {
-      console.error(`   ❌ ERROR: No hay orden de compra asociada`);
-      console.log(`════════════════════════════════════════════════════════════\n`);
+
       return null;
     }
     
@@ -788,12 +769,10 @@ async function generarAsientoParaMovimiento({
     });
     
     if (!detalles || detalles.length === 0) {
-      console.error(`   ❌ ERROR: No hay detalles en la orden de compra`);
-      console.log(`════════════════════════════════════════════════════════════\n`);
+
       return null;
     }
     
-    console.log(`      📦 Total detalles encontrados: ${detalles.length}`);
     
     // Agrupar por cuenta contable y sumar montos
     const cuentasAgrupadas = new Map();
@@ -838,11 +817,7 @@ async function generarAsientoParaMovimiento({
     // Convertir a array para usar en la creación del asiento
     cuentasDebeMultiples = Array.from(cuentasAgrupadas.values());
     
-    console.log(`      ✅ Cuentas agrupadas: ${cuentasDebeMultiples.length}`);
-    cuentasDebeMultiples.forEach((cuenta, index) => {
-      console.log(`         ${index + 1}. Cuenta ID: ${cuenta.cuentaId}, Monto: S/ ${cuenta.monto.toFixed(2)}, Origen: ${cuenta.origen}`);
-    });
-    console.log(`      ✅ HABER: Banco (${movimientoCompleto.cuentaCorrienteDestino.banco?.nombre || 'N/A'})`);
+
 
   } else if (esEgreso && !esDetraccion) {
     // ═══════════════════════════════════════════════════════════
@@ -854,18 +829,12 @@ async function generarAsientoParaMovimiento({
     // - ITF
     // - Comisión
     // ═══════════════════════════════════════════════════════════
-    console.log(`\n   💰 Procesando EGRESO NORMAL (Pago de factura)`);
     
     if (!movimientoCompleto.cuentaCorrienteDestino) {
-      console.error(`   ❌ ERROR: No hay cuenta destino en el movimiento`);
-      console.log(`════════════════════════════════════════════════════════════\n`);
       return null;
     }
     
     if (!movimientoCompleto.cuentaCorrienteDestino.cuentaContable) {
-      console.error(`   ❌ ERROR: La cuenta destino no tiene cuenta contable asociada`);
-      console.error(`      Cuenta Destino ID: ${movimientoCompleto.cuentaCorrienteDestinoId}`);
-      console.log(`════════════════════════════════════════════════════════════\n`);
       return null;
     }
     
@@ -879,36 +848,26 @@ async function generarAsientoParaMovimiento({
     
     // ✅ HABER: Banco destino (disminuye activo)
     cuentaHaber = movimientoCompleto.cuentaCorrienteDestino.cuentaContable.id;
-    
-    console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (CxP ${Number(monedaFactura) === 1 ? 'Soles' : 'Dólares'})`);
-    console.log(`      ✅ Cuenta HABER: ${cuentaHaber} (Banco)`);
-    console.log(`      🔍 Moneda Factura: ${monedaFactura}, Moneda Movimiento: ${movimientoCompleto.monedaId}`);
+  
 
   } else if (esAutodetraccionEgreso) {
     // Autodetracción EGRESO - Transferencia desde cuenta empresa a BN
-    console.log(`\n   📤 Procesando AUTODETRACCIÓN EGRESO (Transferencia)`);
     
     if (!movimientoCompleto.cuentaCorrienteOrigen) {
-      console.error(`   ❌ ERROR: No hay cuenta origen en el movimiento`);
-      console.log(`════════════════════════════════════════════════════════════\n`);
+
       return null;
     }
     
     if (!movimientoCompleto.cuentaCorrienteOrigen.cuentaContable) {
-      console.error(`   ❌ ERROR: La cuenta origen no tiene cuenta contable asociada`);
-      console.error(`      Cuenta Origen ID: ${movimientoCompleto.cuentaCorrienteOrigenId}`);
-      console.log(`════════════════════════════════════════════════════════════\n`);
+
       return null;
     }
     
     cuentaDebe = cuentaBNDetraccion.id;
     cuentaHaber = movimientoCompleto.cuentaCorrienteOrigen.cuentaContable.id;
     
-    console.log(`      ✅ Cuenta DEBE: ${cuentaDebe} (BN Detracción)`);
-    console.log(`      ✅ Cuenta HABER: ${cuentaHaber} (Banco Empresa)`);
 
   } else if (esDetraccion) {
-    console.log(`\n   🏦 Procesando DETRACCIÓN EGRESO`);
     
     if (movimientoCompleto.cuentaCorrienteOrigenId) {
       // Este caso ya no debería ocurrir porque ahora usamos 2 movimientos separados
@@ -3083,9 +3042,7 @@ const obtenerResumenOperacion = async (empresaId, correlativo) => {
  * @returns {Promise<string>} - URL del PDF generado
  */
 const generarYGuardarVoucherContable = async (movimientoId) => {
-  console.log('\n📄 ════════════════════════════════════════════════════════');
-  console.log(`📄 GENERANDO VOUCHER CONTABLE - Movimiento ID: ${movimientoId}`);
-  console.log('📄 ════════════════════════════════════════════════════════');
+
   
   try {
     // 0. Verificar que el movimiento tenga asientos contables
@@ -3101,62 +3058,35 @@ const generarYGuardarVoucherContable = async (movimientoId) => {
       throw new Error(`Movimiento ${movimientoId} no encontrado`);
     }
     
-    console.log(`     Asientos encontrados: ${movimientoConAsientos.asientosContables?.length || 0}`);
     
-    if (!movimientoConAsientos.asientosContables || movimientoConAsientos.asientosContables.length === 0) {
-      console.log('  ⚠️  ADVERTENCIA: No hay asientos contables para este movimiento');
-      console.log('     El voucher se generará sin tabla de asientos');
-    }
     
     // 1. Generar PDF del voucher contable
-    console.log('  ⏳ Paso 1: Generando PDF del voucher contable...');
     const pdfBuffer = await generarVoucherContableMovimientoCaja(movimientoId);
-    console.log(`  ✅ PDF generado exitosamente (${pdfBuffer.length} bytes)`);
 
     // 2. Definir directorio y nombre del archivo (✅ RUTA ESTÁNDAR)
     const uploadDir = path.join(__dirname, '../../../uploads/pdf-system/movimiento-caja-voucher-contable');
     const fileName = `MOVIMIENTO-CAJA-VOUCHER-CONTABLE-${movimientoId}.pdf`;
     const filePath = path.join(uploadDir, fileName);
     
-    console.log('  ⏳ Paso 2: Creando directorio...');
-    console.log(`     Directorio: ${uploadDir}`);
+
     await fs.mkdir(uploadDir, { recursive: true });
-    console.log('  ✅ Directorio verificado/creado');
 
     // 3. Guardar archivo
-    console.log('  ⏳ Paso 3: Guardando archivo PDF...');
-    console.log(`     Archivo: ${fileName}`);
-    console.log(`     Ruta completa: ${filePath}`);
+
     await fs.writeFile(filePath, pdfBuffer);
-    console.log('  ✅ Archivo guardado exitosamente');
 
     // 4. Construir URL relativa (✅ RUTA ESTÁNDAR)
     const urlRelativa = `/uploads/pdf-system/movimiento-caja-voucher-contable/${fileName}`;
-    console.log('  ⏳ Paso 4: URL relativa construida');
-    console.log(`     URL: ${urlRelativa}`);
 
     // 5. Actualizar MovimientoCaja con la URL
-    console.log('  ⏳ Paso 5: Actualizando MovimientoCaja en BD...');
     await prisma.movimientoCaja.update({
       where: { id: Number(movimientoId) },
       data: { urlDocumentoMovCaja: urlRelativa }
     });
-    console.log('  ✅ MovimientoCaja.urlDocumentoMovCaja actualizado');
-
-    console.log('📄 ════════════════════════════════════════════════════════');
-    console.log(`📄 ✅ VOUCHER CONTABLE GENERADO EXITOSAMENTE`);
-    console.log(`📄    Movimiento: ${movimientoId}`);
-    console.log(`📄    URL: ${urlRelativa}`);
-    console.log('📄 ════════════════════════════════════════════════════════\n');
 
     return urlRelativa;
   } catch (error) {
-    console.log('📄 ════════════════════════════════════════════════════════');
-    console.log(`📄 ❌ ERROR GENERANDO VOUCHER CONTABLE`);
-    console.log(`📄    Movimiento: ${movimientoId}`);
-    console.log(`📄    Error: ${error.message}`);
-    console.log(`📄    Stack: ${error.stack}`);
-    console.log('📄 ════════════════════════════════════════════════════════\n');
+
     // No fallar el proceso completo si falla la generación del PDF
     return null;
   }

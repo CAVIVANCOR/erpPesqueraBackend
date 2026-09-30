@@ -163,10 +163,14 @@ const CODIGOS_CUENTAS_CONTABLES = {
 async function validarDatosTransferenciaInterna(data, tx = null) {
   const db = tx || prisma;
   
-  // ========================================
+  // ════════════════════════════════════════════════════════════
   // VALIDAR CAMPOS BÁSICOS OBLIGATORIOS
-  // ========================================
-  const camposBasicos = ['empresaId', 'fechaTransferencia', 'monto', 'usuarioId'];
+  // ════════════════════════════════════════════════════════════
+  //
+  // NOTA: empresaId ya NO es obligatorio
+  // La empresa se obtiene automáticamente de las cuentas seleccionadas
+  //
+  const camposBasicos = ['fechaTransferencia', 'monto', 'usuarioId'];
   const camposFaltantes = camposBasicos.filter(campo => !data[campo]);
 
   if (camposFaltantes.length > 0) {
@@ -236,7 +240,7 @@ async function validarDatosTransferenciaInterna(data, tx = null) {
     saldoOrigen = await db.saldoCuentaCorriente.findFirst({
       where: {
         cuentaCorrienteId: cuentaOrigen.id,
-        empresaId: Number(data.empresaId)
+        empresaId: Number(cuentaOrigen.empresaId) // ✅ Usar empresa de la cuenta
       },
       orderBy: { fecha: 'desc' }
     });
@@ -404,35 +408,44 @@ async function actualizarSaldoCuentaCorriente({
  * Genera asientos contables automáticamente para cada movimiento de caja creado.
  * Sigue el patrón de pagoEspecializadoCuentaPorCobrar.service.js
  * 
+ * ✅ LÓGICA DE MISMA EMPRESA:
+ * - Si ambas cuentas son de la MISMA empresa:
+ *   → El asiento del egreso incluye directamente la cuenta destino (DEBE)
+ *   → El movimiento ingreso NO genera asiento (ya está reflejado)
+ * - Si las cuentas son de DIFERENTES empresas:
+ *   → Cada movimiento genera su propio asiento en su empresa
+ * 
  * @pattern
  * - Un asiento por cada movimiento con monto > 0
  * - Vinculación por procesoOrigenId = MovimientoCaja.id
  * - Usa referencia de asientos-contables-referencia.json
  * 
+ * @tipos_operacion
+ * - esGerencial = false: Operación FISCAL (visible SUNAT, declarable, blanca)
+ * - esGerencial = true:  Operación GERENCIAL (solo interno, no declarable, negra)
+ * 
  * @param {Array} movimientos - Array de MovimientoCaja creados
  * @param {Object} periodoContable - Período contable
- * @param {Number} empresaId - ID empresa
  * @param {Number} creadoPor - ID usuario
  * @param {Object} cuentaOrigen - Cuenta corriente origen (puede ser null)
  * @param {Object} cuentaDestino - Cuenta corriente destino (puede ser null)
+ * @param {Boolean} esGerencial - Flag operación gerencial (default: false)
+ * @param {Boolean} esMismaEmpresa - Flag si origen y destino son misma empresa
  * @param {Object} tx - Transacción Prisma
  * @returns {Promise<Array>} Array de asientos creados
  */
 async function generarAsientosContablesTransferencia(
   movimientos,
   periodoContable,
-  empresaId,
   creadoPor,
   cuentaOrigen,
   cuentaDestino,
+  esGerencial = false,
+  esMismaEmpresa = false,
   tx
 ) {
   try {
-    console.log(`\n╔════════════════════════════════════════════════════════════╗`);
-    console.log(`║  INICIANDO GENERACIÓN DE ASIENTOS CONTABLES               ║`);
-    console.log(`╚════════════════════════════════════════════════════════════╝`);
-    console.log(`📊 Total de movimientos a procesar: ${movimientos.length}`);
-    console.log(`📋 IDs de movimientos: ${movimientos.map(m => m.id).join(', ')}`);
+
 
     // ========================================
     // 1. BUSCAR SUBMÓDULO "MovimientoCaja"
@@ -486,7 +499,6 @@ async function generarAsientosContablesTransferencia(
     // ========================================
     for (let i = 0; i < movimientos.length; i++) {
       const movimiento = movimientos[i];
-      console.log(`\n[${i + 1}/${movimientos.length}] Procesando movimiento ID: ${movimiento.id}`);
 
       try {
         // Cargar movimiento completo con relaciones
@@ -521,7 +533,6 @@ async function generarAsientosContablesTransferencia(
         const asiento = await crearAsientoSegunTipo(
           movimientoCompleto,
           periodoContable,
-          empresaId,
           creadoPor,
           submodulo,
           estadoPendiente,
@@ -529,12 +540,13 @@ async function generarAsientosContablesTransferencia(
           cuentaDestino,
           cuentaTercerosSoles,
           cuentaTercerosDolares,
+          esGerencial,
+          esMismaEmpresa,
           tx
         );
 
         if (asiento) {
           asientosCreados.push(asiento);
-          console.log(`✅ Asiento creado: ${asiento.numeroAsiento} (ID: ${asiento.id})`);
         }
       } catch (error) {
         console.error(`❌ Error generando asiento para movimiento ${movimiento.id}:`, error.message);
@@ -542,28 +554,18 @@ async function generarAsientosContablesTransferencia(
       }
     }
 
-    console.log(`\n╔════════════════════════════════════════════════════════════╗`);
-    console.log(`║  RESUMEN FINAL DE GENERACIÓN DE ASIENTOS                  ║`);
-    console.log(`╚════════════════════════════════════════════════════════════╝`);
-    console.log(`📊 Movimientos procesados: ${movimientos.length}`);
-    console.log(`✅ Asientos generados: ${asientosCreados.length}`);
-    console.log(`❌ Movimientos omitidos: ${movimientos.length - asientosCreados.length}`);
-    if (asientosCreados.length > 0) {
-      console.log(`📝 IDs de asientos creados: ${asientosCreados.map(a => a.id).join(', ')}`);
-    }
-    console.log(`════════════════════════════════════════════════════════════\n`);
-
-    // ✅ Recargar asientos con la relación moneda para el frontend
-    const asientosConMoneda = await tx.asientoContable.findMany({
+    // ✅ Recargar asientos con relaciones para el frontend
+    const asientosConRelaciones = await tx.asientoContable.findMany({
       where: {
         id: { in: asientosCreados.map(a => a.id) }
       },
       include: {
-        moneda: true
+        moneda: true,
+        empresa: true // ✅ Incluir empresa del asiento
       }
     });
 
-    return asientosConMoneda;
+    return asientosConRelaciones;
   } catch (error) {
     console.error('❌ Error generando asientos contables:', error);
     throw error;
@@ -578,14 +580,20 @@ async function generarAsientosContablesTransferencia(
  * @description
  * Determina el tipo de asiento a crear según el contexto del movimiento:
  * - TRANSFERENCIA_ENTRE_CUENTAS: Si hay cuenta origen Y destino
- * - PAGO_A_TERCERO: Si solo hay cuenta origen (egreso)
- * - INGRESO_DE_TERCERO: Si solo hay cuenta destino (ingreso)
- * - ITF y Comisión: Se omiten (no generan asiento contable)
+ * - EGRESO_DIRECTO: Si solo hay cuenta origen (salida sin destino registrado)
+ * - INGRESO_DIRECTO: Si solo hay cuenta destino (entrada sin origen registrado)
+ * - ITF y Comisión: Generan asientos de gasto
+ * 
+ * ✅ LÓGICA DE MISMA EMPRESA:
+ * - Si esMismaEmpresa = true: El egreso usa directamente la cuenta destino (DEBE)
+ * - Si esMismaEmpresa = false: El egreso usa cuenta transitoria o cuentas por cobrar
+ * 
+ * @param {Boolean} esGerencial - Flag para operaciones gerenciales (negras)
+ * @param {Boolean} esMismaEmpresa - Flag si origen y destino son misma empresa
  */
 async function crearAsientoSegunTipo(
   movimiento,
   periodoContable,
-  empresaId,
   creadoPor,
   submodulo,
   estadoPendiente,
@@ -593,11 +601,12 @@ async function crearAsientoSegunTipo(
   cuentaDestino,
   cuentaTercerosSoles,
   cuentaTercerosDolares,
+  esGerencial = false,
+  esMismaEmpresa = false,
   tx
 ) {
-  // ========================================
-  // DETERMINAR TIPO DE MOVIMIENTO
-  // ========================================
+  
+  
   // ✅ PROFESIONAL: Diferenciar ITF y Comisión por descripción (mismo tipoMovimientoId: 163)
   const tipoMovimientoEsITFoComision = Number(movimiento.tipoMovimientoId) === TIPOS_MOVIMIENTO.ITF;
   const descripcionUpper = movimiento.descripcion ? movimiento.descripcion.toUpperCase() : '';
@@ -617,11 +626,10 @@ async function crearAsientoSegunTipo(
   // Si la moneda es USD (monedaId === 2), convertir a soles
   const monto = monedaId === 2 ? montoOriginal * tipoCambio : montoOriginal;
 
-  // ========================================
+  // ════════════════════════════════════════════════════════════
   // CASO 1: ITF (Impuesto a las Transacciones Financieras)
-  // ========================================
+  // ════════════════════════════════════════════════════════════
   if (esITF) {
-    console.log(`   💸 Tipo: ITF (Egreso bancario)`);
     
     // Buscar cuenta de gasto ITF (641101)
     const cuentaGastoITF = await tx.planCuentasContable.findFirst({
@@ -649,15 +657,11 @@ async function crearAsientoSegunTipo(
     centroCostoId = cuentaGastoITF.centroCostoId;
     glosa = `POR EL ITF - ${movimiento.descripcion || 'TRANSFERENCIA'}`;
     
-    console.log(`      ✅ DEBE: ${cuentaDebe} (Gasto ITF 641101)`);
-    console.log(`      ✅ HABER: ${cuentaHaber} (Banco)`);
-    console.log(`      ✅ Centro Costo: ${centroCostoId}`);
   }
-  // ========================================
+  // ════════════════════════════════════════════════════════════
   // CASO 2: COMISIÓN BANCARIA
-  // ========================================
+  // ════════════════════════════════════════════════════════════
   else if (esComision) {
-    console.log(`   💳 Tipo: COMISIÓN BANCARIA (Egreso bancario)`);
     
     // Buscar cuenta de gasto comisión (679401)
     const cuentaGastoComision = await tx.planCuentasContable.findFirst({
@@ -685,62 +689,115 @@ async function crearAsientoSegunTipo(
     centroCostoId = cuentaGastoComision.centroCostoId;
     glosa = `POR LA COMISIÓN BANCARIA - ${movimiento.descripcion || 'TRANSFERENCIA'}`;
     
-    console.log(`      ✅ DEBE: ${cuentaDebe} (Gasto Comisión 679401)`);
-    console.log(`      ✅ HABER: ${cuentaHaber} (Banco)`);
-    console.log(`      ✅ Centro Costo: ${centroCostoId}`);
+
   }
-  // ========================================
-  // CASO 3: TRANSFERENCIA ENTRE CUENTAS
-  // ========================================
-  else if (cuentaOrigen && cuentaDestino) {
-    console.log(`   📋 Tipo: TRANSFERENCIA_ENTRE_CUENTAS`);
+  // ════════════════════════════════════════════════════════════
+  // BIFURCACIÓN 1: TRANSFERENCIA INTERNA (MISMA EMPRESA)
+  // ════════════════════════════════════════════════════════════
+  //
+  // Condición: Hay cuenta origen Y destino, y ambas son de la MISMA empresa
+  //
+  // Asiento:
+  //   DEBE:  Cuenta Destino (la que recibe el dinero)
+  //   HABER: Cuenta Origen (la que entrega el dinero)
+  //
+  // Nota: Este es el ÚNICO asiento para toda la transferencia
+  //       El movimiento de ingreso NO generará asiento adicional
+  //
+  else if (cuentaOrigen && cuentaDestino && esMismaEmpresa) {
     
-    // DEBE: Cuenta que RECIBE (cuentaDestino)
-    // HABER: Cuenta que ENTREGA (cuentaOrigen)
+    
     cuentaDebe = cuentaDestino.cuentaContableId;
     cuentaHaber = cuentaOrigen.cuentaContableId;
     glosa = `TRANSFERENCIA DE ${cuentaOrigen.banco?.nombre || 'CUENTA'} A ${cuentaDestino.banco?.nombre || 'CUENTA'}`;
     
-    console.log(`      ✅ DEBE: ${cuentaDebe} (${cuentaDestino.banco?.nombre})`);
-    console.log(`      ✅ HABER: ${cuentaHaber} (${cuentaOrigen.banco?.nombre})`);
+
   }
-  // ========================================
-  // CASO 4: PAGO A TERCERO (solo cuenta origen - egreso)
-  // ========================================
-  else if (cuentaOrigen && !cuentaDestino && movimiento.cuentaCorrienteDestinoId) {
-    console.log(`   📋 Tipo: PAGO_A_TERCERO`);
+  // ════════════════════════════════════════════════════════════
+  // BIFURCACIÓN 2: EGRESO INTER-EMPRESARIAL
+  // ════════════════════════════════════════════════════════════
+  //
+  // Condición: Hay cuenta origen Y destino, son DIFERENTES empresas,
+  //            y este movimiento es el EGRESO (tiene cuentaCorrienteDestinoId)
+  //
+  // Asiento (en empresa ORIGEN):
+  //   DEBE:  Cuenta Destino (la que recibe el dinero)
+  //   HABER: Cuenta Origen (la que entrega el dinero)
+  //
+  // Nota: Usa la MISMA lógica que transferencia interna
+  //       El movimiento de ingreso generará otro asiento en la empresa DESTINO
+  //
+  else if (cuentaOrigen && cuentaDestino && !esMismaEmpresa && movimiento.cuentaCorrienteDestinoId) {
+
     
-    // DEBE: Terceros (461101 o 461102)
-    // HABER: Cuenta bancaria que entrega
+    cuentaDebe = cuentaDestino.cuentaContableId;
+    cuentaHaber = cuentaOrigen.cuentaContableId;
+    glosa = `TRANSFERENCIA A ${cuentaDestino.empresa?.razonSocial || cuentaDestino.banco?.nombre || 'CUENTA DESTINO'}`;
+    
+ 
+  }
+  // ════════════════════════════════════════════════════════════
+  // BIFURCACIÓN 3: INGRESO INTER-EMPRESARIAL
+  // ════════════════════════════════════════════════════════════
+  //
+  // Condición: Hay cuenta origen Y destino, son DIFERENTES empresas,
+  //            y este movimiento es el INGRESO (tiene cuentaCorrienteOrigenId)
+  //
+  // Asiento (en empresa DESTINO):
+  //   DEBE:  Cuenta Destino (la que recibe el dinero)
+  //   HABER: Cuenta Origen (la que entrega el dinero)
+  //
+  // Nota: Usa la MISMA lógica que transferencia interna
+  //       El movimiento de egreso ya generó su asiento en la empresa ORIGEN
+  //
+  else if (cuentaOrigen && cuentaDestino && !esMismaEmpresa && movimiento.cuentaCorrienteOrigenId && !movimiento.cuentaCorrienteDestinoId) {
+
+    
+    cuentaDebe = cuentaDestino.cuentaContableId;
+    cuentaHaber = cuentaOrigen.cuentaContableId;
+    glosa = `TRANSFERENCIA DE ${cuentaOrigen.empresa?.razonSocial || cuentaOrigen.banco?.nombre || 'CUENTA ORIGEN'}`;
+    
+
+  }
+  // ════════════════════════════════════════════════════════════
+  // BIFURCACIÓN 4: EGRESO DIRECTO (sin cuenta destino)
+  // ════════════════════════════════════════════════════════════
+  //
+  // Condición: Solo hay cuenta origen, NO hay cuenta destino
+  //
+  // Asiento:
+  //   DEBE:  461101/461102 Reclamaciones de Terceros (según moneda)
+  //   HABER: Cuenta Origen (la que entrega el dinero)
+  //
+  else if (cuentaOrigen && !cuentaDestino && movimiento.cuentaCorrienteDestinoId) {
+    
     const cuentaTerceros = monedaId === 1 ? cuentaTercerosSoles : cuentaTercerosDolares;
     cuentaDebe = cuentaTerceros?.id;
     cuentaHaber = movimiento.cuentaCorrienteDestino?.cuentaContable?.id;
     glosa = `POR LA TRANSFERENCIA ${movimiento.descripcion || 'A TERCERO'}`;
     
-    console.log(`      ✅ DEBE: ${cuentaDebe} (Terceros)`);
-    console.log(`      ✅ HABER: ${cuentaHaber} (Banco)`);
+
   }
-  // ========================================
-  // CASO 5: INGRESO DE TERCERO (solo cuenta destino - ingreso)
-  // ========================================
+  // ════════════════════════════════════════════════════════════
+  // BIFURCACIÓN 5: INGRESO DIRECTO (sin cuenta origen)
+  // ════════════════════════════════════════════════════════════
+  //
+  // Condición: Solo hay cuenta destino, NO hay cuenta origen
+  //
+  // Asiento:
+  //   DEBE:  Cuenta Destino (la que recibe el dinero)
+  //   HABER: 461101/461102 Reclamaciones de Terceros (según moneda)
+  //
   else if (!cuentaOrigen && cuentaDestino && movimiento.cuentaCorrienteOrigenId) {
-    console.log(`   📋 Tipo: INGRESO_DE_TERCERO`);
     
-    // DEBE: Cuenta bancaria que recibe
-    // HABER: Terceros (461101 o 461102)
     const cuentaTerceros = monedaId === 1 ? cuentaTercerosSoles : cuentaTercerosDolares;
     cuentaDebe = movimiento.cuentaCorrienteOrigen?.cuentaContable?.id;
     cuentaHaber = cuentaTerceros?.id;
     glosa = `POR EL INGRESO ${movimiento.descripcion || 'DE TERCERO'}`;
-    
-    console.log(`      ✅ DEBE: ${cuentaDebe} (Banco)`);
-    console.log(`      ✅ HABER: ${cuentaHaber} (Terceros)`);
+
   }
   else {
-    console.warn(`   ⚠️  No se pudo determinar el tipo de asiento para movimiento ${movimiento.id}`);
-    console.warn(`   Tipo: ${tipoMovNombre}`);
-    console.warn(`   Contexto: cuentaOrigen=${!!cuentaOrigen}, cuentaDestino=${!!cuentaDestino}`);
-    console.warn(`   Movimiento: cuentaCorrienteOrigenId=${!!movimiento.cuentaCorrienteOrigenId}, cuentaCorrienteDestinoId=${!!movimiento.cuentaCorrienteDestinoId}`);
+
     return null;
   }
 
@@ -748,16 +805,21 @@ async function crearAsientoSegunTipo(
   // VALIDAR CUENTAS CONTABLES
   // ========================================
   if (!cuentaDebe || !cuentaHaber) {
-    console.warn(`   ⚠️  Faltan cuentas contables (DEBE: ${cuentaDebe}, HABER: ${cuentaHaber})`);
     return null;
   }
 
-  // ========================================
+  // ════════════════════════════════════════════════════════════
   // GENERAR CORRELATIVO Y NÚMERO DE ASIENTO
-  // ========================================
+  // ════════════════════════════════════════════════════════════
+  //
+  // ✅ IMPORTANTE: Usar la empresaId del MOVIMIENTO, no del parámetro
+  // Esto permite que cada empresa genere sus propios asientos con sus correlativos
+  //
+  const empresaIdMovimiento = Number(movimiento.empresaId);
+  
   const ultimoAsiento = await tx.asientoContable.findFirst({
     where: {
-      empresaId: Number(empresaId),
+      empresaId: empresaIdMovimiento,
       periodoContableId: Number(periodoContable.id)
     },
     orderBy: { correlativo: 'desc' }
@@ -766,18 +828,20 @@ async function crearAsientoSegunTipo(
   const nuevoCorrelativo = ultimoAsiento ? Number(ultimoAsiento.correlativo) + 1 : 1;
   const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(nuevoCorrelativo).padStart(6, '0')}`;
 
-  // ========================================
+  // ════════════════════════════════════════════════════════════
   // DETERMINAR TIPO DE LIBRO (FISCAL o GERENCIAL)
-  // ========================================
-  const esGerencial = false;  // Las transferencias son siempre fiscales
+  // ════════════════════════════════════════════════════════════
+  // esGerencial viene como parámetro de la función
+  // false = Operación FISCAL (visible SUNAT, declarable, blanca)
+  // true  = Operación GERENCIAL (solo interno, no declarable, negra)
   const tipoLibro = esGerencial ? "GERENCIAL" : "FISCAL";
 
-  // ========================================
+  // ════════════════════════════════════════════════════════════
   // CREAR ASIENTO CONTABLE
-  // ========================================
+  // ════════════════════════════════════════════════════════════
   const asiento = await tx.asientoContable.create({
     data: {
-      empresaId: Number(empresaId),
+      empresaId: empresaIdMovimiento,  // ✅ EMPRESA DEL MOVIMIENTO
       periodoContableId: Number(periodoContable.id),
       numeroAsiento: numeroAsiento,
       correlativo: nuevoCorrelativo,
@@ -806,7 +870,7 @@ async function crearAsientoSegunTipo(
             glosa: glosa,
             debe: monto,  // ✅ Monto convertido a SOLES para contabilidad
             haber: 0,
-            monedaId: monedaId,  // ✅ Moneda ORIGINAL del movimiento
+            monedaId: 1,  // ✅ SIEMPRE PEN (1) - Los asientos contables son en soles
             tipoCambio: tipoCambio,
             debeMonedaExtranjera: monedaId === 2 ? montoOriginal : null,  // ✅ Monto original en USD si aplica
             haberMonedaExtranjera: null,
@@ -826,7 +890,7 @@ async function crearAsientoSegunTipo(
             glosa: glosa,
             debe: 0,
             haber: monto,  // ✅ Monto convertido a SOLES para contabilidad
-            monedaId: monedaId,  // ✅ Moneda ORIGINAL del movimiento
+            monedaId: 1,  // ✅ SIEMPRE PEN (1) - Los asientos contables son en soles
             tipoCambio: tipoCambio,
             debeMonedaExtranjera: null,
             haberMonedaExtranjera: monedaId === 2 ? montoOriginal : null,  // ✅ Monto original en USD si aplica
@@ -858,66 +922,121 @@ async function crearAsientoSegunTipo(
  * ════════════════════════════════════════════════════════════════════════════
  * 
  * @description
- * Procesa movimientos de caja especializados: transferencia interna, egreso directo o ingreso directo.
- * Crea todos los movimientos necesarios de forma atómica y actualiza saldos en cascada.
+ * Procesa movimientos de caja especializados con 3 flujos posibles:
+ * 
+ * FLUJO 1: TRANSFERENCIA ENTRE CUENTAS (origen + destino)
+ *   - 6 movimientos: egreso principal, ITF origen, comisión origen,
+ *                    ingreso principal, ITF destino, comisión destino
+ *   - 6 asientos contables automáticos
+ * 
+ * FLUJO 2: INGRESO DIRECTO (solo destino, sin origen)
+ *   - 3 movimientos: ingreso principal, ITF destino, comisión destino
+ *   - 3 asientos contables automáticos
+ *   - Ejemplo: Préstamo de cambista → Caja dólares
+ * 
+ * FLUJO 3: EGRESO DIRECTO (solo origen, sin destino)
+ *   - 3 movimientos: egreso principal, ITF origen, comisión origen
+ *   - 3 asientos contables automáticos
+ *   - Ejemplo: Devolución a cambista, pago coimas (si esGerencial=true)
  * 
  * @pattern Sigue el patrón de pagoEspecializadoCuentaPorPagar.service.js
  * 
  * @workflow
  * 1. Validar datos según tipo de operación
  * 2. Generar correlativo único
- * 3. Crear movimiento egreso (si hay cuenta origen) + ITF/comisión opcionales
- * 4. Crear movimiento ingreso (si hay cuenta destino) + ITF/comisión opcionales
+ * 3. Crear movimientos según flujo (egreso/ingreso/ambos) + ITF/comisión
+ * 4. Generar asientos contables automáticos (fiscal o gerencial)
  * 5. Actualizar saldos en cascada
- * 6. Retornar IDs de movimientos creados
+ * 6. Retornar IDs de movimientos y asientos creados
  * 
- * @param {Object} data - Datos del movimiento (ver validarDatosTransferenciaInterna para detalles)
- * @returns {Promise<Object>} { success, correlativo, movimientoEgresoId, movimientoIngresoId, ... }
+ * @param {Object} data - Datos del movimiento
+ * @param {Number} data.empresaId - ID de la empresa
+ * @param {Number} [data.cuentaOrigenId] - ID cuenta origen (opcional para ingreso directo)
+ * @param {Number} [data.cuentaDestinoId] - ID cuenta destino (opcional para egreso directo)
+ * @param {Number} data.monto - Monto principal de la operación
+ * @param {Boolean} [data.esGerencial=false] - Flag operación gerencial (negra, no declarable)
+ * @param {Number} [data.itfOrigen=0] - ITF cuenta origen
+ * @param {Number} [data.comisionOrigen=0] - Comisión cuenta origen
+ * @param {Number} [data.itfDestino=0] - ITF cuenta destino
+ * @param {Number} [data.comisionDestino=0] - Comisión cuenta destino
+ * @param {String} data.descripcion - Descripción de la operación
+ * @param {Date} data.fechaTransferencia - Fecha de la operación
+ * @param {Number} data.usuarioId - ID del usuario que ejecuta
+ * 
+ * @returns {Promise<Object>} { success, correlativo, movimientoEgresoId, movimientoIngresoId, asientosContables, ... }
  * @throws {ValidationError|NotFoundError|DatabaseError}
  * @transaction Toda la operación es atómica (rollback automático en errores)
  */
 export async function procesarTransferenciaInterna(data) {
   return await prisma.$transaction(async (tx) => {
     try {
-      // ========================================
+      // ════════════════════════════════════════════════════════════
       // PASO 1: VALIDAR DATOS
-      // ========================================
+      // ════════════════════════════════════════════════════════════
       const { cuentaOrigen, cuentaDestino, saldoOrigen } = 
         await validarDatosTransferenciaInterna(data, tx);
 
-      // ========================================
-      // PASO 2: GENERAR CORRELATIVO DE OPERACIÓN
-      // ========================================
+      // ════════════════════════════════════════════════════════════
+      // PASO 2: DETERMINAR EMPRESA PRINCIPAL PARA CORRELATIVO
+      // ════════════════════════════════════════════════════════════
+      //
+      // El correlativo se genera en la empresa que INICIA la operación:
+      // - Si hay cuenta origen: usa empresa de cuenta origen
+      // - Si solo hay cuenta destino (ingreso directo): usa empresa de cuenta destino
+      //
+      const empresaPrincipal = cuentaOrigen ? cuentaOrigen.empresaId : cuentaDestino.empresaId;
+
+      // ════════════════════════════════════════════════════════════
+      // PASO 3: GENERAR CORRELATIVO DE OPERACIÓN
+      // ════════════════════════════════════════════════════════════
       const correlativo = await correlativoService.generarCorrelativo(
-        Number(data.empresaId),
+        Number(empresaPrincipal),
         tx
       );
 
-      // ========================================
-      // PASO 3: CALCULAR DATOS CONTABLES
-      // ========================================
+      // ════════════════════════════════════════════════════════════
+      // PASO 4: CALCULAR DATOS CONTABLES
+      // ════════════════════════════════════════════════════════════
       const fechaContable = new Date(data.fechaTransferencia);
       
       const periodoContable = await periodoContableService.obtenerPeriodoPorFecha(
-        Number(data.empresaId),
+        Number(empresaPrincipal),
         fechaContable
       );
 
-      // Generar descripción dinámica según el tipo de operación
+      // La descripción/glosa es obligatoria y viene del frontend
       let descripcion = data.descripcion;
-      if (!descripcion) {
-        if (cuentaOrigen && cuentaDestino) {
-          descripcion = `Transferencia de ${cuentaOrigen.banco.nombre} a ${cuentaDestino.banco.nombre}`;
-        } else if (cuentaOrigen) {
-          descripcion = `Egreso desde ${cuentaOrigen.banco.nombre}`;
-        } else {
-          descripcion = `Ingreso a ${cuentaDestino.banco.nombre}`;
-        }
+
+      // Agregar número de cheque a la descripción si aplica
+      if (data.numeroChequeOrigen) {
+        descripcion += ` N° CHEQUE: ${data.numeroChequeOrigen}`;
+      }
+      if (data.numeroChequeDestino) {
+        descripcion += ` N° CHEQUE: ${data.numeroChequeDestino}`;
       }
 
-      // ========================================
-      // PASO 4: CREAR MOVIMIENTO DE CAJA - EGRESO (si hay cuenta origen)
-      // ========================================
+      // ════════════════════════════════════════════════════════════
+      // PASO 5: DETERMINAR SI ES TRANSFERENCIA INTER-EMPRESARIAL
+      // ════════════════════════════════════════════════════════════
+      // 
+      // ✅ LÓGICA DE NEGOCIO:
+      // - Si ambas cuentas pertenecen a la MISMA empresa → Transferencia Interna
+      // - Si las cuentas pertenecen a DIFERENTES empresas → Transferencia Inter-Empresarial
+      // 
+      // IMPACTO CONTABLE:
+      // - Misma empresa: 1 solo asiento (Cuenta Destino DEBE / Cuenta Origen HABER)
+      // - Diferentes empresas: 2 asientos (uno en cada empresa con cuentas por cobrar/pagar relacionadas)
+      //
+      const esMismaEmpresa = cuentaOrigen && cuentaDestino && 
+                             Number(cuentaOrigen.empresaId) === Number(cuentaDestino.empresaId);
+
+      // ════════════════════════════════════════════════════════════
+      // PASO 6: CREAR MOVIMIENTO DE CAJA - EGRESO (si hay cuenta origen)
+      // ════════════════════════════════════════════════════════════
+      //
+      // ✅ IMPORTANTE: El movimiento usa la empresaId de la CUENTA ORIGEN
+      // ✅ Esto permite que cada empresa registre sus propios movimientos
+      //
       let movimientoEgreso = null;
       let saldoDespuesEgreso = null;
       
@@ -926,7 +1045,7 @@ export async function procesarTransferenciaInterna(data) {
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: Number(data.tipoMovimientoEgresoId),
-            empresaId: Number(data.empresaId),
+            empresaId: Number(cuentaOrigen.empresaId),  // ✅ EMPRESA DE LA CUENTA ORIGEN
             monto: Number(data.monto),
             monedaId: Number(cuentaOrigen.monedaId),
             medioPagoId: Number(data.medioPagoOrigenId),
@@ -947,7 +1066,7 @@ export async function procesarTransferenciaInterna(data) {
         const registroSaldo = await actualizarSaldoCuentaCorriente({
           tx,
           cuentaCorrienteId: cuentaOrigen.id,
-          empresaId: data.empresaId,
+          empresaId: cuentaOrigen.empresaId,  // ✅ EMPRESA DE LA CUENTA ORIGEN
           fecha: fechaContable,
           ingresos: 0,
           egresos: data.monto,
@@ -958,9 +1077,13 @@ export async function procesarTransferenciaInterna(data) {
         saldoDespuesEgreso = registroSaldo.saldoActual;
       }
 
-      // ========================================
-      // PASO 5: CREAR MOVIMIENTO DE CAJA - ITF ORIGEN (si aplica)
-      // ========================================
+      // ════════════════════════════════════════════════════════════
+      // PASO 7: CREAR MOVIMIENTO DE CAJA - ITF ORIGEN (si aplica)
+      // ════════════════════════════════════════════════════════════
+      //
+      // ✅ IMPORTANTE: El ITF usa la empresaId de la CUENTA ORIGEN
+      // ✅ Siempre genera asiento contable (es un gasto independiente)
+      //
       let movimientoITFOrigen = null;
       let saldoDespuesITFOrigen = null;
       
@@ -969,7 +1092,7 @@ export async function procesarTransferenciaInterna(data) {
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.ITF,
-            empresaId: Number(data.empresaId),
+            empresaId: Number(cuentaOrigen.empresaId),  // ✅ EMPRESA DE LA CUENTA ORIGEN
             monto: Number(data.itfOrigen),
             monedaId: Number(cuentaOrigen.monedaId),
             medioPagoId: Number(data.medioPagoOrigenId),
@@ -988,7 +1111,7 @@ export async function procesarTransferenciaInterna(data) {
         const registroSaldo = await actualizarSaldoCuentaCorriente({
           tx,
           cuentaCorrienteId: cuentaOrigen.id,
-          empresaId: data.empresaId,
+          empresaId: cuentaOrigen.empresaId,  // ✅ EMPRESA DE LA CUENTA ORIGEN
           fecha: fechaContable,
           ingresos: 0,
           egresos: data.itfOrigen,
@@ -1000,9 +1123,13 @@ export async function procesarTransferenciaInterna(data) {
         saldoDespuesITFOrigen = registroSaldo.saldoActual;
       }
 
-      // ========================================
-      // PASO 6: CREAR MOVIMIENTO DE CAJA - COMISIÓN ORIGEN (si aplica)
-      // ========================================
+      // ════════════════════════════════════════════════════════════
+      // PASO 8: CREAR MOVIMIENTO DE CAJA - COMISIÓN ORIGEN (si aplica)
+      // ════════════════════════════════════════════════════════════
+      //
+      // ✅ IMPORTANTE: La comisión usa la empresaId de la CUENTA ORIGEN
+      // ✅ Siempre genera asiento contable (es un gasto independiente)
+      //
       let movimientoComisionOrigen = null;
       let saldoDespuesComisionOrigen = null;
       
@@ -1011,7 +1138,7 @@ export async function procesarTransferenciaInterna(data) {
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.COMISION_BANCARIA,
-            empresaId: Number(data.empresaId),
+            empresaId: Number(cuentaOrigen.empresaId),  // ✅ EMPRESA DE LA CUENTA ORIGEN
             monto: Number(data.comisionOrigen),
             monedaId: Number(cuentaOrigen.monedaId),
             medioPagoId: Number(data.medioPagoOrigenId),
@@ -1030,7 +1157,7 @@ export async function procesarTransferenciaInterna(data) {
         const registroSaldo = await actualizarSaldoCuentaCorriente({
           tx,
           cuentaCorrienteId: cuentaOrigen.id,
-          empresaId: data.empresaId,
+          empresaId: cuentaOrigen.empresaId,  // ✅ EMPRESA DE LA CUENTA ORIGEN
           fecha: fechaContable,
           ingresos: 0,
           egresos: data.comisionOrigen,
@@ -1042,9 +1169,15 @@ export async function procesarTransferenciaInterna(data) {
         saldoDespuesComisionOrigen = registroSaldo.saldoActual;
       }
 
-      // ========================================
-      // PASO 7: CREAR MOVIMIENTO DE CAJA - INGRESO (si hay cuenta destino)
-      // ========================================
+      // ════════════════════════════════════════════════════════════
+      // PASO 9: CREAR MOVIMIENTO DE CAJA - INGRESO (si hay cuenta destino)
+      // ════════════════════════════════════════════════════════════
+      //
+      // ✅ IMPORTANTE: El movimiento usa la empresaId de la CUENTA DESTINO
+      // ✅ REGLA CONTABLE:
+      //    - Si es MISMA empresa: NO genera asiento (ya está en el asiento del egreso)
+      //    - Si es DIFERENTE empresa: SÍ genera asiento (cada empresa registra su parte)
+      //
       let movimientoIngreso = null;
       let saldoDespuesIngreso = null;
       
@@ -1055,7 +1188,7 @@ export async function procesarTransferenciaInterna(data) {
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: Number(data.tipoMovimientoIngresoId),
-            empresaId: Number(data.empresaId),
+            empresaId: Number(cuentaDestino.empresaId),  // ✅ EMPRESA DE LA CUENTA DESTINO
             monto: Number(montoDestino),
             monedaId: Number(cuentaDestino.monedaId),
             medioPagoId: Number(data.medioPagoDestinoId),
@@ -1076,7 +1209,7 @@ export async function procesarTransferenciaInterna(data) {
         const registroSaldo = await actualizarSaldoCuentaCorriente({
           tx,
           cuentaCorrienteId: cuentaDestino.id,
-          empresaId: data.empresaId,
+          empresaId: cuentaDestino.empresaId,  // ✅ EMPRESA DE LA CUENTA DESTINO
           fecha: fechaContable,
           ingresos: montoDestino,
           egresos: 0,
@@ -1087,9 +1220,13 @@ export async function procesarTransferenciaInterna(data) {
         saldoDespuesIngreso = registroSaldo.saldoActual;
       }
 
-      // ========================================
-      // PASO 8: CREAR MOVIMIENTO DE CAJA - ITF DESTINO (si aplica)
-      // ========================================
+      // ════════════════════════════════════════════════════════════
+      // PASO 10: CREAR MOVIMIENTO DE CAJA - ITF DESTINO (si aplica)
+      // ════════════════════════════════════════════════════════════
+      //
+      // ✅ IMPORTANTE: El ITF usa la empresaId de la CUENTA DESTINO
+      // ✅ Siempre genera asiento contable (es un gasto independiente)
+      //
       let movimientoITFDestino = null;
       let saldoDespuesITFDestino = null;
       
@@ -1098,7 +1235,7 @@ export async function procesarTransferenciaInterna(data) {
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.ITF,
-            empresaId: Number(data.empresaId),
+            empresaId: Number(cuentaDestino.empresaId),  // ✅ EMPRESA DE LA CUENTA DESTINO
             monto: Number(data.itfDestino),
             monedaId: Number(cuentaDestino.monedaId),
             medioPagoId: Number(data.medioPagoDestinoId),
@@ -1117,7 +1254,7 @@ export async function procesarTransferenciaInterna(data) {
         const registroSaldo = await actualizarSaldoCuentaCorriente({
           tx,
           cuentaCorrienteId: cuentaDestino.id,
-          empresaId: data.empresaId,
+          empresaId: cuentaDestino.empresaId,  // ✅ EMPRESA DE LA CUENTA DESTINO
           fecha: fechaContable,
           ingresos: 0,
           egresos: data.itfDestino,
@@ -1129,16 +1266,20 @@ export async function procesarTransferenciaInterna(data) {
         saldoDespuesITFDestino = registroSaldo.saldoActual;
       }
 
-      // ========================================
-      // PASO 9: CREAR MOVIMIENTO DE CAJA - COMISIÓN DESTINO (si aplica)
-      // ========================================
+      // ════════════════════════════════════════════════════════════
+      // PASO 11: CREAR MOVIMIENTO DE CAJA - COMISIÓN DESTINO (si aplica)
+      // ════════════════════════════════════════════════════════════
+      //
+      // ✅ IMPORTANTE: La comisión usa la empresaId de la CUENTA DESTINO
+      // ✅ Siempre genera asiento contable (es un gasto independiente)
+      //
       let movimientoComisionDestino = null;
       if (cuentaDestino && data.comisionDestino && Number(data.comisionDestino) > 0) {
         movimientoComisionDestino = await tx.movimientoCaja.create({
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.COMISION_BANCARIA,
-            empresaId: Number(data.empresaId),
+            empresaId: Number(cuentaDestino.empresaId),  // ✅ EMPRESA DE LA CUENTA DESTINO
             monto: Number(data.comisionDestino),
             monedaId: Number(cuentaDestino.monedaId),
             medioPagoId: Number(data.medioPagoDestinoId),
@@ -1157,7 +1298,7 @@ export async function procesarTransferenciaInterna(data) {
         await actualizarSaldoCuentaCorriente({
           tx,
           cuentaCorrienteId: cuentaDestino.id,
-          empresaId: data.empresaId,
+          empresaId: cuentaDestino.empresaId,  // ✅ EMPRESA DE LA CUENTA DESTINO
           fecha: fechaContable,
           ingresos: 0,
           egresos: data.comisionDestino,
@@ -1168,17 +1309,39 @@ export async function procesarTransferenciaInterna(data) {
         });
       }
 
-      // ========================================
-      // PASO 10: GENERAR ASIENTOS CONTABLES AUTOMÁTICAMENTE
-      // ========================================
+      // ════════════════════════════════════════════════════════════
+      // PASO 12: GENERAR ASIENTOS CONTABLES AUTOMÁTICAMENTE
+      // ════════════════════════════════════════════════════════════
+      //
+      // ✅ LÓGICA DE GENERACIÓN DE ASIENTOS:
+      //
+      // 1️⃣ TRANSFERENCIA MISMA EMPRESA:
+      //    - Egreso Origen: SÍ genera asiento (único para la transferencia)
+      //    - Ingreso Destino: NO genera asiento (ya está en el asiento del egreso)
+      //    - ITF/Comisión Origen: SÍ generan asientos (gastos independientes)
+      //    - ITF/Comisión Destino: SÍ generan asientos (gastos independientes)
+      //
+      // 2️⃣ TRANSFERENCIA INTER-EMPRESARIAL:
+      //    - Egreso Origen: SÍ genera asiento (en empresa origen)
+      //    - Ingreso Destino: SÍ genera asiento (en empresa destino)
+      //    - ITF/Comisión Origen: SÍ generan asientos (en empresa origen)
+      //    - ITF/Comisión Destino: SÍ generan asientos (en empresa destino)
+      //
+      // 3️⃣ EGRESO/INGRESO DIRECTO:
+      //    - Todos los movimientos generan asientos
+      //
+      
+      // Construir lista de movimientos que deben generar asientos
       const movimientosParaAsientos = [
         movimientoEgreso,
         movimientoITFOrigen,
         movimientoComisionOrigen,
-        movimientoIngreso,
+        // ⚠️ IMPORTANTE: Solo incluir movimiento ingreso si NO es misma empresa
+        esMismaEmpresa ? null : movimientoIngreso,
         movimientoITFDestino,
         movimientoComisionDestino
       ].filter(m => m !== null && Number(m.monto) > 0);
+
 
       let asientosGenerados = [];
       if (movimientosParaAsientos.length > 0) {
@@ -1186,28 +1349,35 @@ export async function procesarTransferenciaInterna(data) {
           asientosGenerados = await generarAsientosContablesTransferencia(
             movimientosParaAsientos,
             periodoContable,
-            data.empresaId,
             data.usuarioId,
             cuentaOrigen,
             cuentaDestino,
+            data.esGerencial || false,
+            esMismaEmpresa,  // ✅ Pasar flag de misma empresa
             tx
           );
 
           // ✅ ACTUALIZAR CAMPO asientosGenerados EN CADA MOVIMIENTO
-          if (asientosGenerados && asientosGenerados.length > 0) {
-            console.log('\n🔄 Actualizando campo asientosGenerados en MovimientoCaja...');
+          // IMPORTANTE: Actualizar TODOS los movimientos, incluso el ingreso que no generó asiento
+          const todosLosMovimientos = [
+            movimientoEgreso,
+            movimientoITFOrigen,
+            movimientoComisionOrigen,
+            movimientoIngreso,  // ✅ Incluir siempre para marcar como procesado
+            movimientoITFDestino,
+            movimientoComisionDestino
+          ].filter(m => m !== null && Number(m.monto) > 0);
 
-            for (const movimiento of movimientosParaAsientos) {
+          if (asientosGenerados && asientosGenerados.length > 0) {
+
+            for (const movimiento of todosLosMovimientos) {
               await tx.movimientoCaja.update({
                 where: { id: movimiento.id },
                 data: { asientosGenerados: true }
               });
             }
-
-            console.log(`✅ Campo asientosGenerados actualizado en ${movimientosParaAsientos.length} movimientos\n`);
           }
         } catch (error) {
-          console.error('❌ Error generando asientos contables:', error);
           // No lanzar error - continuar con la operación
           // Los asientos se pueden generar manualmente después
         }
@@ -1236,16 +1406,19 @@ export async function procesarTransferenciaInterna(data) {
           tipoMovimiento: true,
           moneda: true,
           medioPago: true,
+          empresa: true, // ✅ Incluir empresa del movimiento
           cuentaCorrienteOrigen: {
             include: {
               banco: true,
-              moneda: true
+              moneda: true,
+              empresa: true // ✅ Incluir empresa de la cuenta
             }
           },
           cuentaCorrienteDestino: {
             include: {
               banco: true,
-              moneda: true
+              moneda: true,
+              empresa: true // ✅ Incluir empresa de la cuenta
             }
           }
         }
@@ -1255,12 +1428,6 @@ export async function procesarTransferenciaInterna(data) {
       const movimientosMap = {};
       movimientosCompletos.forEach(mov => {
         movimientosMap[mov.id.toString()] = mov;
-      });
-      
-      // Debug: verificar que los movimientos tienen moneda
-      console.log('🔍 DEBUG - Movimientos con moneda:');
-      movimientosCompletos.forEach(mov => {
-        console.log(`   Mov ${mov.id}: moneda = ${mov.moneda?.simbolo || 'undefined'}`);
       });
 
       // ========================================

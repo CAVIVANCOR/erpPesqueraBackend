@@ -103,24 +103,6 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
     // Asignar asientos al movimiento
     movimiento.asientosContables = asientosContables;
 
-    // Debug: Verificar datos cargados
-    console.log('📊 Datos del movimiento cargados:');
-    console.log('  - Movimiento ID:', movimientoId);
-    console.log('  - Moneda:', movimiento.moneda ? `${movimiento.moneda.nombre} (${movimiento.moneda.simbolo})` : 'NO CARGADA');
-    console.log('  - Tipo Movimiento:', movimiento.tipoMovimiento ? movimiento.tipoMovimiento.nombre : 'NO CARGADO');
-    console.log('  - Asientos:', asientosContables.length, 'asientos encontrados');
-    if (asientosContables.length > 0) {
-      console.log('  - IDs de asientos:', asientosContables.map(a => a.id).join(', '));
-      console.log('  - procesoOrigenId de asientos:', asientosContables.map(a => a.procesoOrigenId).join(', '));
-      console.log('  - Primer asiento tiene detalles:', asientosContables[0].detalles ? `${asientosContables[0].detalles.length} detalles` : 'NO CARGADOS');
-      if (asientosContables[0].detalles && asientosContables[0].detalles.length > 0) {
-        console.log('  - Primer detalle tiene planCuenta:', asientosContables[0].detalles[0].planCuenta ? 'SÍ' : 'NO');
-        console.log('  - Código cuenta:', asientosContables[0].detalles[0].planCuenta?.codigoCuenta);
-        console.log('  - Nombre cuenta:', asientosContables[0].detalles[0].planCuenta?.nombreCuenta);
-      }
-    }
-    console.log('  - Cuenta Origen:', movimiento.cuentaCorrienteOrigen ? 'Cargada' : 'No cargada');
-    console.log('  - Empresa:', movimiento.empresa ? movimiento.empresa.razonSocial : 'NO CARGADA');
 
     // 2. Crear documento PDF
     const pdfDoc = await PDFDocument.create();
@@ -158,7 +140,6 @@ export async function generarVoucherContableMovimientoCaja(movimientoId) {
             logoImage = await pdfDoc.embedJpg(logoBytes);
           }
           
-          console.log('  ✅ Logo cargado correctamente');
         } else {
           console.warn('  ⚠️ Logo no disponible (HTTP', response.status, ')');
         }

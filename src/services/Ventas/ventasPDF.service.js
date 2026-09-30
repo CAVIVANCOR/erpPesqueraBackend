@@ -17,14 +17,7 @@ const __dirname = path.dirname(__filename);
  */
 export async function descargarPDFDesdeJsonPe(empresaId, preFacturaId, tipoDoc, serie, correlativo) {
   try {
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📥 SERVICIO - Descargando PDF de venta desde json.pe');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Empresa ID:', empresaId);
-    console.log('PreFactura ID:', preFacturaId);
-    console.log('Tipo Doc:', tipoDoc);
-    console.log('Serie:', serie);
-    console.log('Correlativo:', correlativo);
+
 
     // 1. Obtener credenciales de la empresa
     const empresa = await prisma.empresa.findUnique({
@@ -44,7 +37,6 @@ export async function descargarPDFDesdeJsonPe(empresaId, preFacturaId, tipoDoc, 
       throw new Error('Credenciales SOL no configuradas para la empresa');
     }
 
-    console.log('✅ Credenciales de empresa obtenidas');
 
     // 2. Obtener token de json.pe
     const jsonpeToken = process.env.JSONPE_TOKEN;
@@ -53,7 +45,6 @@ export async function descargarPDFDesdeJsonPe(empresaId, preFacturaId, tipoDoc, 
     }
 
     // 3. Llamar a json.pe para descargar el PDF
-    console.log('📡 Llamando a json.pe...');
     const response = await fetch('https://api.json.pe/api/sunat/pdf', {
       method: 'POST',
       headers: {
@@ -78,7 +69,6 @@ export async function descargarPDFDesdeJsonPe(empresaId, preFacturaId, tipoDoc, 
       throw new Error(result.message || 'Error descargando PDF desde SUNAT');
     }
 
-    console.log('✅ PDF descargado desde json.pe');
 
     // 4. Convertir base64 a buffer
     const pdfBuffer = Buffer.from(result.data.pdf_base64, 'base64');
@@ -91,7 +81,6 @@ export async function descargarPDFDesdeJsonPe(empresaId, preFacturaId, tipoDoc, 
     const filePath = path.join(uploadsDir, fileName);
 
     await fs.writeFile(filePath, pdfBuffer);
-    console.log('✅ PDF guardado en:', filePath);
 
     // 6. Actualizar la base de datos
     const pdfUrl = `/uploads/pdf-system/pre-facturas/${fileName}`;
@@ -101,18 +90,13 @@ export async function descargarPDFDesdeJsonPe(empresaId, preFacturaId, tipoDoc, 
       data: { urlPreFacturaPdf: pdfUrl }
     });
 
-    console.log('✅ Base de datos actualizada');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
     return {
       success: true,
       pdfUrl: pdfUrl
     };
 
   } catch (error) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ ERROR en descargarPDFDesdeJsonPe:', error.message);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
     throw error;
   }
 }

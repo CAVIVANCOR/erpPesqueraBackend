@@ -51,35 +51,6 @@ const BANCO_NACION_ID = 7; // Banco de la Nación
  * Documentado en español.
  */
 
-/**
- * Genera código único para la pre-factura
- * Formato: PF-YYYY-NNNNNN
- * Ejemplo: PF-2024-000001
- */
-async function generarCodigoPreFactura(empresaId) {
-  const año = new Date().getFullYear();
-
-  // Buscar la última pre-factura del año
-  const ultimaPreFactura = await prisma.preFactura.findFirst({
-    where: {
-      empresaId,
-      codigo: {
-        startsWith: `PF-${año}-`,
-      },
-    },
-    orderBy: { id: "desc" },
-  });
-
-  let correlativo = 1;
-  if (ultimaPreFactura) {
-    // Extraer el correlativo del código: PF-2024-000001
-    const partes = ultimaPreFactura.codigo.split("-");
-    correlativo = parseInt(partes[2]) + 1;
-  }
-
-  return `PF-${año}-${String(correlativo).padStart(6, "0")}`;
-}
-
 async function validarUnicidadCodigo(codigo, id = null) {
   const where = id ? { codigo, NOT: { id } } : { codigo };
   const existe = await prisma.preFactura.findFirst({ where });
@@ -464,12 +435,6 @@ const crear = async (data) => {
 
     // Usar transacción para generar número y actualizar correlativo atómicamente
     return await prisma.$transaction(async (tx) => {
-      // 1. Generar código único
-      let codigo = data.codigo;
-      if (!codigo) {
-        codigo = await generarCodigoPreFactura(data.empresaId);
-      }
-
       // 2. Validar existencia de empresa
       const empresa = await tx.empresa.findUnique({
         where: { id: data.empresaId },
@@ -531,8 +496,8 @@ const crear = async (data) => {
       const fechaVencimiento = new Date(data.fechaVencimiento);
 
       // 10. Crear objeto limpio solo con campos del modelo (patrón estándar)
+      // El código se asigna con el id después de crear (ver paso 12)
       const datosLimpios = {
-        codigo,
         empresaId: data.empresaId,
         tipoDocumentoId: data.tipoDocumentoId,
         serieDocId: data.serieDocId,
@@ -686,20 +651,19 @@ const crear = async (data) => {
         Object.entries(datosLimpios).filter(([_, v]) => v !== undefined),
       );
 
-      // 12. Crear la pre-factura con los números generados (patrón estándar)
+      // 12. Crear la pre-factura con código temporal único
+      const codigoTemporal = `TMP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const preFacturaCreada = await tx.preFactura.create({
-        data: datosLimpiosSinUndefined,
-        include: {
-          empresa: true,
-          cliente: true,
-          tipoDocumento: true,
-          serieDoc: true,
-          moneda: true,
-          formaPago: true,
-          incoterm: true,
-          periodoContable: true, // ✅ AGREGADO - Consistencia con obtenerPorId
-        },
+        data: { ...datosLimpiosSinUndefined, codigo: codigoTemporal },
       });
+
+      // 13. Asignar código definitivo = id (garantiza unicidad absoluta)
+      const codigoDefinitivo = String(preFacturaCreada.id);
+      await tx.preFactura.update({
+        where: { id: preFacturaCreada.id },
+        data: { codigo: codigoDefinitivo },
+      });
+
       // ✅ Calcular totales e impuestos en backend
       const totales = await calcularTotalesEImpuestos(preFacturaCreada.id, tx);
 
@@ -724,8 +688,10 @@ const crear = async (data) => {
   } catch (err) {
     if (err instanceof ValidationError || err instanceof ConflictError)
       throw err;
-    if (err.code && err.code.startsWith("P"))
-      throw new DatabaseError("Error de base de datos", err.message);
+    if (err.code && err.code.startsWith("P")) {
+      console.error("[PreFacturaService.crear] Prisma error:", err);
+      throw new DatabaseError(`Error de base de datos: ${err.message}`, err.message);
+    }
     throw err;
   }
 };

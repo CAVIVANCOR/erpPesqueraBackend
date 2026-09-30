@@ -6,9 +6,6 @@ import { descargarPDFDesdeJsonPe } from '../../services/Ventas/ventasPDF.service
  */
 export async function descargarPDFParaPreFactura(req, res) {
   try {
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🎯 CONTROLLER - Descargar PDF Pre-Factura');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     const { empresaId, preFacturaId, tipoDoc, serie, correlativo } = req.body;
 
@@ -28,9 +25,6 @@ export async function descargarPDFParaPreFactura(req, res) {
       serie,
       correlativo
     );
-
-    console.log('✅ PDF descargado exitosamente');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     return res.status(200).json(resultado);
 

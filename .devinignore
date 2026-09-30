@@ -1,0 +1,35 @@
+=========================================================
+
+ARCHIVO DE EXCLUSIÓN PARA DEVIN / WINDSURF - BACKEND ERP
+
+=========================================================
+
+1. Dependencias y bloqueos (Archivos masivos generados automáticamente)
+
+node_modules/
+package-lock.json
+
+2. Archivos temporales y Datos Espaciales GIS (¡CRÍTICO PARA AHORRAR!)
+
+Esto bloquea la lectura de todos los centros_poblados (.geojson, .shp, .dbf, etc.)
+
+temp/
+
+3. Historial de Base de Datos
+
+Mantenemos visible schema.prisma y la carpeta models, pero ocultamos el historial SQL
+
+prisma/migrations/
+
+4. Archivos multimedia y cargas de usuarios
+
+uploads/
+
+5. Seguridad y Variables de Entorno
+
+.env
+.env.*
+
+6. Registros de texto innecesarios para la lógica
+
+migraciones_git.txt

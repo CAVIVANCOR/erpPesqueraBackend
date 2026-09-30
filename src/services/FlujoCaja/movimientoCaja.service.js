@@ -680,10 +680,6 @@ const actualizar = async (id, data) => {
           data: { urlPagoImpuesto }
         });
         
-        console.log(`✅ Archivo copiado y sincronizado:`);
-        console.log(`   Origen: ${data.urlComprobanteOperacionMovCaja}`);
-        console.log(`   Destino: ${urlPagoImpuesto}`);
-        console.log(`   PagoCuentaPorCobrar ID: ${pagoCuentaPorCobrarId}`);
       } catch (syncError) {
         console.warn(`⚠️ No se pudo sincronizar archivo con PagoCuentaPorCobrar:`, syncError.message);
         // No lanzar error, la actualización del movimiento ya se hizo correctamente
@@ -1133,7 +1129,6 @@ const regenerarVoucherContable = async (movimientoId) => {
     }
     
     // 3. Generar PDF
-    console.log(`📄 Generando PDF del voucher contable...`);
     const pdfBuffer = await generarVoucherContableMovimientoCaja(Number(movimientoId));
     
     // 4. Guardar PDF en servidor
@@ -1151,7 +1146,6 @@ const regenerarVoucherContable = async (movimientoId) => {
     
     const urlRelativa = `/uploads/pdf-system/movimiento-caja-voucher-contable/${fileName}`;
     
-    console.log(`💾 PDF guardado en: ${filePath}`);
     
     // 5. Actualizar MovimientoCaja con la nueva URL
     const movimientoActualizado = await prisma.movimientoCaja.update({
@@ -1161,7 +1155,6 @@ const regenerarVoucherContable = async (movimientoId) => {
       }
     });
     
-    console.log(`✅ Voucher contable regenerado y guardado exitosamente`);
     
     return {
       urlDocumentoMovCaja: urlRelativa,

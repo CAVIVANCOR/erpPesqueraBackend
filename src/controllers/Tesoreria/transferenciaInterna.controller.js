@@ -29,7 +29,21 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  * ════════════════════════════════════════════════════════════════════════════
  * 
  * @description
- * Procesa un movimiento de caja especializado (transferencia, egreso o ingreso).
+ * Procesa un movimiento de caja especializado con 3 flujos posibles:
+ * 
+ * FLUJO 1: TRANSFERENCIA ENTRE CUENTAS (origen + destino)
+ *   - Requiere: cuentaOrigenId, cuentaDestinoId, ambos medios de pago y tipos de movimiento
+ *   - Genera: 6 movimientos (egreso, ITF origen, comisión origen, ingreso, ITF destino, comisión destino)
+ * 
+ * FLUJO 2: INGRESO DIRECTO (solo destino, sin origen)
+ *   - Requiere: cuentaDestinoId, medioPagoDestinoId, tipoMovimientoIngresoId
+ *   - Genera: 3 movimientos (ingreso, ITF destino, comisión destino)
+ *   - Ejemplo: Préstamo de cambista → Caja dólares
+ * 
+ * FLUJO 3: EGRESO DIRECTO (solo origen, sin destino)
+ *   - Requiere: cuentaOrigenId, medioPagoOrigenId, tipoMovimientoEgresoId
+ *   - Genera: 3 movimientos (egreso, ITF origen, comisión origen)
+ *   - Ejemplo: Devolución a cambista, pago coimas (si esGerencial=true)
  * 
  * @route POST /api/tesoreria/transferencias
  * @access Requiere autenticación JWT
@@ -38,18 +52,19 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  * @body {number} empresaId - ID de la empresa (OBLIGATORIO)
  * @body {string} fechaTransferencia - Fecha ISO (OBLIGATORIO)
  * @body {number} monto - Monto principal (OBLIGATORIO)
- * @body {number} [cuentaOrigenId] - ID cuenta origen (opcional)
- * @body {number} [cuentaDestinoId] - ID cuenta destino (opcional)
- * @body {number} [medioPagoOrigenId] - Medio de pago origen
- * @body {number} [medioPagoDestinoId] - Medio de pago destino
- * @body {number} [tipoMovimientoEgresoId] - Tipo movimiento egreso
- * @body {number} [tipoMovimientoIngresoId] - Tipo movimiento ingreso
- * @body {number} [itfOrigen] - ITF cuenta origen
- * @body {number} [comisionOrigen] - Comisión cuenta origen
- * @body {number} [itfDestino] - ITF cuenta destino
- * @body {number} [comisionDestino] - Comisión cuenta destino
+ * @body {number} [cuentaOrigenId] - ID cuenta origen (obligatorio para FLUJO 1 y 3)
+ * @body {number} [cuentaDestinoId] - ID cuenta destino (obligatorio para FLUJO 1 y 2)
+ * @body {number} [medioPagoOrigenId] - Medio de pago origen (si hay cuenta origen)
+ * @body {number} [medioPagoDestinoId] - Medio de pago destino (si hay cuenta destino)
+ * @body {number} [tipoMovimientoEgresoId] - Tipo movimiento egreso (si hay cuenta origen)
+ * @body {number} [tipoMovimientoIngresoId] - Tipo movimiento ingreso (si hay cuenta destino)
+ * @body {number} [itfOrigen] - ITF cuenta origen (default: 0)
+ * @body {number} [comisionOrigen] - Comisión cuenta origen (default: 0)
+ * @body {number} [itfDestino] - ITF cuenta destino (default: 0)
+ * @body {number} [comisionDestino] - Comisión cuenta destino (default: 0)
  * @body {number} [tipoCambio] - Tipo de cambio (si monedas difieren)
  * @body {number} [montoDestino] - Monto destino (si monedas difieren)
+ * @body {boolean} [esGerencial] - Flag operación gerencial/negra (default: false)
  * @body {string} [descripcion] - Descripción personalizada
  * @body {string} [numeroOperacion] - Número de operación bancaria
  * 
@@ -64,12 +79,13 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  * @returns {number|null} data.movimientoComisionOrigenId - ID comisión origen
  * @returns {number|null} data.movimientoITFDestinoId - ID ITF destino
  * @returns {number|null} data.movimientoComisionDestinoId - ID comisión destino
+ * @returns {Array} data.asientosContables - Asientos contables generados
  * 
  * @throws {400} ValidationError - Datos inválidos
  * @throws {404} NotFoundError - Cuenta no encontrada
  * @throws {500} DatabaseError - Error en base de datos
  * 
- * @example
+ * @example FLUJO 1: Transferencia
  * POST /api/tesoreria/transferencias
  * {
  *   "empresaId": 1,
@@ -81,13 +97,24 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  *   "medioPagoDestinoId": 5,
  *   "tipoMovimientoEgresoId": 10,
  *   "tipoMovimientoIngresoId": 11,
- *   "usuarioId": 1
+ *   "esGerencial": false
+ * }
+ * 
+ * @example FLUJO 3: Egreso directo
+ * POST /api/tesoreria/transferencias
+ * {
+ *   "empresaId": 1,
+ *   "fechaTransferencia": "2025-01-15T10:00:00Z",
+ *   "monto": 100,
+ *   "cuentaOrigenId": 45,
+ *   "cuentaDestinoId": null,
+ *   "medioPagoOrigenId": 4,
+ *   "tipoMovimientoEgresoId": 178,
+ *   "esGerencial": true
  * }
  */
 export const procesarTransferenciaInterna = async (req, res, next) => {
   try {
-    // Log para debug
-    console.log('📥 Datos recibidos en backend:', JSON.stringify(req.body, null, 2));
     
     // Validar datos obligatorios
     const {
@@ -103,40 +130,60 @@ export const procesarTransferenciaInterna = async (req, res, next) => {
       tipoMovimientoIngresoId
     } = req.body;
 
-    if (!empresaId) {
-      throw new ValidationError('El campo empresaId es obligatorio.');
-    }
+    // ════════════════════════════════════════════════════════════
+    // NOTA: empresaId ya NO es obligatorio en el request
+    // La empresa se obtiene automáticamente de las cuentas seleccionadas
+    // ════════════════════════════════════════════════════════════
 
     if (!fechaTransferencia) {
       throw new ValidationError('El campo fechaTransferencia es obligatorio.');
     }
 
     if (!monto || Number(monto) <= 0) {
-      throw new ValidationError('El monto de la transferencia debe ser mayor a cero.');
+      throw new ValidationError('El monto debe ser mayor a cero.');
     }
 
-    if (!cuentaOrigenId) {
-      throw new ValidationError('El campo cuentaOrigenId es obligatorio.');
+    // ========================================
+    // VALIDAR SEGÚN FLUJO (3 CASOS POSIBLES)
+    // ========================================
+    
+    // Validar que exista al menos una cuenta
+    if (!cuentaOrigenId && !cuentaDestinoId) {
+      throw new ValidationError('Debe especificar al menos una cuenta (origen o destino).');
     }
 
-    if (!medioPagoOrigenId) {
-      throw new ValidationError('El campo medioPagoOrigenId es obligatorio.');
+    // FLUJO 1: TRANSFERENCIA ENTRE CUENTAS (origen + destino)
+    if (cuentaOrigenId && cuentaDestinoId) {
+      if (!medioPagoOrigenId) {
+        throw new ValidationError('El campo medioPagoOrigenId es obligatorio para transferencias.');
+      }
+      if (!medioPagoDestinoId) {
+        throw new ValidationError('El campo medioPagoDestinoId es obligatorio para transferencias.');
+      }
+      if (!tipoMovimientoEgresoId) {
+        throw new ValidationError('El campo tipoMovimientoEgresoId es obligatorio para transferencias.');
+      }
+      if (!tipoMovimientoIngresoId) {
+        throw new ValidationError('El campo tipoMovimientoIngresoId es obligatorio para transferencias.');
+      }
     }
-
-    if (!cuentaDestinoId) {
-      throw new ValidationError('El campo cuentaDestinoId es obligatorio.');
+    // FLUJO 2: INGRESO DIRECTO (solo destino)
+    else if (!cuentaOrigenId && cuentaDestinoId) {
+      if (!medioPagoDestinoId) {
+        throw new ValidationError('El campo medioPagoDestinoId es obligatorio para ingresos.');
+      }
+      if (!tipoMovimientoIngresoId) {
+        throw new ValidationError('El campo tipoMovimientoIngresoId es obligatorio para ingresos.');
+      }
     }
-
-    if (!medioPagoDestinoId) {
-      throw new ValidationError('El campo medioPagoDestinoId es obligatorio.');
-    }
-
-    if (!tipoMovimientoEgresoId) {
-      throw new ValidationError('El campo tipoMovimientoEgresoId es obligatorio.');
-    }
-
-    if (!tipoMovimientoIngresoId) {
-      throw new ValidationError('El campo tipoMovimientoIngresoId es obligatorio.');
+    // FLUJO 3: EGRESO DIRECTO (solo origen)
+    else if (cuentaOrigenId && !cuentaDestinoId) {
+      if (!medioPagoOrigenId) {
+        throw new ValidationError('El campo medioPagoOrigenId es obligatorio para egresos.');
+      }
+      if (!tipoMovimientoEgresoId) {
+        throw new ValidationError('El campo tipoMovimientoEgresoId es obligatorio para egresos.');
+      }
     }
 
     // Agregar usuario que crea el registro
@@ -147,10 +194,6 @@ export const procesarTransferenciaInterna = async (req, res, next) => {
 
     // Procesar transferencia
     const resultado = await transferenciaInternaService.procesarTransferenciaInterna(data);
-
-    console.log('✅ Transferencia procesada exitosamente. Correlativo:', resultado.correlativo);
-    console.log('   Movimiento Egreso ID:', resultado.movimientoEgresoId?.toString());
-    console.log('   Movimiento Ingreso ID:', resultado.movimientoIngresoId?.toString());
 
     res.status(201).json(toJSONBigInt({
       success: true,
