@@ -569,6 +569,13 @@ const listarPendientes = async (filtros = {}) => {
           fechaMovimiento: 'asc',
         },
       });
+
+      console.log('[pendientes.service] entregasARendir crudo:', entregasARendir.map(a => ({
+        id: a.id,
+        moduloOrigenId: a.moduloOrigenId,
+        documentoOrigenId: a.documentoOrigenId,
+        moduloOrigen: a.moduloOrigen,
+      })));
     }
 
     // ========================================
@@ -883,6 +890,8 @@ const listarPendientes = async (filtros = {}) => {
           nombreCompleto: nombreResponsable,
         },
         tipoMovimiento: entrega.tipoMovimiento,
+        moduloOrigenId: entrega.moduloOrigenId,
+        documentoOrigenId: entrega.documentoOrigenId,
         moduloOrigen: entrega.moduloOrigen,
         embarcacion: entrega.embarcacion,
         centroCosto: entrega.centroCosto,
