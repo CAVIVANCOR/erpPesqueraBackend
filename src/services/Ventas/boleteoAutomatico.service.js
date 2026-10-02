@@ -156,7 +156,11 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
           tx.moneda.findUnique({ where: { id: Number(boleta.monedaId) } }),
           tx.producto.findUnique({
             where: { id: Number(boleta.productoId) },
-            include: { unidadMedida: true, unidadMedidaComercial: true },
+            include: {
+              unidadMedida: true,
+              unidadMedidaComercial: true,
+              tipoAfectacionIGV: true,
+            },
           }),
         ]);
       exigir(empresa, "Empresa");
@@ -166,6 +170,16 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
       exigir(tipoProducto, "Tipo de producto");
       exigir(moneda, "Moneda");
       exigir(producto, "Producto");
+
+      // El tratamiento del IGV lo define el producto (catálogo 07 SUNAT), no un valor fijo.
+      // Sin tipo de afectación no se puede saber si la boleta lleva IGV: se rechaza.
+      const tipoAfectacion = producto.tipoAfectacionIGV;
+      if (!tipoAfectacion) {
+        throw new ValidationError(
+          `El producto ${producto.descripcionBase || producto.id} no tiene Tipo de Afectación IGV asignado.`,
+        );
+      }
+      const calculaIGV = Boolean(tipoAfectacion.calculaIGV);
 
       if (boleta.unidadNegocioId) {
         exigir(
@@ -193,13 +207,15 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
       const numeroDocumento = `${numSerieDoc}-${numCorreDoc}`;
 
       // ════════════════════════════════════════════════════════════
-      // 4. PRECIO SIN IGV derivado del TOTAL de la boleta
+      // 4. VALOR UNITARIO derivado del TOTAL de la boleta
       // ════════════════════════════════════════════════════════════
-      // El total de la boleta incluye IGV y el detalle guarda el precio sin IGV.
+      // El detalle guarda siempre el valor unitario (sin IGV):
+      //   - Producto afecto al IGV: el total de la boleta incluye IGV, se desagrega.
+      //   - Producto exonerado/inafecto: no hay IGV, el valor unitario es total ÷ cantidad.
       // Derivarlo del total (y no del precio de lista) garantiza que el sistema
       // recomponga exactamente el total de la boleta al centavo.
-      const porcentajeIgv = Number(empresa.porcentajeIgv || 18);
-      const precioSinIGV = redondear(totalConIGV / (1 + porcentajeIgv / 100) / cantidad, 6);
+      const porcentajeIgv = calculaIGV ? Number(empresa.porcentajeIgv || 18) : 0;
+      const valorUnitario = redondear(totalConIGV / (1 + porcentajeIgv / 100) / cantidad, 6);
 
       // ════════════════════════════════════════════════════════════
       // 5. CREAR PREFACTURA (código temporal único; el definitivo es el id)
@@ -234,13 +250,13 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
           monedaId: Number(boleta.monedaId),
           tipoCambio,
           estadoId: parametros.estadoId,
-          exoneradoIgv: false,
+          // exoneradoIgv es el interruptor que usa el cálculo de totales y el asiento;
+          // tipoAfectacionIGVId es el que usa el Registro de Ventas SUNAT (inafecto, exonerado, etc.)
+          exoneradoIgv: !calculaIGV,
           porcentajeIgv,
+          tipoAfectacionIGVId: tipoAfectacion.id,
           ...(parametros.tipoOperacionSunatId && {
             tipoOperacionSunatId: parametros.tipoOperacionSunatId,
-          }),
-          ...(parametros.tipoAfectacionIGVId && {
-            tipoAfectacionIGVId: parametros.tipoAfectacionIGVId,
           }),
           ...(boleta.unidadNegocioId && { unidadNegocioId: Number(boleta.unidadNegocioId) }),
           creadoPor: usuarioId ? Number(usuarioId) : null,
@@ -254,15 +270,16 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
       // ════════════════════════════════════════════════════════════
       // 6. DETALLE
       // ════════════════════════════════════════════════════════════
-      const datosAlmacen = calcularDatosAlmacen(producto, cantidad, precioSinIGV);
+      const datosAlmacen = calcularDatosAlmacen(producto, cantidad, valorUnitario);
       await tx.detallePreFactura.create({
         data: {
           preFacturaId: preFactura.id,
           productoId: producto.id,
           cantidadVenta: cantidad,
-          precioUnitarioVenta: precioSinIGV,
+          precioUnitarioVenta: valorUnitario,
           cantidad: datosAlmacen.cantidad,
           precioUnitario: datosAlmacen.precioUnitario,
+          tipoAfectacionIGVId: tipoAfectacion.id,
           creadoPor: usuarioId ? Number(usuarioId) : null,
         },
       });
@@ -302,7 +319,8 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
 /**
  * @param {Object} datos
  * @param {Array}  datos.boletas - Boletas normalizadas (ver CAMPOS_OBLIGATORIOS)
- * @param {Object} [datos.parametros] - { estadoId?, tipoOperacionSunatId?, tipoAfectacionIGVId? }
+ * @param {Object} [datos.parametros] - { estadoId?, tipoOperacionSunatId? }
+ *        (el tipo de afectación del IGV NO es parámetro: se toma de cada producto)
  * @param {number} datos.usuarioId
  * @returns {Promise<{resultados: Array}>} Un resultado por boleta: CREADA | OMITIDA | ERROR
  */
@@ -320,9 +338,6 @@ const importarBoletas = async ({ boletas, parametros = {}, usuarioId }) => {
     estadoId: Number(parametros.estadoId || ESTADO_PREFACTURA.PENDIENTE),
     tipoOperacionSunatId: parametros.tipoOperacionSunatId
       ? Number(parametros.tipoOperacionSunatId)
-      : null,
-    tipoAfectacionIGVId: parametros.tipoAfectacionIGVId
-      ? Number(parametros.tipoAfectacionIGVId)
       : null,
   };
 
