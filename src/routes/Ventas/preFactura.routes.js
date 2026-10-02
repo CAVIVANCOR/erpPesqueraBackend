@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as preFacturaController from '../../controllers/Ventas/preFactura.controller.js';
+import * as boleteoAutomaticoController from '../../controllers/Ventas/boleteoAutomatico.controller.js';
 import { autenticarJWT } from '../../middlewares/authMiddleware.js';
 import { checkPermission } from '../../middlewares/checkPermission.js';
 
@@ -34,6 +35,14 @@ router.get(
   autenticarJWT,
   checkPermission('preFactura', 'ver'),
   preFacturaController.obtenerPreFacturasPorCliente
+);
+
+// Boleteo automático: crea PreFactura + detalle desde boletas ya emitidas (lotes)
+router.post(
+  '/boleteo-automatico',
+  autenticarJWT,
+  checkPermission('preFactura', 'crear'),
+  boleteoAutomaticoController.importarBoletas
 );
 
 // ========================================

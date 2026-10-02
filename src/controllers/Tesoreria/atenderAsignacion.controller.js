@@ -18,3 +18,18 @@ export async function atenderAsignacion(req, res, next) {
     next(error);
   }
 }
+
+/**
+ * Guardar la URL del voucher de la operación en la asignación
+ */
+export async function actualizarUrlComprobante(req, res, next) {
+  try {
+    const resultado = await atenderAsignacionService.actualizarUrlComprobante(
+      req.params.id,
+      req.body.urlPdf,
+    );
+    res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+}
