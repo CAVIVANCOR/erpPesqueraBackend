@@ -6,6 +6,7 @@ import {
 } from "../../utils/errors.js";
 import correlativoService from "./correlativoOperacionCaja.service.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
+import detMovsEntregaRendirService from "../Pesca/detMovsEntregaRendir.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 
@@ -17,6 +18,11 @@ import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
  * Autónomo a propósito: las reglas del Flujo 3 (egreso directo) de
  * transferenciaInterna.service.js se COPIARON aquí para no tocar ese servicio,
  * que está en producción. Si se corrige algo allá, evaluar si aplica aquí.
+ *
+ * No bloquea por saldo insuficiente: la cuenta puede quedar en negativo.
+ *
+ * El monto entregado puede ser menor o mayor al solicitado: reemplaza el monto de la
+ * asignación (DetMovsEntregaRendir.monto) y se recalculan los saldos del responsable.
  *
  * Una sola transacción atómica:
  *   1. Egreso principal  → asiento DEBE 141301/141302  HABER cuenta bancaria
@@ -283,7 +289,9 @@ const atenderAsignacion = async (datos) => {
       throw new ValidationError("La comisión no puede ser negativa.");
     }
 
-    return await prisma.$transaction(async (tx) => {
+    let responsableIdRecalculo = null;
+
+    const resultado = await prisma.$transaction(async (tx) => {
       // ════════════════════════════════════════════════════════════
       // 1. VALIDAR ASIGNACIÓN
       // ════════════════════════════════════════════════════════════
@@ -310,14 +318,13 @@ const atenderAsignacion = async (datos) => {
         throw new ValidationError("La asignación no tiene moneda definida");
       }
 
-      // La entrega es por el monto total asignado: una entrega parcial dejaría
-      // la asignación validada y perdería el saldo pendiente.
-      const monto = Number(detMov.monto);
-      if (datos.monto !== undefined && Number(datos.monto) !== monto) {
-        throw new ValidationError(
-          `La entrega debe ser por el monto total asignado (${detMov.moneda?.simbolo || ""} ${monto})`,
-        );
+      // El monto entregado puede diferir del solicitado (menos o un poco más). Si no se
+      // envía, se entrega lo asignado. Al final reemplaza DetMovsEntregaRendir.monto.
+      const monto = Number(datos.monto ?? detMov.monto);
+      if (!Number.isFinite(monto) || monto <= 0) {
+        throw new ValidationError("El monto a entregar debe ser mayor a cero");
       }
+      responsableIdRecalculo = detMov.responsableId;
 
       // ════════════════════════════════════════════════════════════
       // 2. VALIDAR CUENTA CORRIENTE Y SALDO (monto + ITF + comisión)
@@ -343,20 +350,8 @@ const atenderAsignacion = async (datos) => {
         );
       }
 
-      const totalDebitado = monto + itf + comision;
-      const saldoOrigen = await tx.saldoCuentaCorriente.findFirst({
-        where: {
-          cuentaCorrienteId: cuenta.id,
-          empresaId: Number(cuenta.empresaId),
-        },
-        orderBy: { fecha: "desc" },
-      });
-      const saldoDisponible = saldoOrigen ? Number(saldoOrigen.saldoActual) : 0;
-      if (saldoDisponible < totalDebitado) {
-        throw new ValidationError(
-          `Saldo insuficiente en cuenta de origen. Disponible: ${saldoDisponible}, Requerido: ${totalDebitado}`,
-        );
-      }
+      // No se valida saldo a propósito: la entrega puede dejar la cuenta en negativo
+      // (el formulario solo advierte). El saldo en cascada admite valores negativos.
 
       const esMonedaNacional = Number(detMov.monedaId) === MONEDA_NACIONAL_ID;
       const tc = esMonedaNacional ? 1 : Number(tipoCambio);
@@ -574,6 +569,8 @@ const atenderAsignacion = async (datos) => {
       await tx.detMovsEntregaRendir.update({
         where: { id: detMov.id },
         data: {
+          // Monto realmente entregado (puede diferir del solicitado)
+          monto,
           refOperacionEspecializadaMovCaja: correlativo,
           validadoTesoreria: true,
           fechaValidacionTesoreria: new Date(),
@@ -651,6 +648,15 @@ const atenderAsignacion = async (datos) => {
         },
       };
     });
+
+    // Cambiar el monto de la asignación altera los saldos inicial/final de la cadena del
+    // responsable. Se recalcula DESPUÉS de confirmar la transacción (usa el cliente global,
+    // no ve datos sin confirmar) y no interrumpe la entrega si fallara.
+    if (responsableIdRecalculo) {
+      await detMovsEntregaRendirService.recalcularSaldosAutomatico(responsableIdRecalculo);
+    }
+
+    return resultado;
   } catch (err) {
     if (err.code && err.code.startsWith("P")) {
       throw new DatabaseError(
@@ -662,25 +668,6 @@ const atenderAsignacion = async (datos) => {
   }
 };
 
-/**
- * Registra la URL del voucher de la operación en la asignación.
- * Solo aplica a asignaciones ya atendidas: no toca asignaciones pendientes.
- */
-const actualizarUrlComprobante = async (detMovsEntregaRendirId, urlPdf) => {
-  if (!urlPdf || !String(urlPdf).trim()) {
-    throw new ValidationError("La URL del comprobante es obligatoria");
-  }
-  const resultado = await prisma.detMovsEntregaRendir.updateMany({
-    where: { id: BigInt(detMovsEntregaRendirId), validadoTesoreria: true },
-    data: { urlComprobanteOperacionMovCaja: urlPdf },
-  });
-  if (resultado.count !== 1) {
-    throw new NotFoundError("Asignación atendida no encontrada");
-  }
-  return { success: true };
-};
-
 export default {
   atenderAsignacion,
-  actualizarUrlComprobante,
 };

@@ -15,15 +15,4 @@ router.post(
   atenderAsignacionController.atenderAsignacion
 );
 
-/**
- * @route   PATCH /api/tesoreria/atender-asignacion/:id/url-comprobante
- * @desc    Guardar la URL del voucher de la operación en la asignación
- * @access  Private
- */
-router.patch(
-  "/:id/url-comprobante",
-  autenticarJWT,
-  atenderAsignacionController.actualizarUrlComprobante
-);
-
 export default router;

@@ -776,6 +776,22 @@ const PDF_MODULES_CONFIG = {
       field: "urlDocumentoMovCaja",  // ✅ Campo correcto
     },
   },
+
+  // ✅ Comprobante de operación de la asignación (DetMovsEntregaRendir).
+  // Ruta ÚNICA compartida por el voucher que genera la Entrega de Fondos (Tesorería) y por
+  // PdfComprobanteOperacionDetMovCard (Rendición de Gastos), para que ambos vean el mismo archivo.
+  "det-movs-entrega-rendir-operacion": {
+    uploadPath: "uploads/pdf-system/det-movs-entrega-rendir-operacion",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/det-movs-entrega-rendir-operacion",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "DetMovsEntregaRendir",
+      field: "urlComprobanteOperacionMovCaja",
+    },
+  },
 };
 
 export function getModuleConfig(moduleName) {

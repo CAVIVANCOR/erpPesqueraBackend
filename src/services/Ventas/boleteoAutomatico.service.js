@@ -27,7 +27,8 @@ import preFacturaService from "./preFactura.service.js";
  *   - numeroDocumento (interno): lo genera el sistema con la SerieDoc indicada.
  *   - numeroDocumentoFinal: la boleta ya emitida (ej: EB01-2673), tal como viene.
  *
- * Idempotente: si ya existe una PreFactura con ese documento final, se omite.
+ * Idempotente: si ya existe una PreFactura con ese documento final EN LA MISMA EMPRESA
+ * (la empresa sale de la serie), se omite. Otra empresa puede tener el mismo número.
  */
 
 // Tope por llamada: el frontend envía lotes pequeños para mostrar el avance
@@ -112,27 +113,7 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
   return await prisma.$transaction(
     async (tx) => {
       // ════════════════════════════════════════════════════════════
-      // 1. IDEMPOTENCIA: omitir si el documento final ya fue registrado
-      // ════════════════════════════════════════════════════════════
-      const existente = await tx.preFactura.findFirst({
-        where: {
-          numeroDocumentoFinal,
-          tipoDocumentoFinalId: Number(boleta.tipoDocumentoFinalId),
-        },
-        select: { id: true, numeroDocumento: true },
-      });
-      if (existente) {
-        return {
-          estado: "OMITIDA",
-          numeroDocumentoFinal,
-          preFacturaId: existente.id,
-          numeroDocumento: existente.numeroDocumento,
-          mensaje: "Ya estaba registrada",
-        };
-      }
-
-      // ════════════════════════════════════════════════════════════
-      // 2. VALIDAR SERIE Y CATÁLOGOS (nada hardcodeado: la empresa sale de la serie)
+      // 1. SERIE Y EMPRESA (nada hardcodeado: la empresa sale de la serie)
       // ════════════════════════════════════════════════════════════
       const serie = exigir(
         await tx.serieDoc.findUnique({ where: { id: Number(boleta.serieDocId) } }),
@@ -145,6 +126,29 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
         throw new ValidationError("La serie de documento no tiene empresa asociada.");
       }
       const empresaId = Number(serie.empresaId);
+
+      // ════════════════════════════════════════════════════════════
+      // 2. IDEMPOTENCIA: omitir si el documento final ya fue registrado EN ESTA EMPRESA
+      // ════════════════════════════════════════════════════════════
+      // Dos empresas pueden emitir el mismo número (ej: EB01-2673): son documentos distintos,
+      // por eso la clave incluye la empresa. Por eso se carga la serie antes de este control.
+      const existente = await tx.preFactura.findFirst({
+        where: {
+          empresaId,
+          numeroDocumentoFinal,
+          tipoDocumentoFinalId: Number(boleta.tipoDocumentoFinalId),
+        },
+        select: { id: true, numeroDocumento: true },
+      });
+      if (existente) {
+        return {
+          estado: "OMITIDA",
+          numeroDocumentoFinal,
+          preFacturaId: existente.id,
+          numeroDocumento: existente.numeroDocumento,
+          mensaje: "Ya registrada en esta empresa",
+        };
+      }
 
       const [empresa, cliente, vendedor, formaPago, tipoProducto, moneda, producto] =
         await Promise.all([
