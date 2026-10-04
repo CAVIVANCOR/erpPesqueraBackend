@@ -10,6 +10,7 @@ router.put('/:id', pagoDeudaPersonalController.actualizar);
 router.delete('/:id', pagoDeudaPersonalController.eliminar);
 
 router.get('/deuda/:deudaId', pagoDeudaPersonalController.listarPorDeuda);
+router.post('/pagar-multiple', pagoDeudaPersonalController.procesarPagoMultiple);
 router.post('/:deudaId/pagar', pagoDeudaPersonalController.procesarPago);
 
 export default router;

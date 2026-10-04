@@ -170,6 +170,65 @@ const aplicarFiltrosAvanzados = (where, filtros, tipoEntidad = null) => {
   return whereActualizado;
 };
 
+/**
+ * Aplicar filtros avanzados a deudas (DeudaConPersonal / DeudaTributaria)
+ * @param {Object} where - Cláusula WHERE base
+ * @param {Object} filtros - Filtros avanzados
+ * @param {Boolean} esPersonal - true para DeudaConPersonal (habilita personalIds)
+ * @returns {Object} WHERE actualizado
+ */
+const aplicarFiltrosDeudas = (where, filtros, esPersonal = false) => {
+  const w = { ...where };
+
+  // Los nombres de campo difieren entre modelos:
+  // DeudaConPersonal: fecha / numeroDocumento
+  // DeudaTributaria:  fechaGeneracion / numeroDeclaracion
+  const campoFecha = esPersonal ? 'fecha' : 'fechaGeneracion';
+  const campoNumero = esPersonal ? 'numeroDocumento' : 'numeroDeclaracion';
+
+  if (filtros.fechaDesde || filtros.fechaHasta) {
+    w[campoFecha] = {};
+    if (filtros.fechaDesde) {
+      const desde = new Date(filtros.fechaDesde);
+      desde.setHours(0, 0, 0, 0);
+      w[campoFecha].gte = desde;
+    }
+    if (filtros.fechaHasta) {
+      const hasta = new Date(filtros.fechaHasta);
+      hasta.setHours(23, 59, 59, 999);
+      w[campoFecha].lte = hasta;
+    }
+  }
+
+  if (esPersonal && filtros.personalIds?.length > 0) {
+    w.personalId = { in: filtros.personalIds };
+  }
+
+  if (filtros.tipoDeudaIds?.length > 0) {
+    w.tipoDeudaId = { in: filtros.tipoDeudaIds };
+  }
+
+  if (filtros.numeroDocumento && filtros.numeroDocumento.trim() !== '') {
+    w[campoNumero] = { contains: filtros.numeroDocumento.trim(), mode: 'insensitive' };
+  }
+
+  if (filtros.monedaIds?.length > 0) {
+    w.monedaId = { in: filtros.monedaIds };
+  }
+
+  if (filtros.estadoIds?.length > 0) {
+    w.estadoId = { in: filtros.estadoIds };
+  }
+
+  if (filtros.montoDesde != null || filtros.montoHasta != null) {
+    w.saldoPendiente = { ...w.saldoPendiente };
+    if (filtros.montoDesde != null) w.saldoPendiente.gte = Number(filtros.montoDesde);
+    if (filtros.montoHasta != null) w.saldoPendiente.lte = Number(filtros.montoHasta);
+  }
+
+  return w;
+};
+
 const listarPendientes = async (filtros = {}) => {
   try {
     const {
@@ -612,7 +671,7 @@ const listarPendientes = async (filtros = {}) => {
       }
 
       deudasPersonales = await prisma.deudaConPersonal.findMany({
-        where: whereDeudas,
+        where: aplicarFiltrosDeudas(whereDeudas, filtros, true),
         include: {
           personal: {
             select: {
@@ -711,7 +770,7 @@ const listarPendientes = async (filtros = {}) => {
       }
 
       deudasTributarias = await prisma.deudaTributaria.findMany({
-        where: whereDeudasTrib,
+        where: aplicarFiltrosDeudas(whereDeudasTrib, filtros),
         include: {
           empresa: {
             select: {
@@ -926,6 +985,8 @@ const listarPendientes = async (filtros = {}) => {
       personal: {
         id: deuda.personal?.id,
         nombreCompleto: `${deuda.personal?.nombres} ${deuda.personal?.apellidos}`.trim(),
+        // Permite preseleccionar la entidad destino en el pago múltiple
+        enlaceEntidadComercialId: deuda.personal?.enlaceEntidadComercialId,
       },
       tipoDeuda: deuda.tipoDeuda,
       observaciones: deuda.observaciones,
@@ -940,7 +1001,7 @@ const listarPendientes = async (filtros = {}) => {
       tipoDocumento: 'DEUDA_TRIBUTARIA',
       origen: 'Deuda Tributaria',
       origenId: deuda.id,
-      documentoNumero: deuda.numeroDocumento || `DT-${deuda.id}`,
+      documentoNumero: deuda.numeroDeclaracion || `DT-${deuda.id}`,
       documentoTipo: deuda.tipoDeuda?.nombre || 'Tributo',
       entidadComercial: {
         id: null,
@@ -949,7 +1010,7 @@ const listarPendientes = async (filtros = {}) => {
         tipo: 'Entidad Gubernamental',
       },
       empresa: deuda.empresa,
-      fechaEmision: deuda.fecha,
+      fechaEmision: deuda.fechaGeneracion,
       fechaVencimiento: deuda.fechaVencimiento,
       moneda: deuda.moneda,
       montoTotal: deuda.montoOriginal,
@@ -959,6 +1020,7 @@ const listarPendientes = async (filtros = {}) => {
       ultimoPago: deuda.pagos?.[0] || null,
       movimientoCajaId: deuda.pagos?.[0]?.movimientoCajaId || null,
       esDeudaTributaria: true,
+      esSaldoInicial: deuda.esSaldoInicial,
       tipoDeuda: deuda.tipoDeuda,
       observaciones: deuda.observaciones,
     }));

@@ -1,4 +1,5 @@
 import pagoDeudaPersonalService from '../../services/Tesoreria/pagoDeudaPersonal.service.js';
+import pagoDeudaPersonalMultipleService from '../../services/Tesoreria/pagoDeudaPersonalMultiple.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
 export async function listar(req, res, next) {
@@ -75,6 +76,23 @@ export async function procesarPago(req, res, next) {
       usuarioId: req.user?.id || null
     };
     const resultado = await pagoDeudaPersonalService.procesarPago(deudaId, data);
+    res.status(201).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Pago múltiple especializado: varias deudas (de una o varias personas) con un solo egreso.
+ * El reparto proporcional y las validaciones viven en el servicio.
+ */
+export async function procesarPagoMultiple(req, res, next) {
+  try {
+    const data = {
+      ...req.body,
+      usuarioId: req.user?.id || null
+    };
+    const resultado = await pagoDeudaPersonalMultipleService.procesarPagoMultiple(data);
     res.status(201).json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
