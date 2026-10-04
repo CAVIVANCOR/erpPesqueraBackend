@@ -4302,6 +4302,7 @@ model DeudaConPersonal {
   esGerencial           Boolean                 @default(false)               // true = Pago en negro (sin declarar a SUNAT), false = Pago formal
   esSaldoInicial        Boolean                 @default(false)               // true = Saldo inicial de migración (sin origen), false = Deuda generada
 
+
   // ========================================
   // INTEGRACIÓN CONTABLE
   // ========================================
@@ -4373,6 +4374,13 @@ model PagoDeudaPersonal {
   actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
   actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
   refOperacionEspecializadaMovCaja  BigInt?
+  urlVoucherOperacionConsolidado    String?
+  urlComprobanteOperacion           String?
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  fechaContable         DateTime    @default(now())                  // ✅ AGREGADO: Fecha del período contable
+  periodoContableId     BigInt?                                      // ✅ AGREGADO: Período contable (para control de cierre)
 
   // ========================================
   // RELACIONES
@@ -4380,7 +4388,8 @@ model PagoDeudaPersonal {
   deudaConPersonal      DeudaConPersonal        @relation(fields: [deudaConPersonalId], references: [id])
   medioPago             MedioPago?              @relation(fields: [medioPagoId], references: [id])
   movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
-  
+  periodoContable       PeriodoContable?        @relation(fields: [periodoContableId], references: [id])
+
   // ========================================
   // RELACIONES INVERSAS
   // ========================================
@@ -4393,6 +4402,7 @@ model PagoDeudaPersonal {
   @@index([medioPagoId])                                                      // Filtro por medio de pago
   @@index([movimientoCajaId])                                                 // Vinculación con caja
   @@index([fechaPago])                                                        // Ordenar por fecha de pago
+  @@index([periodoContableId])                                                // Control de cierre contable
 }
 
 
@@ -4571,6 +4581,13 @@ model PagoDeudaTributaria {
   actualizadoEn         DateTime                @updatedAt                    // Fecha de última actualización
   actualizadoPor        BigInt?                                               // Usuario que actualizó el registro
   refOperacionEspecializadaMovCaja  BigInt?
+  urlVoucherOperacionConsolidado    String?
+  urlComprobanteOperacion           String?
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  fechaContable         DateTime    @default(now())                  // ✅ AGREGADO: Fecha del período contable
+  periodoContableId     BigInt?                                      // ✅ AGREGADO: Período contable (para control de cierre)
 
   // ========================================
   // RELACIONES
@@ -4578,7 +4595,8 @@ model PagoDeudaTributaria {
   deudaTributaria       DeudaTributaria         @relation(fields: [deudaTributariaId], references: [id])
   medioPago             MedioPago?              @relation(fields: [medioPagoId], references: [id])
   movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
-  
+  periodoContable       PeriodoContable?        @relation(fields: [periodoContableId], references: [id])
+
   // ========================================
   // RELACIONES INVERSAS
   // ========================================
@@ -4591,6 +4609,8 @@ model PagoDeudaTributaria {
   @@index([movimientoCajaId])                                                 // Vinculación con caja
   @@index([fechaPago])                                                        // Ordenar por fecha de pago
   @@index([medioPagoId])                                                      // Filtro por medio de pago
+  @@index([periodoContableId])                                                // Control de cierre contable
+
 }
 
 
@@ -6077,6 +6097,8 @@ model PeriodoContable {
   detracciones          Detraccion[]        // ✅ AGREGAR - Todas las detracciones de este período
   retenciones           Retencion[]         // ✅ AGREGAR - Todas las retenciones de este período
   percepciones          Percepcion[]        // ✅ AGREGAR - Todas las percepciones de este período
+  pagosDeudaPersonal    PagoDeudaPersonal[]
+  pagosDeudaTributaria  PagoDeudaTributaria[]
 
   @@unique([empresaId, anio, mes])
   @@index([empresaId])
