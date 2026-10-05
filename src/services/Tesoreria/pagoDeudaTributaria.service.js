@@ -42,7 +42,7 @@ async function validarPagoDeudaTributaria(data) {
   }
 
   if (data.medioPagoId) {
-    const medioPago = await prisma.medioPago.findUnique({ where: { id: data.medioPagoId } });s
+    const medioPago = await prisma.medioPago.findUnique({ where: { id: data.medioPagoId } });
     if (!medioPago) throw new ValidationError('El medio de pago referenciado no existe.');
   }
 
@@ -70,11 +70,13 @@ const listar = async () => {
               include: {
                 entidadRecaudadora: true
               }
-            }
+            },
+            moneda: true
           }
         },
         medioPago: true,
-        movimientoCaja: true
+        movimientoCaja: true,
+        periodoContable: true
       },
       orderBy: { fechaPago: 'desc' }
     });
@@ -103,7 +105,8 @@ const obtenerPorId = async (id) => {
           }
         },
         medioPago: true,
-        movimientoCaja: true
+        movimientoCaja: true,
+        periodoContable: true
       }
     });
     if (!pago) throw new NotFoundError('Pago de deuda tributaria no encontrado');
@@ -174,6 +177,20 @@ const actualizar = async (id, data) => {
     const existente = await prisma.pagoDeudaTributaria.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Pago de deuda tributaria no encontrado');
 
+    // Los pagos se registran solo desde Caja y Bancos (pago especializado): ya generaron
+    // movimientos de caja, saldos y asientos. Editar monto, fecha o medio de pago los dejaría
+    // descuadrados, por eso solo se permite actualizar las observaciones.
+    // Los adjuntos (voucher y comprobante) se actualizan por el sistema PDF, no por aquí.
+    if (existente.movimientoCajaId) {
+      return await prisma.pagoDeudaTributaria.update({
+        where: { id },
+        data: {
+          observaciones: data.observaciones ?? existente.observaciones,
+          actualizadoPor: data.actualizadoPor || null
+        }
+      });
+    }
+
     await validarPagoDeudaTributaria({ ...data, id });
 
     const pagoData = {
@@ -224,6 +241,10 @@ const eliminar = async (id) => {
     const existente = await prisma.pagoDeudaTributaria.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Pago de deuda tributaria no encontrado');
 
+    // Permite corregir un pago erróneo. Solo elimina el pago y recalcula la deuda: NO revierte
+    // los movimientos de caja, saldos ni asientos que ese pago haya generado (la interfaz lo advierte).
+    // La validación del derecho de eliminar se hace en la interfaz (permisos?.puedeEliminar).
+
     // ✅ TRANSACCIÓN: Eliminar pago y recalcular deuda
     await prisma.$transaction(async (tx) => {
       await tx.pagoDeudaTributaria.delete({ where: { id } });
@@ -236,13 +257,22 @@ const eliminar = async (id) => {
 
       const montoPagadoTotal = pagos.reduce((sum, p) => sum + Number(p.montoPago), 0);
       const deuda = await tx.deudaTributaria.findUnique({ where: { id: deudaId } });
-      const nuevoSaldoPendiente = Number(deuda.montoOriginal) - montoPagadoTotal;
+      // Saldo = original - pagado antes del sistema - pagos del sistema (misma fórmula que DeudaTributariaForm)
+      const montoPagadoAnterior = Number(deuda.montoPagadoAnterior || 0);
+      const nuevoSaldoPendiente =
+        Math.round((Number(deuda.montoOriginal) - montoPagadoAnterior - montoPagadoTotal) * 100) / 100;
+      // Si ya no queda ningún pago (ni pagado anterior) la deuda vuelve a PENDIENTE
+      const nuevoEstadoId =
+        montoPagadoTotal + montoPagadoAnterior <= 0
+          ? ESTADOS_DEUDA_TRIBUTARIA.PENDIENTE
+          : calcularNuevoEstadoDeuda(nuevoSaldoPendiente);
 
       await tx.deudaTributaria.update({
         where: { id: deudaId },
         data: {
           montoPagado: montoPagadoTotal,
-          saldoPendiente: nuevoSaldoPendiente
+          saldoPendiente: nuevoSaldoPendiente,
+          estadoId: nuevoEstadoId
         }
       });
     });
@@ -543,7 +573,8 @@ const listarPorDeuda = async (deudaTributariaId) => {
       where: { deudaTributariaId },
       include: {
         medioPago: true,
-        movimientoCaja: true
+        movimientoCaja: true,
+        periodoContable: true
       },
       orderBy: { fechaPago: 'desc' }
     });

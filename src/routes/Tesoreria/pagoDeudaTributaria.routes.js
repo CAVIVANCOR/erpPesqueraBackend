@@ -10,5 +10,7 @@ router.put('/:id', pagoDeudaTributariaController.actualizar);
 router.delete('/:id', pagoDeudaTributariaController.eliminar);
 
 router.get('/deuda/:deudaId', pagoDeudaTributariaController.listarPorDeuda);
+router.post('/pagar-multiple', pagoDeudaTributariaController.procesarPagoMultiple);
+router.put('/:pagoId/sincronizar-adjuntos', pagoDeudaTributariaController.sincronizarAdjuntos);
 
 export default router;

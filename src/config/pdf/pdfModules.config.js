@@ -722,6 +722,72 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
+  // ════════════════════════════════════════════════════════════
+  // PAGO DE DEUDAS CON PERSONAL (pago múltiple especializado)
+  // Una operación genera N PagoDeudaPersonal; el archivo se guarda en el primero
+  // (entityId) y luego se copia a los demás con sincronizarAdjuntosOperacion.
+  // ════════════════════════════════════════════════════════════
+
+  "pago-deuda-personal-consolidado": {
+    uploadPath: "uploads/pdf-system/pago-deuda-personal-consolidado",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-deuda-personal-consolidado",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf"],
+    maxFiles: 20,
+    database: {
+      table: "PagoDeudaPersonal",
+      field: "urlVoucherOperacionConsolidado",
+    },
+  },
+
+  // Comprobante emitido por la entidad recaudadora (p. ej. AFP) con el detalle a pagar
+  "pago-deuda-personal-comprobante": {
+    uploadPath: "uploads/pdf-system/pago-deuda-personal-comprobante",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-deuda-personal-comprobante",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "PagoDeudaPersonal",
+      field: "urlComprobanteOperacion",
+    },
+  },
+
+  // ════════════════════════════════════════════════════════════
+  // PAGO DE DEUDAS TRIBUTARIAS (pago múltiple especializado)
+  // Una operación genera N PagoDeudaTributaria; el archivo se guarda en el primero
+  // (entityId) y luego se copia a los demás con sincronizarAdjuntosOperacion.
+  // ════════════════════════════════════════════════════════════
+
+  "pago-deuda-tributaria-consolidado": {
+    uploadPath: "uploads/pdf-system/pago-deuda-tributaria-consolidado",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-deuda-tributaria-consolidado",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf"],
+    maxFiles: 20,
+    database: {
+      table: "PagoDeudaTributaria",
+      field: "urlVoucherOperacionConsolidado",
+    },
+  },
+
+  // Comprobante emitido por la entidad recaudadora (p. ej. SUNAT, ESSALUD) con el detalle a pagar
+  "pago-deuda-tributaria-comprobante": {
+    uploadPath: "uploads/pdf-system/pago-deuda-tributaria-comprobante",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-deuda-tributaria-comprobante",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "PagoDeudaTributaria",
+      field: "urlComprobanteOperacion",
+    },
+  },
+
   // ❌ DUPLICADO - Usar "movimiento-caja-operacion" en su lugar
   // "movimiento-caja": {
   //   uploadPath: "uploads/pdf-system/movimiento-caja",

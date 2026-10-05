@@ -784,6 +784,9 @@ const listarPendientes = async (filtros = {}) => {
               id: true,
               nombre: true,
               descripcion: true,
+              // Permite preseleccionar la entidad destino en el pago múltiple
+              entidadRecaudadoraId: true,
+              entidadRecaudadora: { select: { id: true, razonSocial: true } },
             },
           },
           moneda: {
@@ -1021,6 +1024,8 @@ const listarPendientes = async (filtros = {}) => {
       movimientoCajaId: deuda.pagos?.[0]?.movimientoCajaId || null,
       esDeudaTributaria: true,
       esSaldoInicial: deuda.esSaldoInicial,
+      periodo: deuda.periodo,
+      numeroDeclaracion: deuda.numeroDeclaracion,
       tipoDeuda: deuda.tipoDeuda,
       observaciones: deuda.observaciones,
     }));

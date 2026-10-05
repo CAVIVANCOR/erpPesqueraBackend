@@ -98,3 +98,17 @@ export async function procesarPagoMultiple(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Copia el voucher consolidado y el comprobante del pago indicado a los demás pagos
+ * de la misma operación (pago múltiple).
+ */
+export async function sincronizarAdjuntos(req, res, next) {
+  try {
+    const pagoId = Number(req.params.pagoId);
+    const resultado = await pagoDeudaPersonalMultipleService.sincronizarAdjuntosOperacion(pagoId);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

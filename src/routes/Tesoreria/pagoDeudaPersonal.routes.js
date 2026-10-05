@@ -11,6 +11,7 @@ router.delete('/:id', pagoDeudaPersonalController.eliminar);
 
 router.get('/deuda/:deudaId', pagoDeudaPersonalController.listarPorDeuda);
 router.post('/pagar-multiple', pagoDeudaPersonalController.procesarPagoMultiple);
+router.put('/:pagoId/sincronizar-adjuntos', pagoDeudaPersonalController.sincronizarAdjuntos);
 router.post('/:deudaId/pagar', pagoDeudaPersonalController.procesarPago);
 
 export default router;

@@ -298,7 +298,8 @@ const listar = async () => {
             moneda: true,
             estadoMovimientoCaja: true
           }
-        }
+        },
+        periodoContable: true
       },
       orderBy: { fechaPago: 'desc' }
     });
@@ -331,9 +332,10 @@ const obtenerPorId = async (id) => {
           include: {
             tipoMovimiento: true,
             moneda: true,
-            estado: true
+            estadoMovimientoCaja: true
           }
-        }
+        },
+        periodoContable: true
       }
     });
     
@@ -415,6 +417,20 @@ const actualizar = async (id, data) => {
       throw new NotFoundError('Pago de deuda personal no encontrado');
     }
 
+    // Los pagos se registran solo desde Caja y Bancos (pago especializado): ya generaron
+    // movimientos de caja, saldos y asientos. Editar monto, fecha o medio de pago los dejaría
+    // descuadrados, por eso solo se permite actualizar las observaciones.
+    // Los adjuntos (voucher y comprobante) se actualizan por el sistema PDF, no por aquí.
+    if (existente.movimientoCajaId) {
+      return await prisma.pagoDeudaPersonal.update({
+        where: { id },
+        data: {
+          observaciones: data.observaciones ?? existente.observaciones,
+          actualizadoPor: data.actualizadoPor || null
+        }
+      });
+    }
+
     await validarPagoDeudaPersonal({ ...data, id });
 
     const pagoData = {
@@ -472,6 +488,10 @@ const eliminar = async (id) => {
       throw new NotFoundError('Pago de deuda personal no encontrado');
     }
 
+    // Permite corregir un pago erróneo. Solo elimina el pago y recalcula la deuda: NO revierte
+    // los movimientos de caja, saldos ni asientos que ese pago haya generado (la interfaz lo advierte).
+    // La validación del derecho de eliminar se hace en la interfaz (permisos?.puedeEliminar).
+
     // Transacción: Eliminar pago y recalcular deuda
     await prisma.$transaction(async (tx) => {
       await tx.pagoDeudaPersonal.delete({ where: { id } });
@@ -484,8 +504,15 @@ const eliminar = async (id) => {
 
       const montoPagadoTotal = pagos.reduce((sum, p) => sum + Number(p.montoPago), 0);
       const deuda = await tx.deudaConPersonal.findUnique({ where: { id: deudaId } });
-      const nuevoSaldoPendiente = Number(deuda.montoOriginal) - montoPagadoTotal;
-      const nuevoEstadoId = calcularNuevoEstadoDeuda(nuevoSaldoPendiente);
+      // Saldo = original - pagado antes del sistema - pagos del sistema (misma fórmula que DeudaConPersonalForm)
+      const montoPagadoAnterior = Number(deuda.montoPagadoAnterior || 0);
+      const nuevoSaldoPendiente =
+        Math.round((Number(deuda.montoOriginal) - montoPagadoAnterior - montoPagadoTotal) * 100) / 100;
+      // Si ya no queda ningún pago (ni pagado anterior) la deuda vuelve a PENDIENTE
+      const nuevoEstadoId =
+        montoPagadoTotal + montoPagadoAnterior <= 0
+          ? ESTADOS_DEUDA.PENDIENTE
+          : calcularNuevoEstadoDeuda(nuevoSaldoPendiente);
 
       await tx.deudaConPersonal.update({
         where: { id: deudaId },
@@ -515,6 +542,7 @@ const listarPorDeuda = async (deudaConPersonalId) => {
        return await prisma.pagoDeudaPersonal.findMany({
       where: { deudaConPersonalId },
       include: {
+        periodoContable: true,
         medioPago: true,
         movimientoCaja: {
           include: {

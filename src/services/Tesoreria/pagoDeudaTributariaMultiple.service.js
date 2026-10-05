@@ -11,16 +11,23 @@ import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * SERVICIO: PAGO MÚLTIPLE (ESPECIALIZADO) DE DEUDAS CON PERSONAL
+ * SERVICIO: PAGO MÚLTIPLE (ESPECIALIZADO) DE DEUDAS TRIBUTARIAS
  * ════════════════════════════════════════════════════════════════════════════
  *
- * Paga varias DeudaConPersonal (de una o varias personas) con UN solo egreso.
- * Autónomo a propósito (mismo criterio que atenderAsignacion.service.js): no
- * toca pagoDeudaPersonal.service.js, que está en producción.
+ * Paga varias DeudaTributaria (de una o varias entidades recaudadoras) con UN solo egreso.
+ * Réplica de pagoDeudaPersonalMultiple.service.js adaptada a tributos. Autónomo a propósito
+ * (mismo criterio que atenderAsignacion.service.js): no toca pagoDeudaTributaria.service.js
+ * en el flujo de pago.
+ *
+ * Diferencias con el pago de personal:
+ *   - Las deudas tributarias siempre son formales: no existe esGerencial (asiento FISCAL).
+ *   - La entidad destino la elige el usuario; el frontend preselecciona la entidad
+ *     recaudadora del tipo de deuda (SUNAT, ESSALUD, ONP…) cuando es la misma para todas.
+ *   - La glosa toma el mes del período tributario (p. ej. "2026-01"), no de una fecha.
  *
  * Una sola transacción atómica:
  *   1. MovimientoCaja consolidado (egreso) + ITF + comisión, con saldo en cascada
- *   2. Un PagoDeudaPersonal por deuda (monto repartido proporcionalmente al saldo)
+ *   2. Un PagoDeudaTributaria por deuda (monto repartido proporcionalmente al saldo)
  *   3. Actualización de montoPagado / saldoPendiente / estado de cada deuda
  *   4. Asientos contables (si uno falla se revierte toda la operación)
  *
@@ -33,32 +40,33 @@ import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
  *   - ITF y comisión:   la cuenta bancaria va en cuentaCorrienteOrigenId.
  *   - No se bloquea por saldo insuficiente (el formulario solo advierte).
  *
- * Asiento (referencia: asientos-contables-referencia.json, "PLANILLA - *"):
- *   DEBE  = TipoDeudaPersonal.cuentaContableId (una línea por cuenta distinta;
- *           p. ej. 411101 sueldos, 411401 gratificaciones, 417103 AFP Integra…).
+ * Asiento (referencia: asientos-contables-referencia.json, "PLANILLA - IMPUESTOS"):
+ *   DEBE  = TipoDeudaTributaria.cuentaContableId (una línea por cuenta distinta;
+ *           p. ej. 401731 renta 5ta, 403101 ESSALUD, 403201 ONP…).
  *           Es dinámico: cada tipo de deuda trae su cuenta, nada hardcodeado.
  *   HABER = CuentaCorriente.cuentaContableId (banco del egreso)
- *   Glosa = "PAGO DE {tipo(s) de deuda} MES DE {mes(es) de la deuda}"
+ *   Libro = CAJA_BANCOS (todas son operaciones de caja, igual que el pago de personal)
+ *   Glosa = "PAGO DE {tipo(s) de deuda} MES DE {mes(es) del período}"
  */
 
 // ════════════════════════════════════════════════════════════
-// CONSTANTES (mismos valores que pagoDeudaPersonal / atenderAsignacion)
+// CONSTANTES (mismos valores que pagoDeudaTributaria / atenderAsignacion)
 // ════════════════════════════════════════════════════════════
 const ESTADOS_DEUDA = {
-  PENDIENTE: 114,
-  PAGO_PARCIAL: 115,
-  PAGADO: 116,
-  VENCIDO: 117,
-  ANULADO: 118,
-  CANJEADO: 119,
+  PENDIENTE: 120,
+  PAGO_PARCIAL: 121,
+  PAGADO: 122,
+  VENCIDO: 123,
+  ANULADO: 124,
+  CANJEADO: 125,
 };
 
 const ESTADO_MOVIMIENTO_CAJA_VALIDADO = 21;
 // ITF y comisión comparten el mismo tipo de movimiento
 const TIPO_MOVIMIENTO_ITF_COMISION = 163;
 const MONEDA_NACIONAL_ID = 1;
-// Submódulo origen del motivo de la operación: Deudas con Personal
-const SUBMODULO_ORIGEN_DEUDAS_PERSONAL_ID = 136;
+// Submódulo origen del motivo de la operación: Deudas Tributarias
+const SUBMODULO_ORIGEN_DEUDAS_TRIBUTARIAS_ID = 137;
 
 const CODIGOS_CUENTAS_CONTABLES = {
   ITF: "641101",
@@ -69,6 +77,22 @@ const MESES = [
   "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
   "JULIO", "AGOSTO", "SETIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
 ];
+
+/**
+ * El período tributario puede ser mensual ("2026-01"), trimestral ("2025-Q4") o anual ("2026").
+ * Devuelve el texto para la glosa; si el formato no se reconoce usa el mes de la fecha de
+ * generación de la deuda.
+ */
+const textoPeriodo = (periodo, fechaGeneracion) => {
+  const texto = String(periodo || "").trim();
+  let m = texto.match(/^(\d{4})-(\d{2})$/);
+  if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) return `MES DE ${MESES[Number(m[2]) - 1]} ${m[1]}`;
+  m = texto.match(/^(\d{4})-Q([1-4])$/i);
+  if (m) return `TRIMESTRE ${m[2]} DE ${m[1]}`;
+  m = texto.match(/^(\d{4})$/);
+  if (m) return `AÑO ${m[1]}`;
+  return `MES DE ${MESES[new Date(fechaGeneracion).getUTCMonth()]}`;
+};
 
 // ════════════════════════════════════════════════════════════
 // HELPERS NUMÉRICOS
@@ -294,13 +318,14 @@ const crearAsiento = async ({
 // ════════════════════════════════════════════════════════════
 /**
  * @param {Object} datos
- * @param {Array<number>} datos.deudaIds - DeudaConPersonal a pagar (una o varias personas)
+ * @param {Array<number>} datos.deudaIds - DeudaTributaria a pagar (de una o varias entidades recaudadoras)
  * @param {number} datos.montoPago - Monto total pagado (≤ suma de saldos)
  * @param {string|Date} datos.fechaPago
  * @param {number} datos.cuentaCorrienteOrigenId - Cuenta bancaria de donde sale el dinero
  * @param {number} datos.medioPagoId
  * @param {number} datos.tipoMovimientoId - Tipo de movimiento del egreso consolidado
- * @param {number} datos.entidadComercialId - Entidad destino (OBLIGATORIA, también con 1 persona)
+ * @param {number} datos.entidadComercialId - Entidad destino (OBLIGATORIA; el usuario la elige,
+ *        el frontend preselecciona la entidad recaudadora del tipo de deuda)
  * @param {string} [datos.numeroOperacion]
  * @param {string} [datos.numeroCheque]
  * @param {string} [datos.descripcion] - Glosa; si no viene se arma automáticamente
@@ -340,12 +365,10 @@ const procesarPagoMultiple = async (datos) => {
         "La fecha, la cuenta corriente, el medio de pago y el tipo de movimiento son obligatorios",
       );
     }
-    // Siempre obligatoria: con una persona el frontend la preselecciona desde
-    // Personal.enlaceEntidadComercialId; con varias (p. ej. AFP) la elige el usuario.
+    // Siempre obligatoria: el frontend preselecciona la entidad recaudadora del tipo de deuda
+    // cuando es la misma para todas las deudas; si hay varias (p. ej. SUNAT y ESSALUD) la elige el usuario.
     if (!entidadComercialId) {
-      throw new ValidationError(
-        "La entidad destino es obligatoria. Si es una sola persona, asígnele su entidad comercial en Personal.",
-      );
+      throw new ValidationError("La entidad destino es obligatoria.");
     }
 
     const montoPago = Number(datos.montoPago);
@@ -361,10 +384,9 @@ const procesarPagoMultiple = async (datos) => {
       // ════════════════════════════════════════════════════════════
       // 1. VALIDAR DEUDAS
       // ════════════════════════════════════════════════════════════
-      const deudas = await tx.deudaConPersonal.findMany({
+      const deudas = await tx.deudaTributaria.findMany({
         where: { id: { in: idsUnicos.map((id) => BigInt(id)) } },
         include: {
-          personal: { select: { id: true, nombres: true, apellidos: true } },
           tipoDeuda: { select: { id: true, nombre: true, cuentaContableId: true } },
         },
         orderBy: { id: "asc" },
@@ -386,17 +408,12 @@ const procesarPagoMultiple = async (datos) => {
       const base = deudas[0];
       const mismaEmpresa = deudas.every((d) => Number(d.empresaId) === Number(base.empresaId));
       const mismaMoneda = deudas.every((d) => Number(d.monedaId) === Number(base.monedaId));
-      const mismoLibro = deudas.every((d) => Boolean(d.esGerencial) === Boolean(base.esGerencial));
       if (!mismaEmpresa) throw new ValidationError("Las deudas deben ser de la misma empresa");
       if (!mismaMoneda) throw new ValidationError("Las deudas deben estar en la misma moneda");
-      if (!mismoLibro) {
-        throw new ValidationError(
-          "No se pueden mezclar deudas gerenciales con deudas formales en un mismo pago",
-        );
-      }
 
       const empresaId = Number(base.empresaId);
-      const esGerencial = Boolean(base.esGerencial);
+      // Las deudas tributarias siempre son formales: no existe esGerencial en DeudaTributaria
+      const esGerencial = false;
       const esMonedaNacional = Number(base.monedaId) === MONEDA_NACIONAL_ID;
       const tc = esMonedaNacional ? 1 : Number(datos.tipoCambio);
       if (!esMonedaNacional && !(tc > 0)) {
@@ -490,13 +507,15 @@ const procesarPagoMultiple = async (datos) => {
       );
 
       // ════════════════════════════════════════════════════════════
-      // 5. GLOSA: "PAGO DE {tipos} MES DE {meses}" (mes = fecha de la deuda)
+      // 5. GLOSA: "PAGO DE {tipos} MES DE {mes del período}" (período tributario de la deuda)
       // ════════════════════════════════════════════════════════════
       const tiposTexto = [...new Set(deudas.map((d) => d.tipoDeuda.nombre.toUpperCase()))].join(" / ");
-      const mesesTexto = [...new Set(deudas.map((d) => MESES[new Date(d.fecha).getUTCMonth()]))].join(" / ");
+      const periodosTexto = [
+        ...new Set(deudas.map((d) => textoPeriodo(d.periodo, d.fechaGeneracion))),
+      ].join(" / ");
       let descripcionMovimiento =
         (datos.descripcion && String(datos.descripcion).trim()) ||
-        `PAGO DE ${tiposTexto} MES DE ${mesesTexto}`;
+        `PAGO DE ${tiposTexto} ${periodosTexto}`;
       if (numeroCheque) descripcionMovimiento += ` N° CHEQUE: ${numeroCheque}`;
 
       // ════════════════════════════════════════════════════════════
@@ -514,7 +533,7 @@ const procesarPagoMultiple = async (datos) => {
         usuarioId: usuarioId ? Number(usuarioId) : null,
         // Un pago múltiple no tiene un único registro origen (hay N deudas/pagos):
         // por eso no se informa origenMotivoOperacionId; el vínculo es el correlativo.
-        moduloOrigenMotivoOperacionId: SUBMODULO_ORIGEN_DEUDAS_PERSONAL_ID,
+        moduloOrigenMotivoOperacionId: SUBMODULO_ORIGEN_DEUDAS_TRIBUTARIAS_ID,
         fechaMotivoOperacion: new Date(),
         usuarioMotivoOperacionId: usuarioId ? Number(usuarioId) : null,
       };
@@ -586,7 +605,7 @@ const procesarPagoMultiple = async (datos) => {
           nuevoSaldoCent === 0n ? ESTADOS_DEUDA.PAGADO : ESTADOS_DEUDA.PAGO_PARCIAL;
 
         // Anti doble pago: solo actualiza si el saldo no cambió desde que se leyó
-        const reclamo = await tx.deudaConPersonal.updateMany({
+        const reclamo = await tx.deudaTributaria.updateMany({
           where: { id: deuda.id, saldoPendiente: deuda.saldoPendiente },
           data: {
             montoPagado: nuevoMontoPagado,
@@ -601,9 +620,9 @@ const procesarPagoMultiple = async (datos) => {
           );
         }
 
-        const pago = await tx.pagoDeudaPersonal.create({
+        const pago = await tx.pagoDeudaTributaria.create({
           data: {
-            deudaConPersonalId: deuda.id,
+            deudaTributariaId: deuda.id,
             fechaPago: fechaContable,
             montoPago: montoAplicado,
             medioPagoId: Number(medioPagoId),
@@ -627,8 +646,9 @@ const procesarPagoMultiple = async (datos) => {
         distribucion.push({
           deudaId: deuda.id,
           pagoId: pago.id,
-          personal: `${deuda.personal.nombres} ${deuda.personal.apellidos}`.trim(),
           tipoDeuda: deuda.tipoDeuda.nombre,
+          periodo: deuda.periodo,
+          numeroDeclaracion: deuda.numeroDeclaracion,
           montoAplicado,
           nuevoSaldo,
           nuevoEstadoId,
@@ -652,7 +672,7 @@ const procesarPagoMultiple = async (datos) => {
 
       const asientos = [];
 
-      // Egreso consolidado: DEBE = una línea por cuenta 41.x del tipo de deuda
+      // Egreso consolidado: DEBE = una línea por cuenta 40.x del tipo de deuda tributaria
       asientos.push(
         await crearAsiento({
           ...paramsAsiento,
@@ -794,7 +814,7 @@ const procesarPagoMultiple = async (datos) => {
 // SINCRONIZACIÓN DE ADJUNTOS DE LA OPERACIÓN
 // ════════════════════════════════════════════════════════════
 /**
- * Una operación de pago múltiple genera N PagoDeudaPersonal, pero el sistema PDF guarda
+ * Una operación de pago múltiple genera N PagoDeudaTributaria, pero el sistema PDF guarda
  * el archivo solo en el registro del entityId (el primer pago). Esta función copia las URLs
  * del voucher consolidado y del comprobante de la entidad recaudadora a los demás pagos
  * de la misma operación, de modo que cada deuda pagada muestre los mismos adjuntos.
@@ -807,29 +827,29 @@ const procesarPagoMultiple = async (datos) => {
  */
 const sincronizarAdjuntosOperacion = async (pagoId) => {
   try {
-    const origen = await prisma.pagoDeudaPersonal.findUnique({
+    const origen = await prisma.pagoDeudaTributaria.findUnique({
       where: { id: BigInt(pagoId) },
       select: {
         id: true,
         refOperacionEspecializadaMovCaja: true,
         urlVoucherOperacionConsolidado: true,
         urlComprobanteOperacion: true,
-        deudaConPersonal: { select: { empresaId: true } },
+        deudaTributaria: { select: { empresaId: true } },
       },
     });
 
-    if (!origen) throw new NotFoundError("Pago de deuda personal no encontrado");
+    if (!origen) throw new NotFoundError("Pago de deuda tributaria no encontrado");
 
     // Pagos antiguos sin operación asociada: no hay hermanos que sincronizar
     if (!origen.refOperacionEspecializadaMovCaja) {
       return { success: true, actualizados: 0 };
     }
 
-    const { count } = await prisma.pagoDeudaPersonal.updateMany({
+    const { count } = await prisma.pagoDeudaTributaria.updateMany({
       where: {
         id: { not: origen.id },
         refOperacionEspecializadaMovCaja: origen.refOperacionEspecializadaMovCaja,
-        deudaConPersonal: { empresaId: origen.deudaConPersonal.empresaId },
+        deudaTributaria: { empresaId: origen.deudaTributaria.empresaId },
       },
       data: {
         urlVoucherOperacionConsolidado: origen.urlVoucherOperacionConsolidado,
