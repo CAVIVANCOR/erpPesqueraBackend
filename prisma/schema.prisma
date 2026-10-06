@@ -4241,6 +4241,7 @@ model TipoDeudaPersonal {
   nombre                String                  @db.VarChar(100)              // Nombre del tipo de deuda (ej: "Sueldos", "Comisiones Pesca")
   descripcion           String?                 @db.Text                      // Descripción detallada del tipo de deuda
   cuentaContableId      BigInt?                                               // ⭐ NUEVO: Cuenta contable asociada (FK a PlanCuentasContable: 41.1.1 Remuneraciones por Pagar, etc.)
+  cuentaProvisionId     BigInt?                                               // Cuenta de gasto que se carga al provisionar la planilla (FK a PlanCuentasContable: 62.1.1 Sueldos y Salarios, etc.)
   periodicidad          FrecuenciaPago?                                       // ⭐ NUEVO: Periodicidad del pago (MENSUAL, QUINCENAL, SEMANAL, etc.) - OPCIONAL
   activo                Boolean                 @default(true)                // Estado del tipo de deuda (true = activo, false = inactivo)
   
@@ -4257,7 +4258,8 @@ model TipoDeudaPersonal {
   // ========================================
   categoria             CategoriaTipoDeudaPersonal?  @relation(fields: [categoriaId], references: [id])
   cuentaContable        PlanCuentasContable?    @relation("TipoDeudaPersonalToCuentaContable", fields: [cuentaContableId], references: [id])  // ⭐ NUEVO
-  
+  cuentaProvision       PlanCuentasContable?    @relation("TipoDeudaPersonalToCuentaProvision", fields: [cuentaProvisionId], references: [id])
+
   // ========================================
   // RELACIONES INVERSAS
   // ========================================
@@ -4270,6 +4272,8 @@ model TipoDeudaPersonal {
   @@index([cuentaContableId])                                                 // ⭐ NUEVO: Búsqueda por cuenta contable
   @@index([periodicidad])                                                     // ⭐ NUEVO: Filtro por periodicidad
   @@index([activo])                                                           // Filtro por estado activo/inactivo
+  @@index([cuentaProvisionId])                                                // Búsqueda por cuenta de provisión
+
 }
 
 
@@ -4454,6 +4458,7 @@ model TipoDeudaTributaria {
   entidadRecaudadoraId  BigInt?                                               // Entidad recaudadora (FK a EntidadComercial: SUNAT, ESSALUD, ONP, Municipalidad)
   periodicidad          FrecuenciaPago                                        // Periodicidad del pago (MENSUAL, TRIMESTRAL, ANUAL, etc.)
   cuentaContableId      BigInt?                                               // Cuenta contable asociada (FK a PlanContable: 40.1.1, 40.2.1, etc.)
+  cuentaProvisionId     BigInt?                                               // Cuenta de gasto que se carga al provisionar el tributo (FK a PlanCuentasContable: 64.x, 62.7.x, etc.)
   tipoLibroId           BigInt?                                               // ✅ NUEVO: FK a TipoLibroContableSunat
   activo                Boolean                 @default(true)                // Estado del tipo de deuda (true = activo, false = inactivo)
   
@@ -4470,7 +4475,8 @@ model TipoDeudaTributaria {
   // ========================================
   categoria               CategoriaTipoDeudaTributaria?  @relation(fields: [categoriaId], references: [id])
   entidadRecaudadora      EntidadComercial?       @relation(fields: [entidadRecaudadoraId], references: [id])
-  cuentaContable          PlanCuentasContable?    @relation(fields: [cuentaContableId], references: [id])
+  cuentaContable          PlanCuentasContable?    @relation("TipoDeudaTributariaToCuentaContable", fields: [cuentaContableId], references: [id])
+  cuentaProvision         PlanCuentasContable?    @relation("TipoDeudaTributariaToCuentaProvision", fields: [cuentaProvisionId], references: [id])
   tipoLibroContableSunat  TipoLibroContableSunat? @relation(fields: [tipoLibroId], references: [id])
 
   // ========================================
@@ -4487,6 +4493,7 @@ model TipoDeudaTributaria {
   @@index([periodicidad])                                                     // Filtro por periodicidad
   @@index([activo])                                                           // Filtro por estado activo/inactivo
   @@index([tipoLibroId])                                                      // Búsqueda por tipo de libro contable
+  @@index([cuentaProvisionId])                                                // Búsqueda por cuenta de provisión
 }
 
 
@@ -5986,7 +5993,7 @@ model PlanCuentasContable {
   tiposActivoActivo               TipoActivo[]              @relation("TipoActivoCuentaActivo")
   tiposActivoDepreciacion         TipoActivo[]              @relation("TipoActivoCuentaDepreciacion")
   tiposActivoDepreciacionAcum     TipoActivo[]              @relation("TipoActivoCuentaDepAcum")
-  tiposDeudaTributaria            TipoDeudaTributaria[]     // 🆕 AGREGAR ESTA LÍNEA
+  tiposDeudaTributaria            TipoDeudaTributaria[]     @relation("TipoDeudaTributariaToCuentaContable")  // 🆕 AGREGAR ESTA LÍNEA
   tiposDeudaPersonal              TipoDeudaPersonal[]       @relation("TipoDeudaPersonalToCuentaContable")  // ⭐ NUEVO: Tipos de deuda personal que usan esta cuenta
   centrosCosto                    CentroCosto[]             @relation("CentroCostoToCuentaContable")        // ⭐ NUEVO
   centroCosto                     CentroCosto?              @relation("PlanCuentasCentroCostoDefecto", fields: [centroCostoId], references: [id])
@@ -6006,6 +6013,9 @@ model PlanCuentasContable {
   activosCuentaGastoDep     Activo[]                    @relation("ActivoCuentaGastoDep")
   tiposMovActivoDebe        TipoMovimientoActivoFijo[]  @relation("TipoMovActivoCuentaDebe")
   tiposMovActivoHaber       TipoMovimientoActivoFijo[]  @relation("TipoMovActivoCuentaHaber")
+  tiposDeudaPersonalProvision     TipoDeudaPersonal[]       @relation("TipoDeudaPersonalToCuentaProvision")  // Tipos de deuda personal que provisionan contra esta cuenta de gasto
+  tiposDeudaTributariaProvision   TipoDeudaTributaria[]     @relation("TipoDeudaTributariaToCuentaProvision")  // Tipos de deuda tributaria que provisionan contra esta cuenta de gasto
+
   // ========================================
   // ÍNDICES
   // ========================================
