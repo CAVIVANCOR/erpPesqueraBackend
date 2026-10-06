@@ -90,6 +90,26 @@ export const ESTADO_PERCEPCION = {
 };
 
 // ────────────────────────────────────────────────────────────
+// ESTADOS: CUOTA DE PRÉSTAMO BANCARIO (tipo "CUOTAS PRESTAMO BANCARIO")
+// ────────────────────────────────────────────────────────────
+// SALDO_INICIAL queda en el catálogo pero no se asigna: una cuota histórica se guarda como PAGADO
+// y se distingue con el flag saldoInicialPagada.
+export const ESTADO_CUOTA_PRESTAMO = {
+  PENDIENTE: 135,
+  VENCIDO: 136,
+  PAGO_PARCIAL: 137,
+  PAGADO: 138,
+  SALDO_INICIAL: 139,
+};
+
+// Cuotas con saldo por pagar (una cuota con pago parcial sigue abierta por su diferencia)
+export const ESTADOS_CUOTA_PRESTAMO_ABIERTAS = [
+  ESTADO_CUOTA_PRESTAMO.PENDIENTE,
+  ESTADO_CUOTA_PRESTAMO.VENCIDO,
+  ESTADO_CUOTA_PRESTAMO.PAGO_PARCIAL,
+];
+
+// ────────────────────────────────────────────────────────────
 // TIPOS DE DOCUMENTO (para impuestos SUNAT)
 // ────────────────────────────────────────────────────────────
 export const TIPO_DOCUMENTO_SUNAT = {

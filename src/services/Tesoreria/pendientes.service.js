@@ -9,6 +9,10 @@ import {
   TIPO_DEUDA_TESORERIA,
   TIPO_VENCIMIENTO_TESORERIA,
 } from "../../utils/tesoreria.constants.js";
+import {
+  ESTADO_CUOTA_PRESTAMO,
+  ESTADOS_CUOTA_PRESTAMO_ABIERTAS,
+} from "../../utils/estados.constants.js";
 /**
  * Servicio para consulta de documentos pendientes de cobro y pago
  * Para vista de Tesorería - Pendientes
@@ -36,17 +40,6 @@ const CATEGORIA_GASTOS_A_RENDIR = 17; // Categoría "Gastos a Rendir" en TipoMov
 // Estados del préstamo (EstadoMultiFuncion) que admiten desembolso o pago de cuotas: VIGENTE y VENCIDO.
 // Debe coincidir con operacionPrestamo.service.js
 const ESTADOS_PRESTAMO_OPERABLES = [81, 83];
-
-// Catálogo de estados de la cuota (EstadoMultiFuncion, tipo "CUOTAS PRESTAMO BANCARIO"). La cuota
-// guarda `estadoPago` (enum) y `saldoInicialPagada`; el catálogo da el nombre y el color oficiales.
-// SALDO INICIAL = cuota pagada antes del corte (saldoInicialPagada = true): no se cobra y no se lista.
-const ESTADO_CUOTA_CATALOGO = {
-  PENDIENTE: 135,
-  VENCIDO: 136,
-  PARCIAL: 137, // "PAGO PARCIAL"
-  PAGADO: 138,
-  SALDO_INICIAL: 139,
-};
 
 // Fecha de corte del saldo inicial: las cuotas con vencimiento anterior se consideran pagadas en el
 // año anterior y se marcan con `saldoInicialPagada`. Mismo valor que cuotaPrestamo.service.js
@@ -974,7 +967,7 @@ const listarPendientes = async (filtros = {}) => {
 
       const whereCuotas = {
         saldoInicialPagada: false,
-        estadoPago: { in: ['PENDIENTE', 'VENCIDO', 'PARCIAL'] },
+        estadoCuotaId: { in: ESTADOS_CUOTA_PRESTAMO_ABIERTAS },
         prestamo: wherePrestamoCuota,
       };
       const filtroFechaVencimiento = construirFiltroVencimiento(vencimiento);
@@ -1314,7 +1307,7 @@ const listarPendientes = async (filtros = {}) => {
     // Nombre y color del estado de la cuota desde el catálogo (no se listan SALDO INICIAL ni PAGADO)
     const estadosCuotaCatalogo = cuotasPrestamo.length
       ? await prisma.estadoMultiFuncion.findMany({
-          where: { id: { in: Object.values(ESTADO_CUOTA_CATALOGO) } },
+          where: { id: { in: Object.values(ESTADO_CUOTA_PRESTAMO) } },
           select: { id: true, descripcion: true, severityColor: true },
         })
       : [];
@@ -1345,9 +1338,9 @@ const listarPendientes = async (filtros = {}) => {
         montoTotal: cuota.montoTotal,
         montoPagado,
         saldoPendiente,
-        estado: estadoCuotaPorId.get(ESTADO_CUOTA_CATALOGO[cuota.estadoPago]) || {
+        estado: estadoCuotaPorId.get(Number(cuota.estadoCuotaId)) || {
           id: null,
-          descripcion: cuota.estadoPago,
+          descripcion: 'SIN ESTADO',
           severityColor: 'secondary',
         },
         ultimoPago: null,
@@ -1376,7 +1369,7 @@ const listarPendientes = async (filtros = {}) => {
           montoComision: cuota.montoComision,
           montoSeguro: cuota.montoSeguro,
           montoMora: cuota.montoMora,
-          estadoPago: cuota.estadoPago,
+          estadoCuotaId: cuota.estadoCuotaId,
         },
       };
     });
@@ -1534,7 +1527,7 @@ const obtenerResumen = async (empresaId = null) => {
     const cuotasPrestamoResumen = await prisma.cuotaPrestamo.findMany({
       where: {
         saldoInicialPagada: false,
-        estadoPago: { in: ['PENDIENTE', 'VENCIDO', 'PARCIAL'] },
+        estadoCuotaId: { in: ESTADOS_CUOTA_PRESTAMO_ABIERTAS },
         prestamo: { ...where, estadoId: { in: ESTADOS_PRESTAMO_OPERABLES } },
       },
       select: {

@@ -7,6 +7,7 @@ import {
 } from "../../utils/errors.js";
 import lineaCreditoService from "./lineaCredito.service.js";
 import cuotaPrestamoService from "./cuotaPrestamo.service.js";
+import { ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
 const { obtenerTipoCambio } = lineaCreditoService;
 /**
  * Servicio CRUD para PrestamoBancario
@@ -277,7 +278,7 @@ function calcularCronogramaCuotas(prestamo) {
       montoTotal: parseFloat(montoTotal.toFixed(2)),
       saldoCapitalAntes: parseFloat(saldoCapitalAntes.toFixed(2)),
       saldoCapitalDespues: parseFloat(Math.max(0, saldoCapital).toFixed(2)),
-      estadoPago: "PENDIENTE",
+      estadoCuotaId: ESTADO_CUOTA_PRESTAMO.PENDIENTE,
       diasMora: null,
       fechaPago: null,
       montoPagado: null,
@@ -726,8 +727,8 @@ const eliminar = async (id) => {
     if (!existente) throw new NotFoundError("Préstamo bancario no encontrado");
 
     // Validar que no tenga cuotas pagadas
-    const cuotasPagadas = existente.cuotas.filter(
-      (c) => c.estadoPago === "PAGADO" || c.estadoPago === "PARCIAL",
+    const cuotasPagadas = existente.cuotas.filter((c) =>
+      [ESTADO_CUOTA_PRESTAMO.PAGADO, ESTADO_CUOTA_PRESTAMO.PAGO_PARCIAL].includes(Number(c.estadoCuotaId)),
     );
     if (cuotasPagadas.length > 0) {
       throw new ConflictError(
@@ -776,7 +777,7 @@ const listarPorEmpresa = async (empresaId) => {
         lineaCredito: true,
         tipoPrestamo: true,
         cuotas: {
-          where: { estadoPago: "PENDIENTE" },
+          where: { estadoCuotaId: ESTADO_CUOTA_PRESTAMO.PENDIENTE },
           orderBy: { fechaVencimiento: "asc" },
           take: 5,
         },

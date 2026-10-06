@@ -1,7 +1,7 @@
 import prisma from "../../config/prismaClient.js";
 import { ValidationError, DatabaseError } from "../../utils/errors.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
-import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
+import { ESTADO_ASIENTO_CONTABLE, ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
 import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 
@@ -419,7 +419,7 @@ async function generarAsientoSaldoInicial(prestamo, tx, creadoPor) {
     
     // Filtrar cuotas IMPAGAS (no pagadas y no marcadas como saldo inicial pagado)
     const cuotasImpagas = cuotas.filter(c => {
-      const noEstaPagada = c.estadoPago !== 'PAGADO' && !c.saldoInicialPagada;
+      const noEstaPagada = Number(c.estadoCuotaId) !== ESTADO_CUOTA_PRESTAMO.PAGADO && !c.saldoInicialPagada;
       return noEstaPagada;
     });
     

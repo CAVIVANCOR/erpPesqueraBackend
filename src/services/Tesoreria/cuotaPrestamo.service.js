@@ -5,6 +5,10 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
+import {
+  ESTADO_CUOTA_PRESTAMO,
+  ESTADOS_CUOTA_PRESTAMO_ABIERTAS,
+} from "../../utils/estados.constants.js";
 
 /**
  * Servicio CRUD para CuotaPrestamo
@@ -39,11 +43,10 @@ async function validarCuotaPrestamo(data) {
     }
   }
 
-  // Validar estado de pago
-  if (data.estadoPago) {
-    const estadosValidos = ["PENDIENTE", "PAGADO", "VENCIDO", "PARCIAL"];
-    if (!estadosValidos.includes(data.estadoPago)) {
-      throw new ValidationError("El estado de pago no es válido.");
+  // Validar estado de la cuota contra el catálogo
+  if (data.estadoCuotaId) {
+    if (!Object.values(ESTADO_CUOTA_PRESTAMO).includes(Number(data.estadoCuotaId))) {
+      throw new ValidationError("El estado de la cuota no es válido.");
     }
   }
 
@@ -145,7 +148,7 @@ async function actualizarSaldosPrestamo(prestamoBancarioId) {
 
   // Filtrar cuotas pagadas (PAGADO o SALDO_INICIAL)
   const cuotasPagadas = cuotas.filter(
-    (c) => c.estadoPago === "PAGADO" || c.saldoInicialPagada
+    (c) => Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO || c.saldoInicialPagada
   );
 
   const capitalPagado = cuotasPagadas.reduce(
@@ -164,7 +167,7 @@ async function actualizarSaldosPrestamo(prestamoBancarioId) {
 
   const saldoCapital = parseFloat(prestamo.montoDesembolsado) - capitalPagado;
   const saldoInteres = cuotas
-    .filter((c) => c.estadoPago === "PENDIENTE" || c.estadoPago === "VENCIDO")
+    .filter((c) => [ESTADO_CUOTA_PRESTAMO.PENDIENTE, ESTADO_CUOTA_PRESTAMO.VENCIDO].includes(Number(c.estadoCuotaId)))
     .reduce((sum, c) => sum + parseFloat(c.montoInteres), 0);
 
   await prisma.prestamoBancario.update({
@@ -211,7 +214,7 @@ async function marcarComoSaldoInicial(cuotaId, usuarioId) {
       where: { id: cuotaId },
       data: {
         saldoInicialPagada: true,
-        estadoPago: "PAGADO", // Prisma enum
+        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.PAGADO,
         fechaPago: new Date("2025-12-31"),
         montoPagado: cuota.montoTotal,
         diasMora: 0,
@@ -233,7 +236,7 @@ async function marcarComoSaldoInicial(cuotaId, usuarioId) {
     const cuotasPendientes = await tx.cuotaPrestamo.count({
       where: {
         prestamoBancarioId: cuota.prestamoBancarioId,
-        estadoPago: { in: ["PENDIENTE", "VENCIDO", "PARCIAL"] },
+        estadoCuotaId: { in: ESTADOS_CUOTA_PRESTAMO_ABIERTAS },
       },
     });
 
@@ -244,7 +247,7 @@ async function marcarComoSaldoInicial(cuotaId, usuarioId) {
       const cuotasVencidas = await tx.cuotaPrestamo.count({
         where: {
           prestamoBancarioId: cuota.prestamoBancarioId,
-          estadoPago: "VENCIDO",
+          estadoCuotaId: ESTADO_CUOTA_PRESTAMO.VENCIDO,
         },
       });
       nuevoEstadoId = cuotasVencidas > 0 ? BigInt(83) : BigInt(81);
@@ -358,7 +361,7 @@ const crear = async (data) => {
       data.montoInteres === undefined ||
       data.montoTotal === null ||
       data.montoTotal === undefined ||
-      !data.estadoPago
+      !data.estadoCuotaId
     ) {
       throw new ValidationError(
         "Faltan campos obligatorios para crear la cuota.",
@@ -463,7 +466,7 @@ const eliminar = async (id) => {
     if (!existente) throw new NotFoundError("Cuota de préstamo no encontrada");
 
     // Validar que la cuota esté pendiente
-    if (existente.estadoPago !== "PENDIENTE") {
+    if (Number(existente.estadoCuotaId) !== ESTADO_CUOTA_PRESTAMO.PENDIENTE) {
       throw new ConflictError("Solo se pueden eliminar cuotas pendientes.");
     }
 
@@ -529,7 +532,7 @@ const registrarPago = async (id, dataPago) => {
 
     if (!cuota) throw new NotFoundError("Cuota de préstamo no encontrada");
 
-    if (cuota.estadoPago === "PAGADO") {
+    if (Number(cuota.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO) {
       throw new ConflictError("La cuota ya está pagada.");
     }
 
@@ -554,9 +557,9 @@ const registrarPago = async (id, dataPago) => {
     }
 
     // Determinar estado de pago
-    let estadoPago = "PAGADO";
+    let estadoCuotaId = ESTADO_CUOTA_PRESTAMO.PAGADO;
     if (montoPagado < cuota.montoTotal) {
-      estadoPago = "PARCIAL";
+      estadoCuotaId = ESTADO_CUOTA_PRESTAMO.PAGO_PARCIAL;
     }
 
     // Actualizar cuota en una transacción
@@ -568,7 +571,7 @@ const registrarPago = async (id, dataPago) => {
           montoPagado,
           montoMora: montoMora > 0 ? montoMora : null,
           diasMora: diasMora > 0 ? diasMora : null,
-          estadoPago,
+          estadoCuotaId,
           movimientoCajaId: movimientoCajaId || null,
           observaciones: observaciones || null,
         },
@@ -602,7 +605,7 @@ const registrarPago = async (id, dataPago) => {
       const cuotasPendientes = await tx.cuotaPrestamo.count({
         where: {
           prestamoBancarioId: cuota.prestamoBancarioId,
-          estadoPago: { in: ["PENDIENTE", "VENCIDO", "PARCIAL"] },
+          estadoCuotaId: { in: ESTADOS_CUOTA_PRESTAMO_ABIERTAS },
         },
       });
 
@@ -671,7 +674,7 @@ const listarPendientes = async () => {
   try {
     return await prisma.cuotaPrestamo.findMany({
       where: {
-        estadoPago: { in: ["PENDIENTE", "VENCIDO", "PARCIAL"] },
+        estadoCuotaId: { in: ESTADOS_CUOTA_PRESTAMO_ABIERTAS },
       },
       include: {
         prestamo: {
@@ -701,7 +704,7 @@ const listarVencidas = async () => {
     return await prisma.cuotaPrestamo.findMany({
       where: {
         fechaVencimiento: { lt: hoy },
-        estadoPago: { in: ["PENDIENTE", "VENCIDO", "PARCIAL"] },
+        estadoCuotaId: { in: ESTADOS_CUOTA_PRESTAMO_ABIERTAS },
       },
       include: {
         prestamo: {
@@ -731,10 +734,10 @@ const actualizarEstadosVencidos = async () => {
     const resultado = await prisma.cuotaPrestamo.updateMany({
       where: {
         fechaVencimiento: { lt: hoy },
-        estadoPago: "PENDIENTE",
+        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.PENDIENTE,
       },
       data: {
-        estadoPago: "VENCIDO",
+        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.VENCIDO,
       },
     });
     return resultado;
@@ -778,10 +781,10 @@ const recalcularCuotasPorPrestamo = async (prestamoBancarioId) => {
 
     // Separar cuotas pagadas y pendientes
     const cuotasPagadas = todasLasCuotas.filter(
-      (c) => c.estadoPago === "PAGADO",
+      (c) => Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO,
     );
     const cuotasPendientes = todasLasCuotas.filter(
-      (c) => c.estadoPago === "PENDIENTE",
+      (c) => Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PENDIENTE,
     );
 
     // Calcular capital e interés pagado ANTES del recálculo (de cuotas ya pagadas)
@@ -903,11 +906,11 @@ const recalcularCuotasPorPrestamo = async (prestamoBancarioId) => {
 
       // Calcular capital e interés pagado de cuotas PAGADAS (con valores actualizados)
       const capitalPagadoFinal = todasLasCuotasActualizadas
-        .filter((c) => c.estadoPago === "PAGADO")
+        .filter((c) => Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO)
         .reduce((sum, c) => sum + parseFloat(c.montoCapital || 0), 0);
 
       const interesPagadoFinal = todasLasCuotasActualizadas
-        .filter((c) => c.estadoPago === "PAGADO")
+        .filter((c) => Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO)
         .reduce((sum, c) => sum + parseFloat(c.montoInteres || 0), 0);
 
       // Calcular saldo de capital e interés pendiente
@@ -1010,7 +1013,7 @@ async function generarCronograma(prestamoBancarioId) {
       montoTotal: montoDesembolsado + interesTotal + comision + seguro,
       saldoCapitalAntes: montoDesembolsado,
       saldoCapitalDespues: 0,
-      estadoPago: "PENDIENTE",
+      estadoCuotaId: ESTADO_CUOTA_PRESTAMO.PENDIENTE,
       diasMora: 0,
       creadoPor: prestamo.creadoPor || null,
     });
@@ -1051,7 +1054,7 @@ async function generarCronograma(prestamoBancarioId) {
         montoTotal,
         saldoCapitalAntes: saldoAntes,
         saldoCapitalDespues: saldoDespues,
-        estadoPago: "PENDIENTE",
+        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.PENDIENTE,
         diasMora: 0,
         creadoPor: prestamo.creadoPor || null,
       });
@@ -1082,7 +1085,7 @@ async function generarCronograma(prestamoBancarioId) {
           montoTotal: cuota.montoTotal,
           saldoCapitalAntes: cuota.saldoCapitalAntes,
           saldoCapitalDespues: cuota.saldoCapitalDespues,
-          estadoPago: cuota.estadoPago,
+          estadoCuotaId: cuota.estadoCuotaId,
           diasMora: cuota.diasMora,
         },
       })
@@ -1165,7 +1168,7 @@ async function guardarBulk(prestamoBancarioId, cuotas) {
       montoTotal: parseFloat(cuota.montoTotal || 0),
       saldoCapitalAntes: parseFloat(cuota.saldoCapitalAntes || 0),
       saldoCapitalDespues: parseFloat(cuota.saldoCapitalDespues || 0),
-      estadoPago: cuota.estadoPago || "PENDIENTE",
+      estadoCuotaId: cuota.estadoCuotaId ? BigInt(cuota.estadoCuotaId) : ESTADO_CUOTA_PRESTAMO.PENDIENTE,
       diasMora: parseInt(cuota.diasMora || 0),
       actualizadoPor: cuota.actualizadoPor ? BigInt(cuota.actualizadoPor) : null,
     };

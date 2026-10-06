@@ -7,7 +7,7 @@ import {
 import correlativoService from "./correlativoOperacionCaja.service.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
-import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
+import { ESTADO_ASIENTO_CONTABLE, ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
 import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
 
 /**
@@ -652,7 +652,7 @@ const procesarPagoCuotas = async (datos) => {
 
         const pagadoPreviaCent = [];
         const debidos = cuotas.map((c, i) => {
-          if (c.estadoPago === "PAGADO" || c.saldoInicialPagada) {
+          if (Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO || c.saldoInicialPagada) {
             throw new ValidationError(`La cuota ${c.numeroCuota} ya está pagada`);
           }
           const debido = componentesDebidos(c);
@@ -785,7 +785,8 @@ const procesarPagoCuotas = async (datos) => {
           const cuota = cuotas[i];
           const nuevoPagadoCent = pagadoPreviaCent[i] + montosCent[i];
           const saldoCuotaCent = aCentimos(cuota.montoTotal) - nuevoPagadoCent;
-          const nuevoEstado = saldoCuotaCent === 0n ? "PAGADO" : "PARCIAL";
+          const nuevoEstadoCuotaId =
+            saldoCuotaCent === 0n ? ESTADO_CUOTA_PRESTAMO.PAGADO : ESTADO_CUOTA_PRESTAMO.PAGO_PARCIAL;
 
           const diasAtraso = Math.max(
             0,
@@ -795,13 +796,13 @@ const procesarPagoCuotas = async (datos) => {
 
           // Anti doble pago: solo actualiza si la cuota no cambió desde que se leyó
           const reclamo = await tx.cuotaPrestamo.updateMany({
-            where: { id: cuota.id, estadoPago: cuota.estadoPago, montoPagado: cuota.montoPagado },
+            where: { id: cuota.id, estadoCuotaId: cuota.estadoCuotaId, montoPagado: cuota.montoPagado },
             data: {
               fechaPago: ctx.fechaContable,
               montoPagado: deCentimos(nuevoPagadoCent),
               montoMora: moraAcumulada > 0 ? moraAcumulada : cuota.montoMora,
               diasMora: diasAtraso > 0 ? diasAtraso : cuota.diasMora,
-              estadoPago: nuevoEstado,
+              estadoCuotaId: nuevoEstadoCuotaId,
               movimientoCajaId: egreso.movimiento.id,
               refOperacionEspecializadaMovCaja: ctx.correlativo,
               observaciones: observaciones || cuota.observaciones,
@@ -829,7 +830,7 @@ const procesarPagoCuotas = async (datos) => {
             montoAplicado: deCentimos(montosCent[i]),
             mora: deCentimos(morasCent[i]),
             nuevoSaldo: deCentimos(saldoCuotaCent),
-            estadoPago: nuevoEstado,
+            estadoCuotaId: nuevoEstadoCuotaId,
             imputacion: {
               capital: deCentimos(imputaciones[i].capital),
               interes: deCentimos(imputaciones[i].interes),
@@ -851,7 +852,7 @@ const procesarPagoCuotas = async (datos) => {
         let cuotasPendientes = 0;
         for (const c of todasLasCuotas) {
           const debido = componentesDebidos(c);
-          if (c.estadoPago === "PAGADO" || c.saldoInicialPagada) {
+          if (Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO || c.saldoInicialPagada) {
             capitalPagadoCent += debido.capital;
             interesPagadoCent += debido.interes;
           } else {

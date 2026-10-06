@@ -1,5 +1,6 @@
 import prisma from "../../config/prismaClient.js";
 import cuotaPrestamoService from "./cuotaPrestamo.service.js";
+import { ESTADO_CUOTA_PRESTAMO, ESTADOS_CUOTA_PRESTAMO_ABIERTAS } from "../../utils/estados.constants.js";
 
 /**
  * Servicio de tareas automáticas para Tesorería
@@ -19,10 +20,10 @@ export async function procesarCuotasVencidas() {
     const cuotasActualizadas = await prisma.cuotaPrestamo.updateMany({
       where: {
         fechaVencimiento: { lt: hoy },
-        estadoPago: "PENDIENTE",
+        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.PENDIENTE,
       },
       data: {
-        estadoPago: "VENCIDO",
+        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.VENCIDO,
       },
     });
 
@@ -30,7 +31,7 @@ export async function procesarCuotasVencidas() {
     const cuotasVencidas = await prisma.cuotaPrestamo.findMany({
       where: {
         fechaVencimiento: { lt: hoy },
-        estadoPago: "VENCIDO",
+        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.VENCIDO,
       },
       select: {
         prestamoBancarioId: true,
@@ -72,11 +73,11 @@ async function actualizarEstadosPrestamos(prestamosIds) {
       where: { prestamoBancarioId },
     });
 
-    const cuotasPendientes = cuotas.filter(
-      (c) => c.estadoPago === "PENDIENTE" || c.estadoPago === "VENCIDO" || c.estadoPago === "PARCIAL"
+    const cuotasPendientes = cuotas.filter((c) =>
+      ESTADOS_CUOTA_PRESTAMO_ABIERTAS.includes(Number(c.estadoCuotaId))
     );
 
-    const cuotasVencidas = cuotas.filter((c) => c.estadoPago === "VENCIDO");
+    const cuotasVencidas = cuotas.filter((c) => Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.VENCIDO);
 
     let nuevoEstadoId;
     if (cuotasPendientes.length === 0) {
