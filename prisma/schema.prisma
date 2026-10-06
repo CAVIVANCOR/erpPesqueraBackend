@@ -3895,7 +3895,7 @@ model MovimientoCaja {
   pagosLetra                      PagoLetraCambio[]
 
   // Nuevas relaciones con Tesorería Avanzada
-  cuotasPrestamo                  CuotaPrestamo[]
+  pagosCuotaPrestamo              PagoCuotaPrestamo[]
   inversionesLiquidadas           InversionFinanciera[]
   movimientosInversion            MovimientoInversion[]
   prestamosDesembolso             PrestamoBancario[]    @relation("DesembolsoPrestamo")
@@ -6185,7 +6185,6 @@ model AsientoContable {
   detalles              DetalleAsientoContable[]
 
 // Nuevas relaciones con Tesorería Avanzada
-  cuotasPrestamo        CuotaPrestamo[]
   inversionesLiquidadas InversionFinanciera[]
   movimientosInversion  MovimientoInversion[]
   prestamos             PrestamoBancario[]
@@ -8595,72 +8594,94 @@ model PrestamoBancario {
 
 model CuotaPrestamo {
   id                    BigInt                  @id @default(autoincrement())
-  
-  // ========================================
+
   // RELACIÓN CON PRÉSTAMO
-  // ========================================
   prestamoBancarioId    BigInt
-  
-  // ========================================
+
   // IDENTIFICACIÓN DE CUOTA
-  // ========================================
   numeroCuota           Int                                          // 1, 2, 3, ..., n
   fechaVencimiento      DateTime                                     // Fecha de vencimiento de la cuota
-  
-  // ========================================
+
   // COMPOSICIÓN DE LA CUOTA
-  // ========================================
   montoCapital          Decimal                 @db.Decimal(18, 2)   // Amortización de capital
   montoInteres          Decimal                 @db.Decimal(18, 2)   // Interés del período
   montoComision         Decimal?                @db.Decimal(18, 2)   // Comisión de mantenimiento
   montoSeguro           Decimal?                @db.Decimal(18, 2)   // Seguro de desgravamen
   montoTotal            Decimal                 @db.Decimal(18, 2)   // Total de la cuota
-  
-  // ========================================
+
   // SALDOS ANTES Y DESPUÉS DE LA CUOTA
-  // ========================================
   saldoCapitalAntes     Decimal                 @db.Decimal(18, 2)   // Saldo de capital antes de pagar
   saldoCapitalDespues   Decimal                 @db.Decimal(18, 2)   // Saldo de capital después de pagar
-  
-  // ========================================
-  // INFORMACIÓN DE PAGO
-  // ========================================
-  fechaPago             DateTime?                                    // Fecha real de pago
-  montoPagado           Decimal?                @db.Decimal(18, 2)   // Monto realmente pagado
-  montoMora             Decimal?                @db.Decimal(18, 2)   // Monto de mora por atraso
-  movimientoCajaId      BigInt?                                      // Relación con MovimientoCaja
-  refOperacionEspecializadaMovCaja  BigInt?
-  estadoCuotaId         BigInt?                                      // ✅ NUEVO: FK a EstadoMultiFuncion (tipo CUOTAS PRESTAMO BANCARIO: 135 PENDIENTE | 136 VENCIDO | 137 PAGO PARCIAL | 138 PAGADO | 139 SALDO INICIAL)
+
+  // ✏️ ESTADO Y TOTALES DE PAGO (derivados de PagoCuotaPrestamo; se actualizan en la misma transacción)
+  estadoCuotaId         BigInt                                       // ✏️ Obligatorio. FK a EstadoMultiFuncion (tipo CUOTAS PRESTAMO BANCARIO: 135 PENDIENTE | 136 VENCIDO | 137 PAGO PARCIAL | 138 PAGADO | 139 SALDO INICIAL)
+  fechaPago             DateTime?                                    // ✏️ Fecha del último pago aplicado (o 31/12/2025 si es Historico)
+  montoPagado           Decimal?                @db.Decimal(18, 2)   // ✏️ Total aplicado a la cuota (capital + interés + seguro + comisión) de los pagos no anulados. No incluye mora
+  montoMora             Decimal?                @db.Decimal(18, 2)   // ✏️ Mora acumulada de los pagos no anulados
   diasMora              Int?                                         // Días de atraso
   observaciones         String?                 @db.Text
-  saldoInicialPagada    Boolean                 @default(false)      // Sirve para marcar que es una cuota que ya se pago años anteriores y No requiere Cobro por que es un Saldo Inicial
-  // ========================================
+  saldoInicialPagada    Boolean                 @default(false)      // Cuota pagada antes del saldo inicial (01/01/2026): no requiere cobro ni genera pago
+
+
   // AUDITORÍA
-  // ========================================
   creadoEn              DateTime                @default(now())
   creadoPor             BigInt?
   actualizadoEn         DateTime                @updatedAt
   actualizadoPor        BigInt?
-  
-  // ========================================
-  // RELACIONES
-  // ========================================
-  prestamo              PrestamoBancario?       @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
-  movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
-  asientosContables     AsientoContable[]  // Relación inversa - Asientos generados
-  estadoCuota           EstadoMultiFuncion?     @relation("EstadoCuotaPrestamo", fields: [estadoCuotaId], references: [id])  // ✅ NUEVO
 
-  // ========================================
+  // RELACIONES
+  prestamo              PrestamoBancario?       @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
+  estadoCuota           EstadoMultiFuncion      @relation("EstadoCuotaPrestamo", fields: [estadoCuotaId], references: [id])  // ✏️ Ya no es opcional
+  pagos                 PagoCuotaPrestamo[]                          // ✏️ NUEVO: pagos aplicados a esta cuota
+
   // ÍNDICES
-  // ========================================
   @@unique([prestamoBancarioId, numeroCuota])
   @@index([prestamoBancarioId])
   @@index([fechaVencimiento])
-  @@index([estadoCuotaId])                                           // ✅ NUEVO
+  @@index([estadoCuotaId])
   @@index([fechaPago])
 }
 
+// ============================================
+// MODELO 2.3: Pago de Cuota de Préstamo
+// Detalle de aplicación de un egreso de Caja a UNA cuota (un egreso puede pagar varias cuotas).
+// No genera asientos ni lleva período contable: eso lo maneja el MovimientoCaja. Si el movimiento
+// se revierte (esReversion), el pago deja de contar en los totales de la cuota.
+// ============================================
 
+model PagoCuotaPrestamo {
+  id                    BigInt                  @id @default(autoincrement())
+  cuotaPrestamoId       BigInt                                       // Cuota a la que se aplica el pago
+  movimientoCajaId      BigInt?                                      // Egreso de Caja de la operación (compartido si pagó varias cuotas)
+  refOperacionEspecializadaMovCaja  BigInt?                          // Correlativo de la operación de Caja que originó el pago
+  fechaPago             DateTime                                     // Fecha real del pago: base del cálculo de mora
+
+  // IMPUTACIÓN DEL PAGO (orden: comisión, seguro, interés, capital)
+  montoCapital          Decimal                 @default(0) @db.Decimal(18, 2)
+  montoInteres          Decimal                 @default(0) @db.Decimal(18, 2)
+  montoSeguro           Decimal                 @default(0) @db.Decimal(18, 2)
+  montoComision         Decimal                 @default(0) @db.Decimal(18, 2)
+  montoMora             Decimal                 @default(0) @db.Decimal(18, 2)   // La mora no forma parte de la cuota: se registra aparte
+  montoTotal            Decimal                 @db.Decimal(18, 2)               // Suma de los cinco conceptos = lo aplicado en este pago
+  diasMora              Int?
+  observaciones         String?                 @db.Text
+
+  // AUDITORÍA
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+
+  // RELACIONES
+  cuotaPrestamo         CuotaPrestamo           @relation(fields: [cuotaPrestamoId], references: [id])
+  movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
+
+  // ÍNDICES
+  @@index([cuotaPrestamoId])
+  @@index([movimientoCajaId])
+  @@index([refOperacionEspecializadaMovCaja])
+  @@index([fechaPago])
+}
 
 // ============================================
 // MODELO 2.4: Garantía de Préstamo
