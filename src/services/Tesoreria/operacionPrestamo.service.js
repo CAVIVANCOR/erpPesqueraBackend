@@ -5,6 +5,7 @@ import {
   ValidationError,
 } from "../../utils/errors.js";
 import correlativoService from "./correlativoOperacionCaja.service.js";
+import cuotaPrestamoService from "./cuotaPrestamo.service.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { ESTADO_ASIENTO_CONTABLE, ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
@@ -803,8 +804,6 @@ const procesarPagoCuotas = async (datos) => {
               montoMora: moraAcumulada > 0 ? moraAcumulada : cuota.montoMora,
               diasMora: diasAtraso > 0 ? diasAtraso : cuota.diasMora,
               estadoCuotaId: nuevoEstadoCuotaId,
-              movimientoCajaId: egreso.movimiento.id,
-              refOperacionEspecializadaMovCaja: ctx.correlativo,
               observaciones: observaciones || cuota.observaciones,
             },
           });
@@ -813,6 +812,26 @@ const procesarPagoCuotas = async (datos) => {
               `La cuota ${cuota.numeroCuota} fue modificada por otro usuario. Recargue e intente nuevamente.`,
             );
           }
+
+          // Detalle del pago: qué parte del egreso se aplicó a esta cuota y con qué imputación.
+          // El asiento contable y la reversión viven en el movimiento de Caja, no aquí.
+          await tx.pagoCuotaPrestamo.create({
+            data: {
+              cuotaPrestamoId: cuota.id,
+              movimientoCajaId: egreso.movimiento.id,
+              refOperacionEspecializadaMovCaja: ctx.correlativo,
+              fechaPago: ctx.fechaContable,
+              montoCapital: deCentimos(imputaciones[i].capital),
+              montoInteres: deCentimos(imputaciones[i].interes),
+              montoSeguro: deCentimos(imputaciones[i].seguro),
+              montoComision: deCentimos(imputaciones[i].comision),
+              montoMora: deCentimos(morasCent[i]),
+              montoTotal: deCentimos(montosCent[i] + morasCent[i]),
+              diasMora: diasAtraso > 0 ? diasAtraso : null,
+              observaciones: observaciones || null,
+              creadoPor: usuarioId ? Number(usuarioId) : null,
+            },
+          });
 
           // Líneas del DEBE de esta cuota. El capital va a 451 [CASO A] o 454 [CASO B]
           // (ya resuelto en cuentaCapital); el resto de conceptos es común a ambos casos
@@ -849,7 +868,6 @@ const procesarPagoCuotas = async (datos) => {
         let capitalPagadoCent = 0n;
         let interesPagadoCent = 0n;
         let saldoInteresCent = 0n;
-        let cuotasPendientes = 0;
         for (const c of todasLasCuotas) {
           const debido = componentesDebidos(c);
           if (Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO || c.saldoInicialPagada) {
@@ -860,7 +878,6 @@ const procesarPagoCuotas = async (datos) => {
             capitalPagadoCent += imp.capital;
             interesPagadoCent += imp.interes;
             saldoInteresCent += debido.interes - imp.interes;
-            cuotasPendientes += 1;
           }
         }
         await tx.prestamoBancario.update({
@@ -870,9 +887,14 @@ const procesarPagoCuotas = async (datos) => {
             interesPagado: deCentimos(interesPagadoCent),
             saldoCapital: redondear2(Number(prestamo.montoDesembolsado) - deCentimos(capitalPagadoCent)),
             saldoInteres: deCentimos(saldoInteresCent),
-            // Sin cuotas pendientes el préstamo queda PAGADO
-            ...(cuotasPendientes === 0 ? { estadoId: ESTADOS_PRESTAMO.PAGADO } : {}),
           },
+        });
+
+        // Estado del préstamo con la misma regla que el cron y la edición (PAGADO, VENCIDO o VIGENTE)
+        await cuotaPrestamoService.recalcularEstadoPrestamo(prestamo.id, tx);
+        const { estadoId: estadoPrestamoFinal } = await tx.prestamoBancario.findUnique({
+          where: { id: prestamo.id },
+          select: { estadoId: true },
         });
 
         // ════════════════════════════════════════════════════════════
@@ -943,7 +965,7 @@ const procesarPagoCuotas = async (datos) => {
               id: prestamo.id,
               numeroPrestamo: prestamo.numeroPrestamo,
               banco: prestamo.banco.nombre,
-              estadoId: cuotasPendientes === 0 ? ESTADOS_PRESTAMO.PAGADO : prestamo.estadoId,
+              estadoId: estadoPrestamoFinal,
             },
             movimientoPrincipalId: egreso.movimiento.id,
             movimientoITFId: cargos.itfRegistro?.movimiento.id || null,

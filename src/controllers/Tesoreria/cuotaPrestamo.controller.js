@@ -107,19 +107,6 @@ export async function eliminar(req, res, next) {
 }
 
 /**
- * Registrar pago de una cuota
- */
-export async function registrarPago(req, res, next) {
-  try {
-    const { id } = req.params;
-    const cuota = await cuotaPrestamoService.registrarPago(BigInt(id), req.body);
-    res.json(toJSONBigInt(cuota));
-  } catch (err) {
-    next(err);
-  }
-}
-
-/**
  * Actualizar estados de cuotas vencidas
  */
 export async function actualizarEstadosVencidos(req, res, next) {

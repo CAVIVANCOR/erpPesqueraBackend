@@ -33,18 +33,6 @@ async function validarCuotaPrestamo(data) {
     }
   }
 
-  // Validar movimiento de caja si existe
-  if (data.movimientoCajaId) {
-    const movimiento = await prisma.movimientoCaja.findUnique({
-      where: { id: data.movimientoCajaId },
-    });
-    if (!movimiento) {
-      throw new ValidationError(
-        "El movimiento de caja referenciado no existe.",
-      );
-    }
-  }
-
   // Validar estado de la cuota contra el catálogo
   if (data.estadoCuotaId) {
     if (!Object.values(ESTADO_CUOTA_PRESTAMO).includes(Number(data.estadoCuotaId))) {
@@ -111,25 +99,6 @@ async function calcularSaldosCapital(
     saldoCapitalAntes,
     saldoCapitalDespues,
   };
-}
-
-/**
- * Calcula los días de mora de una cuota.
- * @param {Date} fechaVencimiento - Fecha de vencimiento
- * @param {Date} fechaPago - Fecha de pago (o fecha actual si no está pagada)
- * @returns {number} Días de mora
- */
-function calcularDiasMora(fechaVencimiento, fechaPago = null) {
-  const fechaComparacion = fechaPago ? new Date(fechaPago) : new Date();
-  const fechaVenc = new Date(fechaVencimiento);
-
-  if (fechaComparacion <= fechaVenc) {
-    return 0;
-  }
-
-  const diferenciaMilisegundos = fechaComparacion - fechaVenc;
-  const diasMora = Math.floor(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
-  return diasMora;
 }
 
 /**
@@ -362,7 +331,8 @@ async function desmarcarComoSaldoInicial(cuotaId, usuarioId) {
     throw new ConflictError("La cuota no está marcada como saldo inicial.");
   }
 
-  if (cuota.movimientoCajaId) {
+  const pagosRegistrados = await prisma.pagoCuotaPrestamo.count({ where: { cuotaPrestamoId: cuotaId } });
+  if (pagosRegistrados > 0) {
     throw new ConflictError("La cuota tiene un pago registrado en Caja: no se puede desmarcar.");
   }
 
@@ -418,19 +388,6 @@ const listar = async () => {
             moneda: true,
           },
         },
-        movimientoCaja: true,
-        asientosContables: {
-          // ✅ AGREGAR
-          include: {
-            detalles: {
-              include: {
-                planCuenta: true,
-              },
-              orderBy: { numeroLinea: "asc" },
-            },
-          },
-          orderBy: { fechaAsiento: "desc" },
-        },
       },
       orderBy: { fechaVencimiento: "asc" },
     });
@@ -456,19 +413,6 @@ const obtenerPorId = async (id) => {
             banco: true,
             moneda: true,
           },
-        },
-        movimientoCaja: true,
-        asientosContables: {
-          // ✅ AGREGAR
-          include: {
-            detalles: {
-              include: {
-                planCuenta: true,
-              },
-              orderBy: { numeroLinea: "asc" },
-            },
-          },
-          orderBy: { fechaAsiento: "desc" },
         },
       },
     });
@@ -568,19 +512,6 @@ const actualizar = async (id, data) => {
       data: dataActualizada,
       include: {
         prestamo: true,
-        movimientoCaja: true,
-        asientosContables: {
-          // ✅ AGREGAR
-          include: {
-            detalles: {
-              include: {
-                planCuenta: true,
-              },
-              orderBy: { numeroLinea: "asc" },
-            },
-          },
-          orderBy: { fechaAsiento: "desc" },
-        },
       },
     });
   } catch (err) {
@@ -661,108 +592,6 @@ const eliminar = async (id) => {
 };
 
 /**
- * Registra el pago de una cuota.
- */
-const registrarPago = async (id, dataPago) => {
-  try {
-    const cuota = await prisma.cuotaPrestamo.findUnique({
-      where: { id },
-      include: { prestamo: true },
-    });
-
-    if (!cuota) throw new NotFoundError("Cuota de préstamo no encontrada");
-
-    if (Number(cuota.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO) {
-      throw new ConflictError("La cuota ya está pagada.");
-    }
-
-    const { fechaPago, montoPagado, movimientoCajaId, observaciones } =
-      dataPago;
-
-    if (!fechaPago || !montoPagado) {
-      throw new ValidationError(
-        "Fecha de pago y monto pagado son obligatorios.",
-      );
-    }
-
-    // Calcular días de mora
-    const diasMora = calcularDiasMora(cuota.fechaVencimiento, fechaPago);
-
-    // Calcular mora si hay atraso
-    let montoMora = 0;
-    if (diasMora > 0 && cuota.prestamo.tasaMoratoria) {
-      const tasaMoraDiaria =
-        parseFloat(cuota.prestamo.tasaMoratoria) / 100 / 365;
-      montoMora = parseFloat(cuota.montoTotal) * tasaMoraDiaria * diasMora;
-    }
-
-    // Determinar estado de pago
-    let estadoCuotaId = ESTADO_CUOTA_PRESTAMO.PAGADO;
-    if (montoPagado < cuota.montoTotal) {
-      estadoCuotaId = ESTADO_CUOTA_PRESTAMO.PAGO_PARCIAL;
-    }
-
-    // Actualizar cuota en una transacción
-    const cuotaActualizada = await prisma.$transaction(async (tx) => {
-      const updated = await tx.cuotaPrestamo.update({
-        where: { id },
-        data: {
-          fechaPago,
-          montoPagado,
-          montoMora: montoMora > 0 ? montoMora : null,
-          diasMora: diasMora > 0 ? diasMora : null,
-          estadoCuotaId,
-          movimientoCajaId: movimientoCajaId || null,
-          observaciones: observaciones || null,
-        },
-        include: {
-          prestamo: {
-            include: {
-              banco: true,
-              moneda: true,
-            },
-          },
-          movimientoCaja: true,
-          asientosContables: {
-            // ✅ AGREGAR
-            include: {
-              detalles: {
-                include: {
-                  planCuenta: true,
-                },
-                orderBy: { numeroLinea: "asc" },
-              },
-            },
-            orderBy: { fechaAsiento: "desc" },
-          },
-        },
-      });
-
-      // Actualizar saldos del préstamo
-      await actualizarSaldosPrestamo(cuota.prestamoBancarioId);
-
-      // Recalcular el estado del préstamo según sus cuotas (PAGADO, VENCIDO o VIGENTE)
-      await recalcularEstadoPrestamo(cuota.prestamoBancarioId, tx);
-
-      return updated;
-    });
-
-    return cuotaActualizada;
-  } catch (err) {
-    if (
-      err instanceof NotFoundError ||
-      err instanceof ValidationError ||
-      err instanceof ConflictError
-    )
-      throw err;
-    if (err.code && err.code.startsWith("P")) {
-      throw new DatabaseError("Error de base de datos", err.message);
-    }
-    throw err;
-  }
-};
-
-/**
  * Lista cuotas por préstamo.
  */
 const listarPorPrestamo = async (prestamoBancarioId) => {
@@ -770,19 +599,6 @@ const listarPorPrestamo = async (prestamoBancarioId) => {
     return await prisma.cuotaPrestamo.findMany({
       where: { prestamoBancarioId },
       include: {
-        movimientoCaja: true,
-        asientosContables: {
-          // ✅ AGREGAR
-          include: {
-            detalles: {
-              include: {
-                planCuenta: true,
-              },
-              orderBy: { numeroLinea: "asc" },
-            },
-          },
-          orderBy: { fechaAsiento: "desc" },
-        },
       },
       orderBy: { numeroCuota: "asc" },
     });
@@ -1334,7 +1150,6 @@ export default {
   crear,
   actualizar,
   eliminar,
-  registrarPago,
   actualizarEstadosVencidos,
   generarCronograma,
   guardarBulk,

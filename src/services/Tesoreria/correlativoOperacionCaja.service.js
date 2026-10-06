@@ -144,14 +144,18 @@ const consultarOperacionPorCorrelativo = async (empresaId, correlativo) => {
           }
         }
       }),
-      prisma.cuotaPrestamo.findMany({
+      prisma.pagoCuotaPrestamo.findMany({
         where: { refOperacionEspecializadaMovCaja: Number(correlativo) },
         include: {
-          prestamoBancario: {
+          cuotaPrestamo: {
             include: {
-              entidadFinanciera: true,
-              moneda: true,
-              tipoPrestamo: true
+              prestamo: {
+                include: {
+                  banco: true,
+                  moneda: true,
+                  tipoPrestamo: true
+                }
+              }
             }
           }
         }

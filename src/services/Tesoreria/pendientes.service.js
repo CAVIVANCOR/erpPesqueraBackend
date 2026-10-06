@@ -1344,7 +1344,7 @@ const listarPendientes = async (filtros = {}) => {
           severityColor: 'secondary',
         },
         ultimoPago: null,
-        movimientoCajaId: cuota.movimientoCajaId || null,
+        movimientoCajaId: null,
         esCuotaPrestamo: true,
         // Vence antes del corte pero NO está marcada como saldo inicial: si ya se pagó el año
         // anterior hay que marcarla como histórica en el cronograma antes de pagarla aquí

@@ -283,7 +283,6 @@ function calcularCronogramaCuotas(prestamo) {
       fechaPago: null,
       montoPagado: null,
       montoMora: null,
-      movimientoCajaId: null,
       observaciones: null,
     });
   }
