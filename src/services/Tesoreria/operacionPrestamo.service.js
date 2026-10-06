@@ -815,7 +815,7 @@ const procesarPagoCuotas = async (datos) => {
 
           // Detalle del pago: qué parte del egreso se aplicó a esta cuota y con qué imputación.
           // El asiento contable y la reversión viven en el movimiento de Caja, no aquí.
-          await tx.pagoCuotaPrestamo.create({
+          const pago = await tx.pagoCuotaPrestamo.create({
             data: {
               cuotaPrestamoId: cuota.id,
               movimientoCajaId: egreso.movimiento.id,
@@ -842,6 +842,7 @@ const procesarPagoCuotas = async (datos) => {
           nuevaLinea(cuentaMora, morasCent[i], cuota, "Mora");
 
           distribucion.push({
+            pagoId: pago.id,
             cuotaPrestamoId: cuota.id,
             numeroCuota: cuota.numeroCuota,
             documento: `${prestamo.numeroPrestamo} - Cuota ${cuota.numeroCuota}`,
@@ -860,35 +861,10 @@ const procesarPagoCuotas = async (datos) => {
         }
 
         // ════════════════════════════════════════════════════════════
-        // 6. ACTUALIZAR SALDOS Y ESTADO DEL PRÉSTAMO (con la imputación de pagos parciales)
+        // 6. ACTUALIZAR SALDOS Y ESTADO DEL PRÉSTAMO (recalculados desde los pagos registrados)
         // ════════════════════════════════════════════════════════════
-        const todasLasCuotas = await tx.cuotaPrestamo.findMany({
-          where: { prestamoBancarioId: prestamo.id },
-        });
-        let capitalPagadoCent = 0n;
-        let interesPagadoCent = 0n;
-        let saldoInteresCent = 0n;
-        for (const c of todasLasCuotas) {
-          const debido = componentesDebidos(c);
-          if (Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO || c.saldoInicialPagada) {
-            capitalPagadoCent += debido.capital;
-            interesPagadoCent += debido.interes;
-          } else {
-            const imp = imputarPago(debido, aCentimos(c.montoPagado));
-            capitalPagadoCent += imp.capital;
-            interesPagadoCent += imp.interes;
-            saldoInteresCent += debido.interes - imp.interes;
-          }
-        }
-        await tx.prestamoBancario.update({
-          where: { id: prestamo.id },
-          data: {
-            capitalPagado: deCentimos(capitalPagadoCent),
-            interesPagado: deCentimos(interesPagadoCent),
-            saldoCapital: redondear2(Number(prestamo.montoDesembolsado) - deCentimos(capitalPagadoCent)),
-            saldoInteres: deCentimos(saldoInteresCent),
-          },
-        });
+        // Misma función que usan el cron, el botón de la lista y la edición del préstamo
+        await cuotaPrestamoService.actualizarSaldosPrestamo(prestamo.id, tx);
 
         // Estado del préstamo con la misma regla que el cron y la edición (PAGADO, VENCIDO o VIGENTE)
         await cuotaPrestamoService.recalcularEstadoPrestamo(prestamo.id, tx);
@@ -1241,7 +1217,58 @@ const procesarDesembolso = async (datos) => {
   }
 };
 
+/**
+ * Una operación de pago genera N PagoCuotaPrestamo, pero el sistema PDF guarda el archivo solo
+ * en el registro del entityId (el primer pago). Esta función copia las URLs del voucher
+ * consolidado y del comprobante del banco a los demás pagos de la misma operación, de modo que
+ * cada cuota pagada muestre los mismos adjuntos.
+ *
+ * Los pagos se agrupan por refOperacionEspecializadaMovCaja (correlativo de la empresa), por eso
+ * también se filtra por empresa: el mismo número puede repetirse entre empresas. Se copian ambos
+ * campos tal como están en el pago de origen (incluye null si se eliminó).
+ *
+ * @param {number|bigint} pagoId - Pago que recibió el archivo (origen de la copia)
+ */
+const sincronizarAdjuntosOperacion = async (pagoId) => {
+  try {
+    const origen = await prisma.pagoCuotaPrestamo.findUnique({
+      where: { id: BigInt(pagoId) },
+      select: {
+        id: true,
+        refOperacionEspecializadaMovCaja: true,
+        urlVoucherOperacionConsolidado: true,
+        urlComprobanteOperacion: true,
+        cuotaPrestamo: { select: { prestamo: { select: { empresaId: true } } } },
+      },
+    });
+
+    if (!origen) throw new NotFoundError("Pago de cuota de préstamo no encontrado");
+
+    // Pagos sin operación asociada: no hay hermanos que sincronizar
+    if (!origen.refOperacionEspecializadaMovCaja) {
+      return { success: true, actualizados: 0 };
+    }
+
+    const { count } = await prisma.pagoCuotaPrestamo.updateMany({
+      where: {
+        id: { not: origen.id },
+        refOperacionEspecializadaMovCaja: origen.refOperacionEspecializadaMovCaja,
+        cuotaPrestamo: { prestamo: { empresaId: origen.cuotaPrestamo.prestamo.empresaId } },
+      },
+      data: {
+        urlVoucherOperacionConsolidado: origen.urlVoucherOperacionConsolidado,
+        urlComprobanteOperacion: origen.urlComprobanteOperacion,
+      },
+    });
+
+    return { success: true, actualizados: count };
+  } catch (err) {
+    return traducirErrorPrisma(err, "Error de base de datos al sincronizar adjuntos");
+  }
+};
+
 export default {
   procesarPagoCuotas,
   procesarDesembolso,
+  sincronizarAdjuntosOperacion,
 };

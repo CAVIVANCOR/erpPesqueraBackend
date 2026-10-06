@@ -17,6 +17,17 @@ export async function pagarCuotas(req, res, next) {
   }
 }
 
+/** Copia voucher consolidado y comprobante del pago indicado a los demás pagos de la operación. */
+export async function sincronizarAdjuntos(req, res, next) {
+  try {
+    const { pagoId } = req.params;
+    const resultado = await operacionPrestamoService.sincronizarAdjuntosOperacion(pagoId);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
 /** Desembolso del préstamo: ingreso del dinero a la cuenta de la empresa. */
 export async function desembolsar(req, res, next) {
   try {

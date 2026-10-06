@@ -666,10 +666,8 @@ const actualizar = async (id, data) => {
       },
     });
 
-    // ⭐ RECALCULAR SALDOS DEL PRÉSTAMO DESDE LAS CUOTAS
-    await cuotaPrestamoService.actualizarSaldosPrestamo(id);
-
-    // ⭐ SINCRONIZAR ESTADOS DE CUOTAS Y DEL PRÉSTAMO (misma lógica que el cron y el botón de la lista)
+    // ⭐ RECALCULAR TODO DESDE LOS PAGOS: estados de cuotas, totales de cada cuota, saldos y estado
+    // del préstamo (misma función que usan el cron y el botón de la lista)
     await cuotaPrestamoService.sincronizarEstados(id);
 
     // ⭐ ACTUALIZAR SALDOS DE LÍNEAS DE CRÉDITO

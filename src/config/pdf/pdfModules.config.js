@@ -788,6 +788,39 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
+  // ════════════════════════════════════════════════════════════
+  // PAGO DE CUOTAS DE PRÉSTAMO (operación especializada de Caja)
+  // Una operación genera N PagoCuotaPrestamo; el archivo se guarda en el primero
+  // (entityId) y luego se copia a los demás con sincronizarAdjuntosOperacion.
+  // ════════════════════════════════════════════════════════════
+
+  "pago-cuota-prestamo-consolidado": {
+    uploadPath: "uploads/pdf-system/pago-cuota-prestamo-consolidado",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-cuota-prestamo-consolidado",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf"],
+    maxFiles: 20,
+    database: {
+      table: "PagoCuotaPrestamo",
+      field: "urlVoucherOperacionConsolidado",
+    },
+  },
+
+  // Comprobante emitido por el banco o la entidad financiera con el detalle de lo pagado
+  "pago-cuota-prestamo-comprobante": {
+    uploadPath: "uploads/pdf-system/pago-cuota-prestamo-comprobante",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/pago-cuota-prestamo-comprobante",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "PagoCuotaPrestamo",
+      field: "urlComprobanteOperacion",
+    },
+  },
+
   // ❌ DUPLICADO - Usar "movimiento-caja-operacion" en su lugar
   // "movimiento-caja": {
   //   uploadPath: "uploads/pdf-system/movimiento-caja",

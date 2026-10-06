@@ -22,6 +22,7 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  * - estadoIds: IDs de estados separados por coma
  * - personalIds: IDs de personal separados por coma
  * - tipoDeudaIds: IDs de tipos de deuda (personal/tributaria) separados por coma
+ * - bancoIds / tipoPrestamoIds / prestamoIds: IDs separados por coma (cuotas de préstamo)
  * - montoDesde: monto mínimo
  * - montoHasta: monto máximo
  */
@@ -54,6 +55,9 @@ export async function listarPendientes(req, res, next) {
       estadoIds: parseIds(req.query.estadoIds),
       personalIds: parseIds(req.query.personalIds),
       tipoDeudaIds: parseIds(req.query.tipoDeudaIds),
+      bancoIds: parseIds(req.query.bancoIds),
+      tipoPrestamoIds: parseIds(req.query.tipoPrestamoIds),
+      prestamoIds: parseIds(req.query.prestamoIds),
       montoDesde: req.query.montoDesde ? Number(req.query.montoDesde) : null,
       montoHasta: req.query.montoHasta ? Number(req.query.montoHasta) : null,
     };

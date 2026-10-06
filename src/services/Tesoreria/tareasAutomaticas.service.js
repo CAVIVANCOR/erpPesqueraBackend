@@ -1,6 +1,4 @@
-import prisma from "../../config/prismaClient.js";
 import cuotaPrestamoService from "./cuotaPrestamo.service.js";
-import { ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
 
 /**
  * Servicio de tareas automáticas para Tesorería
@@ -8,41 +6,20 @@ import { ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
  */
 
 /**
- * Actualiza estados de cuotas vencidas y recalcula saldos de préstamos
+ * Actualiza los estados de las cuotas vencidas y recalcula, desde los pagos registrados, los
+ * totales de las cuotas, los saldos y el estado de los préstamos. Es la misma función que usan
+ * el botón de la lista de préstamos y la edición de un préstamo.
  * Debe ejecutarse diariamente (recomendado: 00:05 AM)
  */
 export async function procesarCuotasVencidas() {
   try {
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-
-    // 1. Estados de cuotas y de préstamos: misma lógica que usa la edición de un préstamo
-    const { cuotasActualizadas, prestamosEstadoActualizado } =
+    const { cuotasActualizadas, prestamosRevisados, prestamosEstadoActualizado } =
       await cuotaPrestamoService.sincronizarEstados();
-
-    // 2. Obtener préstamos afectados
-    const cuotasVencidas = await prisma.cuotaPrestamo.findMany({
-      where: {
-        fechaVencimiento: { lt: hoy },
-        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.VENCIDO,
-      },
-      select: {
-        prestamoBancarioId: true,
-      },
-      distinct: ["prestamoBancarioId"],
-    });
-
-    // 3. Recalcular saldos de cada préstamo afectado
-    const prestamosAfectados = [...new Set(cuotasVencidas.map(c => c.prestamoBancarioId))];
-
-    for (const prestamoBancarioId of prestamosAfectados) {
-      await cuotaPrestamoService.actualizarSaldosPrestamo(prestamoBancarioId);
-    }
 
     return {
       success: true,
       cuotasActualizadas,
-      prestamosAfectados: prestamosAfectados.length,
+      prestamosRevisados,
       prestamosEstadoActualizado,
       fechaEjecucion: new Date(),
     };

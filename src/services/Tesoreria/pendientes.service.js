@@ -964,6 +964,10 @@ const listarPendientes = async (filtros = {}) => {
       const wherePrestamoCuota = { estadoId: { in: ESTADOS_PRESTAMO_OPERABLES } };
       if (empresaId) wherePrestamoCuota.empresaId = Number(empresaId);
       if (monedaId) wherePrestamoCuota.monedaId = Number(monedaId);
+      // Filtro especializado en cascada: banco → tipo de préstamo → préstamo
+      if (filtros.bancoIds?.length > 0) wherePrestamoCuota.bancoId = { in: filtros.bancoIds };
+      if (filtros.tipoPrestamoIds?.length > 0) wherePrestamoCuota.tipoPrestamoId = { in: filtros.tipoPrestamoIds };
+      if (filtros.prestamoIds?.length > 0) wherePrestamoCuota.id = { in: filtros.prestamoIds };
 
       const whereCuotas = {
         saldoInicialPagada: false,
@@ -1360,6 +1364,9 @@ const listarPendientes = async (filtros = {}) => {
           cuentaCorrienteId: prestamo.cuentaCorrienteId,
           esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
           tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
+          // Ids para armar y aplicar el filtro especializado (banco, tipo de préstamo y préstamo)
+          bancoId: prestamo.bancoId,
+          tipoPrestamoId: prestamo.tipoPrestamoId,
         },
         cuota: {
           id: cuota.id,

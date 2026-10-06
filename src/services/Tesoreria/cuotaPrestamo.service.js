@@ -101,53 +101,154 @@ async function calcularSaldosCapital(
   };
 }
 
+// ════════════════════════════════════════════════════════════
+// RECÁLCULO DESDE LOS PAGOS (fuente única de verdad de totales y saldos)
+// ════════════════════════════════════════════════════════════
+const aCentimos = (valor) => Math.round(Number(valor || 0) * 100);
+
+// Orden en que se imputa un pago a los componentes de la cuota
+const ORDEN_IMPUTACION = ["comision", "seguro", "interes", "capital"];
+
+/** Componentes que debe una cuota, en céntimos. El capital absorbe cualquier diferencia de redondeo. */
+const componentesDebidos = (cuota) => {
+  const interes = aCentimos(cuota.montoInteres);
+  const comision = aCentimos(cuota.montoComision);
+  const seguro = aCentimos(cuota.montoSeguro);
+  const capital = Math.max(aCentimos(cuota.montoTotal) - interes - comision - seguro, 0);
+  return { comision, seguro, interes, capital };
+};
+
+/** Imputa `pagadoCent` a los componentes siguiendo ORDEN_IMPUTACION. */
+const imputarPago = (debido, pagadoCent) => {
+  let resto = pagadoCent;
+  const imputado = {};
+  for (const clave of ORDEN_IMPUTACION) {
+    imputado[clave] = Math.min(resto, debido[clave]);
+    resto -= imputado[clave];
+  }
+  return imputado;
+};
+
 /**
- * Actualiza los saldos del préstamo después de un pago.
- * @param {Number} prestamoBancarioId - ID del préstamo
+ * Recalcula los totales de cada cuota (monto pagado, mora, fecha de pago, días de mora y estado)
+ * a partir de sus pagos registrados en PagoCuotaPrestamo. Si se elimina un pago, la cuota vuelve
+ * sola al valor que corresponde. Las cuotas Historico (saldoInicialPagada) están pagadas sin filas
+ * de pago, por eso no se tocan. Solo escribe las cuotas cuyos valores cambian.
+ * @param {BigInt|Number} prestamoBancarioId - ID del préstamo
+ * @param {Object} db - Cliente Prisma o transacción
+ * @returns {Promise<Array>} Cuotas del préstamo con sus pagos y su estado ya actualizado
  */
-async function actualizarSaldosPrestamo(prestamoBancarioId) {
-  const cuotas = await prisma.cuotaPrestamo.findMany({
+async function recalcularTotalesCuotas(prestamoBancarioId, db = prisma) {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  const cuotas = await db.cuotaPrestamo.findMany({
     where: { prestamoBancarioId },
-    include: {
-      prestamo: {
-        include: {
-          estado: true,
-        },
-      },
-    },
+    include: { pagos: true },
+    orderBy: { numeroCuota: "asc" },
   });
 
-  // Filtrar cuotas pagadas (PAGADO o SALDO_INICIAL)
-  const cuotasPagadas = cuotas.filter(
-    (c) => Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.PAGADO || c.saldoInicialPagada
-  );
+  for (const cuota of cuotas) {
+    if (cuota.saldoInicialPagada) continue;
 
-  const capitalPagado = cuotasPagadas.reduce(
-    (sum, c) => sum + parseFloat(c.montoCapital),
-    0
-  );
+    const pagos = cuota.pagos;
+    const pagadoCent = pagos.reduce(
+      (suma, p) =>
+        suma +
+        aCentimos(p.montoCapital) +
+        aCentimos(p.montoInteres) +
+        aCentimos(p.montoSeguro) +
+        aCentimos(p.montoComision),
+      0,
+    );
+    const moraCent = pagos.reduce((suma, p) => suma + aCentimos(p.montoMora), 0);
+    const totalCent = aCentimos(cuota.montoTotal);
 
-  const interesPagado = cuotasPagadas.reduce(
-    (sum, c) => sum + parseFloat(c.montoInteres),
-    0
-  );
+    let estadoCuotaId;
+    if (pagadoCent > 0 && pagadoCent >= totalCent) estadoCuotaId = ESTADO_CUOTA_PRESTAMO.PAGADO;
+    else if (pagadoCent > 0) estadoCuotaId = ESTADO_CUOTA_PRESTAMO.PAGO_PARCIAL;
+    else if (new Date(cuota.fechaVencimiento) < hoy) estadoCuotaId = ESTADO_CUOTA_PRESTAMO.VENCIDO;
+    else estadoCuotaId = ESTADO_CUOTA_PRESTAMO.PENDIENTE;
 
-  const prestamo = await prisma.prestamoBancario.findUnique({
-    where: { id: prestamoBancarioId },
-  });
+    const fechaPago = pagos.length
+      ? new Date(Math.max(...pagos.map((p) => new Date(p.fechaPago).getTime())))
+      : null;
+    const diasMora = Math.max(0, ...pagos.map((p) => p.diasMora || 0));
 
-  const saldoCapital = parseFloat(prestamo.montoDesembolsado) - capitalPagado;
-  const saldoInteres = cuotas
-    .filter((c) => [ESTADO_CUOTA_PRESTAMO.PENDIENTE, ESTADO_CUOTA_PRESTAMO.VENCIDO].includes(Number(c.estadoCuotaId)))
-    .reduce((sum, c) => sum + parseFloat(c.montoInteres), 0);
+    const cambios = {};
+    if (Number(cuota.estadoCuotaId) !== estadoCuotaId) cambios.estadoCuotaId = estadoCuotaId;
+    if (aCentimos(cuota.montoPagado) !== pagadoCent) {
+      cambios.montoPagado = pagadoCent > 0 ? pagadoCent / 100 : null;
+    }
+    if (aCentimos(cuota.montoMora) !== moraCent) {
+      cambios.montoMora = moraCent > 0 ? moraCent / 100 : null;
+    }
+    if ((cuota.fechaPago ? new Date(cuota.fechaPago).getTime() : null) !== (fechaPago ? fechaPago.getTime() : null)) {
+      cambios.fechaPago = fechaPago;
+    }
+    if (pagos.length > 0 && diasMora > 0 && cuota.diasMora !== diasMora) cambios.diasMora = diasMora;
+    // Se eliminaron todos los pagos de una cuota que tenía mora registrada
+    if (pagos.length === 0 && aCentimos(cuota.montoPagado) > 0 && cuota.diasMora) cambios.diasMora = null;
 
-  await prisma.prestamoBancario.update({
+    if (Object.keys(cambios).length > 0) {
+      await db.cuotaPrestamo.update({ where: { id: cuota.id }, data: cambios });
+      Object.assign(cuota, cambios);
+    }
+  }
+
+  return cuotas;
+}
+
+/**
+ * Recalcula los totales de las cuotas y los saldos del préstamo desde los pagos registrados.
+ * Una cuota Historico (saldoInicialPagada) se considera pagada y no tiene filas de pago: no se
+ * recalcula desde pagos, se respeta el monto pagado asignado al marcarla y se imputa igual que
+ * un pago. Si los saldos no cambian, no escribe.
+ * @param {BigInt|Number} prestamoBancarioId - ID del préstamo
+ * @param {Object} db - Cliente Prisma o transacción
+ */
+async function actualizarSaldosPrestamo(prestamoBancarioId, db = prisma) {
+  const cuotas = await recalcularTotalesCuotas(prestamoBancarioId, db);
+
+  const prestamo = await db.prestamoBancario.findUnique({ where: { id: prestamoBancarioId } });
+  if (!prestamo) return;
+
+  let capitalPagadoCent = 0;
+  let interesPagadoCent = 0;
+  let saldoInteresCent = 0;
+  for (const c of cuotas) {
+    if (c.saldoInicialPagada) {
+      // Historico: se respeta el monto pagado que se le asignó al marcarla; no hay pagos que leer
+      const imputado = imputarPago(componentesDebidos(c), aCentimos(c.montoPagado));
+      capitalPagadoCent += imputado.capital;
+      interesPagadoCent += imputado.interes;
+      continue;
+    }
+
+    const capitalCuota = c.pagos.reduce((suma, p) => suma + aCentimos(p.montoCapital), 0);
+    const interesCuota = c.pagos.reduce((suma, p) => suma + aCentimos(p.montoInteres), 0);
+    capitalPagadoCent += capitalCuota;
+    interesPagadoCent += interesCuota;
+    if (Number(c.estadoCuotaId) !== ESTADO_CUOTA_PRESTAMO.PAGADO) {
+      saldoInteresCent += Math.max(aCentimos(c.montoInteres) - interesCuota, 0);
+    }
+  }
+
+  const saldoCapitalCent = aCentimos(prestamo.montoDesembolsado) - capitalPagadoCent;
+  const igual =
+    aCentimos(prestamo.capitalPagado) === capitalPagadoCent &&
+    aCentimos(prestamo.interesPagado) === interesPagadoCent &&
+    aCentimos(prestamo.saldoCapital) === saldoCapitalCent &&
+    aCentimos(prestamo.saldoInteres) === saldoInteresCent;
+  if (igual) return;
+
+  await db.prestamoBancario.update({
     where: { id: prestamoBancarioId },
     data: {
-      capitalPagado,
-      interesPagado,
-      saldoCapital,
-      saldoInteres,
+      capitalPagado: capitalPagadoCent / 100,
+      interesPagado: interesPagadoCent / 100,
+      saldoCapital: saldoCapitalCent / 100,
+      saldoInteres: saldoInteresCent / 100,
     },
   });
 }
@@ -207,13 +308,14 @@ async function recalcularEstadoPrestamo(prestamoBancarioId, db = prisma) {
 }
 
 /**
- * Fuente única de verdad de los estados de cuotas y préstamos. La usan el cron diario, el botón
- * "Actualizar Vencidas" y la edición de un préstamo, para que los tres den siempre el mismo resultado:
+ * Fuente única de verdad de cuotas y préstamos. La usan el cron diario, el botón "Actualizar
+ * Vencidas" y la edición de un préstamo, para que los tres den siempre el mismo resultado:
  *   1. Las cuotas PENDIENTE con fecha vencida pasan a VENCIDO.
- *   2. Cada préstamo recalcula su estado con recalcularEstadoPrestamo.
+ *   2. Cada préstamo recalcula desde sus pagos los totales de las cuotas y sus saldos
+ *      (actualizarSaldosPrestamo), y luego su estado (recalcularEstadoPrestamo).
  * Sin prestamoBancarioId procesa todos los préstamos que administra el cron; con id, solo ese.
  * @param {BigInt|null} prestamoBancarioId - Préstamo a sincronizar, o null para todos
- * @returns {Promise<{cuotasActualizadas: number, prestamosEstadoActualizado: number}>}
+ * @returns {Promise<{cuotasActualizadas: number, prestamosRevisados: number, prestamosEstadoActualizado: number}>}
  */
 async function sincronizarEstados(prestamoBancarioId = null) {
   const hoy = new Date();
@@ -243,10 +345,11 @@ async function sincronizarEstados(prestamoBancarioId = null) {
 
   let prestamosEstadoActualizado = 0;
   for (const { id } of prestamos) {
+    await actualizarSaldosPrestamo(id);
     if (await recalcularEstadoPrestamo(id)) prestamosEstadoActualizado++;
   }
 
-  return { cuotasActualizadas, prestamosEstadoActualizado };
+  return { cuotasActualizadas, prestamosRevisados: prestamos.length, prestamosEstadoActualizado };
 }
 
 /**
@@ -1008,6 +1111,16 @@ async function generarCronograma(prestamoBancarioId) {
   // Convertir prestamoBancarioId a Number
   const prestamoId = Number(prestamoBancarioId);
 
+  // Regenerar borra las cuotas: con pagos registrados se perdería el historial de pagos
+  const pagosRegistrados = await prisma.pagoCuotaPrestamo.count({
+    where: { cuotaPrestamo: { prestamoBancarioId: prestamoId } },
+  });
+  if (pagosRegistrados > 0) {
+    throw new ConflictError(
+      "El préstamo tiene pagos registrados: no se puede regenerar el cronograma.",
+    );
+  }
+
   // Eliminar cuotas existentes antes de crear nuevas
   await prisma.cuotaPrestamo.deleteMany({
     where: { prestamoBancarioId: prestamoId },
@@ -1157,6 +1270,7 @@ export default {
   marcarComoSaldoInicial,
   desmarcarComoSaldoInicial,
   actualizarSaldosPrestamo,
+  recalcularTotalesCuotas,
   recalcularEstadoPrestamo,
   sincronizarEstados,
 };
