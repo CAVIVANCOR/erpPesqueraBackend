@@ -3308,6 +3308,8 @@ model EstadoMultiFuncion {
   contratistasOT                  DetContratistasOT[] @relation("EstadoContratistaOT")
   deudasConPersonal               DeudaConPersonal[]  // 🆕 AGREGAR ESTA LÍNEA
   deudasTributarias               DeudaTributaria[]   // 🆕 AGREGAR ESTA LÍNEA
+  cuotasPrestamo                  CuotaPrestamo[]     @relation("EstadoCuotaPrestamo")  // Estado de la cuota (tipo CUOTAS PRESTAMO BANCARIO)
+
 
   detraccionesEstadoPago          Detraccion[]    @relation("EstadoPagoDetraccion")  // ✅ AGREGAR
   retencionesEstadoPago           Retencion[]     @relation("EstadoPagoRetencion")    // ✅ AGREGAR
@@ -8628,7 +8630,8 @@ model CuotaPrestamo {
   montoMora             Decimal?                @db.Decimal(18, 2)   // Monto de mora por atraso
   movimientoCajaId      BigInt?                                      // Relación con MovimientoCaja
   refOperacionEspecializadaMovCaja  BigInt?
-  estadoPago            EstadoPagoCuota                              // PENDIENTE | PAGADO | VENCIDO | PARCIAL
+  estadoPago            EstadoPagoCuota                              // ⚠️ DEPRECADO - Usar estadoCuotaId (se retira tras la migración)
+  estadoCuotaId         BigInt?                                      // ✅ NUEVO: FK a EstadoMultiFuncion (tipo CUOTAS PRESTAMO BANCARIO: 135 PENDIENTE | 136 VENCIDO | 137 PAGO PARCIAL | 138 PAGADO | 139 SALDO INICIAL)
   diasMora              Int?                                         // Días de atraso
   observaciones         String?                 @db.Text
   saldoInicialPagada    Boolean                 @default(false)      // Sirve para marcar que es una cuota que ya se pago años anteriores y No requiere Cobro por que es un Saldo Inicial
@@ -8646,6 +8649,7 @@ model CuotaPrestamo {
   prestamo              PrestamoBancario?       @relation(fields: [prestamoBancarioId], references: [id], onDelete: Cascade)
   movimientoCaja        MovimientoCaja?         @relation(fields: [movimientoCajaId], references: [id])
   asientosContables     AsientoContable[]  // Relación inversa - Asientos generados
+  estadoCuota           EstadoMultiFuncion?     @relation("EstadoCuotaPrestamo", fields: [estadoCuotaId], references: [id])  // ✅ NUEVO
 
   // ========================================
   // ÍNDICES
@@ -8654,6 +8658,7 @@ model CuotaPrestamo {
   @@index([prestamoBancarioId])
   @@index([fechaVencimiento])
   @@index([estadoPago])
+  @@index([estadoCuotaId])                                           // ✅ NUEVO
   @@index([fechaPago])
 }
 
