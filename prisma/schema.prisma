@@ -8665,7 +8665,10 @@ model PagoCuotaPrestamo {
   montoTotal            Decimal                 @db.Decimal(18, 2)               // Suma de los cinco conceptos = lo aplicado en este pago
   diasMora              Int?
   observaciones         String?                 @db.Text
-
+// ADJUNTOS DE LA OPERACIÓN (se copian a todos los pagos de la misma operación)
+  urlVoucherOperacionConsolidado    String?                          // Voucher PDF consolidado de la operación
+  urlComprobanteOperacion           String?                          // Comprobante del banco / entidad recaudadora
+ 
   // AUDITORÍA
   creadoEn              DateTime                @default(now())
   creadoPor             BigInt?
