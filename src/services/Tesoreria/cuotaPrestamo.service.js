@@ -8,6 +8,8 @@ import {
 import {
   ESTADO_CUOTA_PRESTAMO,
   ESTADOS_CUOTA_PRESTAMO_ABIERTAS,
+  ESTADO_PRESTAMO_BANCARIO,
+  ESTADOS_PRESTAMO_RECALCULABLES,
 } from "../../utils/estados.constants.js";
 
 /**
@@ -183,6 +185,102 @@ async function actualizarSaldosPrestamo(prestamoBancarioId) {
 
 
 /**
+ * Recalcula el estado del préstamo según sus cuotas sin pagar. Solo actúa sobre préstamos
+ * DESEMBOLSADO, VIGENTE, PAGADO o VENCIDO, y sobre los de saldo inicial aún en APROBADO (no
+ * tienen desembolso en Caja). APROBADO lo mueve Caja con el desembolso; REFINANCIADO y ANULADO
+ * se respetan. Un préstamo sin cuotas no cambia de estado. Una cuota sin pagar cuenta como
+ * vencida si está en VENCIDO o si su fecha ya pasó (cubre pagos parciales atrasados, que el
+ * cron no marca como VENCIDO).
+ * @param {BigInt} prestamoBancarioId - ID del préstamo
+ * @param {Object} db - Cliente Prisma o transacción
+ * @returns {Promise<boolean>} true si el estado del préstamo cambió
+ */
+async function recalcularEstadoPrestamo(prestamoBancarioId, db = prisma) {
+  const prestamo = await db.prestamoBancario.findUnique({
+    where: { id: prestamoBancarioId },
+    select: { estadoId: true, esSaldoInicial: true },
+  });
+  if (!prestamo) return false;
+
+  const estadoActual = Number(prestamo.estadoId);
+  // Un préstamo de saldo inicial no tiene desembolso en Caja: nunca sale de APROBADO por esa vía,
+  // así que el cron lo administra desde el inicio
+  const esRecalculable =
+    ESTADOS_PRESTAMO_RECALCULABLES.includes(estadoActual) ||
+    (prestamo.esSaldoInicial && estadoActual === ESTADO_PRESTAMO_BANCARIO.APROBADO);
+  if (!esRecalculable) return false;
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  const cuotas = await db.cuotaPrestamo.findMany({
+    where: { prestamoBancarioId },
+    select: { estadoCuotaId: true, fechaVencimiento: true },
+  });
+  if (cuotas.length === 0) return false;
+
+  const sinPagar = cuotas.filter((c) => ESTADOS_CUOTA_PRESTAMO_ABIERTAS.includes(Number(c.estadoCuotaId)));
+
+  const estaVencida = (c) =>
+    Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.VENCIDO || new Date(c.fechaVencimiento) < hoy;
+
+  let nuevoEstadoId = ESTADO_PRESTAMO_BANCARIO.VIGENTE;
+  if (sinPagar.length === 0) nuevoEstadoId = ESTADO_PRESTAMO_BANCARIO.PAGADO;
+  else if (sinPagar.every(estaVencida)) nuevoEstadoId = ESTADO_PRESTAMO_BANCARIO.VENCIDO;
+
+  if (nuevoEstadoId === estadoActual) return false;
+
+  await db.prestamoBancario.update({
+    where: { id: prestamoBancarioId },
+    data: { estadoId: nuevoEstadoId },
+  });
+  return true;
+}
+
+/**
+ * Fuente única de verdad de los estados de cuotas y préstamos. La usan el cron diario, el botón
+ * "Actualizar Vencidas" y la edición de un préstamo, para que los tres den siempre el mismo resultado:
+ *   1. Las cuotas PENDIENTE con fecha vencida pasan a VENCIDO.
+ *   2. Cada préstamo recalcula su estado con recalcularEstadoPrestamo.
+ * Sin prestamoBancarioId procesa todos los préstamos que administra el cron; con id, solo ese.
+ * @param {BigInt|null} prestamoBancarioId - Préstamo a sincronizar, o null para todos
+ * @returns {Promise<{cuotasActualizadas: number, prestamosEstadoActualizado: number}>}
+ */
+async function sincronizarEstados(prestamoBancarioId = null) {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  const { count: cuotasActualizadas } = await prisma.cuotaPrestamo.updateMany({
+    where: {
+      ...(prestamoBancarioId ? { prestamoBancarioId } : {}),
+      fechaVencimiento: { lt: hoy },
+      estadoCuotaId: ESTADO_CUOTA_PRESTAMO.PENDIENTE,
+    },
+    data: { estadoCuotaId: ESTADO_CUOTA_PRESTAMO.VENCIDO },
+  });
+
+  // Los de saldo inicial se incluyen desde APROBADO porque no tienen desembolso en Caja
+  const prestamos = prestamoBancarioId
+    ? [{ id: prestamoBancarioId }]
+    : await prisma.prestamoBancario.findMany({
+        where: {
+          OR: [
+            { estadoId: { in: ESTADOS_PRESTAMO_RECALCULABLES } },
+            { esSaldoInicial: true, estadoId: ESTADO_PRESTAMO_BANCARIO.APROBADO },
+          ],
+        },
+        select: { id: true },
+      });
+
+  let prestamosEstadoActualizado = 0;
+  for (const { id } of prestamos) {
+    if (await recalcularEstadoPrestamo(id)) prestamosEstadoActualizado++;
+  }
+
+  return { cuotasActualizadas, prestamosEstadoActualizado };
+}
+
+/**
  * Marca una cuota como saldo inicial (pagada antes del 01/01/2026)
  * @param {BigInt} cuotaId - ID de la cuota
  * @param {BigInt} usuarioId - ID del usuario que realiza la acción
@@ -231,35 +329,77 @@ async function marcarComoSaldoInicial(cuotaId, usuarioId) {
       },
     });
 
-    await actualizarSaldosPrestamo(cuota.prestamoBancarioId);
-
-    const cuotasPendientes = await tx.cuotaPrestamo.count({
-      where: {
-        prestamoBancarioId: cuota.prestamoBancarioId,
-        estadoCuotaId: { in: ESTADOS_CUOTA_PRESTAMO_ABIERTAS },
-      },
-    });
-
-    let nuevoEstadoId;
-    if (cuotasPendientes === 0) {
-      nuevoEstadoId = BigInt(82);
-    } else {
-      const cuotasVencidas = await tx.cuotaPrestamo.count({
-        where: {
-          prestamoBancarioId: cuota.prestamoBancarioId,
-          estadoCuotaId: ESTADO_CUOTA_PRESTAMO.VENCIDO,
-        },
-      });
-      nuevoEstadoId = cuotasVencidas > 0 ? BigInt(83) : BigInt(81);
-    }
-
-    await tx.prestamoBancario.update({
-      where: { id: cuota.prestamoBancarioId },
-      data: { estadoId: nuevoEstadoId },
-    });
+    await recalcularEstadoPrestamo(cuota.prestamoBancarioId, tx);
 
     return updated;
   });
+
+  // Los saldos se recalculan con el cliente global: deben leer la cuota ya confirmada en BD
+  await actualizarSaldosPrestamo(cuota.prestamoBancarioId);
+
+  return cuotaActualizada;
+}
+
+/**
+ * Revierte la marca de saldo inicial de una cuota: vuelve a ser una cuota normal sin pagar
+ * (PENDIENTE o VENCIDO según su fecha) para registrar su pago real desde Caja. Un préstamo
+ * PAGADO se reabre porque deja de tener todas sus cuotas canceladas.
+ * @param {BigInt} cuotaId - ID de la cuota
+ * @param {BigInt} usuarioId - ID del usuario que realiza la acción
+ * @returns {Promise<Object>} Cuota actualizada
+ */
+async function desmarcarComoSaldoInicial(cuotaId, usuarioId) {
+  const cuota = await prisma.cuotaPrestamo.findUnique({
+    where: { id: cuotaId },
+    include: { prestamo: true },
+  });
+
+  if (!cuota) {
+    throw new NotFoundError("La cuota no existe.");
+  }
+
+  if (!cuota.saldoInicialPagada) {
+    throw new ConflictError("La cuota no está marcada como saldo inicial.");
+  }
+
+  if (cuota.movimientoCajaId) {
+    throw new ConflictError("La cuota tiene un pago registrado en Caja: no se puede desmarcar.");
+  }
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const estadoCuotaId =
+    new Date(cuota.fechaVencimiento) < hoy ? ESTADO_CUOTA_PRESTAMO.VENCIDO : ESTADO_CUOTA_PRESTAMO.PENDIENTE;
+
+  const cuotaActualizada = await prisma.$transaction(async (tx) => {
+    const updated = await tx.cuotaPrestamo.update({
+      where: { id: cuotaId },
+      data: {
+        saldoInicialPagada: false,
+        estadoCuotaId,
+        fechaPago: null,
+        montoPagado: null,
+        montoMora: null,
+        diasMora: 0,
+        actualizadoPor: usuarioId,
+      },
+      include: {
+        prestamo: {
+          include: {
+            moneda: true,
+            estado: true,
+          },
+        },
+      },
+    });
+
+    // Un préstamo PAGADO se reabre solo: recalcularEstadoPrestamo también evalúa ese estado
+    await recalcularEstadoPrestamo(cuota.prestamoBancarioId, tx);
+
+    return updated;
+  });
+
+  await actualizarSaldosPrestamo(cuota.prestamoBancarioId);
 
   return cuotaActualizada;
 }
@@ -601,21 +741,8 @@ const registrarPago = async (id, dataPago) => {
       // Actualizar saldos del préstamo
       await actualizarSaldosPrestamo(cuota.prestamoBancarioId);
 
-      // Verificar si todas las cuotas están pagadas para cambiar estado del préstamo
-      const cuotasPendientes = await tx.cuotaPrestamo.count({
-        where: {
-          prestamoBancarioId: cuota.prestamoBancarioId,
-          estadoCuotaId: { in: ESTADOS_CUOTA_PRESTAMO_ABIERTAS },
-        },
-      });
-
-      if (cuotasPendientes === 0) {
-        // Todas las cuotas pagadas, actualizar estado del préstamo a PAGADO (ID 82)
-        await tx.prestamoBancario.update({
-          where: { id: cuota.prestamoBancarioId },
-          data: { estadoId: Number(82) },
-        });
-      }
+      // Recalcular el estado del préstamo según sus cuotas (PAGADO, VENCIDO o VIGENTE)
+      await recalcularEstadoPrestamo(cuota.prestamoBancarioId, tx);
 
       return updated;
     });
@@ -1213,5 +1340,8 @@ export default {
   guardarBulk,
   recalcularCuotasPorPrestamo,
   marcarComoSaldoInicial,
+  desmarcarComoSaldoInicial,
   actualizarSaldosPrestamo,
+  recalcularEstadoPrestamo,
+  sincronizarEstados,
 };

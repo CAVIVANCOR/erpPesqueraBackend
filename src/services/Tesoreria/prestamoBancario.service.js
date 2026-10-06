@@ -670,6 +670,9 @@ const actualizar = async (id, data) => {
     // ⭐ RECALCULAR SALDOS DEL PRÉSTAMO DESDE LAS CUOTAS
     await cuotaPrestamoService.actualizarSaldosPrestamo(id);
 
+    // ⭐ SINCRONIZAR ESTADOS DE CUOTAS Y DEL PRÉSTAMO (misma lógica que el cron y el botón de la lista)
+    await cuotaPrestamoService.sincronizarEstados(id);
+
     // ⭐ ACTUALIZAR SALDOS DE LÍNEAS DE CRÉDITO
     // Si cambió la línea de crédito, actualizar ambas (antigua y nueva)
     if (

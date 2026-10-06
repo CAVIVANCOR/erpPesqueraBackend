@@ -126,3 +126,26 @@ export const ESTADO_PERIODO_CONTABLE = {
   CERRADO: 74,      // No permite nuevos asientos (cierre mensual)
   BLOQUEADO: 75,    // Bloqueado definitivamente (después de declaración SUNAT)
 };
+
+// ────────────────────────────────────────────────────────────
+// ESTADOS: PRÉSTAMO BANCARIO
+// ────────────────────────────────────────────────────────────
+export const ESTADO_PRESTAMO_BANCARIO = {
+  APROBADO: 79,
+  DESEMBOLSADO: 80,
+  VIGENTE: 81,
+  PAGADO: 82,
+  VENCIDO: 83,
+  REFINANCIADO: 84,
+  ANULADO: 85,
+};
+
+// Estados que el cron recalcula según sus cuotas. PAGADO también se recalcula: es un estado
+// derivado (todas las cuotas canceladas) y debe reabrirse si el préstamo tiene cuotas por pagar.
+// APROBADO solo lo mueve Caja al registrar el desembolso; REFINANCIADO y ANULADO se respetan.
+export const ESTADOS_PRESTAMO_RECALCULABLES = [
+  ESTADO_PRESTAMO_BANCARIO.DESEMBOLSADO,
+  ESTADO_PRESTAMO_BANCARIO.VIGENTE,
+  ESTADO_PRESTAMO_BANCARIO.PAGADO,
+  ESTADO_PRESTAMO_BANCARIO.VENCIDO,
+];

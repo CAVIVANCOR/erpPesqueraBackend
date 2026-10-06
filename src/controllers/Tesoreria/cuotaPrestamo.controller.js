@@ -171,3 +171,17 @@ export async function marcarComoSaldoInicial(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Desmarcar cuota como saldo inicial (vuelve a ser una cuota sin pagar)
+ */
+export async function desmarcarComoSaldoInicial(req, res, next) {
+  try {
+    const { id } = req.params;
+    const usuarioId = req.user?.id ? BigInt(req.user.id) : null;
+    const cuota = await cuotaPrestamoService.desmarcarComoSaldoInicial(BigInt(id), usuarioId);
+    res.json(toJSONBigInt(cuota));
+  } catch (err) {
+    next(err);
+  }
+}

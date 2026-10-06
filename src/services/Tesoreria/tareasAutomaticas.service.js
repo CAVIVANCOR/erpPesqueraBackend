@@ -1,6 +1,6 @@
 import prisma from "../../config/prismaClient.js";
 import cuotaPrestamoService from "./cuotaPrestamo.service.js";
-import { ESTADO_CUOTA_PRESTAMO, ESTADOS_CUOTA_PRESTAMO_ABIERTAS } from "../../utils/estados.constants.js";
+import { ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
 
 /**
  * Servicio de tareas automáticas para Tesorería
@@ -16,16 +16,9 @@ export async function procesarCuotasVencidas() {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
-    // 1. Actualizar estados de cuotas vencidas
-    const cuotasActualizadas = await prisma.cuotaPrestamo.updateMany({
-      where: {
-        fechaVencimiento: { lt: hoy },
-        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.PENDIENTE,
-      },
-      data: {
-        estadoCuotaId: ESTADO_CUOTA_PRESTAMO.VENCIDO,
-      },
-    });
+    // 1. Estados de cuotas y de préstamos: misma lógica que usa la edición de un préstamo
+    const { cuotasActualizadas, prestamosEstadoActualizado } =
+      await cuotaPrestamoService.sincronizarEstados();
 
     // 2. Obtener préstamos afectados
     const cuotasVencidas = await prisma.cuotaPrestamo.findMany({
@@ -46,55 +39,15 @@ export async function procesarCuotasVencidas() {
       await cuotaPrestamoService.actualizarSaldosPrestamo(prestamoBancarioId);
     }
 
-    // 4. Actualizar estados de préstamos según cuotas vencidas
-    await actualizarEstadosPrestamos(prestamosAfectados);
-
     return {
       success: true,
-      cuotasActualizadas: cuotasActualizadas.count,
+      cuotasActualizadas,
       prestamosAfectados: prestamosAfectados.length,
+      prestamosEstadoActualizado,
       fechaEjecucion: new Date(),
     };
   } catch (error) {
     throw error;
-  }
-}
-
-/**
- * Actualiza el estado de los préstamos según sus cuotas vencidas
- * Estados:
- * - 81: VIGENTE (sin cuotas vencidas)
- * - 82: PAGADO (todas las cuotas pagadas)
- * - 83: VENCIDO (tiene cuotas vencidas)
- */
-async function actualizarEstadosPrestamos(prestamosIds) {
-  for (const prestamoBancarioId of prestamosIds) {
-    const cuotas = await prisma.cuotaPrestamo.findMany({
-      where: { prestamoBancarioId },
-    });
-
-    const cuotasPendientes = cuotas.filter((c) =>
-      ESTADOS_CUOTA_PRESTAMO_ABIERTAS.includes(Number(c.estadoCuotaId))
-    );
-
-    const cuotasVencidas = cuotas.filter((c) => Number(c.estadoCuotaId) === ESTADO_CUOTA_PRESTAMO.VENCIDO);
-
-    let nuevoEstadoId;
-    if (cuotasPendientes.length === 0) {
-      // Todas las cuotas pagadas
-      nuevoEstadoId = BigInt(82); // PAGADO
-    } else if (cuotasVencidas.length > 0) {
-      // Tiene cuotas vencidas
-      nuevoEstadoId = BigInt(83); // VENCIDO
-    } else {
-      // Sin cuotas vencidas
-      nuevoEstadoId = BigInt(81); // VIGENTE
-    }
-
-    await prisma.prestamoBancario.update({
-      where: { id: prestamoBancarioId },
-      data: { estadoId: nuevoEstadoId },
-    });
   }
 }
 
