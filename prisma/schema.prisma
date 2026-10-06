@@ -8630,7 +8630,6 @@ model CuotaPrestamo {
   montoMora             Decimal?                @db.Decimal(18, 2)   // Monto de mora por atraso
   movimientoCajaId      BigInt?                                      // Relación con MovimientoCaja
   refOperacionEspecializadaMovCaja  BigInt?
-  estadoPago            EstadoPagoCuota                              // ⚠️ DEPRECADO - Usar estadoCuotaId (se retira tras la migración)
   estadoCuotaId         BigInt?                                      // ✅ NUEVO: FK a EstadoMultiFuncion (tipo CUOTAS PRESTAMO BANCARIO: 135 PENDIENTE | 136 VENCIDO | 137 PAGO PARCIAL | 138 PAGADO | 139 SALDO INICIAL)
   diasMora              Int?                                         // Días de atraso
   observaciones         String?                 @db.Text
@@ -8657,7 +8656,6 @@ model CuotaPrestamo {
   @@unique([prestamoBancarioId, numeroCuota])
   @@index([prestamoBancarioId])
   @@index([fechaVencimiento])
-  @@index([estadoPago])
   @@index([estadoCuotaId])                                           // ✅ NUEVO
   @@index([fechaPago])
 }
@@ -9085,12 +9083,6 @@ enum TipoGarantia {
   SIN_GARANTIA         // Sin garantía específica
 }
 
-enum EstadoPagoCuota {
-  PENDIENTE            // Cuota pendiente de pago
-  PAGADO               // Cuota pagada completamente
-  VENCIDO              // Cuota vencida no pagada
-  PARCIAL              // Cuota pagada parcialmente
-}
 
 enum TipoLineaCredito {
   REVOLVENTE           // Línea revolvente (se puede usar y devolver)
