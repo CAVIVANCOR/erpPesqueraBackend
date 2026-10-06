@@ -64,6 +64,9 @@ export const TIPO_DEUDA_TESORERIA = {
   NINGUNO: null,
   DEUDAS_PERSONAL: 'DEUDAS_PERSONAL',
   DEUDAS_TRIBUTARIAS: 'DEUDAS_TRIBUTARIAS',
+  // Préstamos bancarios (operaciones de caja): desembolsos pendientes (ingreso) y cuotas pendientes (egreso)
+  PRESTAMOS_DESEMBOLSOS: 'PRESTAMOS_DESEMBOLSOS',
+  PRESTAMOS_CUOTAS: 'PRESTAMOS_CUOTAS',
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -574,6 +577,16 @@ export const LABELS_TIPO_DEUDA = {
     label: 'Deudas Tributarias',
     severity: 'contrast',
     icon: 'pi pi-building',
+  },
+  [TIPO_DEUDA_TESORERIA.PRESTAMOS_DESEMBOLSOS]: {
+    label: 'Desembolsos Préstamos',
+    severity: 'success',
+    icon: 'pi pi-money-bill',
+  },
+  [TIPO_DEUDA_TESORERIA.PRESTAMOS_CUOTAS]: {
+    label: 'Cuotas Préstamos',
+    severity: 'danger',
+    icon: 'pi pi-wallet',
   },
 };
 

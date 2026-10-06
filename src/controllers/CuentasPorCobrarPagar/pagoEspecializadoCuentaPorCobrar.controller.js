@@ -1,4 +1,5 @@
 import pagoEspecializadoService from '../../services/CuentasPorCobrarPagar/pagoEspecializadoCuentaPorCobrar.service.js';
+import cobroMultipleService from '../../services/CuentasPorCobrarPagar/cobroCuentaPorCobrarMultiple.service.js';
 import { ValidationError } from '../../utils/errors.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 
@@ -293,6 +294,37 @@ export const actualizarUrlVoucherContable = async (req, res, next) => {
     );
     
     res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Cobro múltiple especializado: varias cuentas por cobrar de un cliente con un solo
+ * ingreso consolidado. Las validaciones y el reparto viven en el servicio.
+ */
+export const procesarCobroMultiple = async (req, res, next) => {
+  try {
+    const data = {
+      ...req.body,
+      usuarioId: req.user?.id || null
+    };
+    const resultado = await cobroMultipleService.procesarCobroMultiple(data);
+    res.status(201).json(toJSONBigInt(resultado));
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Copia el voucher consolidado del pago indicado a los demás pagos de la misma operación
+ * (cobro múltiple). El comprobante de impuesto de cada documento no se comparte.
+ */
+export const sincronizarVoucherOperacion = async (req, res, next) => {
+  try {
+    const pagoId = Number(req.params.pagoId);
+    const resultado = await cobroMultipleService.sincronizarVoucherOperacion(pagoId);
+    res.json(toJSONBigInt(resultado));
   } catch (error) {
     next(error);
   }

@@ -66,4 +66,14 @@ router.patch('/pago/:pagoId/comprobante-impuesto', autenticarJWT, pagoEspecializ
 // ════════════════════════════════════════════════════════════
 router.put('/movimiento/:movimientoId/voucher-contable', autenticarJWT, pagoEspecializadoController.actualizarUrlVoucherContable);
 
+// ════════════════════════════════════════════════════════════
+// POST: COBRO MÚLTIPLE (varias facturas de un cliente, un solo ingreso)
+// ════════════════════════════════════════════════════════════
+router.post('/cobrar-multiple', autenticarJWT, pagoEspecializadoController.procesarCobroMultiple);
+
+// ════════════════════════════════════════════════════════════
+// PUT: SINCRONIZAR VOUCHER CONSOLIDADO CON LOS PAGOS DE LA OPERACIÓN
+// ════════════════════════════════════════════════════════════
+router.put('/pago/:pagoId/sincronizar-voucher', autenticarJWT, pagoEspecializadoController.sincronizarVoucherOperacion);
+
 export default router;

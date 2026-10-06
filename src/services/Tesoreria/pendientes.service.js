@@ -32,6 +32,118 @@ import {
 
 // 🔵 CATEGORÍA DE GASTOS A RENDIR
 const CATEGORIA_GASTOS_A_RENDIR = 17; // Categoría "Gastos a Rendir" en TipoMovEntregaRendir
+
+// Estados del préstamo (EstadoMultiFuncion) que admiten desembolso o pago de cuotas: VIGENTE y VENCIDO.
+// Debe coincidir con operacionPrestamo.service.js
+const ESTADOS_PRESTAMO_OPERABLES = [81, 83];
+
+// Catálogo de estados de la cuota (EstadoMultiFuncion, tipo "CUOTAS PRESTAMO BANCARIO"). La cuota
+// guarda `estadoPago` (enum) y `saldoInicialPagada`; el catálogo da el nombre y el color oficiales.
+// SALDO INICIAL = cuota pagada antes del corte (saldoInicialPagada = true): no se cobra y no se lista.
+const ESTADO_CUOTA_CATALOGO = {
+  PENDIENTE: 135,
+  VENCIDO: 136,
+  PARCIAL: 137, // "PAGO PARCIAL"
+  PAGADO: 138,
+  SALDO_INICIAL: 139,
+};
+
+// Fecha de corte del saldo inicial: las cuotas con vencimiento anterior se consideran pagadas en el
+// año anterior y se marcan con `saldoInicialPagada`. Mismo valor que cuotaPrestamo.service.js
+// (marcarComoSaldoInicial) y que el botón "Histórico" de CuotaPrestamoList.
+const FECHA_CORTE_SALDO_INICIAL = new Date('2026-01-01');
+
+/**
+ * Filtros avanzados de las secciones de préstamos (rango de fechas y de montos), combinados con
+ * lo que ya tenga el where (p. ej. el filtro de vencimiento).
+ * @param {String} campoFecha - Campo de fecha a filtrar (fechaVencimiento de la cuota / fechaDesembolso)
+ * @param {String} campoMonto - Campo de monto a filtrar (montoTotal de la cuota / montoDesembolsado)
+ */
+const aplicarFiltrosPrestamo = (where, filtros, campoFecha, campoMonto) => {
+  if (filtros.fechaDesde || filtros.fechaHasta) {
+    const rango = { ...(where[campoFecha] || {}) };
+    if (filtros.fechaDesde) {
+      const desde = new Date(filtros.fechaDesde);
+      desde.setHours(0, 0, 0, 0);
+      rango.gte = desde;
+    }
+    if (filtros.fechaHasta) {
+      const hasta = new Date(filtros.fechaHasta);
+      hasta.setHours(23, 59, 59, 999);
+      rango.lte = hasta;
+    }
+    where[campoFecha] = rango;
+  }
+
+  if (filtros.montoDesde !== null || filtros.montoHasta !== null) {
+    const rango = {};
+    if (filtros.montoDesde !== null) rango.gte = Number(filtros.montoDesde);
+    if (filtros.montoHasta !== null) rango.lte = Number(filtros.montoHasta);
+    where[campoMonto] = rango;
+  }
+  return where;
+};
+
+/**
+ * Filtro de fecha según el botón de vencimiento (VENCIDOS / HOY / SEMANA), igual que el de las
+ * demás secciones. Devuelve null si no hay filtro.
+ */
+const construirFiltroVencimiento = (vencimiento) => {
+  if (!vencimiento) return null;
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  if (vencimiento === 'VENCIDOS') return { lt: hoy };
+  if (vencimiento === 'HOY') {
+    const manana = new Date(hoy);
+    manana.setDate(manana.getDate() + 1);
+    return { gte: hoy, lt: manana };
+  }
+  if (vencimiento === 'SEMANA') {
+    const finSemana = new Date(hoy);
+    finSemana.setDate(finSemana.getDate() + 7);
+    return { gte: hoy, lt: finSemana };
+  }
+  return null;
+};
+
+/**
+ * Impuesto tributario de una cuenta por cobrar / por pagar (columna "Imp. Trib." de Atenciones).
+ * Solo uno aplica por documento (nunca se mezclan). Prioridad: Detracción > Retención >
+ * Percepción (misma regla que OrdenCompra.jsx).
+ *
+ * El saldo pendiente del impuesto sale de Detraccion / Retencion / Percepcion .saldoPendiente
+ * y coincide con el saldo de la cuenta cuando solo falta pagar el impuesto.
+ *
+ * @param {Object|null} documento - Documento origen (OrdenCompra en CxP, PreFactura en CxC);
+ *        ambos tienen aplicaX, porcentajeX y los registros 1:1 detraccion/retencion/percepcion
+ * @param {Object} cuenta - CxP o CxC (tieneX / porcentajeX como respaldo si no hay documento origen)
+ * @returns {{tipo: string, porcentaje: *, saldoPendiente: *}|null}
+ */
+const calcularImpuestoTributario = (documento, cuenta) => {
+  if (documento?.aplicaDetraccion || documento?.detraccion || cuenta.tieneDetraccion) {
+    return {
+      tipo: 'DETRACCION',
+      porcentaje: documento?.detraccion?.tasaDetraccion ?? documento?.porcentajeDetraccion ?? cuenta.porcentajeDetraccion ?? null,
+      saldoPendiente: documento?.detraccion?.saldoPendiente ?? null,
+    };
+  }
+  if (documento?.aplicaRetencion || documento?.retencion || cuenta.tieneRetencion) {
+    return {
+      tipo: 'RETENCION',
+      porcentaje: documento?.retencion?.tasaRetencion ?? documento?.porcentajeRetencion ?? cuenta.porcentajeRetencion ?? null,
+      saldoPendiente: documento?.retencion?.saldoPendiente ?? null,
+    };
+  }
+  if (documento?.aplicaPercepcion || documento?.percepcion || cuenta.tienePercepcion) {
+    return {
+      tipo: 'PERCEPCION',
+      porcentaje: documento?.percepcion?.tasaPercepcion ?? documento?.porcentajePercepcion ?? cuenta.porcentajePercepcion ?? null,
+      saldoPendiente: documento?.percepcion?.saldoPendiente ?? null,
+    };
+  }
+  return null;
+};
 /**
  * Aplicar filtros avanzados a la cláusula WHERE de Prisma
  * Utiliza sintaxis correcta de Prisma para filtrar por relaciones anidadas
@@ -362,6 +474,19 @@ const listarPendientes = async (filtros = {}) => {
             select: {
               id: true,
               numeroDocumento: true,
+              // Número del comprobante emitido (para la glosa del cobro múltiple)
+              numeroDocumentoFinal: true,
+              // Neto cobrable del cobro múltiple = saldo - detracción pendiente
+              aplicaDetraccion: true,
+              detraccion: { select: { tasaDetraccion: true, saldoPendiente: true } },
+              // Impuesto tributario (columna "Imp. Trib." de Atenciones)
+              porcentajeDetraccion: true,
+              aplicaRetencion: true,
+              porcentajeRetencion: true,
+              aplicaPercepcion: true,
+              porcentajePercepcion: true,
+              retencion: { select: { tasaRetencion: true, saldoPendiente: true } },
+              percepcion: { select: { tasaPercepcion: true, saldoPendiente: true } },
             },
           },
           estado: {
@@ -433,6 +558,19 @@ const listarPendientes = async (filtros = {}) => {
               numeroDocumentoFinal: true,
               fechaFacturacion: true,
               fechaVencimiento: true,
+              // Para identificar Recibos por Honorarios (glosa propia en el pago múltiple)
+              tipoDocumentoFinalId: true,
+              // Impuesto tributario del documento (columna "Imp. Trib." de Atenciones):
+              // el % sale de la orden / del registro del impuesto y el saldo del registro del impuesto
+              aplicaDetraccion: true,
+              porcentajeDetraccion: true,
+              aplicaRetencion: true,
+              porcentajeRetencion: true,
+              aplicaPercepcion: true,
+              porcentajePercepcion: true,
+              detraccion: { select: { tasaDetraccion: true, saldoPendiente: true } },
+              retencion: { select: { tasaRetencion: true, saldoPendiente: true } },
+              percepcion: { select: { tasaPercepcion: true, saldoPendiente: true } },
             },
           },
           estado: {
@@ -824,8 +962,97 @@ const listarPendientes = async (filtros = {}) => {
 
 
     // ========================================
+    // PRÉSTAMOS: CUOTAS PENDIENTES (si tipoDeuda es 'PRESTAMOS_CUOTAS') → pago de cuotas (EGRESO)
+    // ========================================
+    // Incluye las cuotas de préstamos de saldo inicial; se excluyen las cuotas ya pagadas y las
+    // marcadas como saldo inicial pagado. Una cuota PARCIAL sigue pendiente por su diferencia.
+    let cuotasPrestamo = [];
+    if (tipoDeuda === TIPO_DEUDA_TESORERIA.PRESTAMOS_CUOTAS) {
+      const wherePrestamoCuota = { estadoId: { in: ESTADOS_PRESTAMO_OPERABLES } };
+      if (empresaId) wherePrestamoCuota.empresaId = Number(empresaId);
+      if (monedaId) wherePrestamoCuota.monedaId = Number(monedaId);
+
+      const whereCuotas = {
+        saldoInicialPagada: false,
+        estadoPago: { in: ['PENDIENTE', 'VENCIDO', 'PARCIAL'] },
+        prestamo: wherePrestamoCuota,
+      };
+      const filtroFechaVencimiento = construirFiltroVencimiento(vencimiento);
+      if (filtroFechaVencimiento) whereCuotas.fechaVencimiento = filtroFechaVencimiento;
+
+      cuotasPrestamo = await prisma.cuotaPrestamo.findMany({
+        where: aplicarFiltrosPrestamo(whereCuotas, filtros, 'fechaVencimiento', 'montoTotal'),
+        include: {
+          prestamo: {
+            include: {
+              empresa: { select: { id: true, razonSocial: true, ruc: true } },
+              banco: { select: { id: true, nombre: true } },
+              moneda: { select: { id: true, simbolo: true, codigoSunat: true } },
+              tipoPrestamo: { select: { id: true, descripcion: true, esFactoring: true } },
+            },
+          },
+        },
+        orderBy: { fechaVencimiento: 'asc' },
+      });
+    }
+
+    // ========================================
+    // PRÉSTAMOS: DESEMBOLSOS PENDIENTES (si tipoDeuda es 'PRESTAMOS_DESEMBOLSOS') → ingreso
+    // ========================================
+    // Préstamos nuevos (no saldo inicial) cuyo dinero aún no se registró en caja. Se excluyen los
+    // que ya tienen asientos (flujo anterior) para no duplicar la contabilidad.
+    let desembolsosPrestamo = [];
+    if (tipoDeuda === TIPO_DEUDA_TESORERIA.PRESTAMOS_DESEMBOLSOS) {
+      const whereDesembolsos = {
+        esSaldoInicial: false,
+        movimientoCajaDesembolsoId: null,
+        estadoId: { in: ESTADOS_PRESTAMO_OPERABLES },
+        asientosContables: { none: {} },
+      };
+      if (empresaId) whereDesembolsos.empresaId = Number(empresaId);
+      if (monedaId) whereDesembolsos.monedaId = Number(monedaId);
+      // El "vencimiento" de un desembolso es su fecha prevista de desembolso
+      const filtroFechaDesembolso = construirFiltroVencimiento(vencimiento);
+      if (filtroFechaDesembolso) whereDesembolsos.fechaDesembolso = filtroFechaDesembolso;
+
+      desembolsosPrestamo = await prisma.prestamoBancario.findMany({
+        where: aplicarFiltrosPrestamo(whereDesembolsos, filtros, 'fechaDesembolso', 'montoDesembolsado'),
+        include: {
+          empresa: { select: { id: true, razonSocial: true, ruc: true } },
+          banco: { select: { id: true, nombre: true } },
+          moneda: { select: { id: true, simbolo: true, codigoSunat: true } },
+          estado: { select: { id: true, descripcion: true, severityColor: true } },
+          tipoPrestamo: { select: { id: true, descripcion: true, esFactoring: true } },
+        },
+        orderBy: { fechaDesembolso: 'asc' },
+      });
+    }
+
+    // ========================================
     // TRANSFORMAR CxC A FORMATO CONSOLIDADO
     // ========================================
+    // Concepto de las ventas para la glosa "Cobro de fact. {NumDoc} por venta de {Concepto}" del
+    // cobro múltiple: productos / servicios únicos del detalle de la pre-factura
+    const preFacturasCxC = cuentasPorCobrar.map((c) => c.preFactura?.id).filter(Boolean);
+    const conceptoPorPreFactura = new Map();
+    if (preFacturasCxC.length > 0) {
+      const detallesVenta = await prisma.detallePreFactura.findMany({
+        where: { preFacturaId: { in: preFacturasCxC } },
+        select: {
+          preFacturaId: true,
+          producto: { select: { descripcionArmada: true } },
+        },
+        orderBy: { id: 'asc' },
+      });
+      for (const d of detallesVenta) {
+        const texto = (d.producto?.descripcionArmada || '').trim();
+        if (!texto) continue;
+        const clave = String(d.preFacturaId);
+        if (!conceptoPorPreFactura.has(clave)) conceptoPorPreFactura.set(clave, new Set());
+        conceptoPorPreFactura.get(clave).add(texto);
+      }
+    }
+
     const cxcConsolidadas = cuentasPorCobrar.map((cxc) => ({
       id: cxc.id,
       tipo: 'INGRESO',
@@ -850,11 +1077,47 @@ const listarPendientes = async (filtros = {}) => {
       estado: cxc.estado,
       ultimoPago: cxc.pagos?.[0] || null,
       movimientoCajaId: cxc.pagos?.[0]?.movimientoCajaId || null,
+      // Datos para el cobro múltiple (selección de facturas de un cliente)
+      esCuentaPorCobrar: true,
+      esGerencial: cxc.esGerencial,
+      detraccionPendiente:
+        cxc.preFactura?.aplicaDetraccion && cxc.preFactura.detraccion
+          ? cxc.preFactura.detraccion.saldoPendiente
+          : 0,
+      impuestoTributario: calcularImpuestoTributario(cxc.preFactura, cxc),
+      numeroDocumentoFinal: cxc.preFactura?.numeroDocumentoFinal || null,
+      concepto: conceptoPorPreFactura.has(String(cxc.preFactura?.id))
+        ? [...conceptoPorPreFactura.get(String(cxc.preFactura?.id))].join(' / ')
+        : null,
     }));
 
     // ========================================
     // TRANSFORMAR CxP A FORMATO CONSOLIDADO
     // ========================================
+    // Concepto de las compras gerenciales para la glosa "GASTOS VARIOS - {Concepto}" del pago múltiple:
+    // descripciones únicas del detalle de la orden de compra. Solo se consulta para las gerenciales.
+    const ordenesGerenciales = cuentasPorPagar
+      .filter((c) => c.esGerencial && c.ordenCompraId)
+      .map((c) => c.ordenCompraId);
+    const conceptoPorOrden = new Map();
+    if (ordenesGerenciales.length > 0) {
+      const detallesGerenciales = await prisma.detalleOrdenCompra.findMany({
+        where: { ordenCompraId: { in: ordenesGerenciales } },
+        select: {
+          ordenCompraId: true,
+          producto: { select: { descripcionArmada: true } },
+        },
+        orderBy: { id: 'asc' },
+      });
+      for (const d of detallesGerenciales) {
+        const texto = (d.producto?.descripcionArmada || '').trim();
+        if (!texto) continue;
+        const clave = String(d.ordenCompraId);
+        if (!conceptoPorOrden.has(clave)) conceptoPorOrden.set(clave, new Set());
+        conceptoPorOrden.get(clave).add(texto);
+      }
+    }
+
     const cxpConsolidadas = cuentasPorPagar.map((cxp) => ({
       id: cxp.id,
       tipo: 'EGRESO',
@@ -879,6 +1142,19 @@ const listarPendientes = async (filtros = {}) => {
       estado: cxp.estado,
       ultimoPago: cxp.pagos?.[0] || null,
       movimientoCajaId: cxp.pagos?.[0]?.movimientoCajaId || null,
+      impuestoTributario: calcularImpuestoTributario(cxp.ordenCompra, cxp),
+      // Datos para el pago múltiple (selección de facturas de un proveedor)
+      esCuentaPorPagar: true,
+      esGerencial: cxp.esGerencial,
+      // OrdenCompra.tipoDocumentoFinalId = 3 → Recibo por Honorarios
+      esHonorarios: Number(cxp.ordenCompra?.tipoDocumentoFinalId) === 3,
+      concepto: conceptoPorOrden.has(String(cxp.ordenCompraId))
+        ? [...conceptoPorOrden.get(String(cxp.ordenCompraId))].join(' / ')
+        : null,
+      detraccionPendiente:
+        cxp.ordenCompra?.aplicaDetraccion && cxp.ordenCompra.detraccion
+          ? cxp.ordenCompra.detraccion.saldoPendiente
+          : 0,
     }));
 
 
@@ -1031,6 +1307,123 @@ const listarPendientes = async (filtros = {}) => {
     }));
 
     // ========================================
+    // TRANSFORMAR CUOTAS DE PRÉSTAMO A FORMATO CONSOLIDADO (pago de cuotas · EGRESO)
+    // ========================================
+    // Los ids llevan prefijo porque el id de una cuota y el de un préstamo pueden coincidir.
+    // saldoPendiente = lo que falta de la cuota (montoTotal - montoPagado acumulado).
+    // Nombre y color del estado de la cuota desde el catálogo (no se listan SALDO INICIAL ni PAGADO)
+    const estadosCuotaCatalogo = cuotasPrestamo.length
+      ? await prisma.estadoMultiFuncion.findMany({
+          where: { id: { in: Object.values(ESTADO_CUOTA_CATALOGO) } },
+          select: { id: true, descripcion: true, severityColor: true },
+        })
+      : [];
+    const estadoCuotaPorId = new Map(estadosCuotaCatalogo.map((e) => [Number(e.id), e]));
+
+    const cuotasPrestamoConsolidadas = cuotasPrestamo.map((cuota) => {
+      const prestamo = cuota.prestamo;
+      const montoPagado = Number(cuota.montoPagado || 0);
+      const saldoPendiente = Math.round((Number(cuota.montoTotal) - montoPagado) * 100) / 100;
+      return {
+        id: `cuota-${cuota.id}`,
+        tipo: 'EGRESO',
+        tipoDocumento: 'CUOTA_PRESTAMO',
+        origen: 'Préstamo - Cuota',
+        origenId: cuota.id,
+        documentoNumero: `${prestamo.numeroPrestamo} - Cuota ${cuota.numeroCuota}/${prestamo.numeroCuotas}`,
+        documentoTipo: 'Cuota de Préstamo',
+        entidadComercial: {
+          id: prestamo.banco?.id,
+          razonSocial: prestamo.banco?.nombre || 'N/A',
+          numeroDocumento: null,
+          tipo: 'Banco',
+        },
+        empresa: prestamo.empresa,
+        fechaEmision: prestamo.fechaDesembolso,
+        fechaVencimiento: cuota.fechaVencimiento,
+        moneda: prestamo.moneda,
+        montoTotal: cuota.montoTotal,
+        montoPagado,
+        saldoPendiente,
+        estado: estadoCuotaPorId.get(ESTADO_CUOTA_CATALOGO[cuota.estadoPago]) || {
+          id: null,
+          descripcion: cuota.estadoPago,
+          severityColor: 'secondary',
+        },
+        ultimoPago: null,
+        movimientoCajaId: cuota.movimientoCajaId || null,
+        esCuotaPrestamo: true,
+        // Vence antes del corte pero NO está marcada como saldo inicial: si ya se pagó el año
+        // anterior hay que marcarla como histórica en el cronograma antes de pagarla aquí
+        vencidaAntesDelCorte: new Date(cuota.fechaVencimiento) < FECHA_CORTE_SALDO_INICIAL,
+        esGerencial: false,
+        esSaldoInicial: prestamo.esSaldoInicial,
+        // Datos para el formulario de pago (mora sugerida, cuenta propuesta y componentes de la cuota)
+        prestamo: {
+          id: prestamo.id,
+          numeroPrestamo: prestamo.numeroPrestamo,
+          numeroCuotas: prestamo.numeroCuotas,
+          tasaMoratoria: prestamo.tasaMoratoria,
+          cuentaCorrienteId: prestamo.cuentaCorrienteId,
+          esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
+          tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
+        },
+        cuota: {
+          id: cuota.id,
+          numeroCuota: cuota.numeroCuota,
+          montoCapital: cuota.montoCapital,
+          montoInteres: cuota.montoInteres,
+          montoComision: cuota.montoComision,
+          montoSeguro: cuota.montoSeguro,
+          montoMora: cuota.montoMora,
+          estadoPago: cuota.estadoPago,
+        },
+      };
+    });
+
+    // ========================================
+    // TRANSFORMAR DESEMBOLSOS DE PRÉSTAMO A FORMATO CONSOLIDADO (desembolso · INGRESO)
+    // ========================================
+    const desembolsosPrestamoConsolidados = desembolsosPrestamo.map((prestamo) => ({
+      id: `desembolso-${prestamo.id}`,
+      tipo: 'INGRESO',
+      tipoDocumento: 'DESEMBOLSO_PRESTAMO',
+      origen: 'Préstamo - Desembolso',
+      origenId: prestamo.id,
+      documentoNumero: `${prestamo.numeroPrestamo} - Desembolso`,
+      documentoTipo: 'Desembolso de Préstamo',
+      entidadComercial: {
+        id: prestamo.banco?.id,
+        razonSocial: prestamo.banco?.nombre || 'N/A',
+        numeroDocumento: null,
+        tipo: 'Banco',
+      },
+      empresa: prestamo.empresa,
+      fechaEmision: prestamo.fechaContrato,
+      // Fecha prevista del desembolso
+      fechaVencimiento: prestamo.fechaDesembolso,
+      moneda: prestamo.moneda,
+      montoTotal: prestamo.montoDesembolsado,
+      montoPagado: 0,
+      saldoPendiente: prestamo.montoDesembolsado,
+      estado: prestamo.estado,
+      ultimoPago: null,
+      movimientoCajaId: null,
+      esDesembolsoPrestamo: true,
+      esGerencial: false,
+      esSaldoInicial: false,
+      // Datos para el formulario de desembolso (cuenta propuesta y comisión inicial sugerida)
+      prestamo: {
+        id: prestamo.id,
+        numeroPrestamo: prestamo.numeroPrestamo,
+        cuentaCorrienteId: prestamo.cuentaCorrienteId,
+        comisionInicial: prestamo.comisionInicial,
+        esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
+        tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
+      },
+    }));
+
+    // ========================================
     // COMBINAR Y RETORNAR
     // ========================================
     const pendientes = [
@@ -1039,6 +1432,8 @@ const listarPendientes = async (filtros = {}) => {
       ...entregasConsolidadas,
       ...deudasConsolidadas,
       ...deudasTributariasConsolidadas,
+      ...cuotasPrestamoConsolidadas,
+      ...desembolsosPrestamoConsolidados,
     ];
     pendientes.sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
 
@@ -1129,6 +1524,49 @@ const obtenerResumen = async (empresaId = null) => {
       _count: {
         id: true,
       },
+    });
+
+    // ========================================
+    // PRÉSTAMOS: CUOTAS PENDIENTES Y DESEMBOLSOS PENDIENTES
+    // ========================================
+    // La moneda de la cuota está en su préstamo, por eso se agrupa en memoria (no se puede
+    // agrupar por una relación con groupBy). Mismos filtros que el listado.
+    const cuotasPrestamoResumen = await prisma.cuotaPrestamo.findMany({
+      where: {
+        saldoInicialPagada: false,
+        estadoPago: { in: ['PENDIENTE', 'VENCIDO', 'PARCIAL'] },
+        prestamo: { ...where, estadoId: { in: ESTADOS_PRESTAMO_OPERABLES } },
+      },
+      select: {
+        montoTotal: true,
+        montoPagado: true,
+        prestamo: { select: { monedaId: true } },
+      },
+    });
+    const prestamosCuotasPorMoneda = new Map();
+    for (const c of cuotasPrestamoResumen) {
+      const clave = String(c.prestamo.monedaId);
+      const acumulado = prestamosCuotasPorMoneda.get(clave) || { monedaId: c.prestamo.monedaId, total: 0, cantidad: 0 };
+      acumulado.total += Number(c.montoTotal) - Number(c.montoPagado || 0);
+      acumulado.cantidad += 1;
+      prestamosCuotasPorMoneda.set(clave, acumulado);
+    }
+    const prestamosCuotasAgrupadas = [...prestamosCuotasPorMoneda.values()].map((g) => ({
+      ...g,
+      total: Math.round(g.total * 100) / 100,
+    }));
+
+    const prestamosDesembolsosAgrupados = await prisma.prestamoBancario.groupBy({
+      by: ['monedaId'],
+      where: {
+        ...where,
+        esSaldoInicial: false,
+        movimientoCajaDesembolsoId: null,
+        estadoId: { in: ESTADOS_PRESTAMO_OPERABLES },
+        asientosContables: { none: {} },
+      },
+      _sum: { montoDesembolsado: true },
+      _count: { id: true },
     });
 
     // ========================================
@@ -1233,6 +1671,8 @@ const obtenerResumen = async (empresaId = null) => {
         ...cxpAgrupadas.map((g) => g.monedaId),
         ...deudasAgrupadas.map((g) => g.monedaId),
         ...deudasTributariasAgrupadas.map((g) => g.monedaId),  // ✅ AGREGAR
+        ...prestamosCuotasAgrupadas.map((g) => g.monedaId),
+        ...prestamosDesembolsosAgrupados.map((g) => g.monedaId),
         ...asignacionesAgrupadas.map((g) => g.monedaId),
         ...gastosDirectosAgrupados.map((g) => g.monedaId),
         ...cxcVencidas.map((g) => g.monedaId),
@@ -1281,6 +1721,16 @@ const obtenerResumen = async (empresaId = null) => {
       deudasTributarias: deudasTributariasAgrupadas.map((g) => ({
         moneda: monedas.find((m) => m.id === g.monedaId),
         total: g._sum.saldoPendiente,
+        cantidad: g._count.id,
+      })),
+      prestamosCuotas: prestamosCuotasAgrupadas.map((g) => ({
+        moneda: monedas.find((m) => m.id === g.monedaId),
+        total: g.total,
+        cantidad: g.cantidad,
+      })),
+      prestamosDesembolsos: prestamosDesembolsosAgrupados.map((g) => ({
+        moneda: monedas.find((m) => m.id === g.monedaId),
+        total: g._sum.montoDesembolsado,
         cantidad: g._count.id,
       })),
       vencidos: {
