@@ -26,6 +26,11 @@ async function validarTipoDeudaTributaria(data) {
     if (!cuenta) throw new ValidationError('La cuenta contable referenciada no existe.');
   }
 
+  if (data.cuentaProvisionId) {
+    const cuenta = await prisma.planCuentasContable.findUnique({ where: { id: data.cuentaProvisionId } });
+    if (!cuenta) throw new ValidationError('La cuenta contable de provisión referenciada no existe.');
+  }
+
   if (data.tipoLibroId) {
     const tipoLibro = await prisma.tipoLibroContableSunat.findUnique({ where: { id: data.tipoLibroId } });
     if (!tipoLibro) throw new ValidationError('El tipo de libro contable referenciado no existe.');
@@ -39,6 +44,7 @@ const listar = async () => {
         categoria: true,
         entidadRecaudadora: true,
         cuentaContable: true,
+        cuentaProvision: true,
         tipoLibroContableSunat: true
       },
       orderBy: { nombre: 'asc' }
@@ -59,6 +65,7 @@ const listarActivos = async () => {
         categoria: true,
         entidadRecaudadora: true,
         cuentaContable: true,
+        cuentaProvision: true,
         tipoLibroContableSunat: true
       },
       orderBy: { nombre: 'asc' }
@@ -79,6 +86,7 @@ const obtenerPorId = async (id) => {
         categoria: true,
         entidadRecaudadora: true,
         cuentaContable: true,
+        cuentaProvision: true,
         tipoLibroContableSunat: true,
         deudas: {
           include: {
@@ -116,6 +124,9 @@ const crear = async (data) => {
     } else {
       cuentaContableId = null;
     }
+
+    // Misma regla para la cuenta de provisión: 0 o vacío significa "sin cuenta"
+    const cuentaProvisionId = data.cuentaProvisionId ? Number(data.cuentaProvisionId) : null;
     
     const tipoData = {
       nombre: data.nombre,
@@ -124,6 +135,7 @@ const crear = async (data) => {
       entidadRecaudadoraId: Number(data.entidadRecaudadoraId) || null,
       periodicidad: data.periodicidad,
       cuentaContableId: cuentaContableId,
+      cuentaProvisionId: cuentaProvisionId,
       tipoLibroId: Number(data.tipoLibroId) || null,
       activo: data.activo !== undefined ? data.activo : true,
       creadoPor: data.creadoPor || null
@@ -150,6 +162,9 @@ const actualizar = async (id, data) => {
     const tipoData = { ...data };
     if (tipoData.cuentaContableId === 0) {
       tipoData.cuentaContableId = null;
+    }
+    if (tipoData.cuentaProvisionId === 0) {
+      tipoData.cuentaProvisionId = null;
     }
     
     tipoData.actualizadoPor = data.actualizadoPor || null;

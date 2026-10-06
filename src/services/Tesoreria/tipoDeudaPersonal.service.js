@@ -20,6 +20,11 @@ async function validarTipoDeudaPersonal(data) {
     const cuenta = await prisma.planCuentasContable.findUnique({ where: { id: data.cuentaContableId } });
     if (!cuenta) throw new ValidationError('La cuenta contable referenciada no existe.');
   }
+
+  if (data.cuentaProvisionId) {
+    const cuenta = await prisma.planCuentasContable.findUnique({ where: { id: data.cuentaProvisionId } });
+    if (!cuenta) throw new ValidationError('La cuenta contable de provisión referenciada no existe.');
+  }
 }
 
 const listar = async () => {
@@ -27,7 +32,8 @@ const listar = async () => {
     return await prisma.tipoDeudaPersonal.findMany({
       include: {
         categoria: true,
-        cuentaContable: true
+        cuentaContable: true,
+        cuentaProvision: true
       },
       orderBy: { nombre: 'asc' }
     });
@@ -45,7 +51,8 @@ const listarActivos = async () => {
       where: { activo: true },
       include: {
         categoria: true,
-        cuentaContable: true
+        cuentaContable: true,
+        cuentaProvision: true
       },
       orderBy: { nombre: 'asc' }
     });
@@ -64,6 +71,7 @@ const obtenerPorId = async (id) => {
       include: {
         categoria: true,
         cuentaContable: true,
+        cuentaProvision: true,
         deudas: {
           include: {
             personal: true,
@@ -102,11 +110,15 @@ const crear = async (data) => {
       cuentaContableId = null;
     }
 
+    // Misma regla para la cuenta de provisión: 0 o vacío significa "sin cuenta"
+    const cuentaProvisionId = data.cuentaProvisionId ? Number(data.cuentaProvisionId) : null;
+
     const tipoData = {
       nombre: data.nombre,
       descripcion: data.descripcion || null,
       categoriaId: data.categoriaId ? Number(data.categoriaId) : null,
       cuentaContableId: cuentaContableId,
+      cuentaProvisionId: cuentaProvisionId,
       periodicidad: data.periodicidad || null,
       activo: data.activo !== undefined ? data.activo : true,
       creadoPor: data.creadoPor || null
@@ -133,6 +145,9 @@ const actualizar = async (id, data) => {
     const tipoData = { ...data };
     if (tipoData.cuentaContableId === 0) {
       tipoData.cuentaContableId = null;
+    }
+    if (tipoData.cuentaProvisionId === 0) {
+      tipoData.cuentaProvisionId = null;
     }
     
     tipoData.actualizadoPor = data.actualizadoPor || null;
