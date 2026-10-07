@@ -6,6 +6,7 @@ const router = Router();
 router.get('/', deudaConPersonalController.listar);
 router.get('/:id', deudaConPersonalController.obtenerPorId);
 router.post('/', deudaConPersonalController.crear);
+router.post('/provision-planilla', deudaConPersonalController.generarProvisionPlanilla);
 router.put('/:id', deudaConPersonalController.actualizar);
 router.delete('/:id', deudaConPersonalController.eliminar);
 

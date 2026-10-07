@@ -101,6 +101,25 @@ export async function listarPorTipo(req, res, next) {
 
 
 /**
+ * Genera un asiento consolidado de provisión de planilla con las deudas seleccionadas
+ * POST /api/tesoreria/deudas-con-personal/provision-planilla
+ * Body: { deudaIds: [...], fechaAsiento? }
+ */
+export async function generarProvisionPlanilla(req, res, next) {
+  try {
+    const usuarioId = req.usuario?.personalId ? Number(req.usuario.personalId) : null;
+    const resultado = await deudaConPersonalService.generarProvisionPlanilla({
+      deudaIds: req.body.deudaIds,
+      fechaAsiento: req.body.fechaAsiento,
+      usuarioId,
+    });
+    res.status(201).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Genera borrador de asiento contable para una deuda CTS
  * GET /api/deudas-personal/:id/borrador-asiento
  */

@@ -500,6 +500,8 @@ const obtenerConGastosAsociados = async (id) => {
             moneda: true,
             producto: true,
             tipoDocumento: true,
+            // Activo afecto del gasto: reemplaza a la embarcación (deprecada) en el PDF de liquidación
+            activoAfecto: true,
             embarcacion: {
               include: {
                 activo: true,

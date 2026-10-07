@@ -6,14 +6,25 @@ import {
 } from "../../utils/estados.constants.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import preFacturaService from "./preFactura.service.js";
+import { TIPO_DOC_ID } from "../../utils/tiposDocumento.constants.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
  * SERVICIO: BOLETEO AUTOMÁTICO
  * ════════════════════════════════════════════════════════════════════════════
  *
- * Crea PreFactura + DetallePreFactura a partir de boletas ya emitidas
+ * Crea PreFactura + DetallePreFactura a partir de boletas y notas de crédito ya emitidas
  * (cargadas desde un JSON en el frontend).
+ *
+ * Notas de crédito (tipoDocumentoFinalId = TIPO_DOC_ID.NOTA_CREDITO):
+ *   - El documento que afectan se busca en la tabla PreFactura, de la misma empresa, por tipo de
+ *     documento final + serie + correlativo. La serie de los documentos finales se guarda como
+ *     texto en numSerieDocFinal (serieDocFinalId queda vacío en los documentos importados).
+ *   - Se guardan dcmtoAfectoNCNDId, numeroDcmtoAfectoNCND, fechaDcmtoAfectoNCND (los mismos datos
+ *     que registra preFacturaService.crear) y el motivo (MotivoNotaCreditoDebito de tipo NC).
+ *   - El sistema guarda las NC con total negativo: el total del archivo (positivo) se compara en
+ *     valor absoluto. El tipo de cambio efectivo de una NC lo resuelve obtenerTipoCambioEfectivo
+ *     con el del documento afecto, igual que el resto del sistema.
  *
  * Por qué NO se llama a preFacturaService.crear():
  *   - crear() abre su propia transacción: si luego fallara el detalle quedaría una
@@ -85,6 +96,14 @@ const CAMPOS_OBLIGATORIOS = [
   "tipoCambio",
 ];
 
+// Datos adicionales que exige una nota de crédito: el documento que afecta y el motivo
+const CAMPOS_OBLIGATORIOS_NOTA_CREDITO = [
+  "tipoDocumentoAfectoId",
+  "serieDocAfecto",
+  "correlativoDocAfecto",
+  "motivoNotaCreditoDebitoId",
+];
+
 // ════════════════════════════════════════════════════════════
 // PROCESAR UNA BOLETA (una transacción)
 // ════════════════════════════════════════════════════════════
@@ -94,6 +113,19 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
   );
   if (faltantes.length > 0) {
     throw new ValidationError(`Faltan datos: ${faltantes.join(", ")}`);
+  }
+
+  const esNotaCredito =
+    Number(boleta.tipoDocumentoFinalId) === Number(TIPO_DOC_ID.NOTA_CREDITO);
+  if (esNotaCredito) {
+    const faltantesNC = CAMPOS_OBLIGATORIOS_NOTA_CREDITO.filter(
+      (campo) => boleta[campo] === undefined || boleta[campo] === null || boleta[campo] === "",
+    );
+    if (faltantesNC.length > 0) {
+      throw new ValidationError(
+        `Nota de crédito sin datos del documento afecto: ${faltantesNC.join(", ")}`,
+      );
+    }
   }
 
   const cantidad = Number(boleta.cantidad);
@@ -148,6 +180,48 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
           numeroDocumento: existente.numeroDocumento,
           mensaje: "Ya registrada en esta empresa",
         };
+      }
+
+      // ════════════════════════════════════════════════════════════
+      // 2.1 NOTA DE CRÉDITO: documento afecto (en la tabla PreFactura) y motivo
+      // ════════════════════════════════════════════════════════════
+      let documentoAfecto = null;
+      if (esNotaCredito) {
+        documentoAfecto = await tx.preFactura.findFirst({
+          where: {
+            empresaId,
+            tipoDocumentoFinalId: Number(boleta.tipoDocumentoAfectoId),
+            numSerieDocFinal: String(boleta.serieDocAfecto).trim(),
+            numCorreDocFinal: String(boleta.correlativoDocAfecto).trim(),
+          },
+          select: { id: true, numeroDocumentoFinal: true, fechaFacturacion: true },
+        });
+        if (!documentoAfecto) {
+          throw new ValidationError(
+            `No existe el documento afecto ${String(boleta.serieDocAfecto).trim()}-${String(boleta.correlativoDocAfecto).trim()} en esta empresa. Debe registrarse antes que la nota de crédito.`,
+          );
+        }
+
+        // La NC debe ser del mismo producto que el documento que afecta: si no, no se procesa
+        const mismoProducto = await tx.detallePreFactura.findFirst({
+          where: { preFacturaId: documentoAfecto.id, productoId: Number(boleta.productoId) },
+          select: { id: true },
+        });
+        if (!mismoProducto) {
+          throw new ValidationError(
+            `El producto de la nota de crédito no coincide con el del documento afecto ${documentoAfecto.numeroDocumentoFinal}.`,
+          );
+        }
+
+        const motivo = exigir(
+          await tx.motivoNotaCreditoDebito.findUnique({
+            where: { id: Number(boleta.motivoNotaCreditoDebitoId) },
+          }),
+          "Motivo de nota de crédito",
+        );
+        if (motivo.esNCND) {
+          throw new ValidationError("El motivo indicado corresponde a una nota de débito, no a una nota de crédito.");
+        }
       }
 
       const [empresa, cliente, vendedor, formaPago, tipoProducto, moneda, producto] =
@@ -263,6 +337,13 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
             tipoOperacionSunatId: parametros.tipoOperacionSunatId,
           }),
           ...(boleta.unidadNegocioId && { unidadNegocioId: Number(boleta.unidadNegocioId) }),
+          // Nota de crédito: vínculo con el documento afecto (mismos datos que registra crear())
+          ...(documentoAfecto && {
+            dcmtoAfectoNCNDId: documentoAfecto.id,
+            numeroDcmtoAfectoNCND: documentoAfecto.numeroDocumentoFinal,
+            fechaDcmtoAfectoNCND: documentoAfecto.fechaFacturacion,
+            motivoNotaCreditoDebitoId: Number(boleta.motivoNotaCreditoDebitoId),
+          }),
           creadoPor: usuarioId ? Number(usuarioId) : null,
           actualizadoPor: usuarioId ? Number(usuarioId) : null,
           subtotal: 0,
@@ -293,10 +374,12 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
       // ════════════════════════════════════════════════════════════
       const totales = await preFacturaService.calcularTotalesEImpuestos(preFactura.id, tx);
 
-      // Seguridad: si el total recompuesto no coincide con la boleta, se revierte esta boleta
-      if (Math.abs(Number(totales.total) - redondear(totalConIGV, 2)) > 0.005) {
+      // Seguridad: si el total recompuesto no coincide con el documento, se revierte este documento.
+      // Las notas de crédito se guardan con total negativo y el archivo trae el monto en positivo:
+      // se compara en valor absoluto.
+      if (Math.abs(Math.abs(Number(totales.total)) - redondear(totalConIGV, 2)) > 0.005) {
         throw new ValidationError(
-          `El total calculado (${redondear(totales.total, 2)}) no coincide con la boleta (${redondear(totalConIGV, 2)}).`,
+          `El total calculado (${redondear(Math.abs(totales.total), 2)}) no coincide con el documento (${redondear(totalConIGV, 2)}).`,
         );
       }
 
@@ -311,6 +394,7 @@ const procesarBoleta = async (boleta, parametros, usuarioId) => {
         preFacturaId: preFactura.id,
         numeroDocumento,
         total: redondear(totales.total, 2),
+        ...(documentoAfecto && { documentoAfecto: documentoAfecto.numeroDocumentoFinal }),
       };
     },
     { timeout: 20000 },

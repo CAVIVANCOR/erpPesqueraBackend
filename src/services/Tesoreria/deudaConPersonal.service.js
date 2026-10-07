@@ -3,6 +3,8 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
 import { obtenerTipoCambioSunat } from '../../utils/tipoCambio.util.js';
+import periodoContableService from '../Contabilidad/periodoContable.service.js';
+import { ESTADO_PERIODO_CONTABLE } from '../../utils/estados.constants.js';
 
 /**
  * Servicio CRUD para DeudaConPersonal
@@ -59,7 +61,9 @@ const listar = async () => {
         moneda: true,
         estado: true,
         periodoContable: true,
-        pagos: true
+        pagos: true,
+        // Solo para saber si está contabilizada (tiene al menos un asiento vinculado)
+        asientosContables: { select: { id: true }, take: 1 }
       },
       orderBy: { fecha: 'desc' }
     });
@@ -589,7 +593,183 @@ const eliminarAsientoCTS = async (deudaId, asientoId) => {
   }
 };
 
+// Submódulo origen de los asientos de deudas con personal (el mismo que usa guardarAsientosCTS)
+const SUBMODULO_DEUDA_PERSONAL_ID = 136;
+
+/**
+ * Genera UN asiento consolidado de provisión de planilla a partir de las deudas seleccionadas.
+ *
+ * Por cada deuda: DEBE = tipoDeuda.cuentaProvisionId (gasto; en las retenciones, el pasivo que
+ * reducen) y HABER = tipoDeuda.cuentaContableId, por el monto de la deuda. Se suma por cuenta y se
+ * compensa el mismo pasivo a ambos lados (p. ej. 411101: bruto en el Haber menos retenciones en el
+ * Debe = neto), de modo que queda una sola línea por cuenta. Cuadra siempre porque cada deuda
+ * aporta el mismo monto a ambos lados.
+ *
+ * Las deudas quedan vinculadas al asiento: una deuda que ya tiene asiento (provisión o saldo
+ * inicial) no se puede provisionar de nuevo.
+ *
+ * @param {Object} datos
+ * @param {Array<number>} datos.deudaIds - Deudas a provisionar
+ * @param {string|Date} [datos.fechaAsiento] - Fecha del asiento (por defecto, la fecha más reciente de las deudas)
+ * @param {number} [datos.usuarioId]
+ */
+const generarProvisionPlanilla = async ({ deudaIds, fechaAsiento, usuarioId }) => {
+  try {
+    const ids = [...new Set((deudaIds || []).map(Number))];
+    if (ids.length === 0) throw new ValidationError('Seleccione al menos una deuda.');
+
+    const deudas = await prisma.deudaConPersonal.findMany({
+      where: { id: { in: ids } },
+      include: {
+        moneda: { select: { codigoSunat: true } },
+        tipoDeuda: { select: { nombre: true, cuentaContableId: true, cuentaProvisionId: true } },
+        asientosContables: { select: { id: true }, take: 1 },
+      },
+      orderBy: { id: 'asc' },
+    });
+    if (deudas.length !== ids.length) throw new NotFoundError('Alguna de las deudas seleccionadas no existe.');
+
+    const conAsiento = deudas.filter((d) => d.asientosContables.length > 0);
+    if (conAsiento.length > 0) {
+      throw new ConflictError(
+        `Estas deudas ya tienen asiento y no se pueden provisionar: ${conAsiento.map((d) => d.id).join(', ')}.`
+      );
+    }
+
+    const base = deudas[0];
+    const mismoAsiento = deudas.every(
+      (d) =>
+        Number(d.empresaId) === Number(base.empresaId) &&
+        Number(d.monedaId) === Number(base.monedaId) &&
+        Boolean(d.esGerencial) === Boolean(base.esGerencial)
+    );
+    if (!mismoAsiento) {
+      throw new ValidationError('Las deudas deben ser de la misma empresa, moneda y tipo de operación (fiscal o gerencial).');
+    }
+    if (base.moneda?.codigoSunat !== 'PEN') {
+      throw new ValidationError('La provisión de planilla solo aplica a deudas en soles.');
+    }
+
+    const sinCuentas = [
+      ...new Set(
+        deudas
+          .filter((d) => !d.tipoDeuda.cuentaProvisionId || !d.tipoDeuda.cuentaContableId)
+          .map((d) => d.tipoDeuda.nombre)
+      ),
+    ];
+    if (sinCuentas.length > 0) {
+      throw new ValidationError(
+        `Configure la cuenta de provisión (Debe) y la cuenta contable (Haber) en los tipos de deuda: ${sinCuentas.join(', ')}.`
+      );
+    }
+
+    const fecha = fechaAsiento
+      ? new Date(fechaAsiento)
+      : new Date(Math.max(...deudas.map((d) => new Date(d.fecha).getTime())));
+    const periodo = await periodoContableService.obtenerPeriodoPorFecha(base.empresaId, fecha);
+    if (Number(periodo.estadoId) !== ESTADO_PERIODO_CONTABLE.ABIERTO) {
+      throw new ValidationError(`El período ${periodo.nombrePeriodo} no está abierto.`);
+    }
+
+    // Neto por cuenta en céntimos: positivo = Debe, negativo = Haber
+    const netoPorCuenta = new Map();
+    for (const deuda of deudas) {
+      const centimos = Math.round(Number(deuda.montoOriginal) * 100);
+      const cuentaDebe = Number(deuda.tipoDeuda.cuentaProvisionId);
+      const cuentaHaber = Number(deuda.tipoDeuda.cuentaContableId);
+      netoPorCuenta.set(cuentaDebe, (netoPorCuenta.get(cuentaDebe) || 0) + centimos);
+      netoPorCuenta.set(cuentaHaber, (netoPorCuenta.get(cuentaHaber) || 0) - centimos);
+    }
+
+    const cuentas = await prisma.planCuentasContable.findMany({
+      where: { id: { in: [...netoPorCuenta.keys()] } },
+      select: { id: true, codigoCuenta: true },
+    });
+    const codigoPorCuenta = new Map(cuentas.map((c) => [Number(c.id), c.codigoCuenta]));
+
+    // Primero el Debe y luego el Haber, cada grupo por código de cuenta
+    const lineas = [...netoPorCuenta.entries()]
+      .filter(([, neto]) => neto !== 0)
+      .map(([cuentaId, neto]) => ({
+        cuentaId,
+        debe: neto > 0 ? neto / 100 : 0,
+        haber: neto < 0 ? -neto / 100 : 0,
+      }))
+      .sort(
+        (a, b) =>
+          Number(a.haber > 0) - Number(b.haber > 0) ||
+          String(codigoPorCuenta.get(a.cuentaId)).localeCompare(String(codigoPorCuenta.get(b.cuentaId)))
+      );
+
+    const totalDebe = lineas.reduce((suma, l) => suma + Math.round(l.debe * 100), 0) / 100;
+    const totalHaber = lineas.reduce((suma, l) => suma + Math.round(l.haber * 100), 0) / 100;
+
+    const mes = fecha.toLocaleDateString('es-PE', { month: 'long' }).toUpperCase();
+    const glosa = `PROVISION PLANILLA MES DE ${mes} ${fecha.getFullYear()}`;
+
+    const asiento = await asientoContableService.crear({
+      empresaId: base.empresaId,
+      periodoContableId: periodo.id,
+      fechaAsiento: fecha,
+      glosa,
+      origenAsiento: 'AUTOMATICO',
+      monedaId: base.monedaId,
+      tipoCambio: 1,
+      totalDebe,
+      totalHaber,
+      diferencia: 0,
+      estaCuadrado: true,
+      submoduloOrigenId: SUBMODULO_DEUDA_PERSONAL_ID,
+      procesoOrigenId: base.id,
+      tipoLibroId: TIPO_LIBRO.PLANILLAS,
+      esSaldoInicial: false,
+      esGerencial: base.esGerencial,
+      creadoPor: usuarioId,
+      actualizadoPor: usuarioId,
+      deudas: { connect: deudas.map((d) => ({ id: d.id })) },
+      detalles: lineas.map((l, indice) => ({
+        numeroLinea: indice + 1,
+        planCuentaId: l.cuentaId,
+        glosa,
+        debe: l.debe,
+        haber: l.haber,
+        monedaId: 1,
+        tipoCambio: 1,
+        debeMonedaExtranjera: l.debe,
+        haberMonedaExtranjera: l.haber,
+        submoduloOrigenLineaId: SUBMODULO_DEUDA_PERSONAL_ID,
+        procesoOrigenLineaId: base.id,
+        creadoPor: usuarioId,
+        actualizadoPor: usuarioId,
+      })),
+    });
+
+    await prisma.deudaConPersonal.updateMany({
+      where: { id: { in: ids } },
+      data: { periodoContableId: periodo.id, fechaContable: fecha },
+    });
+
+    return {
+      success: true,
+      asientoId: asiento.id,
+      numeroAsiento: asiento.numeroAsiento,
+      glosa,
+      totalDebe,
+      totalHaber,
+      deudasProvisionadas: deudas.length,
+      lineas: lineas.length,
+    };
+  } catch (err) {
+    if (err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith('P')) {
+      throw new DatabaseError('Error de base de datos al generar la provisión de planilla', err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
+  generarProvisionPlanilla,
   listar,
   obtenerPorId,
   crear,

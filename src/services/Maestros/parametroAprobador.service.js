@@ -62,6 +62,48 @@ const listarPorModulo = async (empresaId, moduloSistemaId) => {
 };
 
 /**
+ * Obtiene el aprobador vigente de una empresa para un módulo del sistema, con los datos del
+ * personal que necesita una firma (nombres, apellidos, tipo y número de documento).
+ * Vigente = no cesado, vigenteDesde ya iniciada y vigenteHasta vacía o no vencida (inclusive el día
+ * final). Si hubiera varios, toma el de vigenteDesde más reciente. Devuelve null si no hay ninguno.
+ */
+const obtenerVigente = async (empresaId, moduloSistemaId) => {
+  try {
+    const ahora = new Date();
+    const inicioHoy = new Date(ahora);
+    inicioHoy.setHours(0, 0, 0, 0);
+
+    const parametro = await prisma.parametroAprobador.findFirst({
+      where: {
+        empresaId: BigInt(empresaId),
+        moduloSistemaId: BigInt(moduloSistemaId),
+        cesado: false,
+        vigenteDesde: { lte: ahora },
+        OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: inicioHoy } }]
+      },
+      orderBy: { vigenteDesde: 'desc' }
+    });
+    if (!parametro) return null;
+
+    const personal = await prisma.personal.findUnique({
+      where: { id: parametro.personalRespId },
+      select: {
+        id: true,
+        nombres: true,
+        apellidos: true,
+        numeroDocumento: true,
+        tipoDocIdentidad: { select: { codigo: true, nombre: true } }
+      }
+    });
+
+    return { ...parametro, personal };
+  } catch (err) {
+    if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
+    throw err;
+  }
+};
+
+/**
  * Obtiene un parámetro aprobador por ID.
  */
 const obtenerPorId = async (id) => {
@@ -137,6 +179,7 @@ const eliminar = async (id) => {
 export default {
   listar,
   listarPorModulo,
+  obtenerVigente,
   obtenerPorId,
   crear,
   actualizar,

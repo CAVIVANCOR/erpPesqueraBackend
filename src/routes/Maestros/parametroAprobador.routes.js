@@ -26,6 +26,14 @@ router.get(
   parametroAprobadorController.listarPorModulo
 );
 
+// Aprobador vigente (lo consumen otras pantallas, p. ej. la firma del PDF de liquidación): solo
+// requiere sesión, no el permiso del mantenimiento de parámetros. Va antes de '/:id'.
+router.get(
+  '/vigente',
+  autenticarJWT,
+  parametroAprobadorController.obtenerVigente
+);
+
 router.get(
   '/:id',
   autenticarJWT,

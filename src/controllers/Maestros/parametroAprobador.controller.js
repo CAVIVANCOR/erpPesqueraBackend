@@ -27,6 +27,20 @@ export async function listarPorModulo(req, res, next) {
   }
 }
 
+/** Aprobador vigente de una empresa y módulo (null si no hay ninguno configurado). */
+export async function obtenerVigente(req, res, next) {
+  try {
+    const { empresaId, moduloSistemaId } = req.query;
+    if (!empresaId || !moduloSistemaId) {
+      return res.status(400).json({ error: 'empresaId y moduloSistemaId son requeridos' });
+    }
+    const parametro = await parametroAprobadorService.obtenerVigente(empresaId, moduloSistemaId);
+    res.json(toJSONBigInt(parametro));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     const id = Number(req.params.id);
