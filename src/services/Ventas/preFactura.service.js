@@ -4762,6 +4762,33 @@ async function actualizarTipoAfectacionIGVMasivo(ids, tipoAfectacionIGVId, usuar
   };
 }
 
+async function actualizarUnidadNegocioMasivo(ids, unidadNegocioId, usuarioId) {
+  if (!ids || ids.length === 0) {
+    throw new ValidationError("Debe proporcionar al menos un ID de PreFactura");
+  }
+
+  if (!unidadNegocioId) {
+    throw new ValidationError("Debe proporcionar una unidad de negocio");
+  }
+
+  const resultado = await prisma.preFactura.updateMany({
+    where: {
+      id: {
+        in: ids.map(id => Number(id))
+      }
+    },
+    data: {
+      unidadNegocioId: Number(unidadNegocioId),
+      actualizadoPor: usuarioId ? Number(usuarioId) : null
+    }
+  });
+
+  return {
+    actualizados: Number(resultado.count),
+    mensaje: `Se actualizaron ${resultado.count} registro(s) exitosamente`
+  };
+}
+
 /**
  * Actualiza ÚNICAMENTE el tipo de cambio de una PreFactura.
  *
@@ -5098,6 +5125,7 @@ export default {
   regenerarKardex,
   actualizarTipoOperacionSunatMasivo,
   actualizarTipoAfectacionIGVMasivo,
+  actualizarUnidadNegocioMasivo,
   actualizarTipoCambio,
   calcularTotalesEImpuestos, // ⭐ AGREGAR
   exportarRegistroVentasSUNAT, // ⭐ NUEVO

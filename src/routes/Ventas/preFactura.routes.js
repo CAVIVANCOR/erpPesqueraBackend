@@ -175,6 +175,7 @@ router.post(
 
 router.put("/actualizar-tipo-operacion-sunat-masivo", preFacturaController.actualizarTipoOperacionSunatMasivo);
 router.put("/actualizar-tipo-afectacion-igv-masivo", preFacturaController.actualizarTipoAfectacionIGVMasivo);
+router.put("/actualizar-unidad-negocio-masivo", preFacturaController.actualizarUnidadNegocioMasivo);
 
 router.put(
   '/:id',

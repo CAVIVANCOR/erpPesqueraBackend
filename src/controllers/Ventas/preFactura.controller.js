@@ -436,6 +436,23 @@ export async function actualizarTipoAfectacionIGVMasivo(req, res, next) {
   }
 }
 
+export async function actualizarUnidadNegocioMasivo(req, res, next) {
+  try {
+    const { ids, unidadNegocioId } = req.body;
+    const usuarioId = req.usuario?.id;
+
+    const resultado = await preFacturaService.actualizarUnidadNegocioMasivo(
+      ids,
+      unidadNegocioId,
+      usuarioId
+    );
+
+    res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+}
+
 
 /**
  * Actualizar SOLO el tipo de cambio de una PreFactura
