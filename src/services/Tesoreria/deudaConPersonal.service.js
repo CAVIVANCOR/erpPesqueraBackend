@@ -4,7 +4,7 @@ import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
 import { obtenerTipoCambioSunat } from '../../utils/tipoCambio.util.js';
 import periodoContableService from '../Contabilidad/periodoContable.service.js';
-import { ESTADO_PERIODO_CONTABLE } from '../../utils/estados.constants.js';
+import { ESTADO_PERIODO_CONTABLE, ESTADO_ASIENTO_CONTABLE } from '../../utils/estados.constants.js';
 
 /**
  * Servicio CRUD para DeudaConPersonal
@@ -593,9 +593,6 @@ const eliminarAsientoCTS = async (deudaId, asientoId) => {
   }
 };
 
-// Submódulo origen de los asientos de deudas con personal (el mismo que usa guardarAsientosCTS)
-const SUBMODULO_DEUDA_PERSONAL_ID = 136;
-
 /**
  * Genera UN asiento consolidado de provisión de planilla a partir de las deudas seleccionadas.
  *
@@ -704,50 +701,83 @@ const generarProvisionPlanilla = async ({ deudaIds, fechaAsiento, usuarioId }) =
     const totalDebe = lineas.reduce((suma, l) => suma + Math.round(l.debe * 100), 0) / 100;
     const totalHaber = lineas.reduce((suma, l) => suma + Math.round(l.haber * 100), 0) / 100;
 
-    const mes = fecha.toLocaleDateString('es-PE', { month: 'long' }).toUpperCase();
-    const glosa = `PROVISION PLANILLA MES DE ${mes} ${fecha.getFullYear()}`;
+    const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SETIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+    const glosa = `PROVISION PLANILLA MES DE ${MESES[fecha.getUTCMonth()]} ${fecha.getUTCFullYear()}`;
 
-    const asiento = await asientoContableService.crear({
-      empresaId: base.empresaId,
-      periodoContableId: periodo.id,
-      fechaAsiento: fecha,
-      glosa,
-      origenAsiento: 'AUTOMATICO',
-      monedaId: base.monedaId,
-      tipoCambio: 1,
-      totalDebe,
-      totalHaber,
-      diferencia: 0,
-      estaCuadrado: true,
-      submoduloOrigenId: SUBMODULO_DEUDA_PERSONAL_ID,
-      procesoOrigenId: base.id,
-      tipoLibroId: TIPO_LIBRO.PLANILLAS,
-      esSaldoInicial: false,
-      esGerencial: base.esGerencial,
-      creadoPor: usuarioId,
-      actualizadoPor: usuarioId,
-      deudas: { connect: deudas.map((d) => ({ id: d.id })) },
-      detalles: lineas.map((l, indice) => ({
-        numeroLinea: indice + 1,
-        planCuentaId: l.cuentaId,
-        glosa,
-        debe: l.debe,
-        haber: l.haber,
-        monedaId: 1,
-        tipoCambio: 1,
-        debeMonedaExtranjera: l.debe,
-        haberMonedaExtranjera: l.haber,
-        submoduloOrigenLineaId: SUBMODULO_DEUDA_PERSONAL_ID,
-        procesoOrigenLineaId: base.id,
-        creadoPor: usuarioId,
-        actualizadoPor: usuarioId,
-      })),
-    });
+    // Asiento y vínculo con las deudas en una sola transacción: o queda todo o no queda nada
+    const asiento = await prisma.$transaction(
+      async (tx) => {
+        const [submoduloDeuda, estadoPendiente] = await Promise.all([
+          tx.submoduloSistema.findFirst({ where: { nombreModeloOrigen: 'DeudaConPersonal', activo: true } }),
+          tx.estadoMultiFuncion.findFirst({ where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) } }),
+        ]);
+        if (!submoduloDeuda) throw new ValidationError('No se encontró el submódulo "DeudaConPersonal"');
+        if (!estadoPendiente) throw new ValidationError('No se encontró el estado PENDIENTE para asientos contables');
 
-    await prisma.deudaConPersonal.updateMany({
-      where: { id: { in: ids } },
-      data: { periodoContableId: periodo.id, fechaContable: fecha },
-    });
+        const ultimoAsiento = await tx.asientoContable.findFirst({
+          where: { empresaId: base.empresaId, periodoContableId: periodo.id },
+          orderBy: { correlativo: 'desc' },
+        });
+        const correlativo = ultimoAsiento ? Number(ultimoAsiento.correlativo) + 1 : 1;
+        const numeroAsiento = `ASI-${fecha.getUTCFullYear()}-${String(correlativo).padStart(6, '0')}`;
+
+        const creado = await tx.asientoContable.create({
+          data: {
+            empresaId: base.empresaId,
+            periodoContableId: periodo.id,
+            numeroAsiento,
+            correlativo,
+            fechaAsiento: fecha,
+            glosa,
+            tipoLibro: base.esGerencial ? 'GERENCIAL' : 'FISCAL',
+            tipoLibroId: TIPO_LIBRO.PLANILLAS,
+            esGerencial: Boolean(base.esGerencial),
+            esSaldoInicial: false,
+            origenAsiento: 'AUTOMATICO',
+            submoduloOrigenId: submoduloDeuda.id,
+            procesoOrigenId: base.id,
+            estadoId: estadoPendiente.id,
+            totalDebe,
+            totalHaber,
+            diferencia: 0,
+            estaCuadrado: true,
+            monedaId: base.monedaId,
+            tipoCambio: 1,
+            creadoPor: usuarioId,
+            detalles: {
+              create: lineas.map((l, indice) => ({
+                numeroLinea: indice + 1,
+                planCuentaId: l.cuentaId,
+                glosa,
+                debe: l.debe,
+                haber: l.haber,
+                monedaId: 1,
+                tipoCambio: 1,
+                debeMonedaExtranjera: null,
+                haberMonedaExtranjera: null,
+                submoduloOrigenLineaId: submoduloDeuda.id,
+                procesoOrigenLineaId: base.id,
+                creadoPor: usuarioId,
+              })),
+            },
+          },
+        });
+
+        for (const deuda of deudas) {
+          await tx.deudaConPersonal.update({
+            where: { id: deuda.id },
+            data: {
+              periodoContableId: periodo.id,
+              fechaContable: fecha,
+              asientosContables: { connect: { id: creado.id } },
+            },
+          });
+        }
+
+        return creado;
+      },
+      { timeout: 60000 }
+    );
 
     return {
       success: true,
