@@ -281,7 +281,7 @@ export async function asignarActivoMasivo(req, res, next) {
 export async function generarDocumentosFinancieros(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const resultado = await detMovsEntregaRendirService.generarDocumentosFinancieros(id);
+    const resultado = await detMovsEntregaRendirService.generarDocumentosFinancieros(id, req.body?.accionOcExistente);
     res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
