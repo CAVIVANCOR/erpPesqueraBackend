@@ -1384,7 +1384,6 @@ model PreFactura {
   
   // Relaciones inversas
   detalles                    DetallePreFactura[]                                                                                          // Detalles de productos
-  contratistasOT              DetContratistasOT[] @relation("PreFacturaContratistaOT")
   asientosContables           AsientoContable[]  // Relación inversa - Asientos generados
   tipoAfectacionIGV           TipoAfectacionIGV?  @relation(fields: [tipoAfectacionIGVId], references: [id])
   tipoOperacionSunat          TipoOperacionSunat? @relation(fields: [tipoOperacionSunatId], references: [id])
@@ -2171,7 +2170,6 @@ model DetPermisoGestionadoOT {
   fechaGestion             DateTime?
   urlPermisoAutorizacion   String?
 
-  otMantenimiento          OTMantenimiento     @relation(fields: [otMantenimientoId], references: [id])
   permisoAutorizacion      PermisoAutorizacion @relation(fields: [permisoAutorizacionId], references: [id])
 }
 
@@ -3171,7 +3169,6 @@ model EntregaARendirOTMantenimiento {
   urlLiquidacionPdf            String?     @db.VarChar(500)
   respLiquidacionId            BigInt?
 
-  otMantenimiento              OTMantenimiento @relation("EntregaRendirOTMantenimiento", fields: [otMantenimientoId], references: [id])
   detallesMovimientos          DetMovsEntregaRendirOTMantenimiento[]
   respLiquidacion              Personal? @relation("LiquidadorOTMantenimiento", fields: [respLiquidacionId], references: [id])
   respEntregaRendir            Personal @relation("ResponsableEntregaOTMantenimiento", fields: [respEntregaRendirId], references: [id])
@@ -4723,7 +4720,6 @@ model Producto {
   // ========================================
   detallesComprobante                   DetalleComprobante[]
   gastosPlanificados                    DetGastosPlanificados[]
-  serviciosContratistasOT               DetContratistasOT[] @relation("ProductoServicioOT")
   repuestosContratistasOT               DetRepuestosContratistaOT[]
   // ========================================
   // 🆕 RELACIONES CON CUENTAS CONTABLES
@@ -5459,16 +5455,40 @@ model TripulanteFaenaConsumo {
 faenaPescaConsumo    FaenaPescaConsumo @relation(fields: [faenaPescaConsumoId], references: [id])
 }
 
-// ============================================
+// ============================================================================
 // MÓDULO DE MANTENIMIENTO
-// ============================================
-
+//
+// Estructura de negocio:
+//   OT (OTMantenimiento)
+//    └─ Presupuesto del contratista (DetContratistasOT)   ← cabecera; NO se factura directamente
+//         └─ Ítems (DetRepuestosContratistaOT)            ← repuestos Y servicios; de aquí salen los documentos de compra
+//
+// Documentos de compra de un presupuesto (OrdenCompra + CxP + asientos):
+//   - La OC se enlaza al presupuesto por trazabilidad, sin FK nueva:
+//       OrdenCompra.submoduloOrigenId = 158 (SubmoduloSistema "detContratistasOT")
+//       OrdenCompra.procesoOrigenId   = DetContratistasOT.id
+//   - Los asientos llevan origen 28 (OrdenCompra) + id de la OC, igual que Compras, y son
+//     regenerables desde la OC con el flujo normal. La glosa de cabecera agrega la traza
+//     "OT ID x (fecha) - PRESUPUESTO ID y - razón social del contratista" (informativa).
+//   - Un presupuesto puede tener N documentos. Un comprobante fiscal (empresa + proveedor +
+//     tipo + serie + correlativo) no puede repetirse en ninguna OC.
+//   - Gerencial: OC tipo 17 serie 002 de la empresa que factura, proveedor = contratista.
+//     Fiscal: se ingresa tipo de documento, fecha, serie, correlativo y RUC del proveedor
+//     (el proveedor puede ser distinto del contratista).
+//   - El presupuesto aprobado NO cambia al generar documentos; solo lo modifica el usuario.
+//     Un documento no puede superar el monto del presupuesto.
+//
+// Conversión de monedas (en cascada):
+//   Nivel 1: cada documento de compra se convierte a la moneda del presupuesto con el TC de esa OC.
+//   Nivel 2: cada presupuesto (y su saldo) se convierte a la moneda de la OT con el TC del presupuesto.
+// ============================================================================
+ 
 model OTMantenimiento {
   id                     BigInt    @id @default(autoincrement())
-  empresaId              BigInt
+  empresaId              BigInt                                    // Empresa dueña de la OT (puede diferir de la que factura cada documento de compra)
   fechaDocumento         DateTime  @default(now())
   sedeId                 BigInt?
-  activoId               BigInt
+  activoId               BigInt                                    // Activo que se mantiene
   tipoMantenimientoId    BigInt
   motivoOriginoId        BigInt
   prioridadAlta          Boolean   @default(false)
@@ -5478,17 +5498,21 @@ model OTMantenimiento {
   fechaFin               DateTime?
   
   porcentajeAvance       Decimal?  @db.Decimal(5, 2)
+ 
+  // ⭐ CAMBIO (solo comentario): totales CALCULADOS = suma de los presupuestos de la OT, cada uno
+  // convertido a la moneda de la OT (monedaId) con el tipoCambio de su presupuesto.
+  // Se recalculan al generar un documento de compra y al consultar o grabar la OT.
   totalMontoPactado      Decimal?  @db.Decimal(18, 2)
   totalMontoPagado       Decimal?  @db.Decimal(18, 2)
   totalSaldo             Decimal?  @db.Decimal(18, 2)
-
+ 
   tipoDocumentoId        BigInt
   serieDocId             BigInt
   numeroSerie            String    @db.VarChar(10)
   numeroCorrelativo      Int
   numeroCompleto         String    @db.VarChar(20)
-
-  monedaId               BigInt
+ 
+  monedaId               BigInt                                    // Moneda de la OT (base de sus totales)
   solicitanteId          BigInt?
   responsableId          BigInt?
   descripcionProblema    String?   @db.Text
@@ -5502,7 +5526,7 @@ model OTMantenimiento {
   actualizadoEn          DateTime  @updatedAt
   creadoPor              BigInt?
   actualizadoPor         BigInt?
-
+ 
   empresa                Empresa             @relation(fields: [empresaId], references: [id])
   sede                   SedesEmpresa?       @relation(fields: [sedeId], references: [id])
   activo                 Activo              @relation(fields: [activoId], references: [id])
@@ -5514,11 +5538,11 @@ model OTMantenimiento {
   responsable            Personal?           @relation("ResponsableOT", fields: [responsableId], references: [id])
   tipoDocumento          TipoDocumento       @relation(fields: [tipoDocumentoId], references: [id])
   serieDoc               SerieDoc            @relation(fields: [serieDocId], references: [id])
-
-  contratistas           DetContratistasOT[]
-  entregaARendir         EntregaARendirOTMantenimiento? @relation("EntregaRendirOTMantenimiento")
-  permisosGestionados    DetPermisoGestionadoOT[]
-
+ 
+  contratistas           DetContratistasOT[]                       // Presupuestos de contratistas de la OT
+  // ⭐ CAMBIO: se eliminan las relaciones entregaARendir y permisosGestionados
+  //    (ver nota: decidir si las columnas otMantenimientoId de esas tablas quedan como campo simple)
+ 
   @@unique([empresaId, numeroCompleto])
   @@index([empresaId])
   @@index([activoId])
@@ -5544,20 +5568,40 @@ model TipoMantenimiento {
   ordenesMantenimiento    OTMantenimiento[]
 }
 
+// ----------------------------------------------------------------------------
+// Presupuesto del contratista = CABECERA. No se factura directamente: los documentos
+// de compra se generan siempre desde sus ítems (DetRepuestosContratistaOT).
+// Puede existir sin ítems (monto 0); el usuario agrega los ítems después.
+// ----------------------------------------------------------------------------
 model DetContratistasOT {
   id                      BigInt              @id @default(autoincrement())
-  otMantenimientoId       BigInt
+  otMantenimientoId       BigInt                                   // OT a la que pertenece el presupuesto
   numeroLinea             Int
-  contratistaId           BigInt
-  productoServicioId      BigInt
-  activoId                BigInt?
-  servicioDescripcion     String              @db.Text
-  montoPactado            Decimal             @db.Decimal(18, 2)
-  montoPagado             Decimal             @db.Decimal(18, 2)  @default(0)
-  saldo                   Decimal             @db.Decimal(18, 2)
-  monedaId                BigInt
+  contratistaId           BigInt                                   // Contratista que presupuesta; proveedor de los documentos GERENCIALES
+                                                                   // (en los FISCALES el proveedor se toma del RUC del comprobante)
+  // ⭐ CAMBIO: se elimina productoServicioId. Los productos/servicios viven en los ítems
+  //    (DetRepuestosContratistaOT); la cabecera solo describe el trabajo (servicioDescripcion).
+  activoId                BigInt?                                  // Activo específico del trabajo (si difiere del de la OT)
+  servicioDescripcion     String              @db.Text             // Descripción del trabajo contratado
+ 
+  // ⭐ CAMPO NUEVO: fecha del presupuesto. Base del tipo de cambio SUNAT.
+  fechaPresupuesto        DateTime            @default(now())
+ 
+  // ⭐ CAMBIO: montos CALCULADOS por una única función del backend (una sola verdad), en la moneda
+  // del presupuesto (monedaId). Se recalculan al generar un documento de compra, al cambiar ítems
+  // y al consultar o grabar la OT.
+  montoPactado            Decimal             @default(0) @db.Decimal(18, 2)  // ⭐ CAMBIO: default 0. = suma de TODOS los ítems (nace en 0 sin ítems)
+  montoFacturado          Decimal             @default(0) @db.Decimal(18, 2)  // ⭐ CAMPO NUEVO: = suma de los documentos de compra (con sus impuestos)
+  montoPagado             Decimal             @default(0) @db.Decimal(18, 2)  // = suma de lo pagado en las CxP de esos documentos
+  saldo                   Decimal             @default(0) @db.Decimal(18, 2)  // ⭐ CAMBIO: default 0. = montoPactado - montoPagado
+ 
+  monedaId                BigInt                                   // Moneda del presupuesto (obligatoria): base de todos sus montos
+  // ⭐ CAMPO NUEVO: TC venta SUNAT (3 decimales) de la fechaPresupuesto, editable por el usuario.
+  // Convierte los montos del presupuesto (y su saldo) a la moneda de la OT cuando son distintas.
+  // Es nulo cuando el presupuesto está en la misma moneda de la OT.
+  tipoCambio              Decimal?            @db.Decimal(10, 3)
   estadoId                BigInt
-  preFacturaId            BigInt?
+  // ⭐ CAMBIO: se elimina preFacturaId (una PreFactura es un documento de VENTA; este módulo es de compras)
   urlDocumentoContratista String?             @db.VarChar(500)
   urlFotosProductos       String?             @db.VarChar(500)
   urlFotosAntes           String?             @db.VarChar(500)
@@ -5569,49 +5613,49 @@ model DetContratistasOT {
   
   otMantenimiento         OTMantenimiento     @relation(fields: [otMantenimientoId], references: [id], onDelete: Cascade)
   contratista             EntidadComercial    @relation("ContratistaOT", fields: [contratistaId], references: [id])
-  productoServicio        Producto            @relation("ProductoServicioOT", fields: [productoServicioId], references: [id])
   activo                  Activo?             @relation("ActivoContratistaOT", fields: [activoId], references: [id])
   moneda                  Moneda              @relation(fields: [monedaId], references: [id])
   estado                  EstadoMultiFuncion  @relation("EstadoContratistaOT", fields: [estadoId], references: [id])
-  preFactura              PreFactura?         @relation("PreFacturaContratistaOT", fields: [preFacturaId], references: [id])
-  repuestos               DetRepuestosContratistaOT[]
+  repuestos               DetRepuestosContratistaOT[]              // Ítems (repuestos y servicios) del presupuesto
   
   @@unique([otMantenimientoId, numeroLinea])
   @@index([otMantenimientoId])
   @@index([contratistaId])
-  @@index([productoServicioId])
   @@index([activoId])
   @@index([monedaId])
   @@index([estadoId])
-  @@index([preFacturaId])
 }
-
+// ----------------------------------------------------------------------------
+// Ítems del presupuesto: REPUESTOS Y SERVICIOS por igual (el nombre histórico es "Repuestos").
+// Son el origen de los documentos de compra. En el diálogo "Generar Documento de Compra" los
+// ítems se editan SOLO EN MEMORIA (p. ej. cambiar servicio por repuesto, o usar el producto
+// equivalente de otra empresa por Producto.descripcionArmada) sin alterar el presupuesto aprobado.
+// ----------------------------------------------------------------------------
 model DetRepuestosContratistaOT {
   id                        BigInt              @id @default(autoincrement())
-  detContratistaOTId        BigInt
+  detContratistaOTId        BigInt                                 // Presupuesto al que pertenece el ítem
   numeroLinea               Int
-  productoId                BigInt
+  productoId                BigInt                                 // Producto/servicio presupuestado
   descripcion               String              @db.Text
   cantidad                  Decimal             @db.Decimal(18, 4)
   precioUnitario            Decimal             @db.Decimal(18, 2)
-  total                     Decimal             @db.Decimal(18, 2)
+  total                     Decimal             @db.Decimal(18, 2)   // cantidad x precioUnitario; la suma de estos totales = montoPactado del presupuesto
   monedaId                  BigInt
-  incluidoEnPresupuesto     Boolean             @default(true)
-  ordenCompraId             BigInt?
+  // ⭐ CAMBIO: se elimina incluidoEnPresupuesto (era informativo y no intervenía en el montoPactado)
+  // ⭐ CAMBIO: se elimina ordenCompraId y su relación. El control de facturación es a nivel de
+  //    presupuesto (trazabilidad de OrdenCompra), no por ítem.
   creadoEn                  DateTime            @default(now())
-  actualizadoEn             DateTime            @updatedAt
+  actualizadoEn           DateTime            @updatedAt
   creadoPor                 BigInt?
   actualizadoPor            BigInt?
   
   detContratistaOT          DetContratistasOT   @relation(fields: [detContratistaOTId], references: [id], onDelete: Cascade)
   producto                  Producto            @relation(fields: [productoId], references: [id])
   moneda                    Moneda              @relation(fields: [monedaId], references: [id])
-  ordenCompra               OrdenCompra?        @relation(fields: [ordenCompraId], references: [id])
   
   @@unique([detContratistaOTId, numeroLinea])
   @@index([detContratistaOTId])
   @@index([productoId])
-  @@index([ordenCompraId])
 }
 
 model Ubigeo {
@@ -7354,7 +7398,6 @@ model OrdenCompra {
 
   datosAdicionales          DetDatosAdicionalesOrdenCompra[]
   detalles                  DetalleOrdenCompra[]
-  repuestosContratistasOT   DetRepuestosContratistaOT[]
   asientosContables         AsientoContable[]     // Relación inversa - Asientos generados
   periodoContable           PeriodoContable?      @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
   tipoOperacionSunat        TipoOperacionSunat?   @relation(fields: [tipoOperacionSunatId], references: [id])
