@@ -5,7 +5,27 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
  * Servicio CRUD para DetMovsEntregaRendirOTMantenimiento
  * Replicado fielmente del patrón de DetMovsEntregaRendirMovAlmacen
  * Documentado en español.
+ *
+ * NOTA: EntregaARendirOTMantenimiento ya no tiene relación Prisma con OTMantenimiento
+ * (otMantenimientoId quedó como columna simple). La OT se consulta aparte y se adjunta.
  */
+
+// Adjunta la OT (con activo y empresa) a la entrega de cada movimiento.
+const adjuntarOT = async (movimientos) => {
+  const lista = Array.isArray(movimientos) ? movimientos : [movimientos];
+  for (const mov of lista) {
+    const entrega = mov.entregaARendirOTMantenimiento;
+    if (entrega) {
+      entrega.otMantenimiento = entrega.otMantenimientoId
+        ? await prisma.oTMantenimiento.findUnique({
+            where: { id: entrega.otMantenimientoId },
+            include: { activo: true, empresa: true },
+          })
+        : null;
+    }
+  }
+  return movimientos;
+};
 
 async function validarClavesForaneas(data) {
   const [entrega, responsable, tipoMov, centroCosto] = await Promise.all([
@@ -22,18 +42,9 @@ async function validarClavesForaneas(data) {
 
 const listar = async () => {
   try {
-    return await prisma.detMovsEntregaRendirOTMantenimiento.findMany({
+    const movimientos = await prisma.detMovsEntregaRendirOTMantenimiento.findMany({
       include: {
-        entregaARendirOTMantenimiento: {
-          include: {
-            otMantenimiento: {
-              include: {
-                activo: true,
-                empresa: true
-              }
-            }
-          }
-        },
+        entregaARendirOTMantenimiento: true,
         tipoMovimiento: true,
         responsable: true,
         producto: true,
@@ -44,6 +55,7 @@ const listar = async () => {
       },
       orderBy: { fechaMovimiento: 'desc' }
     });
+    return await adjuntarOT(movimientos);
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -55,16 +67,7 @@ const obtenerPorId = async (id) => {
     const det = await prisma.detMovsEntregaRendirOTMantenimiento.findUnique({ 
       where: { id },
       include: {
-        entregaARendirOTMantenimiento: {
-          include: {
-            otMantenimiento: {
-              include: {
-                activo: true,
-                empresa: true
-              }
-            }
-          }
-        },
+        entregaARendirOTMantenimiento: true,
         tipoMovimiento: true,
         responsable: true,
         producto: true,
@@ -75,7 +78,7 @@ const obtenerPorId = async (id) => {
       }
     });
     if (!det) throw new NotFoundError('DetMovsEntregaRendirOTMantenimiento no encontrado');
-    return det;
+    return await adjuntarOT(det);
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -125,19 +128,10 @@ const crear = async (data) => {
       actualizadoEn: data.actualizadoEn || new Date(),
     };
     
-    return await prisma.detMovsEntregaRendirOTMantenimiento.create({ 
+    const nuevo = await prisma.detMovsEntregaRendirOTMantenimiento.create({ 
       data: datosConAuditoria,
       include: {
-        entregaARendirOTMantenimiento: {
-          include: {
-            otMantenimiento: {
-              include: {
-                activo: true,
-                empresa: true
-              }
-            }
-          }
-        },
+        entregaARendirOTMantenimiento: true,
         tipoMovimiento: true,
         responsable: true,
         producto: true,
@@ -147,6 +141,7 @@ const crear = async (data) => {
         centroCosto: true
       }
     });
+    return await adjuntarOT(nuevo);
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -171,20 +166,11 @@ const actualizar = async (id, data) => {
       actualizadoEn: data.actualizadoEn || new Date(),
     };
     
-    return await prisma.detMovsEntregaRendirOTMantenimiento.update({ 
+    const actualizado = await prisma.detMovsEntregaRendirOTMantenimiento.update({ 
       where: { id }, 
       data: datosConAuditoria,
       include: {
-        entregaARendirOTMantenimiento: {
-          include: {
-            otMantenimiento: {
-              include: {
-                activo: true,
-                empresa: true
-              }
-            }
-          }
-        },
+        entregaARendirOTMantenimiento: true,
         tipoMovimiento: true,
         responsable: true,
         producto: true,
@@ -194,6 +180,7 @@ const actualizar = async (id, data) => {
         centroCosto: true
       }
     });
+    return await adjuntarOT(actualizado);
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

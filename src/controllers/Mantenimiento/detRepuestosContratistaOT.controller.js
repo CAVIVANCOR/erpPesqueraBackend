@@ -25,6 +25,16 @@ export async function obtenerPorId(req, res, next) {
   }
 }
 
+export async function obtenerPorContratistaOT(req, res, next) {
+  try {
+    const detContratistaOTId = BigInt(req.params.detContratistaOTId);
+    const detalles = await detRepuestosContratistaOTService.listar(detContratistaOTId);
+    res.json(toJSONBigInt(detalles));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const nuevo = await detRepuestosContratistaOTService.crear(req.body);

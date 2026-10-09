@@ -11,4 +11,9 @@ router.post('/', detContratistasOTController.crear);
 router.put('/:id', detContratistasOTController.actualizar);
 router.delete('/:id', detContratistasOTController.eliminar);
 
+// Documentos de compra generados desde el presupuesto (OrdenCompra + CxP + asientos)
+router.get('/:id/documentos-compra', detContratistasOTController.listarDocumentosCompra);
+router.get('/:id/productos-equivalentes', detContratistasOTController.buscarProductosEquivalentes);
+router.post('/:id/generar-documento-compra', detContratistasOTController.generarDocumentoCompra);
+
 export default router;

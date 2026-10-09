@@ -46,11 +46,13 @@ const convertirMoneda = (monto, monedaOrigenId, monedaDestinoId, tipoCambio) => 
 };
 
 /**
- * ÚNICA VERDAD de los montos del presupuesto.
- *  - montoPactado = suma de los ítems (un presupuesto recién creado, sin ítems, tiene monto 0)
- *  - montoPagado  = suma de lo pagado en las CxP de sus documentos de compra (en la moneda del presupuesto)
- *  - saldo        = montoPactado - montoPagado
- * También actualiza los totales de la OT cuando todos sus presupuestos están en la moneda de la OT.
+ * ÚNICA VERDAD de los montos del presupuesto (en la moneda del presupuesto).
+ *  - montoPactado   = suma de los ítems (un presupuesto recién creado, sin ítems, tiene monto 0)
+ *  - montoFacturado = suma de los totales (con impuestos) de sus documentos de compra,
+ *                    cada uno convertido a la moneda del presupuesto con el TC de esa OC
+ *  - montoPagado    = suma de lo pagado en las CxP de esos documentos (misma conversión)
+ *  - saldo          = montoPactado - montoPagado
+ * También actualiza los totales de la OT convirtiendo cada presupuesto con su propio TC.
  */
 const recalcularMontosPresupuesto = async (presupuestoId, tx = prisma) => {
   const presupuesto = await tx.detContratistasOT.findUnique({
@@ -73,10 +75,19 @@ const recalcularMontosPresupuesto = async (presupuestoId, tx = prisma) => {
     select: {
       monedaId: true,
       tipoCambio: true,
+      total: true,
       cuentaPorPagar: { select: { montoPagado: true } },
     },
   });
 
+  const montoFacturado = redondear2(
+    documentos.reduce(
+      (suma, doc) =>
+        suma +
+        convertirMoneda(doc.total || 0, doc.monedaId, presupuesto.monedaId, doc.tipoCambio),
+      0,
+    ),
+  );
   const montoPagado = redondear2(
     documentos.reduce(
       (suma, doc) =>
@@ -89,13 +100,14 @@ const recalcularMontosPresupuesto = async (presupuestoId, tx = prisma) => {
 
   const cambio =
     Number(presupuesto.montoPactado) !== montoPactado ||
+    Number(presupuesto.montoFacturado) !== montoFacturado ||
     Number(presupuesto.montoPagado) !== montoPagado ||
     Number(presupuesto.saldo) !== saldo;
 
   const actualizado = cambio
     ? await tx.detContratistasOT.update({
         where: { id: presupuesto.id },
-        data: { montoPactado, montoPagado, saldo },
+        data: { montoPactado, montoFacturado, montoPagado, saldo },
       })
     : presupuesto;
 
@@ -104,18 +116,47 @@ const recalcularMontosPresupuesto = async (presupuestoId, tx = prisma) => {
 };
 
 /**
- * Totales de la OT = suma de sus presupuestos. Solo se actualiza cuando todos los presupuestos
- * están en la misma moneda de la OT (no se inventan conversiones sin documento de respaldo).
+ * Totales de la OT = suma de sus presupuestos, cada uno convertido a la moneda de la OT
+ * con el tipoCambio del propio presupuesto. Una OT puede mezclar presupuestos en soles
+ * y dólares; si un presupuesto en otra moneda no tiene TC, su aporte es 0.
  */
 const recalcularTotalesOT = async (otId, tx = prisma) => {
   const ot = await tx.oTMantenimiento.findUnique({
     where: { id: otId },
-    include: { contratistas: { select: { monedaId: true, montoPactado: true, montoPagado: true, saldo: true } } },
+    include: {
+      contratistas: {
+        select: {
+          monedaId: true,
+          tipoCambio: true,
+          montoPactado: true,
+          montoPagado: true,
+          saldo: true,
+        },
+      },
+    },
   });
-  if (!ot || ot.contratistas.length === 0) return;
-  if (ot.contratistas.some((c) => Number(c.monedaId) !== Number(ot.monedaId))) return;
+  if (!ot || ot.contratistas.length === 0) {
+    if (ot) {
+      await tx.oTMantenimiento.update({
+        where: { id: ot.id },
+        data: { totalMontoPactado: 0, totalMontoPagado: 0, totalSaldo: 0 },
+      });
+    }
+    return;
+  }
 
-  const sumar = (campo) => redondear2(ot.contratistas.reduce((suma, c) => suma + Number(c[campo] || 0), 0));
+  const sumar = (campo) =>
+    redondear2(
+      ot.contratistas.reduce((suma, c) => {
+        const mismoMoneda = Number(c.monedaId) === Number(ot.monedaId);
+        if (mismoMoneda) return suma + Number(c[campo] || 0);
+        if (!Number(c.tipoCambio)) return suma;
+        return (
+          suma + convertirMoneda(c[campo] || 0, c.monedaId, ot.monedaId, c.tipoCambio)
+        );
+      }, 0),
+    );
+
   await tx.oTMantenimiento.update({
     where: { id: ot.id },
     data: {
@@ -147,7 +188,7 @@ const listarDocumentosCompra = async (presupuestoId) => {
       },
       include: {
         empresa: { select: { id: true, razonSocial: true } },
-        moneda: { select: { id: true, codigoSunat: true, simbolo: true } },
+        moneda: { select: { id: true, codigoSunat: true, simbolo: true, nombreLargo: true, colorFondo: true } },
         estado: { select: { id: true, descripcion: true } },
         tipoDocumentoFinal: { select: { id: true, descripcion: true, codigoSunat: true } },
         cuentaPorPagar: {
@@ -265,6 +306,7 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
     // Cada ítem debe ser un producto de la empresa destino
     const productos = await prisma.producto.findMany({
       where: { id: { in: items.map((i) => Number(i.productoId)) } },
+      include: { tipoAfectacionIGV: true },
     });
     for (const item of items) {
       const producto = productos.find((p) => Number(p.id) === Number(item.productoId));
@@ -285,6 +327,7 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
     // Comprobante fiscal: tipo admitido y no repetido en ninguna OC
     let tipoDocumentoFinal = null;
     let esReciboHonorarios = false;
+    let numCorreDocFinalStr = "";
     if (!esGerencial) {
       tipoDocumentoFinal = await prisma.tipoDocumento.findUnique({
         where: { id: Number(datos.tipoDocumentoFinalId) },
@@ -298,13 +341,14 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
       }
       esReciboHonorarios = codigo === CODIGO_RECIBO_HONORARIOS;
 
+      numCorreDocFinalStr = String(datos.numCorreDocFinal);
       const comprobanteExistente = await prisma.ordenCompra.findFirst({
         where: {
           empresaId,
           proveedorId,
           tipoDocumentoFinalId: tipoDocumentoFinal.id,
           numSerieDocFinal: datos.numSerieDocFinal,
-          numCorreDocFinal: datos.numCorreDocFinal,
+          numCorreDocFinal: numCorreDocFinalStr,
           estadoId: { not: ESTADO_ORDEN_COMPRA.ANULADO },
         },
         select: { numeroDocumento: true },
@@ -315,6 +359,11 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
         );
       }
     }
+
+    const sinIGV = esGerencial || esReciboHonorarios;
+    const porcentajeIGVDoc = sinIGV
+      ? 0
+      : Number(empresa.porcentajeIgv || 18);
 
     // Numeración interna de la OC: tipo 17, serie 002 de la empresa que factura
     const serieDoc = await prisma.serieDoc.findFirst({
@@ -338,7 +387,6 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
     // ═══════════════════════════════════════════════
     // PASO 1: CREAR LA ORDEN DE COMPRA (transacción propia)
     // ═══════════════════════════════════════════════
-    const sinIGV = esGerencial || esReciboHonorarios;
     const ordenCompra = await prisma.$transaction(async (tx) => {
       const nuevoCorrelativo = Number(serieDoc.correlativo) + 1;
       const numSerie = String(serieDoc.serie).padStart(serieDoc.numCerosIzqSerie || 0, "0");
@@ -377,8 +425,8 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
             : {
                 tipoDocumentoFinalId: tipoDocumentoFinal.id,
                 numSerieDocFinal: datos.numSerieDocFinal,
-                numCorreDocFinal: datos.numCorreDocFinal,
-                numeroDocumentoFinal: `${datos.numSerieDocFinal}-${datos.numCorreDocFinal}`,
+                numCorreDocFinal: numCorreDocFinalStr,
+                numeroDocumentoFinal: `${datos.numSerieDocFinal}-${numCorreDocFinalStr}`,
                 comprobanteRecibido: true,
                 fechaRecepcionComprobante: fechaDocumento,
                 fechaFacturacion: fechaDocumento,
@@ -393,7 +441,23 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
       for (const item of items) {
         const producto = productos.find((p) => Number(p.id) === Number(item.productoId));
         const cantidad = Number(item.cantidad);
-        const precioUnitario = Number(item.precioUnitario);
+        const precioUnitarioIngresado = Number(item.precioUnitario);
+        const totalIngresado = redondear2(cantidad * precioUnitarioIngresado);
+
+        let precioUnitario = precioUnitarioIngresado;
+        let subtotal = totalIngresado;
+
+        // Fiscal (Factura/Boleta) con IGV: el precio ingresado se asume INCLUIDO IGV.
+        // Se desagrega la base para que el cálculo de Compras vuelva a armar el total ingresado.
+        const esGravadoIGV =
+          !sinIGV &&
+          producto.tipoAfectacionIGV?.calculaIGV !== false;
+        if (esGravadoIGV) {
+          const factor = 1 + porcentajeIGVDoc / 100;
+          subtotal = redondear2(totalIngresado / factor);
+          precioUnitario = redondear2(precioUnitarioIngresado / factor);
+        }
+
         await tx.detalleOrdenCompra.create({
           data: {
             ordenCompraId: oc.id,
@@ -403,7 +467,7 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
             cantidadRecibida: 0,
             precioUnitario,
             precioUnitarioCompra: precioUnitario,
-            subtotal: redondear2(cantidad * precioUnitario),
+            subtotal,
             tipoAfectacionIGVId: sinIGV ? null : producto.tipoAfectacionIGVId || null,
             observaciones: item.descripcion || null,
             creadoPor: usuarioId ? Number(usuarioId) : null,

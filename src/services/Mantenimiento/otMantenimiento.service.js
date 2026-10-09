@@ -1,4 +1,7 @@
 import prisma from "../../config/prismaClient.js";
+import documentoCompraPresupuestoService from "./documentoCompraPresupuesto.service.js";
+import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
+import { ESTADO_ORDEN_COMPRA } from "../../utils/estados.constants.js";
 import {
   NotFoundError,
   DatabaseError,
@@ -11,6 +14,64 @@ import {
  * Aplica validaciones de unicidad y existencia de claves foráneas.
  * Documentado en español.
  */
+
+// Estados automáticos y manuales de OT de Mantenimiento
+const ESTADOS_OT = {
+  PENDIENTE: 51n,
+  EN_PROCESO: 52n,
+  PAUSADA: 53n,
+  COMPLETADA: 54n,
+  CANCELADA: 55n,
+  CERRADA: 56n,
+};
+
+const ESTADOS_OT_MANUALES = [
+  ESTADOS_OT.COMPLETADA,
+  ESTADOS_OT.CANCELADA,
+  ESTADOS_OT.CERRADA,
+];
+
+/**
+ * Determina automáticamente el estado de una OT según sus contratistas y documentos de compra.
+ * - Sin contratistas -> PENDIENTE
+ * - Con contratistas y al menos un documento de compra no anulado -> EN PROCESO
+ * - Con contratistas pero sin documentos de compra -> PAUSADA
+ * - Completada/Cancelada/Cerrada se respetan (estados manuales de cierre).
+ */
+async function determinarEstadoOT(otId, estadoActualId = null, tx = prisma) {
+  if (ESTADOS_OT_MANUALES.includes(BigInt(estadoActualId || 0))) {
+    return BigInt(estadoActualId);
+  }
+
+  const contratistasCount = await tx.detContratistasOT.count({
+    where: { otMantenimientoId: otId },
+  });
+  if (contratistasCount === 0) return ESTADOS_OT.PENDIENTE;
+
+  const documentosCount = await tx.ordenCompra.count({
+    where: {
+      submoduloOrigenId: BigInt(SUBMODULO_ORIGEN.PRESUPUESTO_CONTRATISTA_OT),
+      procesoOrigenId: otId,
+      estadoId: { not: ESTADO_ORDEN_COMPRA.ANULADO },
+    },
+  });
+
+  return documentosCount > 0 ? ESTADOS_OT.EN_PROCESO : ESTADOS_OT.PAUSADA;
+}
+
+/**
+ * Actualiza el estado de la OT solo si cambió y no está en un estado manual de cierre.
+ */
+async function actualizarEstadoOT(otId, estadoActualId = null, tx = prisma) {
+  const nuevoEstado = await determinarEstadoOT(otId, estadoActualId, tx);
+  if (BigInt(estadoActualId || 0) !== nuevoEstado) {
+    await tx.oTMantenimiento.update({
+      where: { id: otId },
+      data: { estadoId: nuevoEstado },
+    });
+  }
+  return nuevoEstado;
+}
 
 /**
  * Valida existencia de claves foráneas principales.
@@ -64,13 +125,7 @@ const listar = async () => {
         },
         serieDoc: { select: { id: true, serie: true } },
         contratistas: {
-          select: {
-            id: true,
-            numeroLinea: true,
-            servicioDescripcion: true,
-            montoPactado: true,
-            montoPagado: true,
-            saldo: true,
+          include: {
             contratista: {
               select: {
                 id: true,
@@ -84,17 +139,22 @@ const listar = async () => {
                 severityColor: true,
               },
             },
+            repuestos: {
+              select: {
+                id: true,
+                productoId: true,
+                descripcion: true,
+                producto: {
+                  select: {
+                    id: true,
+                    descripcionArmada: true,
+                  },
+                },
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
           },
           orderBy: { numeroLinea: "asc" },
-        },
-        permisosGestionados: {
-          select: {
-            id: true,
-            permisoAutorizacionId: true,
-            gestionado: true,
-            fechaGestion: true,
-            urlPermisoAutorizacion: true,
-          },
         },
       },
       orderBy: { fechaDocumento: "desc" },
@@ -129,11 +189,9 @@ const obtenerPorId = async (id) => {
         contratistas: {
           include: {
             contratista: true,
-            productoServicio: true,
             activo: true,
             moneda: true,
             estado: true,
-            preFactura: true,
             repuestos: {
               include: {
                 producto: {
@@ -142,40 +200,58 @@ const obtenerPorId = async (id) => {
                   },
                 },
                 moneda: true,
-                ordenCompra: true,
               },
               orderBy: { numeroLinea: "asc" },
             },
           },
           orderBy: { numeroLinea: "asc" },
         },
-        permisosGestionados: {
-          include: {
-            permisoAutorizacion: true,
-          },
-        },
-        entregaARendir: {
-          include: {
-            respEntregaRendir: true,
-            respLiquidacion: true,
-            centroCosto: true,
-            detallesMovimientos: {
-              include: {
-                tipoMovimiento: true,
-                responsable: true,
-                entidadComercial: true,
-                producto: true,
-                moneda: true,
-                tipoDocumento: true,
-              },
-              orderBy: { fechaMovimiento: "asc" },
-            },
-          },
-        },
       },
     });
     if (!ot) throw new NotFoundError("OTMantenimiento no encontrada");
-    return ot;
+
+    // Recalcular montos de los presupuestos y totales de la OT (una sola verdad).
+    // No se propaga el error: la OT se muestra igualmente.
+    try {
+      await documentoCompraPresupuestoService.recalcularMontosOT(ot.id);
+      await actualizarEstadoOT(ot.id, ot.estadoId);
+    } catch (e) {
+      console.error("No se pudieron recalcular los montos/estado de la OT:", e.message);
+    }
+
+    // Volver a consultar para devolver el estado actualizado
+    return await prisma.oTMantenimiento.findUnique({
+      where: { id },
+      include: {
+        empresa: true,
+        sede: true,
+        activo: true,
+        tipoMantenimiento: true,
+        motivoOrigino: true,
+        estado: true,
+        moneda: true,
+        solicitante: true,
+        responsable: true,
+        tipoDocumento: true,
+        serieDoc: true,
+        contratistas: {
+          include: {
+            contratista: true,
+            activo: true,
+            moneda: true,
+            estado: true,
+            repuestos: {
+              include: {
+                producto: { include: { unidadMedida: true } },
+                moneda: true,
+              },
+              orderBy: { numeroLinea: "asc" },
+            },
+          },
+          orderBy: { numeroLinea: "asc" },
+        },
+      },
+    });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -275,7 +351,13 @@ const crear = async (data) => {
       };
             
       // 6. Crear la OT con los números generados (patrón estándar)
-      return await tx.oTMantenimiento.create({ data: datosLimpios });
+      const creada = await tx.oTMantenimiento.create({ data: datosLimpios });
+
+      // 7. Estado automático: al crear sin contratistas será PENDIENTE,
+      //    salvo que el usuario haya elegido un estado de cierre manual.
+      creada.estadoId = await actualizarEstadoOT(creada.id, data.estadoId, tx);
+
+      return creada;
     });
   } catch (err) {
     // console.error("=== ERROR AL CREAR OT ===");
@@ -336,10 +418,24 @@ const actualizar = async (id, data) => {
       }
     });
 
-    return await prisma.oTMantenimiento.update({
+    // Estado automático: si NO es un estado manual de cierre, se recalcula.
+    const estadoSolicitado = data.estadoId ?? existente.estadoId;
+    if (!ESTADOS_OT_MANUALES.includes(BigInt(estadoSolicitado || 0))) {
+      dataLimpia.estadoId = await determinarEstadoOT(id, estadoSolicitado);
+    }
+
+    const ot = await prisma.oTMantenimiento.update({
       where: { id },
       data: dataLimpia,
     });
+
+    // Recalcular montos de los presupuestos y totales de la OT al grabarla
+    try {
+      await documentoCompraPresupuestoService.recalcularMontosOT(ot.id);
+    } catch (e) {
+      console.error("No se pudieron recalcular los montos de la OT:", e.message);
+    }
+    return ot;
   } catch (err) {
     if (
       err instanceof NotFoundError ||
@@ -362,8 +458,6 @@ const eliminar = async (id) => {
       where: { id },
       include: {
         contratistas: true,
-        permisosGestionados: true,
-        entregaARendir: true,
       },
     });
     if (!existente) throw new NotFoundError("OTMantenimiento no encontrada");
@@ -375,8 +469,11 @@ const eliminar = async (id) => {
       );
     }
 
-    // Validar que no tenga entrega a rendir
-    if (existente.entregaARendir) {
+    // Validar que no tenga entrega a rendir (la relación ya no existe; se consulta por la columna)
+    const entrega = await prisma.entregaARendirOTMantenimiento.findUnique({
+      where: { otMantenimientoId: id },
+    });
+    if (entrega) {
       throw new ConflictError(
         "No se puede eliminar la orden de trabajo porque tiene una entrega a rendir asociada.",
       );
@@ -398,4 +495,5 @@ export default {
   crear,
   actualizar,
   eliminar,
+  actualizarEstadoOT,
 };

@@ -156,10 +156,17 @@ const resolverUnidadNegocioOrigen = async (detMov) => {
     const delegado = prisma[nombreModelo.charAt(0).toLowerCase() + nombreModelo.slice(1)];
     if (!delegado?.findUnique) return sinUnidad(`El modelo ${nombreModelo} no existe`);
 
-    const documentoOrigen = await delegado.findUnique({
-      where: { id: detMov.documentoOrigenId },
-      select: { unidadNegocioId: true },
-    });
+    // Verificar si el modelo tiene el campo unidadNegocioId antes de consultarlo
+    let documentoOrigen;
+    try {
+      documentoOrigen = await delegado.findUnique({
+        where: { id: detMov.documentoOrigenId },
+        select: { unidadNegocioId: true },
+      });
+    } catch (selectErr) {
+      // El modelo no tiene campo unidadNegocioId (ej. OTMantenimiento)
+      return sinUnidad(`El módulo ${nombreModelo} no maneja unidad de negocio`);
+    }
     if (!documentoOrigen) return sinUnidad(`No se encontró el documento de origen ${nombreModelo} #${detMov.documentoOrigenId}`);
     if (!documentoOrigen.unidadNegocioId) return sinUnidad(`El documento de origen ${nombreModelo} #${detMov.documentoOrigenId} no tiene unidad de negocio asignada`);
 
@@ -169,7 +176,7 @@ const resolverUnidadNegocioOrigen = async (detMov) => {
     });
     return { unidadNegocioId: documentoOrigen.unidadNegocioId, nombre: unidad?.nombre || null, motivo: null };
   } catch (err) {
-    return sinUnidad(`No se pudo consultar el documento de origen: ${err.message?.split('\n').pop()}`);
+    return sinUnidad(`No se encontró Unidad de Negocio en el origen`);
   }
 };
 
@@ -726,202 +733,57 @@ const obtenerLabelEnlace = async (enlaceId) => {
 
 const obtenerTodasAsignacionesNoLiquidadas = async () => {
   try {
-    // Obtener ENTREGAS A RENDIR de todos los módulos que NO estén liquidadas
-    const [
-      pescaConsumo,
-      ventas,
-      compras,
-      movAlmacen,
-      contratos,
-      otMantenimiento,
-    ] = await Promise.all([
-      // Pesca Consumo
-      prisma.entregaARendirPescaConsumo.findMany({
-        where: {
-          entregaLiquidada: false,
+    // Consulta unificada: solo DetMovsEntregaRendir (los modelos por módulo están depreciados)
+    const asignaciones = await prisma.detMovsEntregaRendir.findMany({
+      where: {
+        formaParteCalculoEntregaARendir: true,
+        entregaARendirLiquidada: false,
+      },
+      select: {
+        id: true,
+        descripcion: true,
+        fechaMovimiento: true,
+        monto: true,
+        empresa: {
+          select: { razonSocial: true },
         },
-        select: {
-          id: true,
-          novedadPescaConsumo: {
-            select: {
-              nombre: true,
-              empresa: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-            },
-          },
+        moduloOrigen: {
+          select: { nombre: true },
         },
-      }),
-      // Ventas
-      prisma.entregaARendirPVentas.findMany({
-        where: {
-          entregaLiquidada: false,
+        responsable: {
+          select: { nombres: true, apellidos: true },
         },
-        select: {
-          id: true,
-          cotizacionVentas: {
-            select: {
-              numeroDocumento: true,
-              fechaDocumento: true,
-              cliente: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-              empresa: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-            },
-          },
+        entidadComercial: {
+          select: { razonSocial: true },
         },
-      }),
-      // Compras
-      prisma.entregaARendirPCompras.findMany({
-        where: {
-          entregaLiquidada: false,
+        moneda: {
+          select: { codigoSunat: true, nombreLargo: true },
         },
-        select: {
-          id: true,
-          requerimientoCompra: {
-            select: {
-              numeroDocumento: true,
-              fechaDocumento: true,
-              proveedor: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-              empresa: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      // Movimiento Almacén
-      prisma.entregaARendirMovAlmacen.findMany({
-        where: {
-          entregaLiquidada: false,
-        },
-        select: {
-          id: true,
-          movimientoAlmacen: {
-            select: {
-              numeroDocumento: true,
-              fechaDocumento: true,
-              entidadComercial: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-              empresa: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      // Contratos
-      prisma.entregaARendirContratoServicios.findMany({
-        where: {
-          entregaLiquidada: false,
-        },
-        select: {
-          id: true,
-          contratoServicio: {
-            select: {
-              numeroCompleto: true,
-              fechaCelebracion: true,
-              cliente: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-              empresa: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      // OT Mantenimiento
-      prisma.entregaARendirOTMantenimiento.findMany({
-        where: {
-          entregaLiquidada: false,
-        },
-        select: {
-          id: true,
-          otMantenimiento: {
-            select: {
-              numeroCompleto: true,
-              fechaDocumento: true,
-              descripcionProblema: true,
-              empresa: {
-                select: {
-                  razonSocial: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-    ]);
+      },
+      orderBy: [
+        { empresaId: "asc" },
+        { fechaMovimiento: "desc" },
+      ],
+    });
 
-    // Formatear y unificar resultados
     const formatearFecha = (fecha) => {
       if (!fecha) return "";
       return new Date(fecha).toLocaleDateString("es-PE");
     };
 
-    const asignacionesFormateadas = [
-      ...pescaConsumo.map((a) => ({
-        id: Number(a.id),
-        modulo: "PESCA_CONSUMO",
-        label: `${a.novedadPescaConsumo?.empresa?.razonSocial || "Sin empresa"} - Novedad Pesca Consumo - ${a.novedadPescaConsumo?.nombre || "Sin nombre"}`,
-      })),
-      ...ventas.map((a) => ({
-        id: Number(a.id),
-        modulo: "VENTAS",
-        label: `${a.cotizacionVentas?.empresa?.razonSocial || "Sin empresa"} - Cotización Ventas - ${a.cotizacionVentas?.numeroDocumento || "S/N"} | ${formatearFecha(a.cotizacionVentas?.fechaDocumento)} | ${a.cotizacionVentas?.cliente?.razonSocial || "Sin cliente"}`,
-      })),
-      ...compras.map((a) => ({
-        id: Number(a.id),
-        modulo: "COMPRAS",
-        label: `${a.requerimientoCompra?.empresa?.razonSocial || "Sin empresa"} - Requerimiento Compra - ${a.requerimientoCompra?.numeroDocumento || "S/N"} | ${formatearFecha(a.requerimientoCompra?.fechaDocumento)} | ${a.requerimientoCompra?.proveedor?.razonSocial || "Sin proveedor"}`,
-      })),
-      ...movAlmacen.map((a) => ({
-        id: Number(a.id),
-        modulo: "MOV_ALMACEN",
-        label: `${a.movimientoAlmacen?.empresa?.razonSocial || "Sin empresa"} - Movimiento Almacén - ${a.movimientoAlmacen?.numeroDocumento || "S/N"} | ${formatearFecha(a.movimientoAlmacen?.fechaDocumento)} | ${a.movimientoAlmacen?.entidadComercial?.razonSocial || "Sin entidad"}`,
-      })),
-      ...contratos.map((a) => ({
-        id: Number(a.id),
-        modulo: "CONTRATOS",
-        label: `${a.contratoServicio?.empresa?.razonSocial || "Sin empresa"} - Contrato Servicio - ${a.contratoServicio?.numeroCompleto || "S/N"} | ${formatearFecha(a.contratoServicio?.fechaCelebracion)} | ${a.contratoServicio?.cliente?.razonSocial || "Sin cliente"}`,
-      })),
-      ...otMantenimiento.map((a) => ({
-        id: Number(a.id),
-        modulo: "OT_MANTENIMIENTO",
-        label: `${a.otMantenimiento?.empresa?.razonSocial || "Sin empresa"} - OT Mantenimiento - ${a.otMantenimiento?.numeroCompleto || "S/N"} | ${formatearFecha(a.otMantenimiento?.fechaDocumento)} | ${a.otMantenimiento?.descripcionProblema || "Sin descripción"}`,
-      })),
-    ];
+    return asignaciones.map((a) => {
+      const responsableNombre = a.responsable
+        ? `${a.responsable.nombres || ""} ${a.responsable.apellidos || ""}`.trim()
+        : "Sin responsable";
+      const montoStr = a.moneda
+        ? `${a.moneda.codigoSunat || a.moneda.nombreLargo || ""} ${Number(a.monto || 0).toFixed(2)}`
+        : Number(a.monto || 0).toFixed(2);
 
-    // Ordenar alfabéticamente por módulo y luego por label
-    return asignacionesFormateadas.sort((a, b) => {
-      if (a.modulo !== b.modulo) {
-        return a.modulo.localeCompare(b.modulo);
-      }
-      return a.label.localeCompare(b.label);
+      return {
+        id: Number(a.id),
+        modulo: a.moduloOrigen?.nombre || "GENERAL",
+        label: `${a.empresa?.razonSocial || "Sin empresa"} - ${a.moduloOrigen?.nombre || "Módulo"} | ${formatearFecha(a.fechaMovimiento)} | ${responsableNombre} | ${a.entidadComercial?.razonSocial || "Sin entidad"} | ${montoStr} | ${a.descripcion || "Sin descripción"}`,
+      };
     });
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -1552,7 +1414,7 @@ const asignarActivoMasivo = async (activoId, movimientosIds) => {
  * Generar documentos financieros automáticamente desde DetMovsEntregaRendir
  * Genera: OrdenCompra → CuentaPorPagar → Pago → 2 Asientos Contables
  */
-async function generarDocumentosFinancieros(detMovId, accionOcExistente = null) {
+async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, esGastoDirecto = false) {
   const detMov = await prisma.detMovsEntregaRendir.findUnique({
     where: { id: Number(detMovId) },
     include: {
@@ -1577,7 +1439,8 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null) 
   }
 
   // Solo aplica a gastos de una entrega a rendir; las asignaciones (sin asignación origen) no generan documentos
-  if (!(Number(detMov.asignacionOrigenId) > 0)) {
+  // En modo gasto directo se permite generar documentos sin asignación origen.
+  if (!esGastoDirecto && !(Number(detMov.asignacionOrigenId) > 0)) {
     throw new ValidationError('Solo se pueden generar documentos para gastos asociados a una asignación de entrega a rendir');
   }
 
@@ -1791,15 +1654,14 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null) 
   }
 
 
-  // Obtener cuentas contables para asientos
-  const producto = await prisma.producto.findUnique({
-    where: { id: detMov.productoId },
-    select: { cuentaComprasId: true },
-  });
-
-  if (!producto || !producto.cuentaComprasId) {
-    throw new ValidationError('El producto no tiene cuenta de compras asignada');
+  // Obtener cuentas contables para asientos (el producto ya está incluido en detMov)
+  if (!detMov.producto) {
+    throw new ValidationError('El movimiento no tiene producto asignado');
   }
+  if (!detMov.producto.cuentaComprasId) {
+    throw new ValidationError(`El producto "${detMov.producto.descripcionArmada || detMov.producto.descripcionBase || detMov.productoId}" no tiene cuenta de compras asignada`);
+  }
+  const producto = detMov.producto;
 
   const centroCosto = await prisma.centroCosto.findUnique({
     where: { id: detMov.centroCostoId },
@@ -2085,46 +1947,49 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null) 
       },
     });
 
-    let pago = ordenCompraVinculada
-      ? await tx.pagoCuentaPorPagar.findFirst({ where: { cuentaPorPagarId: cuentaPorPagar.id } })
-      : null;
-    const pagoYaExistia = !!pago;
-    if (!pago) pago = await tx.pagoCuentaPorPagar.create({
-      data: {
-        cuentaPorPagarId: cuentaPorPagar.id,
-        empresaId: cuentaPorPagar.empresaId,
-        fechaPago: cuentaPorPagar.fechaEmision,
-        montoPagado: cuentaPorPagar.montoTotal,
-        monedaPagoId: cuentaPorPagar.monedaId,
-        monedaDeudaId: cuentaPorPagar.monedaId,
-        tipoCambio: ordenCompra.tipoCambio,
-        montoAplicadoDeuda: cuentaPorPagar.montoTotal,
-        medioPagoId: medioPagoEfectivo.id,
-        // Sin banco ni cuenta corriente: el responsable paga directamente y asignar una cuenta alteraría su saldo
-        bancoId: null,
-        cuentaBancariaId: null,
-        observaciones: `PAGO DESDE RENDICIÓN DE GASTOS - MOV-${detMovId}`,
-        fechaContable: cuentaPorPagar.fechaContable,
-        periodoContableId: periodoActual.id,
-        tieneDetraccion: false,
-        montoDetraccion: 0,
-        tieneRetencion: false,
-        montoRetencion: 0,
-        tienePercepcion: false,
-        montoPercepcion: 0,
-        creadoPor: Number(1),
-      },
-    });
+    let pago = null;
+    if (!esGastoDirecto) {
+      pago = ordenCompraVinculada
+        ? await tx.pagoCuentaPorPagar.findFirst({ where: { cuentaPorPagarId: cuentaPorPagar.id } })
+        : null;
+      const pagoYaExistia = !!pago;
+      if (!pago) pago = await tx.pagoCuentaPorPagar.create({
+        data: {
+          cuentaPorPagarId: cuentaPorPagar.id,
+          empresaId: cuentaPorPagar.empresaId,
+          fechaPago: cuentaPorPagar.fechaEmision,
+          montoPagado: cuentaPorPagar.montoTotal,
+          monedaPagoId: cuentaPorPagar.monedaId,
+          monedaDeudaId: cuentaPorPagar.monedaId,
+          tipoCambio: ordenCompra.tipoCambio,
+          montoAplicadoDeuda: cuentaPorPagar.montoTotal,
+          medioPagoId: medioPagoEfectivo.id,
+          // Sin banco ni cuenta corriente: el responsable paga directamente y asignar una cuenta alteraría su saldo
+          bancoId: null,
+          cuentaBancariaId: null,
+          observaciones: `PAGO DESDE RENDICIÓN DE GASTOS - MOV-${detMovId}`,
+          fechaContable: cuentaPorPagar.fechaContable,
+          periodoContableId: periodoActual.id,
+          tieneDetraccion: false,
+          montoDetraccion: 0,
+          tieneRetencion: false,
+          montoRetencion: 0,
+          tienePercepcion: false,
+          montoPercepcion: 0,
+          creadoPor: Number(1),
+        },
+      });
 
-    // Solo se cancela la CxP cuando el pago se generó aquí (si ya había pago se respeta su estado)
-    if (!pagoYaExistia) await tx.cuentaPorPagar.update({
-      where: { id: cuentaPorPagar.id },
-      data: {
-        montoPagado: total,
-        saldoPendiente: 0,
-        estadoId: estadoCxPPagado.id,
-      },
-    });
+      // Solo se cancela la CxP cuando el pago se generó aquí (si ya había pago se respeta su estado)
+      if (!pagoYaExistia) await tx.cuentaPorPagar.update({
+        where: { id: cuentaPorPagar.id },
+        data: {
+          montoPagado: total,
+          saldoPendiente: 0,
+          estadoId: estadoCxPPagado.id,
+        },
+      });
+    }
 
     // ═══════════════════════════════════════════════════════
     // CREAR ASIENTOS CONTABLES
@@ -2162,7 +2027,9 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null) 
           tipoLibroId: tipoLibroDiario.id,
           esGerencial: true,
           fechaAsiento: ordenCompra.fechaContable,
-          glosa: `PAGO SIN FACTURA - ${detMov.descripcion || ''} - MOV-${detMovId}`,
+          glosa: esGastoDirecto
+            ? `GASTO GERENCIAL DIRECTO - ${detMov.descripcion || ''} - MOV-${detMovId}`
+            : `PAGO SIN FACTURA - ${detMov.descripcion || ''} - MOV-${detMovId}`,
           totalDebe: ordenCompra.total * 2,
           totalHaber: ordenCompra.total * 2,
           diferencia: 0,
@@ -2202,10 +2069,10 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null) 
           {
             asientoContableId: asientoPago.id,
             numeroLinea: 2,
-            planCuentaId: cuentaEntregasRendir.id,
+            planCuentaId: esGastoDirecto ? cuentaFacturasPorPagar.id : cuentaEntregasRendir.id,
             debe: 0,
             haber: totalPEN,
-            glosa: 'PAGO',
+            glosa: esGastoDirecto ? 'PROVEEDOR' : 'PAGO',
             monedaId: 1,
             tipoCambio: ordenCompra.tipoCambio,
             debeMonedaExtranjera: null,
@@ -2411,77 +2278,79 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null) 
         ],
       });
 
-      // Asiento 3: Pago de Factura
-      const ultimoAsiento3 = await tx.asientoContable.findFirst({
-        where: {
-          empresaId: detMov.empresaId,
-          periodoContableId: periodoActual?.id,
-        },
-        orderBy: { correlativo: 'desc' },
-      });
-
-      const nuevoCorrelativo3 = ultimoAsiento3 ? ultimoAsiento3.correlativo + 1 : 1;
-      const numeroAsiento3 = `ASI-${new Date(detMov.fechaMovimiento).getFullYear()}-${String(nuevoCorrelativo3).padStart(6, '0')}`;
-
-      asientoPago = await tx.asientoContable.create({
-        data: {
-          empresaId: ordenCompra.empresaId,
-          periodoContableId: ordenCompra.periodoContableId,
-          numeroAsiento: numeroAsiento3,
-          correlativo: nuevoCorrelativo3,
-          tipoLibro: 'FISCAL',
-          tipoLibroId: tipoLibroDiario.id,
-          esGerencial: false,
-          fechaAsiento: ordenCompra.fechaContable,
-          glosa: `PAGO FACTURA ${detMov.numeroSerieComprobante}-${detMov.numeroCorrelativoComprobante}`,
-          totalDebe: totalPENCompra,
-          totalHaber: totalPENCompra,
-          diferencia: 0,
-          estaCuadrado: true,
-          monedaId: ordenCompra.monedaId,
-          tipoCambio: ordenCompra.tipoCambio,
-          estadoId: estadoAsientoPendiente.id,
-          origenAsiento: 'AUTOMATICO',
-          submoduloOrigenId: ordenCompra.submoduloOrigenId,
-          procesoOrigenId: Number(detMovId),
-          ordenesCompra: {
-            connect: { id: ordenCompra.id },
+      // Asiento 3: Pago de Factura (solo si NO es gasto directo)
+      if (!esGastoDirecto) {
+        const ultimoAsiento3 = await tx.asientoContable.findFirst({
+          where: {
+            empresaId: detMov.empresaId,
+            periodoContableId: periodoActual?.id,
           },
-        },
-      });
+          orderBy: { correlativo: 'desc' },
+        });
 
-      await tx.detalleAsientoContable.createMany({
-        data: [
-          {
-            asientoContableId: asientoPago.id,
-            numeroLinea: 1,
-            planCuentaId: cuentaFacturasPorPagar.id,
-            debe: totalPENCompra,
-            haber: 0,
-            glosa: 'PAGO',
-            monedaId: 1,
+        const nuevoCorrelativo3 = ultimoAsiento3 ? ultimoAsiento3.correlativo + 1 : 1;
+        const numeroAsiento3 = `ASI-${new Date(detMov.fechaMovimiento).getFullYear()}-${String(nuevoCorrelativo3).padStart(6, '0')}`;
+
+        asientoPago = await tx.asientoContable.create({
+          data: {
+            empresaId: ordenCompra.empresaId,
+            periodoContableId: ordenCompra.periodoContableId,
+            numeroAsiento: numeroAsiento3,
+            correlativo: nuevoCorrelativo3,
+            tipoLibro: 'FISCAL',
+            tipoLibroId: tipoLibroDiario.id,
+            esGerencial: false,
+            fechaAsiento: ordenCompra.fechaContable,
+            glosa: `PAGO FACTURA ${detMov.numeroSerieComprobante}-${detMov.numeroCorrelativoComprobante}`,
+            totalDebe: totalPENCompra,
+            totalHaber: totalPENCompra,
+            diferencia: 0,
+            estaCuadrado: true,
+            monedaId: ordenCompra.monedaId,
             tipoCambio: ordenCompra.tipoCambio,
-            debeMonedaExtranjera: totalExtranjeraCompra,
-            haberMonedaExtranjera: null,
-            submoduloOrigenLineaId: ordenCompra.submoduloOrigenId,
-            procesoOrigenLineaId: BigInt(detMovId),
+            estadoId: estadoAsientoPendiente.id,
+            origenAsiento: 'AUTOMATICO',
+            submoduloOrigenId: ordenCompra.submoduloOrigenId,
+            procesoOrigenId: Number(detMovId),
+            ordenesCompra: {
+              connect: { id: ordenCompra.id },
+            },
           },
-          {
-            asientoContableId: asientoPago.id,
-            numeroLinea: 2,
-            planCuentaId: cuentaEntregasRendir.id,
-            debe: 0,
-            haber: totalPENCompra,
-            glosa: 'PAGO',
-            monedaId: 1,
-            tipoCambio: ordenCompra.tipoCambio,
-            debeMonedaExtranjera: null,
-            haberMonedaExtranjera: totalExtranjeraCompra,
-            submoduloOrigenLineaId: ordenCompra.submoduloOrigenId,
-            procesoOrigenLineaId: BigInt(detMovId),
-          },
-        ],
-      });
+        });
+
+        await tx.detalleAsientoContable.createMany({
+          data: [
+            {
+              asientoContableId: asientoPago.id,
+              numeroLinea: 1,
+              planCuentaId: cuentaFacturasPorPagar.id,
+              debe: totalPENCompra,
+              haber: 0,
+              glosa: 'PAGO',
+              monedaId: 1,
+              tipoCambio: ordenCompra.tipoCambio,
+              debeMonedaExtranjera: totalExtranjeraCompra,
+              haberMonedaExtranjera: null,
+              submoduloOrigenLineaId: ordenCompra.submoduloOrigenId,
+              procesoOrigenLineaId: BigInt(detMovId),
+            },
+            {
+              asientoContableId: asientoPago.id,
+              numeroLinea: 2,
+              planCuentaId: cuentaEntregasRendir.id,
+              debe: 0,
+              haber: totalPENCompra,
+              glosa: 'PAGO',
+              monedaId: 1,
+              tipoCambio: ordenCompra.tipoCambio,
+              debeMonedaExtranjera: null,
+              haberMonedaExtranjera: totalExtranjeraCompra,
+              submoduloOrigenLineaId: ordenCompra.submoduloOrigenId,
+              procesoOrigenLineaId: BigInt(detMovId),
+            },
+          ],
+        });
+      }
     }
 
     // Marca el gasto como procesado. No se tocan los campos de operación de caja
@@ -2500,7 +2369,7 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null) 
       documentosGenerados: {
         ordenCompra: { id: ordenCompra.id, total: ordenCompra.total },
         cuentaPorPagar: { id: cuentaPorPagar.id, montoTotal: ordenCompra.total },
-        pago: { id: pago.id, montoPago: ordenCompra.total },
+        ...(pago ? { pago: { id: pago.id, montoPago: ordenCompra.total } } : {}),
         asientoPago: asientoPago
           ? { id: asientoPago.id, totalDebe: ordenCompra.total * (esGerencial ? 2 : 1), totalHaber: ordenCompra.total * (esGerencial ? 2 : 1) }
           : null,

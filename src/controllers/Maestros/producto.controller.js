@@ -100,3 +100,25 @@ export async function clonarAEmpresas(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Actualiza un campo específico en múltiples productos seleccionados.
+ * POST /actualizar-campo-masa
+ */
+export async function actualizarCampoMasa(req, res, next) {
+  try {
+    const { ids, campo, valorId } = req.body;
+    const usuarioId = req.usuario?.id;
+
+    const resultado = await productoService.actualizarCampoMasa(
+      ids,
+      campo,
+      valorId,
+      usuarioId
+    );
+
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}

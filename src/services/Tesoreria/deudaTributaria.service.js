@@ -79,7 +79,8 @@ const listar = async () => {
         moneda: true,
         estado: true,
         periodoContable: true,
-        pagos: true
+        pagos: true,
+        asientosContables: { select: { id: true } }
       },
       orderBy: { fechaGeneracion: 'desc' }
     });

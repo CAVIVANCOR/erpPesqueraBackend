@@ -22,10 +22,12 @@ const includeRelaciones = {
   tipoMaterial: true,
   color: true,
   tipoDetraccion: true,
+  tipoAfectacionIGV: true,
   cuentaCompras: true,
   cuentaInventario: true,
   cuentaCostoVentas: true,
-  cuentaVariacion: true
+  cuentaVariacion: true,
+  cuentaVentas: true,
 };
 
 /**
@@ -474,6 +476,105 @@ const actualizar = async (id, data) => {
 };
 
 /**
+ * Actualiza un campo específico en múltiples productos seleccionados.
+ * Permite asignar en masa: tipoAfectacionIGVId, tipoDetraccionId y cuentas contables.
+ * @param {Array<number>} ids - IDs de productos a actualizar
+ * @param {string} campo - Nombre del campo a actualizar
+ * @param {number|null} valorId - Valor a asignar (null para limpiar)
+ * @param {number|null} usuarioId - ID del usuario que realiza la actualización
+ */
+const actualizarCampoMasa = async (ids, campo, valorId, usuarioId) => {
+  if (!ids || ids.length === 0) {
+    throw new ValidationError('Debe proporcionar al menos un producto para actualizar.');
+  }
+
+  const camposPermitidos = [
+    'tipoAfectacionIGVId',
+    'tipoDetraccionId',
+    'cuentaComprasId',
+    'cuentaInventarioId',
+    'cuentaCostoVentasId',
+    'cuentaVariacionId',
+    'cuentaVentasId',
+  ];
+
+  if (!camposPermitidos.includes(campo)) {
+    throw new ValidationError(`Campo no permitido para actualización masiva: ${campo}`);
+  }
+
+  const idsNumerados = ids.map(id => Number(id)).filter(id => !isNaN(id) && id > 0);
+  if (idsNumerados.length === 0) {
+    throw new ValidationError('Los IDs proporcionados no son válidos.');
+  }
+
+  const dataParaActualizar = {
+    [campo]: valorId ? Number(valorId) : null,
+    fechaActualizacion: new Date(),
+  };
+
+  // Si el campo es tipoDetraccionId, mantener sincronizados los campos derivados
+  if (campo === 'tipoDetraccionId') {
+    if (valorId) {
+      const tipoDetraccion = await prisma.tipoDetraccion.findUnique({
+        where: { id: Number(valorId) },
+      });
+      if (!tipoDetraccion) {
+        throw new ValidationError('Tipo de detracción no existente.');
+      }
+      dataParaActualizar.porcentajeDetraccion = tipoDetraccion.tasa;
+      dataParaActualizar.sujetoDetraccion = true;
+    } else {
+      dataParaActualizar.porcentajeDetraccion = 0;
+      dataParaActualizar.sujetoDetraccion = false;
+    }
+  }
+
+  // Si el campo es una cuenta contable, validar que exista cuando se asigna un valor
+  const camposCuentaContable = [
+    'cuentaComprasId',
+    'cuentaInventarioId',
+    'cuentaCostoVentasId',
+    'cuentaVariacionId',
+    'cuentaVentasId',
+  ];
+
+  if (camposCuentaContable.includes(campo) && valorId) {
+    const cuenta = await prisma.planCuentasContable.findUnique({
+      where: { id: Number(valorId) },
+    });
+    if (!cuenta) {
+      throw new ValidationError('Cuenta contable no existente.');
+    }
+  }
+
+  // Si el campo es tipoAfectacionIGVId, validar existencia
+  if (campo === 'tipoAfectacionIGVId' && valorId) {
+    const tipoAfectacionIGV = await prisma.tipoAfectacionIGV.findUnique({
+      where: { id: Number(valorId) },
+    });
+    if (!tipoAfectacionIGV) {
+      throw new ValidationError('Tipo de afectación IGV no existente.');
+    }
+  }
+
+  // updateMany no admite campos FK de relación; se usa update por registro en una transacción
+  const resultado = await prisma.$transaction(
+    idsNumerados.map((id) =>
+      prisma.producto.update({
+        where: { id },
+        data: dataParaActualizar,
+        select: { id: true },
+      })
+    )
+  );
+
+  return {
+    actualizados: resultado.length,
+    mensaje: `Se actualizaron ${resultado.length} producto(s) exitosamente`,
+  };
+};
+
+/**
  * Elimina un producto por ID, validando existencia y dependencias.
  */
 const eliminar = async (id) => {
@@ -518,5 +619,6 @@ export default {
   obtenerPorEntidadYEmpresa,
   crear,
   actualizar,
+  actualizarCampoMasa,
   eliminar
 };

@@ -6,19 +6,29 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
 /**
  * Servicio CRUD para EntregaARendirOTMantenimiento
  * Replicado fielmente del patrón de EntregaARendirMovAlmacen
+ *
+ * NOTA: la relación Prisma con OTMantenimiento ya no existe (otMantenimientoId quedó
+ * como columna simple). Por eso la OT se consulta aparte y se adjunta al resultado.
  */
+
+// Adjunta la OT (con activo, empresa y responsable) a una entrega o lista de entregas.
+const adjuntarOT = async (entregas) => {
+  const lista = Array.isArray(entregas) ? entregas : [entregas];
+  for (const entrega of lista) {
+    entrega.otMantenimiento = entrega.otMantenimientoId
+      ? await prisma.oTMantenimiento.findUnique({
+          where: { id: entrega.otMantenimientoId },
+          include: { activo: true, empresa: true, responsable: true },
+        })
+      : null;
+  }
+  return entregas;
+};
 
 const listar = async () => {
   try {
-    return await prisma.entregaARendirOTMantenimiento.findMany({
+    const entregas = await prisma.entregaARendirOTMantenimiento.findMany({
       include: {
-        otMantenimiento: {
-          include: {
-            activo: true,
-            empresa: true,
-            responsable: true
-          }
-        },
         respEntregaRendir: true,
         respLiquidacion: true,
         centroCosto: true,
@@ -36,6 +46,7 @@ const listar = async () => {
       },
       orderBy: { fechaCreacion: 'desc' }
     });
+    return await adjuntarOT(entregas);
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -47,13 +58,6 @@ const obtenerPorId = async (id) => {
     const entrega = await prisma.entregaARendirOTMantenimiento.findUnique({
       where: { id },
       include: {
-        otMantenimiento: {
-          include: {
-            activo: true,
-            empresa: true,
-            responsable: true
-          }
-        },
         respEntregaRendir: true,
         respLiquidacion: true,
         centroCosto: true,
@@ -71,7 +75,7 @@ const obtenerPorId = async (id) => {
       }
     });
     if (!entrega) throw new NotFoundError('EntregaARendirOTMantenimiento no encontrada');
-    return entrega;
+    return await adjuntarOT(entrega);
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -80,16 +84,9 @@ const obtenerPorId = async (id) => {
 
 const obtenerPorOTMantenimiento = async (otMantenimientoId) => {
   try {
-    return await prisma.entregaARendirOTMantenimiento.findUnique({
+    const entrega = await prisma.entregaARendirOTMantenimiento.findUnique({
       where: { otMantenimientoId },
       include: {
-        otMantenimiento: {
-          include: {
-            activo: true,
-            empresa: true,
-            responsable: true
-          }
-        },
         respEntregaRendir: true,
         respLiquidacion: true,
         centroCosto: true,
@@ -106,6 +103,8 @@ const obtenerPorOTMantenimiento = async (otMantenimientoId) => {
         }
       }
     });
+    if (!entrega) return null;
+    return await adjuntarOT(entrega);
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
     throw err;
@@ -146,22 +145,16 @@ const crear = async (data) => {
       actualizadoPor: data.actualizadoPor ? BigInt(data.actualizadoPor) : null,
     };
 
-    return await prisma.entregaARendirOTMantenimiento.create({
+    const nueva = await prisma.entregaARendirOTMantenimiento.create({
       data: datosLimpios,
       include: {
-        otMantenimiento: {
-          include: {
-            activo: true,
-            empresa: true,
-            responsable: true
-          }
-        },
         respEntregaRendir: true,
         respLiquidacion: true,
         centroCosto: true,
         detallesMovimientos: true
       }
     });
+    return await adjuntarOT(nueva);
   } catch (err) {
     if (err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -179,17 +172,10 @@ const actualizar = async (id, data) => {
       fechaActualizacion: new Date(),
     };
 
-    return await prisma.entregaARendirOTMantenimiento.update({
+    const actualizada = await prisma.entregaARendirOTMantenimiento.update({
       where: { id },
       data: datosConAuditoria,
       include: {
-        otMantenimiento: {
-          include: {
-            activo: true,
-            empresa: true,
-            responsable: true
-          }
-        },
         respEntregaRendir: true,
         respLiquidacion: true,
         centroCosto: true,
@@ -206,6 +192,7 @@ const actualizar = async (id, data) => {
         }
       }
     });
+    return await adjuntarOT(actualizada);
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);

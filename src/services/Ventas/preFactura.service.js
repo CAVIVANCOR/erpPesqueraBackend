@@ -1121,14 +1121,11 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       resultados.comprobantesElectronicos = Number(comprobantesResult.count);
 
       // ========================================
-      // PASO 3: ELIMINAR CONTRATISTAS OT
+      // PASO 3: CONTRATISTAS OT
       // ========================================
-
-      const contratistasResult = await tx.detContratistasOT.updateMany({
-        where: { preFacturaId: id },
-        data: { preFacturaId: null },
-      });
-      resultados.contratistasOT = Number(contratistasResult.count);
+      // La columna DetContratistasOT.preFacturaId fue eliminada (Mantenimiento es de compras,
+      // no de ventas). Ya no hay nada que desvincular.
+      resultados.contratistasOT = 0;
 
       // ========================================
       // PASO 4: ELIMINAR CUENTA POR COBRAR Y PAGOS

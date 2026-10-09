@@ -330,6 +330,19 @@ const PDF_MODULES_CONFIG = {
     },
   },
 
+  "ot-mantenimiento-presupuesto-contratista": {
+    uploadPath: "uploads/pdf-system/ot-mantenimiento-presupuesto-contratista",
+    oldPaths: [],
+    apiEndpoint: "/api/pdf/ot-mantenimiento-presupuesto-contratista",
+    maxFileSize: 20 * 1024 * 1024,
+    allowedTypes: ["application/pdf", "image/jpeg", "image/png"],
+    maxFiles: 20,
+    database: {
+      table: "DetContratistasOT",
+      field: "urlDocumentoContratista",
+    },
+  },
+
   "datos-adicionales-oc": {
     uploadPath: "uploads/pdf-system/datos-adicionales-oc",
     oldPaths: ["/uploads/datos-adicionales-oc/"],

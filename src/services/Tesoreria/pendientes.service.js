@@ -37,9 +37,12 @@ import {
 // 🔵 CATEGORÍA DE GASTOS A RENDIR
 const CATEGORIA_GASTOS_A_RENDIR = 17; // Categoría "Gastos a Rendir" en TipoMovEntregaRendir
 
-// Estados del préstamo (EstadoMultiFuncion) que admiten desembolso o pago de cuotas: VIGENTE y VENCIDO.
+// Estados del préstamo (EstadoMultiFuncion) que admiten pago de cuotas: DESEMBOLSADO, VIGENTE y VENCIDO.
 // Debe coincidir con operacionPrestamo.service.js
-const ESTADOS_PRESTAMO_OPERABLES = [81, 83];
+const ESTADOS_PRESTAMO_OPERABLES = [80, 81, 83];
+
+// Estado APROBADO: préstamo aprobado pendiente de desembolso
+const ESTADO_PRESTAMO_APROBADO = 79;
 
 // Fecha de corte del saldo inicial: las cuotas con vencimiento anterior se consideran pagadas en el
 // año anterior y se marcan con `saldoInicialPagada`. Mismo valor que cuotaPrestamo.service.js
@@ -671,6 +674,10 @@ const listarPendientes = async (filtros = {}) => {
         whereEntregas.monedaId = Number(monedaId);
       }
 
+      if (filtros.entidadComercialIds?.length > 0) {
+        whereEntregas.entidadComercialId = { in: filtros.entidadComercialIds };
+      }
+
       // Consultar entregas a rendir pendientes
       entregasARendir = await prisma.detMovsEntregaRendir.findMany({
         where: whereEntregas,
@@ -961,7 +968,11 @@ const listarPendientes = async (filtros = {}) => {
     // marcadas como saldo inicial pagado. Una cuota PARCIAL sigue pendiente por su diferencia.
     let cuotasPrestamo = [];
     if (tipoDeuda === TIPO_DEUDA_TESORERIA.PRESTAMOS_CUOTAS) {
-      const wherePrestamoCuota = { estadoId: { in: ESTADOS_PRESTAMO_OPERABLES } };
+      const wherePrestamoCuota = {
+        estadoId: filtros.estadoIds?.length > 0
+          ? { in: filtros.estadoIds }
+          : { in: ESTADOS_PRESTAMO_OPERABLES },
+      };
       if (empresaId) wherePrestamoCuota.empresaId = Number(empresaId);
       if (monedaId) wherePrestamoCuota.monedaId = Number(monedaId);
       // Filtro especializado en cascada: banco → tipo de préstamo → préstamo
@@ -1003,11 +1014,17 @@ const listarPendientes = async (filtros = {}) => {
       const whereDesembolsos = {
         esSaldoInicial: false,
         movimientoCajaDesembolsoId: null,
-        estadoId: { in: ESTADOS_PRESTAMO_OPERABLES },
+        estadoId: filtros.estadoIds?.length > 0
+          ? { in: filtros.estadoIds }
+          : ESTADO_PRESTAMO_APROBADO,
         asientosContables: { none: {} },
       };
       if (empresaId) whereDesembolsos.empresaId = Number(empresaId);
       if (monedaId) whereDesembolsos.monedaId = Number(monedaId);
+      // Filtro especializado en cascada: banco → tipo de préstamo → préstamo
+      if (filtros.bancoIds?.length > 0) whereDesembolsos.bancoId = { in: filtros.bancoIds };
+      if (filtros.tipoPrestamoIds?.length > 0) whereDesembolsos.tipoPrestamoId = { in: filtros.tipoPrestamoIds };
+      if (filtros.prestamoIds?.length > 0) whereDesembolsos.id = { in: filtros.prestamoIds };
       // El "vencimiento" de un desembolso es su fecha prevista de desembolso
       const filtroFechaDesembolso = construirFiltroVencimiento(vencimiento);
       if (filtroFechaDesembolso) whereDesembolsos.fechaDesembolso = filtroFechaDesembolso;
@@ -1161,8 +1178,9 @@ const listarPendientes = async (filtros = {}) => {
     const entregasConsolidadas = entregasARendir.map((entrega) => {
       // Determinar si es Asignación o Gasto Directo
       const esAsignacion =
+        Number(entrega.tipoMovimiento?.categoriaId) === CATEGORIA_GASTOS_A_RENDIR &&
         entrega.formaParteCalculoEntregaARendir === true &&
-        entrega.entidadComercialId === null;
+        (entrega.asignacionOrigenId === null || Number(entrega.asignacionOrigenId) === 0);
 
       // Construir nombre completo del responsable
       const nombreResponsable = entrega.responsable
@@ -1420,6 +1438,8 @@ const listarPendientes = async (filtros = {}) => {
         comisionInicial: prestamo.comisionInicial,
         esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
         tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
+        bancoId: prestamo.bancoId,
+        tipoPrestamoId: prestamo.tipoPrestamoId,
       },
     }));
 
@@ -1562,7 +1582,7 @@ const obtenerResumen = async (empresaId = null) => {
         ...where,
         esSaldoInicial: false,
         movimientoCajaDesembolsoId: null,
-        estadoId: { in: ESTADOS_PRESTAMO_OPERABLES },
+        estadoId: ESTADO_PRESTAMO_APROBADO,
         asientosContables: { none: {} },
       },
       _sum: { montoDesembolsado: true },

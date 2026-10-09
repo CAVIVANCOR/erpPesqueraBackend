@@ -1,4 +1,5 @@
 import prisma from '../../config/prismaClient.js';
+import documentoCompraPresupuestoService from './documentoCompraPresupuesto.service.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 
 /**
@@ -28,12 +29,6 @@ async function validarForaneas(data) {
     if (!moneda) throw new ValidationError('La moneda referenciada no existe.');
   }
   
-  if (data.ordenCompraId) {
-    const ordenCompra = await prisma.ordenCompra.findUnique({ 
-      where: { id: data.ordenCompraId } 
-    });
-    if (!ordenCompra) throw new ValidationError('La orden de compra referenciada no existe.');
-  }
 }
 
 const listar = async (detContratistaOTId) => {
@@ -79,12 +74,6 @@ const listar = async (detContratistaOTId) => {
             codigoSunat: true,
             simbolo: true
           }
-        },
-        ordenCompra: {
-          select: {
-            id: true,
-            numeroCompleto: true
-          }
         }
       },
       orderBy: {
@@ -114,8 +103,7 @@ const obtenerPorId = async (id) => {
             marca: true
           }
         },
-        moneda: true,
-        ordenCompra: true
+        moneda: true
       }
     });
     
@@ -155,8 +143,6 @@ const crear = async (data) => {
         precioUnitario: precioUnitario,
         total: total,
         monedaId: BigInt(data.monedaId),
-        incluidoEnPresupuesto: data.incluidoEnPresupuesto !== undefined ? data.incluidoEnPresupuesto : true,
-        ordenCompraId: data.ordenCompraId ? BigInt(data.ordenCompraId) : null,
         creadoEn: new Date(),
         actualizadoEn: new Date(),
         creadoPor: data.creadoPor ? BigInt(data.creadoPor) : null,
@@ -168,11 +154,16 @@ const crear = async (data) => {
             unidadMedida: true
           }
         },
-        moneda: true,
-        ordenCompra: true
+        moneda: true
       }
     });
     
+    // Recalcular montos del presupuesto (montoPactado = suma de ítems)
+    try {
+      await documentoCompraPresupuestoService.recalcularMontosPresupuesto(nuevo.detContratistaOTId);
+    } catch (e) {
+      console.error('No se pudo recalcular montos del presupuesto:', e.message);
+    }
     return nuevo;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
@@ -200,13 +191,12 @@ const actualizar = async (id, data) => {
     if (dataActualizada.detContratistaOTId) dataActualizada.detContratistaOTId = BigInt(dataActualizada.detContratistaOTId);
     if (dataActualizada.productoId) dataActualizada.productoId = BigInt(dataActualizada.productoId);
     if (dataActualizada.monedaId) dataActualizada.monedaId = BigInt(dataActualizada.monedaId);
-    if (dataActualizada.ordenCompraId) dataActualizada.ordenCompraId = BigInt(dataActualizada.ordenCompraId);
     if (dataActualizada.creadoPor) dataActualizada.creadoPor = BigInt(dataActualizada.creadoPor);
     if (dataActualizada.actualizadoPor) dataActualizada.actualizadoPor = BigInt(dataActualizada.actualizadoPor);
     
     dataActualizada.actualizadoEn = new Date();
     
-    return await prisma.detRepuestosContratistaOT.update({ 
+    const actualizado = await prisma.detRepuestosContratistaOT.update({ 
       where: { id }, 
       data: dataActualizada,
       include: {
@@ -215,10 +205,17 @@ const actualizar = async (id, data) => {
             unidadMedida: true
           }
         },
-        moneda: true,
-        ordenCompra: true
+        moneda: true
       }
     });
+
+    // Recalcular montos del presupuesto
+    try {
+      await documentoCompraPresupuestoService.recalcularMontosPresupuesto(actualizado.detContratistaOTId);
+    } catch (e) {
+      console.error('No se pudo recalcular montos del presupuesto:', e.message);
+    }
+    return actualizado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -232,6 +229,12 @@ const eliminar = async (id) => {
     if (!existente) throw new NotFoundError('DetRepuestosContratistaOT no encontrado');
     
     await prisma.detRepuestosContratistaOT.delete({ where: { id } });
+    // Recalcular montos del presupuesto al quitar un ítem
+    try {
+      await documentoCompraPresupuestoService.recalcularMontosPresupuesto(existente.detContratistaOTId);
+    } catch (e) {
+      console.error('No se pudo recalcular montos del presupuesto:', e.message);
+    }
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;

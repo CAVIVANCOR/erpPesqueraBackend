@@ -73,14 +73,16 @@ import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
 // ════════════════════════════════════════════════════════════
 // Estados del préstamo (EstadoMultiFuncion)
 const ESTADOS_PRESTAMO = {
+  APROBADO: 79,
+  DESEMBOLSADO: 80,
   VIGENTE: 81,
   PAGADO: 82,
   VENCIDO: 83,
   REFINANCIADO: 84,
   ANULADO: 85,
 };
-// Un préstamo admite desembolso o pago de cuotas solo mientras está vigente o vencido
-const ESTADOS_PRESTAMO_OPERABLES = [ESTADOS_PRESTAMO.VIGENTE, ESTADOS_PRESTAMO.VENCIDO];
+// Un préstamo admite desembolso o pago de cuotas mientras está desembolsado, vigente o vencido
+const ESTADOS_PRESTAMO_OPERABLES = [ESTADOS_PRESTAMO.DESEMBOLSADO, ESTADOS_PRESTAMO.VIGENTE, ESTADOS_PRESTAMO.VENCIDO];
 
 const ESTADO_MOVIMIENTO_CAJA_VALIDADO = 21;
 // ITF y comisión comparten el mismo tipo de movimiento
@@ -1029,8 +1031,8 @@ const procesarDesembolso = async (datos) => {
             `El préstamo ${prestamo.numeroPrestamo} ya tiene asientos contables: no se puede registrar el desembolso de nuevo`,
           );
         }
-        if (!ESTADOS_PRESTAMO_OPERABLES.includes(Number(prestamo.estadoId))) {
-          throw new ValidationError(`El préstamo ${prestamo.numeroPrestamo} no admite desembolso en su estado actual`);
+        if (Number(prestamo.estadoId) !== ESTADOS_PRESTAMO.APROBADO) {
+          throw new ValidationError(`El préstamo ${prestamo.numeroPrestamo} no admite desembolso en su estado actual (debe estar APROBADO)`);
         }
         const montoDesembolso = Number(prestamo.montoDesembolsado);
         if (!(montoDesembolso > 0)) {
@@ -1165,6 +1167,7 @@ const procesarDesembolso = async (datos) => {
           where: { id: prestamo.id },
           data: {
             movimientoCajaDesembolsoId: ingreso.movimiento.id,
+            estadoId: ESTADOS_PRESTAMO.DESEMBOLSADO,
             fechaContable: ctx.fechaContable,
           },
         });

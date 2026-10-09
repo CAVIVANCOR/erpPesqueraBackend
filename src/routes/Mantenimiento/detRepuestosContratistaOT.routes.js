@@ -5,6 +5,7 @@ const router = Router();
 
 // Rutas CRUD para DetRepuestosContratistaOT
 router.get('/', detRepuestosContratistaOTController.listar);
+router.get('/contratista-ot/:detContratistaOTId', detRepuestosContratistaOTController.obtenerPorContratistaOT);
 router.get('/:id', detRepuestosContratistaOTController.obtenerPorId);
 router.post('/', detRepuestosContratistaOTController.crear);
 router.put('/:id', detRepuestosContratistaOTController.actualizar);

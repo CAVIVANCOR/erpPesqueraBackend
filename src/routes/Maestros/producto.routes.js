@@ -34,6 +34,14 @@ router.post(
   productoController.clonarAEmpresas
 );
 
+// ✅ RUTA ESPECIAL: Actualizar un campo en productos seleccionados
+router.post(
+  '/actualizar-campo-masa',
+  autenticarJWT,
+  checkPermission('producto', 'editar'),
+  productoController.actualizarCampoMasa
+);
+
 router.get(
   '/:id',
   autenticarJWT,

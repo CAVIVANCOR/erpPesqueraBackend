@@ -4,11 +4,22 @@ import {
   DatabaseError,
   ValidationError,
 } from "../../utils/errors.js";
+import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
+import documentoCompraPresupuestoService from "./documentoCompraPresupuesto.service.js";
+import otMantenimientoService from "./otMantenimiento.service.js";
 
 /**
  * Servicio CRUD para DetContratistasOT
  * Documentado en español.
  */
+
+// Obtiene el TC del presupuesto: si el presupuesto está en la moneda de la OT no aplica (null);
+// si difieren, usa el TC enviado o consulta SUNAT con la fechaPresupuesto.
+async function resolverTipoCambio(data, ot) {
+  const mismaMoneda = ot && Number(data.monedaId) === Number(ot.monedaId);
+  if (mismaMoneda) return null;
+  return await validarTipoCambio(data.tipoCambio, data.fechaPresupuesto);
+}
 
 async function validarForaneas(data) {
   if (data.otMantenimientoId) {
@@ -25,14 +36,6 @@ async function validarForaneas(data) {
     });
     if (!contratista)
       throw new ValidationError("El contratista referenciado no existe.");
-  }
-
-  if (data.productoServicioId) {
-    const producto = await prisma.producto.findUnique({
-      where: { id: data.productoServicioId },
-    });
-    if (!producto)
-      throw new ValidationError("El producto/servicio referenciado no existe.");
   }
 
   if (data.activoId) {
@@ -56,13 +59,6 @@ async function validarForaneas(data) {
     if (!estado) throw new ValidationError("El estado referenciado no existe.");
   }
 
-  if (data.preFacturaId) {
-    const preFactura = await prisma.preFactura.findUnique({
-      where: { id: data.preFacturaId },
-    });
-    if (!preFactura)
-      throw new ValidationError("La pre-factura referenciada no existe.");
-  }
 }
 
 const listar = async (otMantenimientoId) => {
@@ -90,14 +86,6 @@ const listar = async (otMantenimientoId) => {
             nombreComercial: true,
           },
         },
-        productoServicio: {
-          select: {
-            id: true,
-            codigo: true,
-            descripcionBase: true,
-            descripcionArmada: true,
-          },
-        },
         activo: {
           select: {
             id: true,
@@ -119,13 +107,6 @@ const listar = async (otMantenimientoId) => {
             severityColor: true,
           },
         },
-        preFactura: {
-          select: {
-            id: true,
-            codigo: true,
-            numeroDocumento: true,
-          },
-        },
         repuestos: {
           include: {
             producto: {
@@ -140,12 +121,6 @@ const listar = async (otMantenimientoId) => {
               select: {
                 id: true,
                 simbolo: true,
-              },
-            },
-            ordenCompra: {
-              select: {
-                id: true,
-                numeroDocumento: true,
               },
             },
           },
@@ -172,16 +147,13 @@ const obtenerPorId = async (id) => {
       include: {
         otMantenimiento: true,
         contratista: true,
-        productoServicio: true,
         activo: true,
         moneda: true,
         estado: true,
-        preFactura: true,
         repuestos: {
           include: {
             producto: true,
             moneda: true,
-            ordenCompra: true,
           },
           orderBy: {
             numeroLinea: "asc",
@@ -207,39 +179,44 @@ const crear = async (data) => {
       !data.otMantenimientoId ||
       !data.numeroLinea ||
       !data.contratistaId ||
-      !data.productoServicioId ||
       !data.servicioDescripcion ||
-      data.montoPactado === undefined ||
-      data.saldo === undefined ||
       !data.monedaId ||
       !data.estadoId
     ) {
       throw new ValidationError(
-        "Faltan campos obligatorios: otMantenimientoId, numeroLinea, contratistaId, productoServicioId, servicioDescripcion, montoPactado, saldo, monedaId, estadoId.",
+        "Faltan campos obligatorios: otMantenimientoId, numeroLinea, contratistaId, servicioDescripcion, monedaId, estadoId.",
       );
     }
 
     await validarForaneas(data);
 
-    // Calcular saldo si no viene
-    const montoPactado = Number(data.montoPactado);
-    const montoPagado = Number(data.montoPagado || 0);
-    const saldo = montoPactado - montoPagado;
+    const ot = await prisma.oTMantenimiento.findUnique({
+      where: { id: BigInt(data.otMantenimientoId) },
+    });
+    const fechaPresupuesto = data.fechaPresupuesto
+      ? new Date(data.fechaPresupuesto)
+      : new Date();
+    const tipoCambio = await resolverTipoCambio(
+      { ...data, fechaPresupuesto },
+      ot,
+    );
 
+    // La cabecera nace sin ítems (monto 0). montoPactado/saldo se recalculan desde los ítems.
     const nuevo = await prisma.detContratistasOT.create({
       data: {
         otMantenimientoId: BigInt(data.otMantenimientoId),
         numeroLinea: Number(data.numeroLinea),
         contratistaId: BigInt(data.contratistaId),
-        productoServicioId: BigInt(data.productoServicioId),
         activoId: data.activoId ? BigInt(data.activoId) : null,
         servicioDescripcion: data.servicioDescripcion,
-        montoPactado: montoPactado,
-        montoPagado: montoPagado,
-        saldo: saldo,
+        fechaPresupuesto,
+        tipoCambio,
+        montoPactado: Number(data.montoPactado || 0),
+        montoFacturado: 0,
+        montoPagado: Number(data.montoPagado || 0),
+        saldo: Number(data.montoPactado || 0) - Number(data.montoPagado || 0),
         monedaId: BigInt(data.monedaId),
         estadoId: BigInt(data.estadoId),
-        preFacturaId: data.preFacturaId ? BigInt(data.preFacturaId) : null,
         urlDocumentoContratista: data.urlDocumentoContratista || null,
         urlFotosProductos: data.urlFotosProductos || null,
         urlFotosAntes: data.urlFotosAntes || null,
@@ -253,14 +230,18 @@ const crear = async (data) => {
       },
       include: {
         contratista: true,
-        productoServicio: true,
         activo: true,
         moneda: true,
         estado: true,
-        preFactura: true,
       },
     });
 
+    try {
+      await documentoCompraPresupuestoService.recalcularMontosOT(nuevo.otMantenimientoId);
+      await otMantenimientoService.actualizarEstadoOT(nuevo.otMantenimientoId);
+    } catch (e) {
+      console.error("No se pudieron recalcular los montos/estado de la OT:", e.message);
+    }
     return nuevo;
   } catch (err) {
     if (err instanceof ValidationError) throw err;
@@ -295,6 +276,30 @@ const actualizar = async (id, data) => {
       dataActualizada.saldo = montoPactado - montoPagado;
     }
 
+    // fechaPresupuesto / tipoCambio: si cambia la fecha y no se envía TC, se consulta SUNAT.
+    if (data.fechaPresupuesto !== undefined) {
+      dataActualizada.fechaPresupuesto = data.fechaPresupuesto
+        ? new Date(data.fechaPresupuesto)
+        : null;
+    }
+    if (
+      data.fechaPresupuesto !== undefined ||
+      data.tipoCambio !== undefined ||
+      data.monedaId !== undefined
+    ) {
+      const ot = await prisma.oTMantenimiento.findUnique({
+        where: { id: existente.otMantenimientoId },
+      });
+      const datosTC = {
+        monedaId: data.monedaId ?? existente.monedaId,
+        fechaPresupuesto:
+          dataActualizada.fechaPresupuesto ?? existente.fechaPresupuesto,
+        tipoCambio:
+          data.tipoCambio !== undefined ? data.tipoCambio : existente.tipoCambio,
+      };
+      dataActualizada.tipoCambio = await resolverTipoCambio(datosTC, ot);
+    }
+
     // Convertir BigInt
     if (dataActualizada.otMantenimientoId)
       dataActualizada.otMantenimientoId = BigInt(
@@ -302,18 +307,12 @@ const actualizar = async (id, data) => {
       );
     if (dataActualizada.contratistaId)
       dataActualizada.contratistaId = BigInt(dataActualizada.contratistaId);
-    if (dataActualizada.productoServicioId)
-      dataActualizada.productoServicioId = BigInt(
-        dataActualizada.productoServicioId,
-      );
     if (dataActualizada.activoId)
       dataActualizada.activoId = BigInt(dataActualizada.activoId);
     if (dataActualizada.monedaId)
       dataActualizada.monedaId = BigInt(dataActualizada.monedaId);
     if (dataActualizada.estadoId)
       dataActualizada.estadoId = BigInt(dataActualizada.estadoId);
-    if (dataActualizada.preFacturaId)
-      dataActualizada.preFacturaId = BigInt(dataActualizada.preFacturaId);
     if (dataActualizada.creadoPor)
       dataActualizada.creadoPor = BigInt(dataActualizada.creadoPor);
     if (dataActualizada.actualizadoPor)
@@ -321,16 +320,14 @@ const actualizar = async (id, data) => {
 
     dataActualizada.actualizadoEn = new Date();
 
-    return await prisma.detContratistasOT.update({
+    const actualizado = await prisma.detContratistasOT.update({
       where: { id },
       data: dataActualizada,
       include: {
         contratista: true,
-        productoServicio: true,
         activo: true,
         moneda: true,
         estado: true,
-        preFactura: true,
         repuestos: {
           include: {
             producto: true,
@@ -339,6 +336,15 @@ const actualizar = async (id, data) => {
         },
       },
     });
+
+    // Si cambia fecha/TC/moneda del presupuesto, los totales de la OT cambian
+    try {
+      await documentoCompraPresupuestoService.recalcularMontosOT(actualizado.otMantenimientoId);
+      await otMantenimientoService.actualizarEstadoOT(actualizado.otMantenimientoId);
+    } catch (e) {
+      console.error("No se pudieron recalcular los montos/estado de la OT:", e.message);
+    }
+    return actualizado;
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError)
       throw err;
@@ -356,8 +362,28 @@ const eliminar = async (id) => {
     });
     if (!existente) throw new NotFoundError("DetContratistasOT no encontrado");
 
+    // No se puede eliminar si ya tiene documentos de compra generados
+    const documentosGenerados = await prisma.ordenCompra.findFirst({
+      where: {
+        submoduloOrigenId: 158,
+        procesoOrigenId: id,
+        estadoId: { not: 40 },
+      },
+    });
+    if (documentosGenerados) {
+      throw new ValidationError(
+        "No se puede eliminar el presupuesto porque ya tiene documentos de compra generados."
+      );
+    }
+
     // Los repuestos se eliminan automáticamente por onDelete: Cascade
     await prisma.detContratistasOT.delete({ where: { id } });
+    try {
+      await documentoCompraPresupuestoService.recalcularMontosOT(existente.otMantenimientoId);
+      await otMantenimientoService.actualizarEstadoOT(existente.otMantenimientoId);
+    } catch (e) {
+      console.error("No se pudieron recalcular los montos/estado de la OT:", e.message);
+    }
     return true;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
