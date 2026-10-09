@@ -1224,6 +1224,348 @@ async function actualizarSaldoCuentaCorriente({
 }
 
 // ════════════════════════════════════════════════════════════
+// CANCELACIÓN DE SOLO LA DETRACCIÓN (el neto ya fue cobrado antes)
+// ════════════════════════════════════════════════════════════
+
+/**
+ * Es "solo detracción" cuando la operación no trae pago del neto (montoPagado = 0),
+ * trae un monto de detracción y no es autodetracción (en la autodetracción el cliente
+ * pagó el total y se registra en el flujo normal).
+ */
+const esPagoSoloDetraccion = (data) =>
+  !(Number(data.montoPagado) > 0) &&
+  Number(data.montoDetraccionIngresado) > 0 &&
+  !data.esAutodetraccion;
+
+/**
+ * Registra únicamente el pago de la detracción de una cuenta por cobrar:
+ *   - PagoCuentaPorCobrar con el monto de la detracción aplicado a la deuda
+ *   - Actualiza la Detracción (importe pagado, saldo y estado)
+ *   - Movimiento de ingreso a la cuenta del Banco de la Nación (+ su saldo)
+ *   - Asiento contable del movimiento (el mismo de la detracción del flujo normal)
+ *   - Recalcula la cuenta por cobrar: queda PAGADA si con esto se cubre todo el documento
+ * No crea ingreso del neto, ITF ni comisión. Devuelve la misma estructura que el flujo normal
+ * para reutilizar su procesamiento posterior. Se ejecuta dentro de la transacción recibida.
+ */
+const ejecutarPagoSoloDetraccion = async (tx, data) => {
+  const redondear2 = (valor) => Math.round(Number(valor) * 100) / 100;
+
+  // ── Validaciones de entrada ──
+  const camposRequeridos = [
+    'cuentaPorCobrarId',
+    'empresaId',
+    'fechaPago',
+    'monedaPagoId',
+    'tipoCambio',
+    'medioPagoId',
+    'usuarioId'
+  ];
+  const camposFaltantes = camposRequeridos.filter((campo) => !data[campo]);
+  if (camposFaltantes.length > 0) {
+    throw new ValidationError(`Faltan campos obligatorios: ${camposFaltantes.join(', ')}`);
+  }
+  if (Number(data.tipoCambio) <= 0) {
+    throw new ValidationError('El tipo de cambio debe ser mayor a cero.');
+  }
+  if (!data.numeroOperacionBN && !data.numeroConstanciaDetraccion) {
+    throw new ValidationError('Debe ingresar el número de constancia o de operación del Banco de la Nación.');
+  }
+  if (Number(data.montoITF || 0) > 0 || Number(data.montoComision || 0) > 0) {
+    throw new ValidationError('El ITF y la comisión corresponden al pago del neto: no aplican al pagar solo la detracción.');
+  }
+  if (data.aplicaRetencion || data.aplicaPercepcion) {
+    throw new ValidationError('El pago de solo la detracción no admite retención ni percepción.');
+  }
+
+  // ── Cuenta por cobrar y detracción ──
+  const cuentaPorCobrar = await tx.cuentaPorCobrar.findUnique({
+    where: { id: Number(data.cuentaPorCobrarId) },
+    include: {
+      cliente: { include: { tipoDocumento: true } },
+      empresa: true,
+      moneda: true,
+      estado: true,
+      preFactura: { include: { tipoDocumento: true } }
+    }
+  });
+  if (!cuentaPorCobrar) {
+    throw new NotFoundError('Cuenta por cobrar no encontrada.');
+  }
+  if (Number(cuentaPorCobrar.empresaId) !== Number(data.empresaId)) {
+    throw new ValidationError('La cuenta por cobrar no pertenece a la empresa indicada.');
+  }
+  if (cuentaPorCobrar.estadoId === ESTADOS_CXC.ANULADO) {
+    throw new ValidationError('No se puede pagar una cuenta por cobrar anulada.');
+  }
+  if (cuentaPorCobrar.estadoId === ESTADOS_CXC.CANJEADO) {
+    throw new ValidationError('No se puede pagar una cuenta por cobrar canjeada.');
+  }
+  if (Number(cuentaPorCobrar.saldoPendiente) <= 0) {
+    throw new ValidationError('La cuenta por cobrar ya está completamente pagada.');
+  }
+  if (!cuentaPorCobrar.preFacturaId) {
+    throw new ValidationError('El documento no tiene detracción asociada.');
+  }
+
+  const detraccionActual = await tx.detraccion.findUnique({
+    where: { preFacturaId: cuentaPorCobrar.preFacturaId }
+  });
+  if (!detraccionActual) {
+    throw new ValidationError('No se encontró la detracción del documento.');
+  }
+  if (Number(detraccionActual.saldoPendiente) <= 0) {
+    throw new ValidationError('La detracción de este documento ya está cancelada.');
+  }
+
+  const montoDetraccion = redondear2(data.montoDetraccionIngresado);
+  if (montoDetraccion > redondear2(detraccionActual.saldoPendiente)) {
+    throw new ValidationError(
+      `El monto de la detracción (${montoDetraccion}) supera su saldo pendiente (${redondear2(detraccionActual.saldoPendiente)}).`
+    );
+  }
+  if (montoDetraccion > redondear2(cuentaPorCobrar.saldoPendiente)) {
+    throw new ValidationError(
+      `El monto de la detracción (${montoDetraccion}) supera el saldo pendiente del documento (${redondear2(cuentaPorCobrar.saldoPendiente)}).`
+    );
+  }
+
+  const cuentaBN = detraccionActual.cuentaBNSunatPropiaId
+    ? Number(detraccionActual.cuentaBNSunatPropiaId)
+    : null;
+  if (!cuentaBN) {
+    throw new ValidationError('La detracción no tiene una cuenta del Banco de la Nación asociada.');
+  }
+
+  const monedaPago = await tx.moneda.findUnique({ where: { id: Number(data.monedaPagoId) } });
+  if (!monedaPago) {
+    throw new NotFoundError('Moneda de pago no encontrada.');
+  }
+
+  // ── Glosa ──
+  const formatearFecha = (fecha) => {
+    const f = new Date(fecha);
+    return `${String(f.getDate()).padStart(2, '0')}/${String(f.getMonth() + 1).padStart(2, '0')}/${f.getFullYear()}`;
+  };
+  const cliente = cuentaPorCobrar.cliente;
+  const glosa =
+    `Cancelación de Detracción de Dcmto: ${cuentaPorCobrar.numeroPreFactura || ''} ${formatearFecha(cuentaPorCobrar.fechaEmision)} ` +
+    `Cliente: ${cliente?.tipoDocumento?.codigo || ''} ${cliente?.numeroDocumento || ''} ${cliente?.razonSocial || ''} ` +
+    `Detracción: ${monedaPago.simbolo || ''} ${montoDetraccion.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ` +
+    `${formatearFecha(data.fechaPago)} T/C: ${Number(data.tipoCambio).toFixed(4)}`;
+
+  // ── Correlativo y período contable ──
+  const correlativo = await correlativoService.generarCorrelativo(data.empresaId, tx);
+  const fechaContable = new Date(data.fechaPago);
+  const periodoContable = await periodoContableService.obtenerPeriodoPorFecha(
+    Number(data.empresaId),
+    fechaContable
+  );
+
+  // ── Pago de la cuenta por cobrar (el monto de la detracción se aplica a la deuda) ──
+  const pagoCuentaPorCobrar = await tx.pagoCuentaPorCobrar.create({
+    data: {
+      cuentaPorCobrarId: Number(data.cuentaPorCobrarId),
+      empresaId: Number(data.empresaId),
+      fechaPago: new Date(data.fechaPago),
+      montoPagado: 0,
+      monedaPagoId: Number(data.monedaPagoId),
+      tipoCambio: Number(data.tipoCambio),
+      montoAplicadoDeuda: montoDetraccion,
+      monedaDeudaId: Number(data.monedaDeudaId || cuentaPorCobrar.monedaId),
+      tieneRetencion: false,
+      montoRetencion: 0,
+      porcentajeRetencion: null,
+      numeroComprobanteRetencion: null,
+      fechaRetencion: null,
+      tienePercepcion: false,
+      montoPercepcion: 0,
+      porcentajePercepcion: null,
+      numeroComprobantePercepcion: null,
+      fechaPercepcion: null,
+      medioPagoId: Number(data.medioPagoId),
+      numeroOperacion: data.numeroOperacionBN || data.numeroConstanciaDetraccion || null,
+      bancoId: null,
+      cuentaBancariaId: null,
+      movimientoCajaId: null,
+      observaciones: data.observaciones || null,
+      fechaContable: fechaContable,
+      periodoContableId: Number(periodoContable.id),
+      refOperacionEspecializadaMovCaja: correlativo,
+      detraccionId: null,
+      creadoPor: data.creadoPor || null
+    }
+  });
+
+  // ── Detracción: importe pagado, saldo y estado ──
+  const nuevoImportePagado = redondear2(Number(detraccionActual.importePagado) + montoDetraccion);
+  const nuevoSaldoDetraccion = redondear2(Number(detraccionActual.importeRequerido) - nuevoImportePagado);
+  let nuevoEstadoDetraccion = ESTADOS_DETRACCION.PENDIENTE;
+  if (nuevoSaldoDetraccion <= 0) {
+    nuevoEstadoDetraccion = ESTADOS_DETRACCION.VALIDADO; // PAGADO
+  } else if (nuevoImportePagado > 0) {
+    nuevoEstadoDetraccion = 126; // PARCIAL (igual que el flujo normal)
+  }
+  const detraccionActualizada = await tx.detraccion.update({
+    where: { id: detraccionActual.id },
+    data: {
+      importePagado: nuevoImportePagado,
+      saldoPendiente: nuevoSaldoDetraccion,
+      estadoPagoId: nuevoEstadoDetraccion,
+      numeroDocumento: data.numeroOperacionBN || data.numeroConstanciaDetraccion || detraccionActual.numeroDocumento,
+      fechaEmision: new Date(data.fechaPago)
+    }
+  });
+
+  // ── Movimiento de ingreso a la cuenta del Banco de la Nación ──
+  const movimientoDetraccionIngreso = await tx.movimientoCaja.create({
+    data: {
+      refOperacionEspecializadaMovCaja: correlativo,
+      tipoMovimientoId: TIPOS_MOVIMIENTO.DETRACCION_INGRESO,
+      empresaId: Number(data.empresaId),
+      entidadComercialId: Number(cuentaPorCobrar.clienteId),
+      monto: montoDetraccion,
+      monedaId: Number(data.monedaPagoId),
+      medioPagoId: Number(data.medioPagoId),
+      cuentaCorrienteDestinoId: cuentaBN,
+      fechaOperacionMovCaja: new Date(data.fechaPago),
+      descripcion: `Detracción - ${glosa}`,
+      numeroOperacionPagoBancoImpuesto: data.numeroOperacionBN || data.numeroConstanciaDetraccion || null,
+      fechaOperacionPagoBancoImpuesto: new Date(data.fechaPago),
+      estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
+      esGerencial: cuentaPorCobrar.esGerencial || false,
+      tipoCambio: Number(data.tipoCambio),
+      usuarioId: Number(data.usuarioId),
+      moduloOrigenMotivoOperacionId: 116,
+      origenMotivoOperacionId: pagoCuentaPorCobrar.id,
+      cuentaPorCobrarId: cuentaPorCobrar.id,
+      detraccionId: detraccionActualizada.id
+    }
+  });
+
+  await actualizarSaldoCuentaCorriente({
+    tx,
+    cuentaCorrienteId: cuentaBN,
+    empresaId: data.empresaId,
+    fecha: pagoCuentaPorCobrar.fechaContable,
+    ingresos: montoDetraccion,
+    egresos: 0,
+    monedaMovimientoId: 1, // Detracción siempre en PEN
+    tipoCambio: data.tipoCambio,
+    movimientoCajaId: movimientoDetraccionIngreso.id
+  });
+
+  // ── Vincular el pago con su movimiento y su detracción ──
+  const pagoCuentaPorCobrarActualizado = await tx.pagoCuentaPorCobrar.update({
+    where: { id: pagoCuentaPorCobrar.id },
+    data: {
+      movimientoCajaId: movimientoDetraccionIngreso.id,
+      detraccionId: detraccionActualizada.id
+    },
+    include: {
+      cuentaPorCobrar: { include: { cliente: true, empresa: true, moneda: true } },
+      empresa: true,
+      monedaPago: true,
+      monedaDeuda: true,
+      medioPago: true,
+      banco: true,
+      cuentaBancaria: { include: { banco: true, moneda: true } },
+      periodoContable: true,
+      movimientoCaja: true,
+      detraccion: true
+    }
+  });
+
+  // ── Asiento contable (mismo tratamiento que la detracción del flujo normal) ──
+  let asientosGenerados = [];
+  try {
+    asientosGenerados = await generarAsientosContablesPagoCxC(
+      pagoCuentaPorCobrar,
+      [movimientoDetraccionIngreso],
+      periodoContable,
+      data.empresaId,
+      data.creadoPor,
+      tx
+    );
+    if (asientosGenerados && asientosGenerados.length > 0) {
+      await tx.movimientoCaja.update({
+        where: { id: movimientoDetraccionIngreso.id },
+        data: { asientosGenerados: true }
+      });
+    }
+  } catch (error) {
+    // Igual que el flujo normal: un fallo del asiento no revierte la operación
+  }
+
+  // ── Recalcular la cuenta por cobrar ──
+  const pagosRealizados = await tx.pagoCuentaPorCobrar.findMany({
+    where: { cuentaPorCobrarId: Number(data.cuentaPorCobrarId) }
+  });
+  const totalPagado = redondear2(
+    pagosRealizados.reduce((suma, pago) => suma + Number(pago.montoAplicadoDeuda || 0), 0)
+  );
+  const saldoPendiente = redondear2(Number(cuentaPorCobrar.montoTotal) - totalPagado);
+
+  let nuevoEstado = ESTADOS_CXC.PENDIENTE;
+  if (saldoPendiente <= 0) {
+    nuevoEstado = ESTADOS_CXC.PAGADO;
+  } else if (totalPagado > 0) {
+    nuevoEstado = ESTADOS_CXC.PAGO_PARCIAL;
+  } else if (new Date(cuentaPorCobrar.fechaVencimiento) < new Date()) {
+    nuevoEstado = ESTADOS_CXC.VENCIDO;
+  }
+  await tx.cuentaPorCobrar.update({
+    where: { id: Number(data.cuentaPorCobrarId) },
+    data: { montoPagado: totalPagado, saldoPendiente, estadoId: nuevoEstado }
+  });
+
+  // ── Respuesta (misma estructura que el flujo normal) ──
+  const saldoCuenta = await tx.saldoCuentaCorriente.findFirst({
+    where: { movimientoCajaId: movimientoDetraccionIngreso.id },
+    orderBy: { fecha: 'asc' }
+  });
+
+  return {
+    success: true,
+    correlativo: correlativo,
+    pagoCuentaPorCobrar: pagoCuentaPorCobrarActualizado,
+    movimientos: {
+      ingreso: null,
+      itf: null,
+      comision: null,
+      detraccionIngreso: movimientoDetraccionIngreso,
+      autodetraccionEgreso: null,
+      autodetraccionIngreso: null
+    },
+    conceptosSunat: {
+      detraccion: detraccionActualizada,
+      retencion: null,
+      percepcion: null
+    },
+    asientosContables: asientosGenerados || [],
+    saldosCuentaCorriente: saldoCuenta
+      ? [
+          {
+            tipo: 'Detracción',
+            saldoAnterior: Number(saldoCuenta.saldoAnterior),
+            ingresos: Number(saldoCuenta.ingresos),
+            egresos: Number(saldoCuenta.egresos),
+            saldoActual: Number(saldoCuenta.saldoActual)
+          }
+        ]
+      : [],
+    resumen: {
+      montoBruto: 0,
+      montoITF: 0,
+      montoComision: 0,
+      montoDetraccion: montoDetraccion,
+      montoNetoCaja: 0,
+      montoAplicadoDeuda: montoDetraccion,
+      saldoPendiente: saldoPendiente
+    }
+  };
+};
+
+// ════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL: PROCESAR PAGO ESPECIALIZADO
 // ════════════════════════════════════════════════════════════
 
@@ -1234,6 +1576,11 @@ async function actualizarSaldoCuentaCorriente({
 const procesarPagoEspecializado = async (data) => {
   try {
     const resultado = await prisma.$transaction(async (tx) => {
+      // Cancelación de solo la detracción (el neto ya se cobró): flujo propio, sin pago del neto
+      if (esPagoSoloDetraccion(data)) {
+        return await ejecutarPagoSoloDetraccion(tx, data);
+      }
+
       // ════════════════════════════════════════════════════════════
       // VALIDACIONES DENTRO DE LA TRANSACCIÓN
       // ════════════════════════════════════════════════════════════
