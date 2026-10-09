@@ -1163,23 +1163,14 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       // ========================================
 
 
-      if (preFactura.movSalidaAlmacenId) {
-        // Usar servicio especializado (patrón existente en anular())
-        const { default: eliminarMovimientoAlmacenService } =
-          await import("../Almacen/eliminarMovimientoAlmacen.service.js");
-
-        const resultadoMov = await eliminarMovimientoAlmacenService
-          .eliminarMovimientoAlmacenCompleto(
-            preFactura.movSalidaAlmacenId,
-            tx  // Pasar la transacción para mantener atomicidad
-          );
-
-        // Acumular contadores del servicio especializado
-        resultados.movimientosAlmacen = 1;
-        resultados.detallesMovAlmacen = resultadoMov.resultados.detallesEliminados;
-        resultados.kardexEliminados = resultadoMov.resultados.kardexEliminados;
-        resultados.saldosDetRegenerados = resultadoMov.resultados.saldosDetRegenerados;
-        resultados.saldosGenRegenerados = resultadoMov.resultados.saldosGenRegenerados;
+      // Puede haber un movimiento de salida por cada almacén elegido en el despacho de stock
+      const movimientosEliminados = await eliminarMovimientosSalidaPreFactura(tx, preFactura);
+      if (movimientosEliminados.movimientos > 0) {
+        resultados.movimientosAlmacen = movimientosEliminados.movimientos;
+        resultados.detallesMovAlmacen = movimientosEliminados.detalles;
+        resultados.kardexEliminados = movimientosEliminados.kardex;
+        resultados.saldosDetRegenerados = movimientosEliminados.saldosDet;
+        resultados.saldosGenRegenerados = movimientosEliminados.saldosGen;
       }
 
       // ========================================
@@ -3537,16 +3528,8 @@ const anular = async (id) => {
         throw new ValidationError("La PreFactura ya está anulada");
       }
 
-      // 2. Si tiene movimiento de almacén, eliminarlo
-      if (preFactura.movSalidaAlmacenId) {
-        const { default: eliminarMovimientoAlmacenService } =
-          await import("../Almacen/eliminarMovimientoAlmacen.service.js");
-
-        await eliminarMovimientoAlmacenService.eliminarMovimientoAlmacenCompleto(
-          preFactura.movSalidaAlmacenId,
-          tx,
-        );
-      }
+      // 2. Si tiene movimientos de almacén (uno por almacén despachado), eliminarlos todos
+      await eliminarMovimientosSalidaPreFactura(tx, preFactura);
 
       // 3. Actualizar PreFactura a estado ANULADO
       const anulada = await tx.preFactura.update({
@@ -5070,6 +5053,353 @@ const generarKardex = async (id, datosKardex, usuarioId, esRegeneracion = false)
 };
 
 
+// ========================================
+// DESPACHO DE STOCK DE UNA PREFACTURA (asignación manual por el usuario)
+// ========================================
+const TIPO_DOCUMENTO_NOTA_SALIDA = 14;
+const TIPO_CONCEPTO_VENTA = 2;
+const TIPO_MOVIMIENTO_SALIDA = 3;
+const ESTADO_MOVIMIENTO_ALMACEN_PENDIENTE = 30;
+const TOLERANCIA_CANTIDAD = 0.0005;
+const ESTADOS_PREFACTURA_DESPACHABLES = [
+  ESTADO_PREFACTURA.FACTURADA,
+  ESTADO_PREFACTURA.EMITIDA,
+  ESTADO_PREFACTURA.COMPROBANTE_ELECTRONICO_GENERADO,
+  ESTADO_PREFACTURA.VALIDADO_SUNAT,
+  ESTADO_PREFACTURA.NO_VALIDADO_SUNAT,
+];
+const redondear3 = (valor) => Math.round(Number(valor) * 1000) / 1000;
+
+/**
+ * Elimina TODOS los movimientos de salida de una PreFactura (puede haber uno por almacén).
+ * Cada eliminación revierte su kardex y recalcula los saldos.
+ */
+const eliminarMovimientosSalidaPreFactura = async (tx, preFactura) => {
+  const ids = new Set();
+  if (preFactura.movSalidaAlmacenId) ids.add(Number(preFactura.movSalidaAlmacenId));
+  const ligados = await tx.movimientoAlmacen.findMany({
+    where: { pedidoVentaId: preFactura.id },
+    select: { id: true },
+  });
+  ligados.forEach((m) => ids.add(Number(m.id)));
+
+  const total = { movimientos: 0, detalles: 0, kardex: 0, saldosDet: 0, saldosGen: 0 };
+  if (ids.size === 0) return total;
+
+  // La PreFactura deja de apuntar al movimiento antes de borrarlo
+  await tx.preFactura.update({
+    where: { id: preFactura.id },
+    data: { movSalidaAlmacenId: null },
+  });
+
+  const { default: eliminarMovimientoAlmacenService } =
+    await import("../Almacen/eliminarMovimientoAlmacen.service.js");
+
+  for (const movimientoId of [...ids].sort((a, b) => b - a)) {
+    const resultado = await eliminarMovimientoAlmacenService.eliminarMovimientoAlmacenCompleto(
+      movimientoId,
+      tx,
+    );
+    total.movimientos += 1;
+    total.detalles += Number(resultado?.resultados?.detallesEliminados || 0);
+    total.kardex += Number(resultado?.resultados?.kardexEliminados || 0);
+    total.saldosDet += Number(resultado?.resultados?.saldosDetRegenerados || 0);
+    total.saldosGen += Number(resultado?.resultados?.saldosGenRegenerados || 0);
+  }
+  return total;
+};
+
+/**
+ * Despacha el stock de una PreFactura emitida con lo que el usuario eligió en pantalla:
+ * crea un movimiento de salida POR ALMACÉN, genera su kardex y actualiza los saldos, todo en una transacción.
+ *
+ * payload = {
+ *   fechaDocumento?, observaciones?, dirOrigenId?, dirDestinoId?,
+ *   conceptosPorAlmacen: { [almacenId]: conceptoMovAlmacenId },
+ *   lineas: [{ detallePreFacturaId, saldoDetProductoClienteId, cantidad }]
+ * }
+ *
+ * Reglas:
+ *  - Cada línea de la PreFactura debe quedar cubierta exactamente (todo o nada).
+ *  - Cada saldo elegido debe existir, ser de la empresa, propio (no custodia), del mismo producto y con
+ *    stock suficiente (el motor de kardex NO protege contra salidas sin stock: lo recorta a 0 en silencio).
+ *  - El concepto de cada movimiento debe ser de VENTA/SALIDA con kardex en origen y su almacén origen
+ *    debe ser el almacén del saldo (el kardex toma el almacén del concepto).
+ *  - Los detalles copian todas las dimensiones del saldo (lote, fechas, ubicación, estado, calidad y propietario).
+ */
+const despacharStock = async (id, payload, usuarioId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // ----- PreFactura -----
+      const preFactura = await tx.preFactura.findUnique({
+        where: { id: Number(id) },
+        include: {
+          detalles: { include: { producto: { select: { id: true, descripcionArmada: true } } } },
+        },
+      });
+      if (!preFactura) throw new NotFoundError("Pre-factura no encontrada");
+
+      if (!ESTADOS_PREFACTURA_DESPACHABLES.includes(Number(preFactura.estadoId))) {
+        throw new ValidationError(
+          "El stock solo se puede despachar cuando la pre-factura está emitida",
+        );
+      }
+      const tipoDoc = Number(preFactura.tipoDocumentoFinalId || preFactura.tipoDocumentoId);
+      if (tipoDoc === Number(TIPO_DOC_ID.NOTA_CREDITO) || tipoDoc === Number(TIPO_DOC_ID.NOTA_DEBITO)) {
+        throw new ValidationError("Las notas de crédito y débito no despachan stock desde aquí");
+      }
+      if (!preFactura.detalles || preFactura.detalles.length === 0) {
+        throw new ValidationError("La pre-factura no tiene detalles para despachar");
+      }
+
+      const movimientosPrevios = await tx.movimientoAlmacen.count({ where: { pedidoVentaId: preFactura.id } });
+      if (preFactura.movSalidaAlmacenId || movimientosPrevios > 0) {
+        throw new ConflictError(
+          "La pre-factura ya tiene movimientos de salida generados. Reactive el documento para volver a asignar el stock.",
+        );
+      }
+
+      // ----- Payload -----
+      const lineas = (payload?.lineas || []).map((l) => ({
+        detalleId: Number(l.detallePreFacturaId),
+        saldoId: Number(l.saldoDetProductoClienteId),
+        cantidad: redondear3(l.cantidad),
+      }));
+      if (lineas.length === 0) throw new ValidationError("Debe asignar stock a las líneas de la pre-factura");
+      if (lineas.some((l) => !l.detalleId || !l.saldoId || !(l.cantidad > 0))) {
+        throw new ValidationError("Hay asignaciones con datos incompletos o cantidad no válida");
+      }
+
+      // ----- Cobertura exacta de cada línea -----
+      const detallePorId = new Map(preFactura.detalles.map((d) => [Number(d.id), d]));
+      const asignadoPorDetalle = new Map();
+      lineas.forEach((l) => {
+        if (!detallePorId.has(l.detalleId)) {
+          throw new ValidationError(`La línea ${l.detalleId} no pertenece a esta pre-factura`);
+        }
+        asignadoPorDetalle.set(l.detalleId, (asignadoPorDetalle.get(l.detalleId) || 0) + l.cantidad);
+      });
+      preFactura.detalles.forEach((det) => {
+        const asignado = redondear3(asignadoPorDetalle.get(Number(det.id)) || 0);
+        const requerido = redondear3(det.cantidad);
+        if (Math.abs(asignado - requerido) > TOLERANCIA_CANTIDAD) {
+          throw new ValidationError(
+            `"${det.producto?.descripcionArmada || `Línea ${det.id}`}": asignado ${asignado}, requerido ${requerido}`,
+          );
+        }
+      });
+
+      // ----- Saldos elegidos -----
+      const saldos = await tx.saldosDetProductoCliente.findMany({
+        where: { id: { in: [...new Set(lineas.map((l) => l.saldoId))] } },
+      });
+      const saldoPorId = new Map(saldos.map((s) => [Number(s.id), s]));
+      const tomadoPorSaldo = new Map();
+      lineas.forEach((l) => {
+        const saldo = saldoPorId.get(l.saldoId);
+        if (!saldo) throw new ValidationError(`El saldo ${l.saldoId} ya no existe`);
+        if (Number(saldo.empresaId) !== Number(preFactura.empresaId)) {
+          throw new ValidationError("Hay stock de otra empresa en la asignación");
+        }
+        if (saldo.esCustodia) {
+          throw new ValidationError("No se puede vender mercadería en custodia desde este despacho");
+        }
+        if (Number(saldo.productoId) !== Number(detallePorId.get(l.detalleId).productoId)) {
+          throw new ValidationError("Hay stock asignado a un producto distinto al de la línea");
+        }
+        tomadoPorSaldo.set(l.saldoId, (tomadoPorSaldo.get(l.saldoId) || 0) + l.cantidad);
+      });
+      tomadoPorSaldo.forEach((tomado, saldoId) => {
+        const saldo = saldoPorId.get(saldoId);
+        if (redondear3(tomado) - redondear3(saldo.saldoCantidad) > TOLERANCIA_CANTIDAD) {
+          throw new ValidationError(
+            `Stock insuficiente en el lote "${saldo.lote || "-"}" (almacén ${saldo.almacenId}): disponible ${redondear3(saldo.saldoCantidad)}, solicitado ${redondear3(tomado)}. Vuelva a asignar con el stock actual.`,
+          );
+        }
+      });
+
+      // ----- Peso proporcional por saldo (la última salida de un saldo agotado toma el peso restante) -----
+      const restante = new Map(
+        saldos.map((s) => [Number(s.id), { cantidad: Number(s.saldoCantidad), peso: Number(s.saldoPeso) }]),
+      );
+      lineas.forEach((l) => {
+        const r = restante.get(l.saldoId);
+        l.peso =
+          r.cantidad > 0 && l.cantidad >= r.cantidad - TOLERANCIA_CANTIDAD
+            ? redondear3(r.peso)
+            : r.cantidad > 0
+              ? redondear3((l.cantidad / r.cantidad) * r.peso)
+              : 0;
+        r.cantidad = Math.max(0, r.cantidad - l.cantidad);
+        r.peso = Math.max(0, r.peso - l.peso);
+      });
+
+      // ----- Agrupar por almacén: un movimiento por almacén -----
+      const grupos = new Map();
+      lineas.forEach((l) => {
+        const almacenId = Number(saldoPorId.get(l.saldoId).almacenId);
+        if (!grupos.has(almacenId)) grupos.set(almacenId, { almacenId, lineas: [] });
+        grupos.get(almacenId).lineas.push(l);
+      });
+
+      // ----- Datos comunes: serie y responsable de almacén -----
+      const serieMovAlmacen = await tx.serieDoc.findFirst({
+        where: {
+          empresaId: preFactura.empresaId,
+          tipoDocumentoId: TIPO_DOCUMENTO_NOTA_SALIDA,
+          serie: preFactura.numSerieDoc,
+          activo: true,
+        },
+      });
+      if (!serieMovAlmacen) {
+        throw new ValidationError(
+          `No se encontró una serie activa de Nota de Salida (tipo ${TIPO_DOCUMENTO_NOTA_SALIDA}) con la serie "${preFactura.numSerieDoc}" para esta empresa`,
+        );
+      }
+
+      const parametroAprobador =
+        (await tx.parametroAprobador.findFirst({
+          where: { empresaId: preFactura.empresaId, moduloSistemaId: Number(6), cesado: false },
+          orderBy: { vigenteDesde: "desc" },
+        })) ||
+        (await tx.parametroAprobador.findFirst({
+          where: { empresaId: preFactura.empresaId, cesado: false },
+          orderBy: { vigenteDesde: "desc" },
+        }));
+      if (!parametroAprobador || !parametroAprobador.personalRespId) {
+        throw new ValidationError(
+          "No se encontró responsable de almacén configurado en ParametroAprobador para esta empresa",
+        );
+      }
+
+      const conceptosPorAlmacen = payload?.conceptosPorAlmacen || {};
+      const fechaDocumento = payload?.fechaDocumento ? new Date(payload.fechaDocumento) : new Date();
+
+      // ----- Crear un movimiento (con kardex y saldos) por almacén -----
+      const movimientosCreados = [];
+      for (const grupo of grupos.values()) {
+        const conceptoId = Number(conceptosPorAlmacen[grupo.almacenId]);
+        if (!conceptoId) {
+          throw new ValidationError(`Falta el concepto de movimiento del almacén ${grupo.almacenId}`);
+        }
+        const concepto = await tx.conceptoMovAlmacen.findUnique({ where: { id: conceptoId } });
+        if (
+          !concepto ||
+          !concepto.activo ||
+          Number(concepto.tipoConceptoId) !== TIPO_CONCEPTO_VENTA ||
+          Number(concepto.tipoMovimientoId) !== TIPO_MOVIMIENTO_SALIDA ||
+          !concepto.llevaKardexOrigen ||
+          concepto.esCustodia ||
+          Number(concepto.almacenOrigenId) !== grupo.almacenId
+        ) {
+          throw new ValidationError(
+            `El concepto elegido no es una salida por venta válida para el almacén ${grupo.almacenId} (debe ser de tipo VENTA, SALIDA, con kardex y con ese almacén como origen)`,
+          );
+        }
+
+        const cabecera = {
+          empresaId: preFactura.empresaId,
+          tipoDocumentoId: TIPO_DOCUMENTO_NOTA_SALIDA,
+          conceptoMovAlmacenId: conceptoId,
+          serieDocId: serieMovAlmacen.id,
+          fechaDocumento,
+          entidadComercialId: preFactura.clienteId,
+          estadoDocAlmacenId: ESTADO_MOVIMIENTO_ALMACEN_PENDIENTE,
+          esCustodia: false,
+          personalRespAlmacen: parametroAprobador.personalRespId,
+          pedidoVentaId: preFactura.id,
+          unidadNegocioId: preFactura.unidadNegocioId,
+          dirOrigenId: payload?.dirOrigenId ? Number(payload.dirOrigenId) : null,
+          dirDestinoId: payload?.dirDestinoId ? Number(payload.dirDestinoId) : null,
+          observaciones:
+            payload?.observaciones || `Salida por Pre-Factura ${preFactura.numeroDocumento}`,
+        };
+
+        const detalles = grupo.lineas.map((l) => {
+          const s = saldoPorId.get(l.saldoId);
+          return {
+            productoId: s.productoId,
+            cantidad: l.cantidad,
+            peso: l.peso,
+            lote: s.lote || "",
+            fechaProduccion: s.fechaProduccion,
+            fechaVencimiento: s.fechaVencimiento,
+            fechaIngreso: s.fechaIngreso,
+            nroSerie: s.nroSerie || "",
+            nroContenedor: s.numContenedor || "",
+            estadoMercaderiaId: s.estadoId,
+            estadoCalidadId: s.estadoCalidadId,
+            // El saldo se identifica también por su propietario: se copia el del saldo, no el cliente de la venta
+            entidadComercialId: s.clienteId,
+            esCustodia: false,
+            empresaId: s.empresaId,
+            // El costo de salida lo calcula el kardex (costo promedio por producto); el precio de venta no es costo
+            costoUnitario: 0,
+            observaciones: null,
+            ubicacionFisicaOrigenId: s.ubicacionFisicaId || null,
+            permitirDimensionesNulas: true,
+          };
+        });
+
+        const resultado = await crearMovimientoAlmacenService.crearMovimientoAlmacenCompleto(
+          cabecera,
+          detalles,
+          usuarioId,
+          tx,
+        );
+        movimientosCreados.push({
+          id: resultado.movimiento.id,
+          numeroDocumento: resultado.movimiento.numeroDocumento,
+          almacenId: grupo.almacenId,
+          conceptoMovAlmacenId: conceptoId,
+          cantidadDetalles: resultado.movimiento.cantidadDetalles,
+        });
+      }
+
+      // ----- Verificación: cada saldo elegido debe haber bajado lo tomado -----
+      // (el motor recorta a 0 y no avisa si una salida no coincide con ningún saldo)
+      const saldosDespues = await tx.saldosDetProductoCliente.findMany({
+        where: { id: { in: [...tomadoPorSaldo.keys()] } },
+      });
+      saldosDespues.forEach((despues) => {
+        const antes = saldoPorId.get(Number(despues.id));
+        const esperado = Math.max(0, redondear3(antes.saldoCantidad) - redondear3(tomadoPorSaldo.get(Number(despues.id))));
+        if (redondear3(despues.saldoCantidad) - esperado > TOLERANCIA_CANTIDAD) {
+          throw new ValidationError(
+            `El saldo del lote "${antes.lote || "-"}" no bajó como se esperaba (esperado ${esperado}, quedó ${redondear3(despues.saldoCantidad)}). Se canceló el despacho.`,
+          );
+        }
+      });
+
+      const preFacturaActualizada = await tx.preFactura.update({
+        where: { id: preFactura.id },
+        data: {
+          movSalidaAlmacenId: movimientosCreados[0].id,
+          fechaActualizacion: new Date(),
+          actualizadoPor: usuarioId,
+        },
+        select: { id: true, movSalidaAlmacenId: true, estadoId: true },
+      });
+
+      return { preFactura: preFacturaActualizada, movimientos: movimientosCreados };
+    }, {
+      timeout: 120000,
+      maxWait: 125000,
+    });
+  } catch (err) {
+    if (
+      err instanceof NotFoundError ||
+      err instanceof ValidationError ||
+      err instanceof ConflictError
+    )
+      throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
 /**
  * Regenera el kardex de una pre-factura
  * Elimina el movimiento existente y crea uno nuevo
@@ -5633,6 +5963,7 @@ export default {
   eliminarAsientoContable,
   generarKardex,
   regenerarKardex,
+  despacharStock,
   actualizarTipoOperacionSunatMasivo,
   actualizarTipoAfectacionIGVMasivo,
   actualizarUnidadNegocioMasivo,

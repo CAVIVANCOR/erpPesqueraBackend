@@ -137,6 +137,14 @@ router.post(
   preFacturaController.regenerarKardex
 );
 
+// Despacho de stock: un movimiento de salida por almacén elegido, con kardex y saldos
+router.post(
+  '/:id/despachar-stock',
+  autenticarJWT,
+  checkPermission('preFactura', 'ver'),
+  preFacturaController.despacharStock
+);
+
 // ========================================
 // RUTAS DE ASIENTOS CONTABLES
 // (Generan recursos derivados - solo requieren 'ver')

@@ -69,13 +69,16 @@ const crearMovimientoAlmacenCompleto = async (
         }
         // lote, fechaProduccion, fechaVencimiento, nroSerie, nroContenedor son OPCIONALES
         // Solo validar fechaIngreso como obligatorio
-        if (det.fechaIngreso === undefined || det.fechaIngreso === null) {
+        // permitirDimensionesNulas: salidas que copian un saldo existente cuyo fechaIngreso/estado/calidad
+        // son nulos; deben conservarse nulos para descontar exactamente ese saldo.
+        const permiteNulos = det.permitirDimensionesNulas === true;
+        if (det.fechaIngreso === undefined || (det.fechaIngreso === null && !permiteNulos)) {
           throw new ValidationError(`Detalle ${index + 1}: fechaIngreso es obligatorio`);
         }
-        if (det.estadoMercaderiaId === undefined || det.estadoMercaderiaId === null) {
+        if (det.estadoMercaderiaId === undefined || (det.estadoMercaderiaId === null && !permiteNulos)) {
           throw new ValidationError(`Detalle ${index + 1}: estadoMercaderiaId es obligatorio`);
         }
-        if (det.estadoCalidadId === undefined || det.estadoCalidadId === null) {
+        if (det.estadoCalidadId === undefined || (det.estadoCalidadId === null && !permiteNulos)) {
           throw new ValidationError(`Detalle ${index + 1}: estadoCalidadId es obligatorio`);
         }
         if (det.entidadComercialId === undefined || det.entidadComercialId === null) {

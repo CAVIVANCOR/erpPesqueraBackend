@@ -1,6 +1,7 @@
 import preFacturaService from '../../services/Ventas/preFactura.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import prisma from '../../config/prismaClient.js';
+import { ValidationError } from '../../utils/errors.js';
 
 /**
  * Controlador para PreFactura
@@ -372,53 +373,42 @@ export async function eliminarAsientoContable(req, res, next) {
 
 
 
+const MENSAJE_FLUJO_KARDEX_REEMPLAZADO =
+  'Este flujo fue reemplazado: el stock se asigna por línea en el detalle de la pre-factura (botón Asignar Stock) y luego se usa Generar Kardex.';
+
 /**
- * Genera un MovimientoAlmacen desde una PreFactura aprobada
+ * Flujo anterior (un solo almacén y un solo lote para todas las líneas): reemplazado por despacharStock.
  */
 export async function generarMovimiento(req, res, next) {
+  next(new ValidationError(MENSAJE_FLUJO_KARDEX_REEMPLAZADO));
+}
+
+/**
+ * Flujo anterior de regeneración: reemplazado. Para volver a asignar el stock se reactiva el documento,
+ * lo que elimina sus movimientos de salida y devuelve el stock.
+ */
+export const regenerarKardex = async (req, res, next) => {
+  next(new ValidationError(MENSAJE_FLUJO_KARDEX_REEMPLAZADO));
+};
+
+/**
+ * Despacha el stock elegido por el usuario: un movimiento de salida por almacén, con su kardex y saldos
+ */
+export async function despacharStock(req, res, next) {
   try {
     const id = Number(req.params.id);
     const usuarioId = req.user?.id;
-    const datosKardex = req.body;
 
     if (!usuarioId) {
       return res.status(401).json({ error: 'Usuario no autenticado' });
     }
 
-    const resultado = await preFacturaService.generarKardex(
-      id,
-      datosKardex,
-      Number(usuarioId)
-    );
+    const resultado = await preFacturaService.despacharStock(id, req.body, Number(usuarioId));
     res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }
 }
-
-/**
- * Regenera el kardex de una PreFactura
- * Elimina el movimiento existente y crea uno nuevo
- */
-export const regenerarKardex = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const usuarioId = req.user?.id;
-
-    if (!usuarioId) {
-      return res.status(401).json({ error: 'Usuario no autenticado' });
-    }
-
-    const resultado = await preFacturaService.regenerarKardex(
-      Number(id),
-      Number(usuarioId)
-    );
-
-    res.json(toJSONBigInt(resultado));
-  } catch (error) {
-    next(error);
-  }
-};
 
 // Obtener PreFacturas por empresa, cliente y fecha límite
 export const obtenerPreFacturasPorCliente = async (req, res, next) => {
