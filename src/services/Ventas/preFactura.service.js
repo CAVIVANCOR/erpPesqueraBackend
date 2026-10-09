@@ -12,7 +12,7 @@ import {
   eliminarKardexDeMovimiento,
   recalcularSaldosAfectados,
 } from '../Almacen/kardexGenerico.service.js';
-import { ESTADO_PERIODO_CONTABLE, ESTADO_PREFACTURA, ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
+import { ESTADO_PERIODO_CONTABLE, ESTADO_PREFACTURA, ESTADO_ASIENTO_CONTABLE, ESTADO_CUENTA_POR_COBRAR } from "../../utils/estados.constants.js";
 import { aplicarSignoMonto, TIPO_DOC_ID } from '../../utils/tiposDocumento.constants.js';
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 
@@ -857,9 +857,11 @@ const actualizar = async (id, data) => {
  * Subtotal, IGV, Total, Detracción, Retención, Percepción
  * @param {Number} preFacturaId - ID de la PreFactura
  * @param {Object} tx - Transacción de Prisma (opcional)
+ * @param {Number} descuentoNotaCredito - Monto (positivo, en la moneda del documento) de la NC aplicada que
+ *   reduce la base de los impuestos. Solo lo usa la aplicación/reversión de NC; por defecto 0 (sin efecto).
  * @returns {Object} - Campos calculados para actualizar
  */
-const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
+const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma, descuentoNotaCredito = 0) => {
   try {
     const preFactura = await tx.preFactura.findUnique({
       where: { id: preFacturaId },
@@ -902,7 +904,7 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma) => {
       : 0;
 
     // PASO 4: CALCULAR TOTAL
-    const total = subtotal + totalIGV - montoImpuestoRenta;
+    const total = subtotal + totalIGV - montoImpuestoRenta - Number(descuentoNotaCredito || 0);
 
     // VALIDAR: Solo calcular impuestos para Facturas (01) y Boletas (03)
     const codigoSunat = preFactura.tipoDocumentoFinal?.codigoSunat || preFactura.tipoDocumento?.codigoSunat || '';
@@ -1048,6 +1050,8 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       if (!usuarioId) {
         throw new ValidationError("El ID del usuario es obligatorio");
       }
+
+      await validarNotaCreditoNoAplicada(tx, id);
 
       // Validar que el usuario es SuperUsuario
       const usuario = await tx.usuario.findUnique({
@@ -2337,6 +2341,18 @@ const facturarPreFacturaBlanca = async (preFacturaId, userId) => {
         );
       }
 
+      // ⭐ NOTA DE CRÉDITO: no genera CxC (ni se regenera si está aplicada); un documento con NC aplicada tampoco se regenera
+      const esNotaCredito = esPreFacturaNotaCredito(preFactura);
+      await validarRegeneracionConCanjeNC(tx, preFactura, esNotaCredito);
+      if (esNotaCredito) {
+        return await emitirNotaCreditoSinCxC(
+          tx,
+          preFactura,
+          ESTADO_PREFACTURA.EMITIDA,
+          estadoActual === ESTADO_PREFACTURA.EMITIDA,
+        );
+      }
+
       // ⭐ REGENERACIÓN: Eliminar CXC y ComprobanteElectronico existentes si ya fueron generados
       if (estadoActual === ESTADO_PREFACTURA.EMITIDA) {
         // Eliminar CuentaPorCobrar existente
@@ -2631,8 +2647,9 @@ const generarComprobanteElectronico = async (preFacturaId) => {
         );
       }
 
-      // Validar que tenga CuentaPorCobrar
-      if (!preFactura.cuentaPorCobrar) {
+      // Validar que tenga CuentaPorCobrar (las notas de crédito no generan CxC)
+      const esNotaCreditoCE = esPreFacturaNotaCredito(preFactura);
+      if (!preFactura.cuentaPorCobrar && !esNotaCreditoCE) {
         throw new ValidationError(
           "La PreFactura debe tener una Cuenta por Cobrar antes de generar el Comprobante Electrónico"
         );
@@ -2692,12 +2709,14 @@ const generarComprobanteElectronico = async (preFacturaId) => {
       // ========================================
       // 4. VINCULAR CE CON CXC
       // ========================================
-      await tx.cuentaPorCobrar.update({
-        where: { id: preFactura.cuentaPorCobrar.id },
-        data: {
-          comprobanteElectronicoId: comprobanteElectronico.id,
-        },
-      });
+      if (preFactura.cuentaPorCobrar) {
+        await tx.cuentaPorCobrar.update({
+          where: { id: preFactura.cuentaPorCobrar.id },
+          data: {
+            comprobanteElectronicoId: comprobanteElectronico.id,
+          },
+        });
+      }
 
       // ========================================
       // 5. ACTUALIZAR PREFACTURA A COMPROBANTE GENERADO (97)
@@ -2790,6 +2809,13 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
         throw new ValidationError(
           "No se encontró el estado PENDIENTE para CuentaPorCobrar",
         );
+      }
+
+      // ⭐ NOTA DE CRÉDITO: no genera CxC (ni se regenera si está aplicada); un documento con NC aplicada tampoco se regenera
+      const esNotaCredito = esPreFacturaNotaCredito(preFactura);
+      await validarRegeneracionConCanjeNC(tx, preFactura, esNotaCredito);
+      if (esNotaCredito) {
+        return await emitirNotaCreditoSinCxC(tx, preFactura, ESTADO_PREFACTURA.FACTURADA, false);
       }
 
       // ⭐ REGENERACIÓN: Eliminar CXC existente si ya fue generada
@@ -3006,6 +3032,489 @@ const facturarPreFacturaNegra = async (preFacturaId) => {
     throw err;
   }
 };
+// ════════════════════════════════════════════════════════════
+// NOTAS DE CRÉDITO: SIN CxC + CANJE (APLICACIÓN) AL DOCUMENTO AFECTO
+// ════════════════════════════════════════════════════════════
+// Una NC NO genera cuenta por cobrar ni documentos de detracción/retención/percepción.
+// Se "aplica" al documento afecto como un pago con medio CANJE-NC (sin movimiento de caja):
+// baja su saldo y se regeneran sus documentos de detracción/retención/percepción sobre el
+// nuevo total. Solo una NC por documento y solo si el documento no tiene ningún pago.
+
+const MEDIO_PAGO_CANJE_NC = 10; // MedioPago "CANJE-NC" (CANJE POR NC)
+const redondear2NC = (valor) => Math.round(Number(valor) * 100) / 100;
+
+// Una NC no genera CxC, así que puede quedarse en APROBADA: basta con que esté aprobada o emitida
+const ESTADOS_NC_APLICABLES = [
+  ESTADO_PREFACTURA.APROBADA,
+  ESTADO_PREFACTURA.FACTURADA,
+  ESTADO_PREFACTURA.EMITIDA,
+  ESTADO_PREFACTURA.COMPROBANTE_ELECTRONICO_GENERADO,
+  ESTADO_PREFACTURA.VALIDADO_SUNAT,
+];
+const NOMBRES_ESTADO_NC = {
+  [ESTADO_PREFACTURA.PENDIENTE]: "PENDIENTE",
+  [ESTADO_PREFACTURA.ANULADA]: "ANULADA",
+  [ESTADO_PREFACTURA.PARTICIONADA]: "PARTICIONADA",
+  [ESTADO_PREFACTURA.NO_VALIDADO_SUNAT]: "NO VALIDADA POR SUNAT",
+};
+
+/** Motivo por el que el estado de la NC no permite aplicarla (null si lo permite). */
+const motivoEstadoNoAplicable = (estadoId) =>
+  ESTADOS_NC_APLICABLES.includes(Number(estadoId))
+    ? null
+    : `La nota de crédito está ${NOMBRES_ESTADO_NC[Number(estadoId)] || `en estado ${Number(estadoId)}`}. Debe estar aprobada o emitida para poder aplicarse.`;
+
+const esPreFacturaNotaCredito = (preFactura) =>
+  Number(preFactura.tipoDocumentoFinalId || preFactura.tipoDocumentoId) === Number(TIPO_DOC_ID.NOTA_CREDITO);
+
+/**
+ * Una NC aplicada fija los montos del documento afecto: ni la NC ni su documento afecto se regeneran
+ * mientras la aplicación exista (hay que revertirla primero).
+ */
+const validarRegeneracionConCanjeNC = async (tx, preFactura, esNotaCredito) => {
+  if (esNotaCredito) {
+    const aplicada = await tx.pagoCuentaPorCobrar.findUnique({
+      where: { notaCreditoPreFacturaId: preFactura.id },
+      select: { id: true },
+    });
+    if (aplicada) {
+      throw new ValidationError(
+        "La nota de crédito ya está aplicada a su documento afecto. Revierta la aplicación antes de regenerarla.",
+      );
+    }
+    return;
+  }
+  const canje = await tx.pagoCuentaPorCobrar.findFirst({
+    where: { cuentaPorCobrar: { preFacturaId: preFactura.id }, notaCreditoPreFacturaId: { not: null } },
+    select: { id: true },
+  });
+  if (canje) {
+    throw new ValidationError(
+      "El documento tiene una nota de crédito aplicada. Revierta la aplicación antes de regenerarlo.",
+    );
+  }
+};
+
+/**
+ * Emite/regenera una NC SIN cuenta por cobrar. Si la NC tenía una CxC de la lógica anterior
+ * y no tiene pagos, se elimina (una sola verdad: la NC nunca tiene CxC).
+ */
+const emitirNotaCreditoSinCxC = async (tx, preFactura, estadoDestino, eliminarComprobante) => {
+  const cxcExistente = await tx.cuentaPorCobrar.findUnique({
+    where: { preFacturaId: preFactura.id },
+    include: { _count: { select: { pagos: true } } },
+  });
+  if (cxcExistente) {
+    if (cxcExistente._count.pagos > 0) {
+      throw new ValidationError(
+        "La nota de crédito tiene una cuenta por cobrar con pagos registrados. Revise y elimine esos pagos antes de regenerarla.",
+      );
+    }
+    await tx.cuentaPorCobrar.delete({ where: { id: cxcExistente.id } });
+  }
+
+  if (eliminarComprobante) {
+    await tx.comprobanteElectronico.deleteMany({ where: { preFacturaId: preFactura.id } });
+  }
+
+  const data = { facturado: true, estadoId: estadoDestino };
+  if (!preFactura.fechaFacturacion) {
+    data.fechaFacturacion = preFactura.fechaDocumento;
+  }
+  await tx.preFactura.update({ where: { id: preFactura.id }, data });
+
+  return { preFactura, cuentaPorCobrar: null, comprobanteElectronico: null };
+};
+
+/** Una NC aplicada no se anula, elimina ni reactiva: primero hay que revertir su aplicación. */
+const validarNotaCreditoNoAplicada = async (db, preFacturaId) => {
+  const aplicada = await db.pagoCuentaPorCobrar.findUnique({
+    where: { notaCreditoPreFacturaId: preFacturaId },
+    select: { id: true },
+  });
+  if (aplicada) {
+    throw new ValidationError(
+      "La nota de crédito está aplicada a su documento afecto. Revierta la aplicación antes de anularla, eliminarla o reactivarla.",
+    );
+  }
+};
+
+/** Detracción, retención o percepción del documento ya pagadas: no se puede aplicar ni revertir la NC. */
+const validarImpuestosSinPagos = async (tx, preFacturaId) => {
+  const [detraccion, retencion, percepcion] = await Promise.all([
+    tx.detraccion.findUnique({ where: { preFacturaId }, select: { importePagado: true } }),
+    tx.retencion.findUnique({ where: { preFacturaId }, select: { importePagado: true } }),
+    tx.percepcion.findUnique({ where: { preFacturaId }, select: { importePagado: true } }),
+  ]);
+  const pagado = [detraccion, retencion, percepcion].some((d) => d && Number(d.importePagado) > 0);
+  if (pagado) {
+    throw new ValidationError(
+      "La detracción, retención o percepción del documento afecto ya tiene pagos: no se puede aplicar ni revertir la nota de crédito.",
+    );
+  }
+};
+
+/**
+ * Regenera (o elimina si dejaron de aplicar) la Detracción, Retención y Percepción del documento
+ * afecto con los impuestos recalculados. Usa las mismas funciones de la facturación normal.
+ */
+const regenerarImpuestosDocumentoAfecto = async (tx, afecto, impuestos, personalId) => {
+  const base = {
+    subtotal: Number(impuestos.subtotal || 0),
+    totalIGV: Number(impuestos.totalIGV || 0),
+    total: Number(impuestos.total || 0),
+  };
+
+  if (impuestos.aplicaDetraccion && Number(impuestos.montoDetraccion) > 0) {
+    await crearDetraccionDesdePreFactura(
+      afecto,
+      {
+        ...base,
+        montoDetraccion: Number(impuestos.montoDetraccion),
+        porcentajeDetraccion: impuestos.porcentajeDetraccion,
+        tipoDetraccionId: impuestos.tipoDetraccionId,
+      },
+      tx,
+      personalId,
+    );
+  } else {
+    await tx.detraccion.deleteMany({ where: { preFacturaId: afecto.id } });
+  }
+
+  if (impuestos.aplicaRetencion && Number(impuestos.montoRetencion) > 0) {
+    await crearRetencionDesdePreFactura(
+      afecto,
+      {
+        ...base,
+        montoRetencion: Number(impuestos.montoRetencion),
+        porcentajeRetencion: impuestos.porcentajeRetencion,
+      },
+      tx,
+      personalId,
+    );
+  } else {
+    await tx.retencion.deleteMany({ where: { preFacturaId: afecto.id } });
+  }
+
+  if (impuestos.aplicaPercepcion && Number(impuestos.montoPercepcion) > 0) {
+    await crearPercepcionDesdePreFactura(
+      afecto,
+      {
+        ...base,
+        montoPercepcion: Number(impuestos.montoPercepcion),
+        porcentajePercepcion: impuestos.porcentajePercepcion,
+      },
+      tx,
+      personalId,
+    );
+  } else {
+    await tx.percepcion.deleteMany({ where: { preFacturaId: afecto.id } });
+  }
+};
+
+/** Datos de impuestos de la CxC a partir de los impuestos recalculados. */
+const datosImpuestosCxC = (impuestos) => ({
+  tieneDetraccion: Boolean(impuestos.aplicaDetraccion),
+  montoDetraccionTotal: impuestos.montoDetraccion ? Number(impuestos.montoDetraccion) : 0,
+  porcentajeDetraccion: impuestos.porcentajeDetraccion ? Number(impuestos.porcentajeDetraccion) : null,
+  tieneRetencion: Boolean(impuestos.aplicaRetencion),
+  montoRetencionTotal: impuestos.montoRetencion ? Number(impuestos.montoRetencion) : 0,
+  porcentajeRetencion: impuestos.porcentajeRetencion ? Number(impuestos.porcentajeRetencion) : null,
+  tienePercepcion: Boolean(impuestos.aplicaPercepcion),
+  montoPercepcionTotal: impuestos.montoPercepcion ? Number(impuestos.montoPercepcion) : 0,
+  porcentajePercepcion: impuestos.porcentajePercepcion ? Number(impuestos.porcentajePercepcion) : null,
+});
+
+const includeDocumentoAfectoNC = {
+  cliente: true,
+  moneda: true,
+  empresa: true,
+  tipoDocumento: true,
+  tipoDocumentoFinal: true,
+  serieDoc: true,
+  detalles: { include: { producto: { include: { unidadMedida: true } } } },
+  cuentaPorCobrar: { include: { pagos: true } },
+};
+
+const obtenerPersonalId = async (tx, usuarioId) => {
+  if (!usuarioId) return null;
+  const usuario = await tx.usuario.findUnique({ where: { id: usuarioId }, select: { personalId: true } });
+  return usuario?.personalId || null;
+};
+
+/**
+ * Aplica una NC a su documento afecto (canje): crea el pago CANJE-NC, baja el saldo y regenera la
+ * detracción/retención/percepción sobre el nuevo total.
+ * @param {Number} notaCreditoId - ID de la PreFactura que es Nota de Crédito
+ * @param {Number} usuarioId - Usuario que ejecuta
+ */
+const aplicarNotaCredito = async (notaCreditoId, usuarioId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const nc = await tx.preFactura.findUnique({
+        where: { id: notaCreditoId },
+        include: { pagoCanjeNC: true },
+      });
+      if (!nc) throw new NotFoundError("Nota de crédito no encontrada");
+      if (!esPreFacturaNotaCredito(nc)) {
+        throw new ValidationError("El documento no es una nota de crédito");
+      }
+      const motivoEstado = motivoEstadoNoAplicable(nc.estadoId);
+      if (motivoEstado) throw new ValidationError(motivoEstado);
+      if (nc.pagoCanjeNC) {
+        throw new ValidationError("La nota de crédito ya está aplicada a su documento afecto");
+      }
+      if (!nc.dcmtoAfectoNCNDId) {
+        throw new ValidationError(
+          "Seleccione el documento afecto con el buscador para poder aplicar la nota de crédito (los documentos digitados a mano no se pueden aplicar)",
+        );
+      }
+
+      const afecto = await tx.preFactura.findUnique({
+        where: { id: nc.dcmtoAfectoNCNDId },
+        include: includeDocumentoAfectoNC,
+      });
+      if (!afecto) throw new NotFoundError("Documento afecto no encontrado");
+
+      const tipoAfecto = Number(afecto.tipoDocumentoFinalId || afecto.tipoDocumentoId);
+      if (tipoAfecto === Number(TIPO_DOC_ID.NOTA_CREDITO) || tipoAfecto === Number(TIPO_DOC_ID.NOTA_DEBITO)) {
+        throw new ValidationError("El documento afecto no puede ser una nota de crédito o de débito");
+      }
+      if (Number(afecto.empresaId) !== Number(nc.empresaId)) {
+        throw new ValidationError("La nota de crédito y el documento afecto deben ser de la misma empresa");
+      }
+      if (Number(afecto.clienteId) !== Number(nc.clienteId)) {
+        throw new ValidationError("La nota de crédito y el documento afecto deben ser del mismo cliente");
+      }
+      if (Number(afecto.monedaId) !== Number(nc.monedaId)) {
+        throw new ValidationError("La nota de crédito y el documento afecto deben estar en la misma moneda");
+      }
+      if (Boolean(afecto.esGerencial) !== Boolean(nc.esGerencial)) {
+        throw new ValidationError("La nota de crédito y el documento afecto deben ser del mismo tipo (fiscal o gerencial)");
+      }
+
+      const cxc = afecto.cuentaPorCobrar;
+      if (!cxc) {
+        throw new ValidationError("El documento afecto no tiene cuenta por cobrar (debe estar emitido)");
+      }
+      if ([ESTADO_CUENTA_POR_COBRAR.ANULADO, ESTADO_CUENTA_POR_COBRAR.CANJEADO].includes(Number(cxc.estadoId))) {
+        throw new ValidationError("La cuenta por cobrar del documento afecto está anulada o canjeada");
+      }
+      if ((cxc.pagos && cxc.pagos.length > 0) || Number(cxc.montoPagado) > 0) {
+        throw new ValidationError(
+          "El documento afecto ya tiene pagos registrados: solo se puede aplicar una nota de crédito a un documento sin ningún pago",
+        );
+      }
+
+      const totalNC = redondear2NC(Math.abs(Number(nc.total)));
+      const montoTotalCxC = redondear2NC(cxc.montoTotal);
+      if (!(totalNC > 0)) {
+        throw new ValidationError("La nota de crédito no tiene un total válido");
+      }
+      if (totalNC > montoTotalCxC) {
+        throw new ValidationError(
+          `La nota de crédito (${totalNC}) supera el total del documento afecto (${montoTotalCxC})`,
+        );
+      }
+
+      await validarImpuestosSinPagos(tx, afecto.id);
+
+      const medioPago = await tx.medioPago.findUnique({ where: { id: MEDIO_PAGO_CANJE_NC } });
+      if (!medioPago) {
+        throw new ValidationError("No se encontró el medio de pago CANJE-NC (id 10)");
+      }
+
+      const personalId = await obtenerPersonalId(tx, usuarioId);
+      const fechaCanje = nc.fechaFacturacion || nc.fechaDocumento;
+      const numeroNC = nc.numeroDocumentoFinal || nc.numeroDocumento || String(nc.id);
+      const numeroAfecto = afecto.numeroDocumentoFinal || afecto.numeroDocumento || String(afecto.id);
+
+      // 1. Pago CANJE-NC en la CxC del documento afecto (sin movimiento de caja)
+      await tx.pagoCuentaPorCobrar.create({
+        data: {
+          cuentaPorCobrarId: cxc.id,
+          empresaId: cxc.empresaId,
+          fechaPago: fechaCanje,
+          montoPagado: 0,
+          monedaPagoId: cxc.monedaId,
+          tipoCambio: Number(nc.tipoCambio || 1),
+          montoAplicadoDeuda: totalNC,
+          monedaDeudaId: cxc.monedaId,
+          tieneRetencion: false,
+          montoRetencion: 0,
+          tienePercepcion: false,
+          montoPercepcion: 0,
+          medioPagoId: MEDIO_PAGO_CANJE_NC,
+          numeroOperacion: `NC ${numeroNC}`.slice(0, 50),
+          movimientoCajaId: null,
+          observaciones: `Canje por Nota de Crédito ${numeroNC} aplicada al documento ${numeroAfecto}`,
+          fechaContable: nc.fechaContable || fechaCanje,
+          periodoContableId: nc.periodoContableId || null,
+          notaCreditoPreFacturaId: nc.id,
+          creadoPor: personalId,
+        },
+      });
+
+      // 2. Detracción / retención / percepción sobre el nuevo total (total - NC).
+      //    Los documentos gerenciales no generan documentos SUNAT: solo se ajusta su saldo.
+      let impuestos = null;
+      let datosImpuestos = {};
+      if (!afecto.esGerencial) {
+        impuestos = await calcularTotalesEImpuestos(afecto.id, tx, totalNC);
+        await regenerarImpuestosDocumentoAfecto(tx, afecto, impuestos, personalId);
+        datosImpuestos = datosImpuestosCxC(impuestos);
+      }
+
+      // 3. Saldo y estado de la CxC del documento afecto
+      const saldoPendiente = redondear2NC(montoTotalCxC - totalNC);
+      const estadoId = saldoPendiente <= 0 ? ESTADO_CUENTA_POR_COBRAR.PAGADO : ESTADO_CUENTA_POR_COBRAR.PAGO_PARCIAL;
+      await tx.cuentaPorCobrar.update({
+        where: { id: cxc.id },
+        data: { montoPagado: totalNC, saldoPendiente, estadoId, ...datosImpuestos },
+      });
+
+      return {
+        notaCreditoId: nc.id,
+        documentoAfectoId: afecto.id,
+        montoAplicado: totalNC,
+        saldoPendiente,
+        estadoId,
+        montoDetraccion: impuestos?.montoDetraccion ? Number(impuestos.montoDetraccion) : 0,
+        montoRetencion: impuestos?.montoRetencion ? Number(impuestos.montoRetencion) : 0,
+        montoPercepcion: impuestos?.montoPercepcion ? Number(impuestos.montoPercepcion) : 0,
+      };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith("P")) throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Revierte la aplicación de una NC: elimina el pago CANJE-NC, restituye el saldo de la CxC y
+ * regenera la detracción/retención/percepción con el total original del documento afecto.
+ * Solo si el documento afecto no tiene otros pagos.
+ */
+const revertirNotaCredito = async (notaCreditoId, usuarioId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const nc = await tx.preFactura.findUnique({
+        where: { id: notaCreditoId },
+        include: { pagoCanjeNC: { include: { cuentaPorCobrar: { include: { pagos: true } } } } },
+      });
+      if (!nc) throw new NotFoundError("Nota de crédito no encontrada");
+      if (!nc.pagoCanjeNC) {
+        throw new ValidationError("La nota de crédito no está aplicada");
+      }
+
+      const pago = nc.pagoCanjeNC;
+      const cxc = pago.cuentaPorCobrar;
+      if (cxc.pagos.length !== 1) {
+        throw new ValidationError(
+          "El documento afecto tiene otros pagos registrados: no se puede revertir la aplicación de la nota de crédito",
+        );
+      }
+
+      await validarImpuestosSinPagos(tx, cxc.preFacturaId);
+
+      const afecto = await tx.preFactura.findUnique({
+        where: { id: cxc.preFacturaId },
+        include: includeDocumentoAfectoNC,
+      });
+      if (!afecto) throw new NotFoundError("Documento afecto no encontrado");
+
+      const personalId = await obtenerPersonalId(tx, usuarioId);
+
+      // 1. Eliminar el pago CANJE-NC
+      await tx.pagoCuentaPorCobrar.delete({ where: { id: pago.id } });
+
+      // 2. Detracción / retención / percepción con el total original (los gerenciales no las generan)
+      let datosImpuestos = {};
+      if (!afecto.esGerencial) {
+        const impuestos = await calcularTotalesEImpuestos(afecto.id, tx, 0);
+        await regenerarImpuestosDocumentoAfecto(tx, afecto, impuestos, personalId);
+        datosImpuestos = datosImpuestosCxC(impuestos);
+      }
+
+      // 3. Saldo y estado original de la CxC
+      const saldoPendiente = redondear2NC(cxc.montoTotal);
+      const vencida = cxc.fechaVencimiento && new Date(cxc.fechaVencimiento) < new Date();
+      const estadoId = vencida ? ESTADO_CUENTA_POR_COBRAR.VENCIDO : ESTADO_CUENTA_POR_COBRAR.PENDIENTE;
+      await tx.cuentaPorCobrar.update({
+        where: { id: cxc.id },
+        data: { montoPagado: 0, saldoPendiente, estadoId, ...datosImpuestos },
+      });
+
+      return {
+        notaCreditoId: nc.id,
+        documentoAfectoId: afecto.id,
+        saldoPendiente,
+        estadoId,
+      };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith("P")) throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Estado de aplicación de una NC (para el botón del formulario): si está aplicada y sus datos.
+ */
+const obtenerEstadoAplicacionNotaCredito = async (notaCreditoId) => {
+  const nc = await prisma.preFactura.findUnique({
+    where: { id: notaCreditoId },
+    include: { pagoCanjeNC: { select: { id: true, fechaPago: true, montoAplicadoDeuda: true, cuentaPorCobrarId: true } } },
+  });
+  if (!nc) throw new NotFoundError("Nota de crédito no encontrada");
+
+  let documentoAfecto = null;
+  if (nc.dcmtoAfectoNCNDId) {
+    const afecto = await prisma.preFactura.findUnique({
+      where: { id: nc.dcmtoAfectoNCNDId },
+      select: {
+        id: true,
+        numeroDocumentoFinal: true,
+        numeroDocumento: true,
+        total: true,
+        cuentaPorCobrar: { select: { saldoPendiente: true, montoTotal: true, montoPagado: true } },
+      },
+    });
+    if (afecto) {
+      documentoAfecto = {
+        id: afecto.id,
+        numero: afecto.numeroDocumentoFinal || afecto.numeroDocumento,
+        total: Number(afecto.cuentaPorCobrar?.montoTotal ?? afecto.total),
+        saldoPendiente: afecto.cuentaPorCobrar ? Number(afecto.cuentaPorCobrar.saldoPendiente) : null,
+        tieneCuenta: Boolean(afecto.cuentaPorCobrar),
+      };
+    }
+  }
+
+  return {
+    esNotaCredito: esPreFacturaNotaCredito(nc),
+    totalNC: Math.abs(Number(nc.total || 0)),
+    aplicada: Boolean(nc.pagoCanjeNC),
+    // Motivo que impide aplicarla ahora (el panel lo muestra en un toast rojo); null si se puede intentar
+    motivoBloqueo: nc.pagoCanjeNC
+      ? null
+      : motivoEstadoNoAplicable(nc.estadoId) ||
+        (!nc.dcmtoAfectoNCNDId
+          ? "Seleccione el documento afecto con el buscador para poder aplicar la nota de crédito (los documentos digitados a mano no se pueden aplicar)."
+          : null),
+    pagoCanje: nc.pagoCanjeNC
+      ? {
+          id: nc.pagoCanjeNC.id,
+          fecha: nc.pagoCanjeNC.fechaPago,
+          monto: Number(nc.pagoCanjeNC.montoAplicadoDeuda),
+        }
+      : null,
+    documentoAfecto,
+  };
+};
+
 /**
  * Anular una PreFactura
  * Si tiene movimiento de almacén asociado, lo elimina
@@ -3020,6 +3529,8 @@ const anular = async (id) => {
       });
 
       if (!preFactura) throw new NotFoundError("PreFactura no encontrada");
+
+      await validarNotaCreditoNoAplicada(tx, id);
 
       // Verificar si ya está anulada (estadoId 40 = ANULADO)
       if (Number(preFactura.estadoId) === 40) {
@@ -3120,6 +3631,8 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
     if (!preFactura) {
       throw new NotFoundError('PreFactura no encontrada');
     }
+
+    await validarNotaCreditoNoAplicada(prisma, id);
 
     // ========================================
     // VALIDACIONES CRÍTICAS
@@ -5126,4 +5639,7 @@ export default {
   actualizarTipoCambio,
   calcularTotalesEImpuestos, // ⭐ AGREGAR
   exportarRegistroVentasSUNAT, // ⭐ NUEVO
+  aplicarNotaCredito,
+  revertirNotaCredito,
+  obtenerEstadoAplicacionNotaCredito,
 };

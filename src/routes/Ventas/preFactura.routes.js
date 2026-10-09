@@ -84,6 +84,27 @@ router.post(
   preFacturaController.facturarPreFacturaBlanca
 );
 
+router.post(
+  '/:id/aplicar-nota-credito',
+  autenticarJWT,
+  checkPermission('preFactura', 'editar'),
+  preFacturaController.aplicarNotaCredito
+);
+
+router.post(
+  '/:id/revertir-nota-credito',
+  autenticarJWT,
+  checkPermission('preFactura', 'editar'),
+  preFacturaController.revertirNotaCredito
+);
+
+router.get(
+  '/:id/estado-nota-credito',
+  autenticarJWT,
+  checkPermission('preFactura', 'ver'),
+  preFacturaController.obtenerEstadoNotaCredito
+);
+
 router.put(
   '/:id/generar-comprobante',
   autenticarJWT,

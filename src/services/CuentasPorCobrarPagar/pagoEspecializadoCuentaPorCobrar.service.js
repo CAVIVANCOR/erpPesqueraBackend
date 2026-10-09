@@ -873,11 +873,11 @@ return null;
   // ✅ CORRECCIÓN: Si el movimiento es en moneda extranjera, convertir a soles
   // El monto del movimiento está en la moneda del pago (USD, EUR, etc.)
   // El asiento contable siempre debe estar en soles (monedaId = 1)
-  const montoSoles = movimientoCompleto.monedaId !== 1
+  const montoSoles = Number(movimientoCompleto.monedaId) !== 1
     ? Number(movimientoCompleto.monto) * Number(movimientoCompleto.tipoCambio)
     : Number(movimientoCompleto.monto);
   
-  const montoMonedaExtranjera = movimientoCompleto.monedaId !== 1
+  const montoMonedaExtranjera = Number(movimientoCompleto.monedaId) !== 1
     ? Number(movimientoCompleto.monto)
     : null;
 
@@ -1232,6 +1232,10 @@ async function actualizarSaldoCuentaCorriente({
  * trae un monto de detracción y no es autodetracción (en la autodetracción el cliente
  * pagó el total y se registra en el flujo normal).
  */
+// La detracción se deposita siempre a la cuenta del Banco de la Nación con DEPOSITO EN CUENTA, en soles
+const MEDIO_PAGO_DEPOSITO_EN_CUENTA = 2;
+const MONEDA_PEN = 1;
+
 const esPagoSoloDetraccion = (data) =>
   !(Number(data.montoPagado) > 0) &&
   Number(data.montoDetraccionIngresado) > 0 &&
@@ -1249,6 +1253,13 @@ const esPagoSoloDetraccion = (data) =>
  */
 const ejecutarPagoSoloDetraccion = async (tx, data) => {
   const redondear2 = (valor) => Math.round(Number(valor) * 100) / 100;
+
+  // Pago de solo la detracción: el medio es siempre DEPOSITO EN CUENTA (no depende del medio del neto)
+  data = {
+    ...data,
+    medioPagoId: MEDIO_PAGO_DEPOSITO_EN_CUENTA,
+    monedaPagoId: data.monedaPagoId || MONEDA_PEN
+  };
 
   // ── Validaciones de entrada ──
   const camposRequeridos = [
@@ -1895,7 +1906,7 @@ const procesarPagoEspecializado = async (data) => {
             entidadComercialId: Number(cuentaPorCobrar.clienteId),
             monto: Number(data.montoDetraccionIngresado),
             monedaId: Number(data.monedaPagoId),
-            medioPagoId: Number(data.medioPagoId),
+            medioPagoId: MEDIO_PAGO_DEPOSITO_EN_CUENTA,
             cuentaCorrienteDestinoId: cuentaBN,
             fechaOperacionMovCaja: new Date(data.fechaPago),
             descripcion: `Detracción - ${glosa}`,
@@ -1951,7 +1962,7 @@ const procesarPagoEspecializado = async (data) => {
               entidadComercialId: Number(cuentaPorCobrar.clienteId),
               monto: Number(data.montoDetraccionIngresado),
               monedaId: Number(data.monedaPagoId),
-              medioPagoId: Number(data.medioPagoId),
+              medioPagoId: MEDIO_PAGO_DEPOSITO_EN_CUENTA,
               cuentaCorrienteOrigenId: cuentaOrigenAutodet,
               cuentaCorrienteDestinoId: null,
               fechaOperacionMovCaja: new Date(data.fechaPago),
@@ -1995,7 +2006,7 @@ const procesarPagoEspecializado = async (data) => {
               entidadComercialId: Number(cuentaPorCobrar.clienteId),
               monto: Number(data.montoDetraccionIngresado),
               monedaId: Number(data.monedaPagoId),
-              medioPagoId: Number(data.medioPagoId),
+              medioPagoId: MEDIO_PAGO_DEPOSITO_EN_CUENTA,
               cuentaCorrienteOrigenId: null,
               cuentaCorrienteDestinoId: cuentaBN,
               fechaOperacionMovCaja: new Date(data.fechaPago),

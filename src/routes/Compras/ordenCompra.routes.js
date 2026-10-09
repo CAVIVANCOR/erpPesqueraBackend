@@ -187,6 +187,30 @@ router.put(
 );
 
 // ========================================
+// NOTAS DE CRÉDITO: APLICAR / REVERTIR (CANJE) Y ESTADO
+// ========================================
+router.post(
+  '/:id/aplicar-nota-credito',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'editar'),
+  ordenCompraController.aplicarNotaCredito
+);
+
+router.post(
+  '/:id/revertir-nota-credito',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'editar'),
+  ordenCompraController.revertirNotaCredito
+);
+
+router.get(
+  '/:id/estado-nota-credito',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.obtenerEstadoNotaCredito
+);
+
+// ========================================
 // RUTA DE GENERACIÓN DE CXP
 // (Genera recurso derivado - solo requiere 'ver')
 // ========================================

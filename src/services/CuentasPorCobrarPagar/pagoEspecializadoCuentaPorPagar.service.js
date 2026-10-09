@@ -1502,6 +1502,11 @@ async function actualizarSaldoCuentaCorriente({
 const procesarPagoEspecializado = async (data) => {
   try {
     const resultado = await prisma.$transaction(async (tx) => {
+      // Cancelación de solo la detracción (el neto es independiente): flujo propio, sin pago del neto
+      if (esPagoSoloDetraccion(data)) {
+        return await ejecutarPagoSoloDetraccion(tx, data);
+      }
+
       // ════════════════════════════════════════════════════════════
       // VALIDACIONES DENTRO DE LA TRANSACCIÓN
       // ════════════════════════════════════════════════════════════
@@ -1826,7 +1831,8 @@ const procesarPagoEspecializado = async (data) => {
         
         // ✅ USAR CAMPOS ESPECÍFICOS DE DETRACCIÓN
         const cuentaBancariaDetraccion = det.cuentaBancariaDetraccionId ? Number(det.cuentaBancariaDetraccionId) : null;
-        const medioPagoDetraccion = det.medioPagoDetraccionId ? Number(det.medioPagoDetraccionId) : null;
+        // La detracción se paga siempre con DEPOSITO EN CUENTA, sin importar el medio del neto
+        const medioPagoDetraccion = MEDIO_PAGO_DEPOSITO_EN_CUENTA;
         
         // ✅ CORRECCIÓN: Obtener moneda de la cuenta corriente de detracción
         let monedaDetraccion = Number(data.monedaPagoId);
@@ -2541,6 +2547,450 @@ const procesarPagoEspecializado = async (data) => {
 
     throw err;
   }
+};
+
+// ════════════════════════════════════════════════════════════
+// FUNCIONES: PAGO DE SOLO LA DETRACCIÓN
+// ════════════════════════════════════════════════════════════
+
+/**
+ * La detracción se paga siempre con DEPOSITO EN CUENTA (id 2) y, por defecto, en soles (id 1).
+ * Pago de solo la detracción: el neto ya se pagó (o se paga aparte), son operaciones independientes.
+ */
+const MEDIO_PAGO_DEPOSITO_EN_CUENTA = 2;
+const MONEDA_PEN = 1;
+
+const esPagoSoloDetraccion = (data) =>
+  !(Number(data.montoPagado) > 0) &&
+  Number(data.montoDetraccionIngresado) > 0 &&
+  !data.esAutodetraccion;
+
+/**
+ * Registra únicamente el pago de la detracción de una cuenta por pagar:
+ * pago (montoPagado 0), egreso de la cuenta elegida, ITF/comisión de la detracción (si hay),
+ * actualización de la detracción, asientos y recálculo de la cuenta por pagar.
+ */
+const ejecutarPagoSoloDetraccion = async (tx, data) => {
+  const redondear2 = (valor) => Math.round(Number(valor) * 100) / 100;
+  const det = data.detraccion || {};
+
+  data = {
+    ...data,
+    medioPagoId: MEDIO_PAGO_DEPOSITO_EN_CUENTA,
+    monedaPagoId: data.monedaPagoId || MONEDA_PEN
+  };
+
+  // ── Validaciones de entrada ──
+  const camposRequeridos = ['cuentaPorPagarId', 'empresaId', 'fechaPago', 'tipoCambio', 'usuarioId'];
+  const camposFaltantes = camposRequeridos.filter((campo) => !data[campo]);
+  if (camposFaltantes.length > 0) {
+    throw new ValidationError(`Faltan campos obligatorios: ${camposFaltantes.join(', ')}`);
+  }
+  if (Number(data.tipoCambio) <= 0) {
+    throw new ValidationError('El tipo de cambio debe ser mayor a cero.');
+  }
+  if (!det.cuentaBancariaDetraccionId) {
+    throw new ValidationError('Debe seleccionar la cuenta bancaria desde la que se paga la detracción.');
+  }
+  const numeroConstancia = det.numeroConstancia || data.numeroConstanciaDetraccion;
+  if (!numeroConstancia) {
+    throw new ValidationError('Debe ingresar el número de constancia de detracción.');
+  }
+  if (data.aplicaRetencion || data.aplicaPercepcion) {
+    throw new ValidationError('El pago de solo la detracción no admite retención ni percepción.');
+  }
+
+  // ── Cuenta por pagar y detracción ──
+  const cuentaPorPagar = await tx.cuentaPorPagar.findUnique({
+    where: { id: Number(data.cuentaPorPagarId) },
+    include: {
+      proveedor: { include: { tipoDocumento: true } },
+      empresa: true,
+      moneda: true,
+      estado: true,
+      ordenCompra: { include: { tipoDocumento: true } }
+    }
+  });
+  if (!cuentaPorPagar) {
+    throw new NotFoundError('Cuenta por pagar no encontrada.');
+  }
+  if (Number(cuentaPorPagar.empresaId) !== Number(data.empresaId)) {
+    throw new ValidationError('La cuenta por pagar no pertenece a la empresa indicada.');
+  }
+  if (cuentaPorPagar.estadoId === ESTADOS_CXP.ANULADO) {
+    throw new ValidationError('No se puede pagar una cuenta por pagar anulada.');
+  }
+  if (cuentaPorPagar.estadoId === ESTADOS_CXP.CANJEADO) {
+    throw new ValidationError('No se puede pagar una cuenta por pagar canjeada.');
+  }
+  if (Number(cuentaPorPagar.saldoPendiente) <= 0) {
+    throw new ValidationError('La cuenta por pagar ya está completamente pagada.');
+  }
+  if (!cuentaPorPagar.ordenCompraId) {
+    throw new ValidationError('El documento no tiene detracción asociada.');
+  }
+
+  const detraccionActual = await tx.detraccion.findUnique({
+    where: { ordenCompraId: cuentaPorPagar.ordenCompraId }
+  });
+  if (!detraccionActual) {
+    throw new ValidationError('No se encontró la detracción del documento.');
+  }
+  if (Number(detraccionActual.saldoPendiente) <= 0) {
+    throw new ValidationError('La detracción de este documento ya está cancelada.');
+  }
+
+  const montoDetraccion = redondear2(data.montoDetraccionIngresado);
+  if (montoDetraccion > redondear2(detraccionActual.saldoPendiente)) {
+    throw new ValidationError(
+      `El monto de la detracción (${montoDetraccion}) supera su saldo pendiente (${redondear2(detraccionActual.saldoPendiente)}).`
+    );
+  }
+
+  // ── Cuenta bancaria de la detracción (origen del egreso) y su moneda ──
+  const cuentaBancariaDetraccion = Number(det.cuentaBancariaDetraccionId);
+  const cuentaCorrienteDetraccion = await tx.cuentaCorriente.findUnique({
+    where: { id: cuentaBancariaDetraccion },
+    include: { moneda: true }
+  });
+  if (!cuentaCorrienteDetraccion) {
+    throw new NotFoundError('Cuenta corriente de la detracción no encontrada.');
+  }
+  if (Number(cuentaCorrienteDetraccion.empresaId) !== Number(data.empresaId)) {
+    throw new ValidationError('La cuenta corriente de la detracción no pertenece a la empresa.');
+  }
+  const monedaDetraccion = Number(cuentaCorrienteDetraccion.monedaId);
+  const tipoCambioDetraccion = det.tipoCambioDetraccion ? Number(det.tipoCambioDetraccion) : Number(data.tipoCambio);
+  if (!(tipoCambioDetraccion > 0)) {
+    throw new ValidationError('El tipo de cambio de la detracción debe ser mayor a cero.');
+  }
+
+  // ── Monto aplicado a la deuda (en la moneda de la cuenta por pagar) ──
+  const codigoDeuda = cuentaPorPagar.moneda?.codigoSunat;
+  const codigoDetraccion = cuentaCorrienteDetraccion.moneda?.codigoSunat;
+  let montoAplicadoDeuda = montoDetraccion;
+  if (codigoDeuda !== codigoDetraccion) {
+    if (codigoDetraccion === 'PEN' && codigoDeuda === 'USD') {
+      montoAplicadoDeuda = redondear2(montoDetraccion / tipoCambioDetraccion);
+    } else if (codigoDetraccion === 'USD' && codigoDeuda === 'PEN') {
+      montoAplicadoDeuda = redondear2(montoDetraccion * tipoCambioDetraccion);
+    } else {
+      throw new ValidationError('La moneda de la cuenta de la detracción no es compatible con la moneda del documento.');
+    }
+  }
+  if (montoAplicadoDeuda > redondear2(cuentaPorPagar.saldoPendiente)) {
+    throw new ValidationError(
+      `El monto de la detracción (${montoAplicadoDeuda}) supera el saldo pendiente del documento (${redondear2(cuentaPorPagar.saldoPendiente)}).`
+    );
+  }
+
+  const monedaPago = await tx.moneda.findUnique({ where: { id: Number(data.monedaPagoId) } });
+  if (!monedaPago) {
+    throw new NotFoundError('Moneda de pago no encontrada.');
+  }
+
+  // ── Glosa ──
+  const formatearFecha = (fecha) => {
+    const f = new Date(fecha);
+    return `${String(f.getDate()).padStart(2, '0')}/${String(f.getMonth() + 1).padStart(2, '0')}/${f.getFullYear()}`;
+  };
+  const proveedor = cuentaPorPagar.proveedor;
+  const glosa =
+    `Cancelación de Detracción de Dcmto: ${cuentaPorPagar.numeroPreFactura || ''} ${formatearFecha(cuentaPorPagar.fechaEmision)} ` +
+    `Proveedor: ${proveedor?.tipoDocumento?.codigo || ''} ${proveedor?.numeroDocumento || ''} ${proveedor?.razonSocial || ''} ` +
+    `Detracción: ${cuentaCorrienteDetraccion.moneda?.simbolo || monedaPago.simbolo || ''} ${montoDetraccion.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ` +
+    `${formatearFecha(data.fechaPago)} T/C: ${tipoCambioDetraccion.toFixed(4)}`;
+
+  // ── Correlativo y período contable ──
+  const correlativo = await correlativoService.generarCorrelativo(data.empresaId, tx);
+  const fechaContable = new Date(data.fechaPago);
+  const periodoContable = await periodoContableService.obtenerPeriodoPorFecha(
+    Number(data.empresaId),
+    fechaContable
+  );
+  const fechaDepositoDetraccion = det.fechaDeposito ? new Date(det.fechaDeposito) : new Date(data.fechaPago);
+  const numeroOperacionDetraccion = det.numeroOperacionDetraccion || data.numeroOperacionBN || numeroConstancia;
+
+  // ── Pago de la cuenta por pagar (el monto de la detracción se aplica a la deuda) ──
+  const pagoCuentaPorPagar = await tx.pagoCuentaPorPagar.create({
+    data: {
+      cuentaPorPagarId: Number(data.cuentaPorPagarId),
+      empresaId: Number(data.empresaId),
+      fechaPago: new Date(data.fechaPago),
+      montoPagado: 0,
+      monedaPagoId: monedaDetraccion,
+      tipoCambio: tipoCambioDetraccion,
+      montoAplicadoDeuda: montoAplicadoDeuda,
+      monedaDeudaId: Number(cuentaPorPagar.monedaId),
+      tieneDetraccion: true,
+      montoDetraccion: montoDetraccion,
+      porcentajeDetraccion: det.tasaDetraccion ? Number(det.tasaDetraccion) : null,
+      numeroConstanciaDetraccion: numeroConstancia,
+      fechaDetraccion: fechaDepositoDetraccion,
+      tieneRetencion: false,
+      montoRetencion: 0,
+      tienePercepcion: false,
+      montoPercepcion: 0,
+      medioPagoId: MEDIO_PAGO_DEPOSITO_EN_CUENTA,
+      numeroOperacion: numeroOperacionDetraccion,
+      bancoId: null,
+      cuentaBancariaId: null,
+      movimientoCajaId: null,
+      observaciones: data.observaciones || null,
+      fechaContable: fechaContable,
+      periodoContableId: Number(periodoContable.id),
+      refOperacionEspecializadaMovCaja: correlativo,
+      detraccionId: null,
+      creadoPor: data.creadoPor || null
+    }
+  });
+
+  // ── Detracción: importe pagado, saldo y estado ──
+  const nuevoImportePagado = redondear2(Number(detraccionActual.importePagado) + montoDetraccion);
+  const nuevoSaldoDetraccion = redondear2(Number(detraccionActual.importeRequerido) - nuevoImportePagado);
+  let nuevoEstadoDetraccion = ESTADOS_DETRACCION.PENDIENTE;
+  if (nuevoSaldoDetraccion <= 0) {
+    nuevoEstadoDetraccion = ESTADOS_DETRACCION.VALIDADO; // PAGADO
+  } else if (nuevoImportePagado > 0) {
+    nuevoEstadoDetraccion = 126; // PARCIAL (igual que el flujo normal)
+  }
+  const detraccionActualizada = await tx.detraccion.update({
+    where: { id: detraccionActual.id },
+    data: {
+      importePagado: nuevoImportePagado,
+      saldoPendiente: nuevoSaldoDetraccion,
+      estadoPagoId: nuevoEstadoDetraccion,
+      numeroDocumento: numeroOperacionDetraccion || detraccionActual.numeroDocumento,
+      fechaEmision: new Date(data.fechaPago)
+    }
+  });
+
+  // ── Movimiento de egreso de la detracción (siempre DEPOSITO EN CUENTA) ──
+  const tipoMovimientoDetraccion = det.tipoMovimientoDetraccionId
+    ? Number(det.tipoMovimientoDetraccionId)
+    : TIPOS_MOVIMIENTO.DETRACCION_EGRESO;
+  const datosBaseMovimiento = {
+    refOperacionEspecializadaMovCaja: correlativo,
+    empresaId: Number(data.empresaId),
+    entidadComercialId: Number(cuentaPorPagar.proveedorId),
+    monedaId: monedaDetraccion,
+    medioPagoId: MEDIO_PAGO_DEPOSITO_EN_CUENTA,
+    cuentaCorrienteOrigenId: cuentaBancariaDetraccion,
+    fechaOperacionMovCaja: fechaDepositoDetraccion,
+    estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
+    esGerencial: cuentaPorPagar.esGerencial || false,
+    tipoCambio: tipoCambioDetraccion,
+    usuarioId: Number(data.usuarioId),
+    moduloOrigenMotivoOperacionId: 116,
+    origenMotivoOperacionId: pagoCuentaPorPagar.id,
+    cuentaPorPagarId: cuentaPorPagar.id
+  };
+
+  const movimientoDetraccionEgreso = await tx.movimientoCaja.create({
+    data: {
+      ...datosBaseMovimiento,
+      tipoMovimientoId: tipoMovimientoDetraccion,
+      monto: montoDetraccion,
+      descripcion: `Detracción - ${glosa}`,
+      numeroOperacionPagoBancoImpuesto: numeroConstancia || det.numeroOperacionDetraccion || null,
+      fechaOperacionPagoBancoImpuesto: fechaDepositoDetraccion,
+      detraccionId: detraccionActualizada.id
+    }
+  });
+
+  const registroSaldoDetraccion = await actualizarSaldoCuentaCorriente({
+    tx,
+    cuentaCorrienteId: cuentaBancariaDetraccion,
+    empresaId: data.empresaId,
+    fecha: pagoCuentaPorPagar.fechaContable,
+    ingresos: 0,
+    egresos: montoDetraccion,
+    monedaMovimientoId: monedaDetraccion,
+    tipoCambio: tipoCambioDetraccion,
+    movimientoCajaId: movimientoDetraccionEgreso.id
+  });
+  let saldoAnterior = registroSaldoDetraccion.saldoActual;
+
+  // ── ITF y comisión de la detracción (opcionales) ──
+  let movimientoITFDetraccion = null;
+  if (det.itfDetraccion && Number(det.itfDetraccion) > 0) {
+    movimientoITFDetraccion = await tx.movimientoCaja.create({
+      data: {
+        ...datosBaseMovimiento,
+        tipoMovimientoId: TIPOS_MOVIMIENTO.ITF,
+        monto: Number(det.itfDetraccion),
+        descripcion: `ITF Detracción - ${glosa}`
+      }
+    });
+    const registro = await actualizarSaldoCuentaCorriente({
+      tx,
+      cuentaCorrienteId: cuentaBancariaDetraccion,
+      empresaId: data.empresaId,
+      fecha: pagoCuentaPorPagar.fechaContable,
+      ingresos: 0,
+      egresos: det.itfDetraccion,
+      monedaMovimientoId: monedaDetraccion,
+      tipoCambio: tipoCambioDetraccion,
+      movimientoCajaId: movimientoITFDetraccion.id,
+      saldoAnteriorManual: saldoAnterior
+    });
+    saldoAnterior = registro.saldoActual;
+  }
+
+  let movimientoComisionDetraccion = null;
+  if (det.comisionDetraccion && Number(det.comisionDetraccion) > 0) {
+    movimientoComisionDetraccion = await tx.movimientoCaja.create({
+      data: {
+        ...datosBaseMovimiento,
+        tipoMovimientoId: TIPOS_MOVIMIENTO.COMISION_BANCARIA,
+        monto: Number(det.comisionDetraccion),
+        descripcion: `Comisión Bancaria Detracción - ${glosa}`
+      }
+    });
+    await actualizarSaldoCuentaCorriente({
+      tx,
+      cuentaCorrienteId: cuentaBancariaDetraccion,
+      empresaId: data.empresaId,
+      fecha: pagoCuentaPorPagar.fechaContable,
+      ingresos: 0,
+      egresos: det.comisionDetraccion,
+      monedaMovimientoId: monedaDetraccion,
+      tipoCambio: tipoCambioDetraccion,
+      movimientoCajaId: movimientoComisionDetraccion.id,
+      saldoAnteriorManual: saldoAnterior
+    });
+  }
+
+  // ── Vincular el pago con su movimiento y su detracción ──
+  const pagoCuentaPorPagarActualizado = await tx.pagoCuentaPorPagar.update({
+    where: { id: pagoCuentaPorPagar.id },
+    data: {
+      movimientoCajaId: movimientoDetraccionEgreso.id,
+      detraccionId: detraccionActualizada.id
+    },
+    include: {
+      cuentaPorPagar: { include: { proveedor: true, empresa: true, moneda: true } },
+      empresa: true,
+      monedaPago: true,
+      monedaDeuda: true,
+      medioPago: true,
+      banco: true,
+      cuentaBancaria: { include: { banco: true, moneda: true } },
+      periodoContable: true,
+      movimientoCaja: true,
+      detraccion: true
+    }
+  });
+
+  // ── Asientos contables (mismo tratamiento que la detracción del flujo normal) ──
+  const movimientosParaAsientos = [
+    movimientoDetraccionEgreso,
+    movimientoITFDetraccion,
+    movimientoComisionDetraccion
+  ].filter((m) => m !== null && Number(m.monto) > 0);
+
+  let asientosGenerados = [];
+  try {
+    asientosGenerados = await generarAsientosContablesPagoCxC(
+      pagoCuentaPorPagar,
+      movimientosParaAsientos,
+      periodoContable,
+      data.empresaId,
+      data.creadoPor,
+      tx
+    );
+    if (asientosGenerados && asientosGenerados.length > 0) {
+      for (const movimiento of movimientosParaAsientos) {
+        await tx.movimientoCaja.update({
+          where: { id: movimiento.id },
+          data: { asientosGenerados: true }
+        });
+      }
+    }
+  } catch (error) {
+    // Igual que el flujo normal: un fallo del asiento no revierte la operación
+  }
+
+  // ── Recalcular la cuenta por pagar ──
+  const pagosRealizados = await tx.pagoCuentaPorPagar.findMany({
+    where: { cuentaPorPagarId: Number(data.cuentaPorPagarId) }
+  });
+  const totalPagado = redondear2(
+    pagosRealizados.reduce((suma, pago) => suma + Number(pago.montoAplicadoDeuda || 0), 0)
+  );
+  const saldoPendiente = redondear2(Number(cuentaPorPagar.montoTotal) - totalPagado);
+
+  let nuevoEstado = ESTADOS_CXP.PENDIENTE;
+  if (saldoPendiente <= 0) {
+    nuevoEstado = ESTADOS_CXP.PAGADO;
+  } else if (totalPagado > 0) {
+    nuevoEstado = ESTADOS_CXP.PAGO_PARCIAL;
+  } else if (new Date(cuentaPorPagar.fechaVencimiento) < new Date()) {
+    nuevoEstado = ESTADOS_CXP.VENCIDO;
+  }
+  await tx.cuentaPorPagar.update({
+    where: { id: Number(data.cuentaPorPagarId) },
+    data: { montoPagado: totalPagado, saldoPendiente, estadoId: nuevoEstado }
+  });
+
+  // ── Respuesta (misma estructura que el flujo normal) ──
+  const saldos = await tx.saldoCuentaCorriente.findMany({
+    where: {
+      movimientoCajaId: {
+        in: [movimientoDetraccionEgreso, movimientoITFDetraccion, movimientoComisionDetraccion]
+          .filter(Boolean)
+          .map((m) => m.id)
+      }
+    },
+    orderBy: { fecha: 'asc' }
+  });
+  const saldosCuentaCorriente = saldos.map((saldo) => {
+    let tipo = 'Detracción';
+    if (movimientoITFDetraccion && saldo.movimientoCajaId === movimientoITFDetraccion.id) {
+      tipo = 'ITF Detracción';
+    } else if (movimientoComisionDetraccion && saldo.movimientoCajaId === movimientoComisionDetraccion.id) {
+      tipo = 'Comisión Detracción';
+    }
+    return {
+      tipo,
+      saldoAnterior: Number(saldo.saldoAnterior),
+      ingresos: Number(saldo.ingresos),
+      egresos: Number(saldo.egresos),
+      saldoActual: Number(saldo.saldoActual)
+    };
+  });
+
+  return {
+    success: true,
+    correlativo: correlativo,
+    pagoCuentaPorPagar: pagoCuentaPorPagarActualizado,
+    movimientos: {
+      egreso: null,
+      itf: null,
+      comision: null,
+      detraccionEgreso: movimientoDetraccionEgreso,
+      itfDetraccion: movimientoITFDetraccion,
+      comisionDetraccion: movimientoComisionDetraccion,
+      autodetraccionEgreso: null,
+      autodetraccionIngreso: null
+    },
+    conceptosSunat: {
+      detraccion: detraccionActualizada,
+      retencion: null,
+      percepcion: null
+    },
+    asientosContables: asientosGenerados || [],
+    saldosCuentaCorriente,
+    resumen: {
+      montoBruto: 0,
+      montoITF: movimientoITFDetraccion ? Number(movimientoITFDetraccion.monto) : 0,
+      montoComision: movimientoComisionDetraccion ? Number(movimientoComisionDetraccion.monto) : 0,
+      montoDetraccion: montoDetraccion,
+      montoNetoCaja: 0,
+      montoAplicadoDeuda: montoAplicadoDeuda,
+      saldoPendiente: saldoPendiente
+    }
+  };
 };
 
 // ════════════════════════════════════════════════════════════

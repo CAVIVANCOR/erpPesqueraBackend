@@ -44,11 +44,17 @@ export const procesarPagoEspecializado = async (req, res, next) => {
       throw new ValidationError('El campo fechaPago es obligatorio.');
     }
 
-    if (!montoPagado || Number(montoPagado) <= 0) {
+    // Solo detracción: el neto es independiente (ya cobrado), el servicio fija medio y moneda
+    const soloDetraccion =
+      !(Number(montoPagado) > 0) &&
+      Number(req.body.montoDetraccionIngresado) > 0 &&
+      !req.body.esAutodetraccion;
+
+    if (!soloDetraccion && (!montoPagado || Number(montoPagado) <= 0)) {
       throw new ValidationError('El monto pagado debe ser mayor a cero.');
     }
 
-    if (!monedaPagoId) {
+    if (!soloDetraccion && !monedaPagoId) {
       throw new ValidationError('El campo monedaPagoId es obligatorio.');
     }
 
@@ -56,7 +62,7 @@ export const procesarPagoEspecializado = async (req, res, next) => {
       throw new ValidationError('El tipo de cambio debe ser mayor a cero.');
     }
 
-    if (!montoAplicadoDeuda || Number(montoAplicadoDeuda) <= 0) {
+    if (!soloDetraccion && (!montoAplicadoDeuda || Number(montoAplicadoDeuda) <= 0)) {
       throw new ValidationError('El monto aplicado a la deuda debe ser mayor a cero.');
     }
 
@@ -64,11 +70,11 @@ export const procesarPagoEspecializado = async (req, res, next) => {
       throw new ValidationError('El campo monedaDeudaId es obligatorio.');
     }
 
-    if (!medioPagoId) {
+    if (!soloDetraccion && !medioPagoId) {
       throw new ValidationError('El campo medioPagoId es obligatorio.');
     }
 
-    if (!tipoMovimientoIngresoId) {
+    if (!soloDetraccion && !tipoMovimientoIngresoId) {
       throw new ValidationError('El campo tipoMovimientoIngresoId es obligatorio.');
     }
 

@@ -267,6 +267,56 @@ export async function facturarPreFacturaBlanca(req, res, next) {
 }
 
 /**
+ * Aplica una Nota de Crédito a su documento afecto (canje por NC)
+ * POST /api/pre-facturas/:id/aplicar-nota-credito
+ */
+export async function aplicarNotaCredito(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await preFacturaService.aplicarNotaCredito(id, req.user?.id);
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "Nota de crédito aplicada al documento afecto",
+      data: resultado
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Revierte la aplicación de una Nota de Crédito
+ * POST /api/pre-facturas/:id/revertir-nota-credito
+ */
+export async function revertirNotaCredito(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await preFacturaService.revertirNotaCredito(id, req.user?.id);
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "Aplicación de la nota de crédito revertida",
+      data: resultado
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Estado de aplicación de una Nota de Crédito
+ * GET /api/pre-facturas/:id/estado-nota-credito
+ */
+export async function obtenerEstadoNotaCredito(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await preFacturaService.obtenerEstadoAplicacionNotaCredito(id);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Genera un borrador de asiento contable para una PreFactura
  * GET /api/pre-facturas/:id/borrador-asiento
  */

@@ -199,6 +199,56 @@ export async function partirOrdenCompra(req, res, next) {
 }
 
 /**
+ * Aplica una Nota de Crédito de compra a su documento afecto (canje por NC)
+ * POST /api/ordenes-compra/:id/aplicar-nota-credito
+ */
+export async function aplicarNotaCredito(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await ordenCompraService.aplicarNotaCredito(id, req.user?.id);
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "Nota de crédito aplicada al documento afecto",
+      data: resultado
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Revierte la aplicación de una Nota de Crédito de compra
+ * POST /api/ordenes-compra/:id/revertir-nota-credito
+ */
+export async function revertirNotaCredito(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await ordenCompraService.revertirNotaCredito(id, req.user?.id);
+    res.status(200).json(toJSONBigInt({
+      success: true,
+      mensaje: "Aplicación de la nota de crédito revertida",
+      data: resultado
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Estado de aplicación de una Nota de Crédito de compra
+ * GET /api/ordenes-compra/:id/estado-nota-credito
+ */
+export async function obtenerEstadoNotaCredito(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const resultado = await ordenCompraService.obtenerEstadoAplicacionNotaCredito(id);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Generar CuentaPorPagar desde OrdenCompra
  * POST /api/ordenes-compra/:id/generar-cxp
  */
