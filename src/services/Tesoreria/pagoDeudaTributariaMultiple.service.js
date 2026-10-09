@@ -8,6 +8,7 @@ import correlativoService from "./correlativoOperacionCaja.service.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
+import { entidadDeBanco } from "../../utils/entidadBanco.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -320,6 +321,9 @@ const crearAsiento = async ({
  * @param {Object} datos
  * @param {Array<number>} datos.deudaIds - DeudaTributaria a pagar (de una o varias entidades recaudadoras)
  * @param {number} datos.montoPago - Monto total pagado (≤ suma de saldos)
+ * @param {Array<{deudaId:number, monto:number}>} [datos.montosPorDeuda] - Monto manual por deuda
+ *   (opcional). Debe incluir todas las deudas, cada monto ≤ su saldo y la suma = montoPago.
+ *   Si no viene, el monto se reparte proporcionalmente al saldo.
  * @param {string|Date} datos.fechaPago
  * @param {number} datos.cuentaCorrienteOrigenId - Cuenta bancaria de donde sale el dinero
  * @param {number} datos.medioPagoId
@@ -433,13 +437,50 @@ const procesarPagoMultiple = async (datos) => {
           `El monto del pago (${montoPago}) no puede ser mayor a la suma de saldos (${deCentimos(sumaSaldosCent)})`,
         );
       }
-      const partesCent = repartirProporcional(saldosCent, totalCent);
+
+      // Reparto: manual por deuda (si el usuario indicó el monto de cada una) o proporcional al saldo
+      let partesCent;
+      if (Array.isArray(datos.montosPorDeuda) && datos.montosPorDeuda.length > 0) {
+        const montoPorDeudaId = new Map();
+        for (const item of datos.montosPorDeuda) {
+          const deudaId = Number(item?.deudaId);
+          const monto = Number(item?.monto);
+          if (!idsUnicos.includes(deudaId) || montoPorDeudaId.has(deudaId)) {
+            throw new ValidationError("El detalle de montos contiene una deuda no seleccionada o repetida");
+          }
+          if (!Number.isFinite(monto) || monto < 0) {
+            throw new ValidationError(`El monto de la deuda ${deudaId} es inválido`);
+          }
+          montoPorDeudaId.set(deudaId, aCentimos(monto));
+        }
+        if (montoPorDeudaId.size !== idsUnicos.length) {
+          throw new ValidationError("Debe indicar el monto a pagar de cada deuda seleccionada");
+        }
+        partesCent = deudas.map((d, i) => {
+          const parteCent = montoPorDeudaId.get(Number(d.id));
+          if (parteCent > saldosCent[i]) {
+            throw new ValidationError(
+              `El monto de la deuda ${d.id} (${deCentimos(parteCent)}) no puede ser mayor a su saldo (${deCentimos(saldosCent[i])})`,
+            );
+          }
+          return parteCent;
+        });
+        const sumaPartesCent = partesCent.reduce((acc, p) => acc + p, 0n);
+        if (sumaPartesCent !== totalCent) {
+          throw new ValidationError(
+            `El monto del pago (${montoPago}) no coincide con la suma de los montos por deuda (${deCentimos(sumaPartesCent)})`,
+          );
+        }
+      } else {
+        partesCent = repartirProporcional(saldosCent, totalCent);
+      }
 
       // ════════════════════════════════════════════════════════════
       // 3. VALIDAR CUENTA, MEDIO DE PAGO, TIPO DE MOVIMIENTO Y ENTIDAD
       // ════════════════════════════════════════════════════════════
       const cuenta = await tx.cuentaCorriente.findUnique({
         where: { id: Number(cuentaCorrienteOrigenId) },
+        include: { banco: { select: { id: true, enlaceEntidadComercialId: true } } },
       });
       if (!cuenta) throw new NotFoundError("Cuenta corriente no encontrada.");
       if (Number(cuenta.empresaId) !== empresaId) {
@@ -561,6 +602,8 @@ const procesarPagoMultiple = async (datos) => {
               saldoAnteriorManual: egreso.saldoActual,
               data: {
                 ...baseMovimiento,
+                // ITF: lo cobra el banco de la cuenta (null si el banco no tiene entidad enlazada)
+                entidadComercialId: entidadDeBanco(cuenta.banco),
                 tipoMovimientoId: TIPO_MOVIMIENTO_ITF_COMISION,
                 monto: itf,
                 cuentaCorrienteOrigenId: cuenta.id,
@@ -578,6 +621,8 @@ const procesarPagoMultiple = async (datos) => {
               saldoAnteriorManual: itfRegistro?.saldoActual ?? egreso.saldoActual,
               data: {
                 ...baseMovimiento,
+                // Comisión: la cobra el banco de la cuenta (null si el banco no tiene entidad enlazada)
+                entidadComercialId: entidadDeBanco(cuenta.banco),
                 tipoMovimientoId: TIPO_MOVIMIENTO_ITF_COMISION,
                 monto: comision,
                 cuentaCorrienteOrigenId: cuenta.id,

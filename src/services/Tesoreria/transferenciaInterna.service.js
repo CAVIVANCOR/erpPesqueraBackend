@@ -5,6 +5,7 @@ import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import periodoContableService from '../Contabilidad/periodoContable.service.js';
 import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
 import { ESTADO_ASIENTO_CONTABLE } from '../../utils/estados.constants.js';
+import { entidadDeBanco } from '../../utils/entidadBanco.js';
 import { generarVoucherContableMovimientoCaja } from '../FlujoCaja/voucherContableMovimientoCaja.service.js';
 
 /**
@@ -1046,6 +1047,7 @@ export async function procesarTransferenciaInterna(data) {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: Number(data.tipoMovimientoEgresoId),
             empresaId: Number(cuentaOrigen.empresaId),  // ✅ EMPRESA DE LA CUENTA ORIGEN
+            entidadComercialId: entidadDeBanco(cuentaOrigen.banco),  // Banco de la cuenta origen (null si no tiene enlace)
             monto: Number(data.monto),
             monedaId: Number(cuentaOrigen.monedaId),
             medioPagoId: Number(data.medioPagoOrigenId),
@@ -1093,6 +1095,7 @@ export async function procesarTransferenciaInterna(data) {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.ITF,
             empresaId: Number(cuentaOrigen.empresaId),  // ✅ EMPRESA DE LA CUENTA ORIGEN
+            entidadComercialId: entidadDeBanco(cuentaOrigen.banco),  // Banco de la cuenta origen (null si no tiene enlace)
             monto: Number(data.itfOrigen),
             monedaId: Number(cuentaOrigen.monedaId),
             medioPagoId: Number(data.medioPagoOrigenId),
@@ -1139,6 +1142,7 @@ export async function procesarTransferenciaInterna(data) {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.COMISION_BANCARIA,
             empresaId: Number(cuentaOrigen.empresaId),  // ✅ EMPRESA DE LA CUENTA ORIGEN
+            entidadComercialId: entidadDeBanco(cuentaOrigen.banco),  // Banco de la cuenta origen (null si no tiene enlace)
             monto: Number(data.comisionOrigen),
             monedaId: Number(cuentaOrigen.monedaId),
             medioPagoId: Number(data.medioPagoOrigenId),
@@ -1189,6 +1193,7 @@ export async function procesarTransferenciaInterna(data) {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: Number(data.tipoMovimientoIngresoId),
             empresaId: Number(cuentaDestino.empresaId),  // ✅ EMPRESA DE LA CUENTA DESTINO
+            entidadComercialId: entidadDeBanco(cuentaDestino.banco),  // Banco de la cuenta destino (null si no tiene enlace)
             monto: Number(montoDestino),
             monedaId: Number(cuentaDestino.monedaId),
             medioPagoId: Number(data.medioPagoDestinoId),
@@ -1236,6 +1241,7 @@ export async function procesarTransferenciaInterna(data) {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.ITF,
             empresaId: Number(cuentaDestino.empresaId),  // ✅ EMPRESA DE LA CUENTA DESTINO
+            entidadComercialId: entidadDeBanco(cuentaDestino.banco),  // Banco de la cuenta destino (null si no tiene enlace)
             monto: Number(data.itfDestino),
             monedaId: Number(cuentaDestino.monedaId),
             medioPagoId: Number(data.medioPagoDestinoId),
@@ -1280,6 +1286,7 @@ export async function procesarTransferenciaInterna(data) {
             refOperacionEspecializadaMovCaja: correlativo,
             tipoMovimientoId: TIPOS_MOVIMIENTO.COMISION_BANCARIA,
             empresaId: Number(cuentaDestino.empresaId),  // ✅ EMPRESA DE LA CUENTA DESTINO
+            entidadComercialId: entidadDeBanco(cuentaDestino.banco),  // Banco de la cuenta destino (null si no tiene enlace)
             monto: Number(data.comisionDestino),
             monedaId: Number(cuentaDestino.monedaId),
             medioPagoId: Number(data.medioPagoDestinoId),

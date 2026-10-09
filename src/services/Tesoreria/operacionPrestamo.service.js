@@ -10,6 +10,7 @@ import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { ESTADO_ASIENTO_CONTABLE, ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
 import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
+import { entidadDeBanco } from "../../utils/entidadBanco.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -219,8 +220,8 @@ const obtenerCuentaPorCodigo = async (tx, codigoCuenta) => {
  * diferencia de redondeo se absorbe en la última línea, de modo que ambos lados sumen
  * exactamente el monto del movimiento.
  *
- * @param {Array<{cuentaId, monto, centroCostoId?, documento?, procesoId?}>} lineasDebe
- * @param {Array<{cuentaId, monto, centroCostoId?, documento?, procesoId?}>} lineasHaber
+ * @param {Array<{cuentaId, monto, centroCostoId?, documento?, procesoId?, entidadComercialId?}>} lineasDebe
+ * @param {Array<{cuentaId, monto, centroCostoId?, documento?, procesoId?, entidadComercialId?}>} lineasHaber
  */
 const crearAsiento = async ({
   tx,
@@ -268,7 +269,7 @@ const crearAsiento = async ({
     debeMonedaExtranjera: esDebe && !esMonedaNacional ? redondear2(linea.monto) : null,
     haberMonedaExtranjera: !esDebe && !esMonedaNacional ? redondear2(linea.monto) : null,
     centroCostoId: linea.centroCostoId ?? null,
-    entidadComercialId: null,
+    entidadComercialId: linea.entidadComercialId ?? null,
     tipoDocumentoOrigenId: null,
     numeroDocumentoOrigen: linea.documento?.numeroDocumentoOrigen ?? null,
     fechaDocumentoOrigen: linea.documento?.fechaDocumentoOrigen ?? movimiento.fechaOperacionMovCaja,
@@ -380,6 +381,8 @@ const prepararContexto = async ({
     esMonedaNacional,
     tc,
     cuenta,
+    // Tercero de toda la operación (movimientos y líneas de obligación/gasto): el banco prestamista
+    entidadPrestamista: entidadDeBanco(prestamo.banco),
     medioPago,
     tipoMovimiento,
     submoduloMovCaja,
@@ -485,6 +488,8 @@ const registrarCargosBancarios = async ({
             cuentaId: ctx.cuentaGastoComision.id,
             monto: comision,
             centroCostoId: ctx.cuentaGastoComision.centroCostoId,
+            // La comisión es del banco prestamista (movimiento: baseMovimiento)
+            entidadComercialId: ctx.entidadPrestamista,
           },
         ],
         lineasHaber: [{ cuentaId: ctx.cuenta.cuentaContableId, monto: comision }],
@@ -632,7 +637,7 @@ const procesarPagoCuotas = async (datos) => {
           include: {
             prestamo: {
               include: {
-                banco: { select: { id: true, nombre: true } },
+                banco: { select: { id: true, nombre: true, enlaceEntidadComercialId: true } },
                 tipoPrestamo: { select: { id: true, esFactoring: true } },
               },
             },
@@ -734,7 +739,8 @@ const procesarPagoCuotas = async (datos) => {
         const baseMovimiento = {
           refOperacionEspecializadaMovCaja: ctx.correlativo,
           empresaId: ctx.empresaId,
-          entidadComercialId: null,
+          // Contraparte: banco prestamista (null si el banco no tiene entidad comercial enlazada)
+          entidadComercialId: ctx.entidadPrestamista,
           monedaId: prestamo.monedaId,
           medioPagoId: Number(medioPagoId),
           fechaOperacionMovCaja: ctx.fechaContable,
@@ -774,6 +780,8 @@ const procesarPagoCuotas = async (datos) => {
             cuentaId: cuenta.id,
             monto: deCentimos(montoCent),
             centroCostoId: cuenta.centroCostoId ?? null,
+            // Tercero: banco prestamista (capital, interés, seguro, comisión y mora)
+            entidadComercialId: ctx.entidadPrestamista,
             procesoId: cuota.id,
             glosa: `${concepto} cuota ${cuota.numeroCuota} préstamo ${prestamo.numeroPrestamo}`,
             documento: {
@@ -1013,7 +1021,7 @@ const procesarDesembolso = async (datos) => {
         const prestamo = await tx.prestamoBancario.findUnique({
           where: { id: BigInt(prestamoBancarioId) },
           include: {
-            banco: { select: { id: true, nombre: true } },
+            banco: { select: { id: true, nombre: true, enlaceEntidadComercialId: true } },
             tipoPrestamo: { select: { id: true, esFactoring: true } },
             _count: { select: { asientosContables: true } },
           },
@@ -1075,7 +1083,8 @@ const procesarDesembolso = async (datos) => {
         const baseMovimiento = {
           refOperacionEspecializadaMovCaja: ctx.correlativo,
           empresaId: ctx.empresaId,
-          entidadComercialId: null,
+          // Contraparte: banco prestamista (null si el banco no tiene entidad comercial enlazada)
+          entidadComercialId: ctx.entidadPrestamista,
           monedaId: prestamo.monedaId,
           medioPagoId: Number(medioPagoId),
           fechaOperacionMovCaja: ctx.fechaContable,
@@ -1126,6 +1135,8 @@ const procesarDesembolso = async (datos) => {
               {
                 cuentaId: cuentaCapital.id,
                 monto: montoDesembolso,
+                // Tercero: banco prestamista (obligación financiera)
+                entidadComercialId: ctx.entidadPrestamista,
                 procesoId: prestamo.id,
                 documento: {
                   numeroDocumentoOrigen: prestamo.numeroPrestamo,

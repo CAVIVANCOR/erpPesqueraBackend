@@ -68,20 +68,6 @@ export async function listarPorDeuda(req, res, next) {
   }
 }
 
-export async function procesarPago(req, res, next) {
-  try {
-    const deudaId = Number(req.params.deudaId);
-    const data = {
-      ...req.body,
-      usuarioId: req.user?.id || null
-    };
-    const resultado = await pagoDeudaPersonalService.procesarPago(deudaId, data);
-    res.status(201).json(toJSONBigInt(resultado));
-  } catch (err) {
-    next(err);
-  }
-}
-
 /**
  * Pago múltiple especializado: varias deudas (de una o varias personas) con un solo egreso.
  * El reparto proporcional y las validaciones viven en el servicio.

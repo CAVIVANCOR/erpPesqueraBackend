@@ -7,12 +7,27 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  * Documentado en español.
  */
 
+/**
+ * Relaciones que se devuelven con cada banco.
+ * enlaceEntidadComercial: entidad comercial (acreedor/tercero) que representa al banco.
+ */
+const includeBanco = {
+  cuentaContable: true,
+  enlaceEntidadComercial: {
+    select: {
+      id: true,
+      razonSocial: true,
+      nombreComercial: true,
+      numeroDocumento: true,
+      estado: true,
+    },
+  },
+};
+
 async function listar() {
   try {
     return await prisma.banco.findMany({
-      include: {
-        cuentaContable: true,
-      },
+      include: includeBanco,
     });
   } catch (err) {
     if (err.code && err.code.startsWith('P')) throw new DatabaseError('Error de base de datos', err.message);
@@ -24,9 +39,7 @@ async function obtenerPorId(id) {
   try {
     const banco = await prisma.banco.findUnique({
       where: { id },
-      include: {
-        cuentaContable: true,
-      },
+      include: includeBanco,
     });
     if (!banco) throw new NotFoundError('Banco no encontrado');
     return banco;
@@ -41,11 +54,38 @@ async function obtenerPorId(id) {
  * Lanza ValidationError si alguna referencia no existe.
  * @param {Object} data - Objeto con los IDs a validar
  */
-async function validarReferencias({ paisId }) {
+async function validarReferencias({ paisId, enlaceEntidadComercialId }) {
   if (paisId !== undefined) {
     const pais = await prisma.pais.findUnique({ where: { id: paisId } });
     if (!pais) throw new ValidationError('País no existente');
   }
+
+  // La entidad comercial enlazada es opcional; null, 0 o vacío significan "sin enlace"
+  const enlace = normalizarEnlaceEntidadComercial(enlaceEntidadComercialId);
+  if (enlace) {
+    const entidad = await prisma.entidadComercial.findUnique({
+      where: { id: enlace },
+      select: { id: true, estado: true },
+    });
+    if (!entidad) throw new ValidationError('Entidad comercial enlazada no existente');
+    if (!entidad.estado) throw new ValidationError('La entidad comercial enlazada está inactiva');
+  }
+}
+
+/**
+ * Normaliza el enlace con la entidad comercial:
+ * - undefined  -> undefined (el campo no se envió: no se modifica)
+ * - null, 0, '' -> null     (sin enlace / limpiar el campo)
+ * - otro valor  -> Number(id)
+ */
+function normalizarEnlaceEntidadComercial(valor) {
+  if (valor === undefined) return undefined;
+  if (valor === null || valor === '' || Number(valor) === 0) return null;
+  const id = Number(valor);
+  if (!Number.isInteger(id) || id < 0) {
+    throw new ValidationError('Entidad comercial enlazada inválida');
+  }
+  return id;
 }
 
 /**
@@ -82,6 +122,10 @@ async function crear(data) {
     if (dataToCreate.cuentaContableId === 0) {
       dataToCreate.cuentaContableId = null;
     }
+
+    // Enlace con la entidad comercial: 0/vacío -> null; si no se envió, no se toca
+    const enlaceCrear = normalizarEnlaceEntidadComercial(dataToCreate.enlaceEntidadComercialId);
+    if (enlaceCrear !== undefined) dataToCreate.enlaceEntidadComercialId = enlaceCrear;
     
     return await prisma.banco.create({ data: dataToCreate });
   } catch (err) {
@@ -114,6 +158,10 @@ async function actualizar(id, data) {
     if (dataToUpdate.cuentaContableId === 0) {
       dataToUpdate.cuentaContableId = null;
     }
+
+    // Enlace con la entidad comercial: 0/vacío -> null (limpia); si no se envió, no se toca
+    const enlaceActualizar = normalizarEnlaceEntidadComercial(dataToUpdate.enlaceEntidadComercialId);
+    if (enlaceActualizar !== undefined) dataToUpdate.enlaceEntidadComercialId = enlaceActualizar;
 
     // Realiza la actualización
     const actualizado = await prisma.banco.update({ where: { id }, data: dataToUpdate });
