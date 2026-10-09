@@ -1366,7 +1366,7 @@ model PreFactura {
   motivoNotaCreditoDebito     MotivoNotaCreditoDebito? @relation("MotivoNCNDPreFactura", fields: [motivoNotaCreditoDebitoId], references: [id])
   dcmtoAfectoNCND             PreFactura?             @relation("PreFacturaAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
   notasCreditoDebito          PreFactura[]            @relation("PreFacturaAfectadaNCND")  // NC/ND que afectan a esta PreFactura
-
+  pagoCanjeNC                 PagoCuentaPorCobrar?    @relation("PagoCxCNotaCredito")
   // ========================================
   // ⭐ RELACIONES NUEVAS - FACTURACIÓN ELECTRÓNICA
   // ========================================
@@ -6924,6 +6924,7 @@ model PagoCuentaPorCobrar {
   
   refOperacionEspecializadaMovCaja  BigInt?
   detraccionId                      BigInt?
+  notaCreditoPreFacturaId           BigInt?   @unique   // NC que originó este canje (medio CANJE-NC)
   urlVoucherOperacionConsolidado    String?
   urlPagoImpuesto                   String?
 
@@ -6941,6 +6942,7 @@ model PagoCuentaPorCobrar {
   periodoContable       PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ✅ AGREGADO
   asientosContables     AsientoContable[]  // Relación inversa
   detraccion            Detraccion?         @relation(fields: [detraccionId], references: [id])
+  notaCreditoPreFactura PreFactura?         @relation("PagoCxCNotaCredito", fields: [notaCreditoPreFacturaId], references: [id])
 
   // ========================================
   // ÍNDICES
@@ -7165,6 +7167,7 @@ model PagoCuentaPorPagar {
 
   refOperacionEspecializadaMovCaja  BigInt?
   detraccionId                      BigInt?                          // ✅ NUEVO
+  notaCreditoOrdenCompraId          BigInt?   @unique   // NC que originó este canje (medio CANJE-NC)
   urlVoucherOperacionConsolidado    String?
   urlPagoImpuesto                   String?
 
@@ -7184,6 +7187,7 @@ model PagoCuentaPorPagar {
   prestamoBancario      PrestamoBancario?   @relation(fields: [prestamoBancarioId], references: [id])
   asientosContables     AsientoContable[]  // Relación inversa
   detraccion            Detraccion?         @relation(fields: [detraccionId], references: [id])  // ✅ NUEVO
+  notaCreditoOrdenCompra OrdenCompra?       @relation("PagoCxPNotaCredito", fields: [notaCreditoOrdenCompraId], references: [id])
 
   // ========================================
   // ÍNDICES
@@ -7369,7 +7373,7 @@ model OrdenCompra {
 
   dcmtoAfectoNCND             OrdenCompra?            @relation("OrdenCompraAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
   notasCreditoDebito          OrdenCompra[]           @relation("OrdenCompraAfectadaNCND")  // NC/ND que afectan a esta OC
-
+  pagoCanjeNC                 PagoCuentaPorPagar?     @relation("PagoCxPNotaCredito")
 
   // ========================================
   // RELACIONES EXISTENTES
