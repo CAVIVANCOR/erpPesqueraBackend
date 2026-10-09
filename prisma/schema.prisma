@@ -335,11 +335,13 @@ model Banco {
   billeteraDigital      Boolean @default(false)
   nroBilleteraDigital   String?
   cuentaContableId      BigInt?        // 🆕 NUEVO CAMPO
+  enlaceEntidadComercialId BigInt?     // 🆕 Entidad comercial (acreedor/tercero) que representa a este banco
 
   // ========================================
   // ⭐ RELACIONES NUEVAS
   // ========================================
   cuentaContable        PlanCuentasContable?    @relation("BancoCuentaContable", fields: [cuentaContableId], references: [id])  // 🆕 RELACIÓN
+  enlaceEntidadComercial EntidadComercial?      @relation("BancoEnlaceEntidad", fields: [enlaceEntidadComercialId], references: [id])  // 🆕 RELACIÓN
   cuentas               CuentaCorriente[]
   ctaCteEntidad         CtaCteEntidad[]
   ubicacionesLetra      UbicacionLetra[]
@@ -354,6 +356,7 @@ model Banco {
   lineasCredito         LineaCredito[]
   inversiones           InversionFinanciera[]
 
+  @@index([enlaceEntidadComercialId])
 }
 
 model BolicheRed {
@@ -2756,6 +2759,8 @@ model EntidadComercial {
   temporadasPescaAlquiladas       TemporadaPesca[] @relation("EntidadEmpresarialAlquiladaTemporadaPesca")
   temporadasPescaComisionista     TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
   personalEnlazado                Personal[] @relation("PersonalEnlaceEntidad")
+  bancosEnlazados                 Banco[]    @relation("BancoEnlaceEntidad")   // 🆕 Bancos que representa esta entidad
+
   comisionesFidelizacion          ComisionFidelizacion[]
   detallesComisionFidelizacion    DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
   plataformasRecepcionPesca       DetPlataformaRecepcionPesca[]
