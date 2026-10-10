@@ -410,6 +410,18 @@ export async function despacharStock(req, res, next) {
   }
 }
 
+/**
+ * Elimina el kardex de la venta: todos los movimientos de salida generados, con saldos y costos recalculados
+ */
+export async function eliminarKardexVenta(req, res, next) {
+  try {
+    const resultado = await preFacturaService.eliminarKardexVenta(Number(req.params.id));
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Obtener PreFacturas por empresa, cliente y fecha límite
 export const obtenerPreFacturasPorCliente = async (req, res, next) => {
   try {

@@ -192,6 +192,8 @@ const crearMovimientoAlmacenCompleto = async (
               esCustodia: det.esCustodia,
               empresaId: det.empresaId,
               costoUnitario: det.costoUnitario,
+              cantidadComercial: det.cantidadComercial ?? null,
+              costoComercial: det.costoComercial ?? null,
 
               creadoPor: usuarioId,
               actualizadoPor: usuarioId,

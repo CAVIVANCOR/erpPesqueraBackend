@@ -145,6 +145,14 @@ router.post(
   preFacturaController.despacharStock
 );
 
+// Eliminar el kardex de la venta: borra todos los movimientos de salida generados
+router.delete(
+  '/:id/despachar-stock',
+  autenticarJWT,
+  checkPermission('preFactura', 'editar'),
+  preFacturaController.eliminarKardexVenta
+);
+
 // ========================================
 // RUTAS DE ASIENTOS CONTABLES
 // (Generan recursos derivados - solo requieren 'ver')

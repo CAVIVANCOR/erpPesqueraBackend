@@ -86,6 +86,8 @@ const regenerarKardexYSaldosCompletoSAP = async (movimientoAlmacenId, tx) => {
         resultados.errores = kardexGenerados.errores;
         // 3.2 Calcular saldos acumulados en kardex
         await calcularSaldosAcumuladosKardexSAP(movimientoAlmacenId, tx);
+        // 3.3 Valorizar el kardex con costo promedio móvil (salidas y costo del saldo)
+        resultados.kardexValorizados = await valorizarKardexCostoPromedioSAP(movimientoAlmacenId, tx);
         // ========================================
         // FASE 4: ACTUALIZACIÓN DE SALDOS
         // ========================================
@@ -101,6 +103,20 @@ const regenerarKardexYSaldosCompletoSAP = async (movimientoAlmacenId, tx) => {
             tx
         );
         resultados.saldosGenActualizados = saldosGenActualizados;
+        // 4.3 Combinaciones que el movimiento tenía antes y ya no tiene (cambió producto, lote, almacén...):
+        // sus movimientos posteriores también deben recalcularse (cantidades, costos y saldos)
+        const combinacionesActuales = await capturarCombinacionesAnterioresSAP(movimientoAlmacenId, tx);
+        const clavesActuales = new Set(
+            [...combinacionesActuales.detalladas, ...combinacionesActuales.generales].map((c) => JSON.stringify(c))
+        );
+        const combinacionesSueltas = {
+            detalladas: combinacionesAnteriores.detalladas.filter((c) => !clavesActuales.has(JSON.stringify(c))),
+            generales: combinacionesAnteriores.generales.filter((c) => !clavesActuales.has(JSON.stringify(c))),
+        };
+        if (combinacionesSueltas.detalladas.length > 0 || combinacionesSueltas.generales.length > 0) {
+            const cadena = await recalcularCadenaCompletaSAP(combinacionesSueltas, tx);
+            resultados.filasRecalculadasCombinacionesAnteriores = cadena.filasRecalculadas;
+        }
         // ========================================
         // FASE 5: VALIDACIÓN
         // ========================================
@@ -501,6 +517,252 @@ const procesarKardexSAP = async (tx, movimiento, detalle, conceptoMovAlmacen, es
             saldoFinalPesoVariables: 0,
         },
     });
+};
+
+// ============================================================================
+// FASE 3.3: VALORIZACIÓN - Costo promedio móvil en el kardex
+// ============================================================================
+/**
+ * Valoriza el kardex con costo promedio móvil por producto (empresa, almacén, producto, propietario y custodia).
+ *
+ * LÓGICA (igual a la del saldo general, para que coincidan):
+ * - Recorre cronológicamente TODO el kardex de cada producto/almacén tocado por el movimiento
+ *   (fecha, ingresos antes que egresos, id).
+ * - Ingreso: suma su costo y recalcula el promedio (costo total acumulado / saldo).
+ * - Egreso: se valoriza al costo promedio vigente y descuenta el costo total.
+ * - Completa el costo unitario/total de las salidas y el costo del saldo final de cada fila.
+ * - Solo escribe las filas cuyos valores cambian.
+ *
+ * Antes de este paso las salidas quedaban con costo 0.
+ */
+const ORDEN_KARDEX_SAP = [
+    { fechaMovimientoAlmacen: "asc" },
+    { esIngresoEgreso: "desc" }, // ingresos primero en la misma fecha
+    { id: "asc" },
+];
+
+/**
+ * Valoriza TODO el kardex de una clave general (empresa, almacén, producto, propietario, custodia)
+ * con costo promedio móvil y devuelve el estado final de la cadena (saldo y costo promedio vigente).
+ */
+const valorizarClaveGeneralSAP = async (tx, k) => {
+    const redondear6 = (valor) => Math.round(Number(valor || 0) * 1e6) / 1e6;
+    const cambio = (actual, nuevo) => Math.abs(Number(actual || 0) - nuevo) > 1e-6;
+
+    const registros = await tx.kardexAlmacen.findMany({
+        where: {
+            empresaId: k.empresaId,
+            almacenId: k.almacenId,
+            productoId: k.productoId,
+            clienteId: k.clienteId,
+            esCustodia: k.esCustodia,
+        },
+        orderBy: ORDEN_KARDEX_SAP,
+    });
+
+    let saldoCantidad = 0;
+    let saldoPeso = 0;
+    let costoTotalAcumulado = 0;
+    let costoUnitarioPromedio = 0;
+    let filasValorizadas = 0;
+
+    for (const r of registros) {
+        const datos = {};
+        if (r.esIngresoEgreso) {
+            const ingresoCant = Number(r.ingresoCant || 0);
+            saldoCantidad += ingresoCant;
+            saldoPeso += Number(r.ingresoPeso || 0);
+            costoTotalAcumulado += ingresoCant * Number(r.ingresoCantCostoUnit || 0);
+            costoUnitarioPromedio = saldoCantidad > 0 ? costoTotalAcumulado / saldoCantidad : 0;
+        } else {
+            const egresoCant = Number(r.egresoCant || 0);
+            const egresoPeso = Number(r.egresoPeso || 0);
+            const costoUnit = redondear6(costoUnitarioPromedio);
+            const costoTotal = redondear6(egresoCant * costoUnitarioPromedio);
+            saldoCantidad -= egresoCant;
+            saldoPeso -= egresoPeso;
+            costoTotalAcumulado -= egresoCant * costoUnitarioPromedio;
+            if (cambio(r.egresoCantCostoUnit, costoUnit)) datos.egresoCantCostoUnit = costoUnit;
+            if (cambio(r.egresoCantCostoTotal, costoTotal)) datos.egresoCantCostoTotal = costoTotal;
+            const costoPesoUnit = egresoPeso > 0 ? redondear6(costoTotal / egresoPeso) : 0;
+            if (cambio(r.egresoPesoCostoUnit, costoPesoUnit)) datos.egresoPesoCostoUnit = costoPesoUnit;
+            if (cambio(r.egresoPesoCostoTotal, costoTotal)) datos.egresoPesoCostoTotal = costoTotal;
+        }
+
+        // Costo del saldo final de la fila (misma base de cantidad que su saldoFinalCant)
+        const costoUnitFinal = redondear6(costoUnitarioPromedio);
+        const costoTotalFinal = redondear6(Number(r.saldoFinalCant || 0) * costoUnitarioPromedio);
+        const saldoFinalPeso = Number(r.saldoFinalPeso || 0);
+        const costoPesoUnitFinal = saldoFinalPeso > 0 ? redondear6(costoTotalFinal / saldoFinalPeso) : 0;
+        if (cambio(r.saldoFinalCostoUnitCant, costoUnitFinal)) datos.saldoFinalCostoUnitCant = costoUnitFinal;
+        if (cambio(r.saldoFinalCostoTotalCant, costoTotalFinal)) datos.saldoFinalCostoTotalCant = costoTotalFinal;
+        if (cambio(r.saldoFinalPesoCostoUnit, costoPesoUnitFinal)) datos.saldoFinalPesoCostoUnit = costoPesoUnitFinal;
+        if (cambio(r.saldoFinalPesoCostoTotal, costoTotalFinal)) datos.saldoFinalPesoCostoTotal = costoTotalFinal;
+
+        if (Object.keys(datos).length > 0) {
+            await tx.kardexAlmacen.update({ where: { id: r.id }, data: datos });
+            filasValorizadas++;
+        }
+    }
+
+    return { registros: registros.length, saldoCantidad, saldoPeso, costoUnitarioPromedio, filasValorizadas };
+};
+
+const valorizarKardexCostoPromedioSAP = async (movimientoAlmacenId, tx) => {
+    const kardexMovimiento = await tx.kardexAlmacen.findMany({
+        where: { movimientoAlmacenId },
+        select: { empresaId: true, almacenId: true, productoId: true, clienteId: true, esCustodia: true },
+    });
+
+    const claves = new Map();
+    for (const k of kardexMovimiento) {
+        const clave = [k.empresaId, k.almacenId, k.productoId, k.clienteId, k.esCustodia].map(String).join("|");
+        if (!claves.has(clave)) claves.set(clave, k);
+    }
+
+    let filasValorizadas = 0;
+    for (const k of claves.values()) {
+        const resultado = await valorizarClaveGeneralSAP(tx, k);
+        filasValorizadas += resultado.filasValorizadas;
+    }
+    return filasValorizadas;
+};
+
+// ============================================================================
+// RECÁLCULO COMPLETO DE LA CADENA (desde un movimiento en adelante)
+// ============================================================================
+/**
+ * Recalcula, para las combinaciones indicadas, TODA la cadena del kardex y los saldos:
+ *  - cantidad y peso acumulados de cada fila, por lote (combinación detallada)
+ *  - costo promedio móvil de cada fila y costo del saldo, por producto/almacén/propietario
+ *  - saldos detallado y general (y su costo unitario promedio)
+ * Al leer toda la historia de cada combinación, quedan corregidas las filas de los movimientos
+ * posteriores al que cambió. Es la rutina común para regenerar, eliminar, reactivar y anular.
+ *
+ * @param {Object} combinaciones - { detalladas: [...], generales: [...] } (de capturarCombinaciones...)
+ * @param {PrismaTransaction} tx
+ * @returns {Promise<{saldosDetActualizados:number, saldosGenActualizados:number, filasRecalculadas:number}>}
+ */
+const recalcularCadenaCompletaSAP = async (combinaciones, tx) => {
+    let saldosDetActualizados = 0;
+    let saldosGenActualizados = 0;
+    let filasRecalculadas = 0;
+    const cambio = (actual, nuevo) => Math.abs(Number(actual || 0) - nuevo) > 1e-6;
+
+    // 1) Cantidades acumuladas por fila y saldo detallado (por lote)
+    for (const c of combinaciones?.detalladas || []) {
+        const filtro = {
+            empresaId: c.empresaId ? Number(c.empresaId) : null,
+            almacenId: c.almacenId ? Number(c.almacenId) : null,
+            productoId: c.productoId ? Number(c.productoId) : null,
+            clienteId: c.clienteId ? Number(c.clienteId) : null,
+            esCustodia: c.esCustodia,
+            lote: c.lote,
+            fechaIngreso: c.fechaIngreso ? new Date(c.fechaIngreso) : null,
+            fechaProduccion: c.fechaProduccion ? new Date(c.fechaProduccion) : null,
+            fechaVencimiento: c.fechaVencimiento ? new Date(c.fechaVencimiento) : null,
+            estadoId: c.estadoId ? Number(c.estadoId) : null,
+            estadoCalidadId: c.estadoCalidadId ? Number(c.estadoCalidadId) : null,
+            numContenedor: c.numContenedor,
+            nroSerie: c.nroSerie,
+            ubicacionFisicaId: c.ubicacionFisicaId ? Number(c.ubicacionFisicaId) : null,
+        };
+
+        const registros = await tx.kardexAlmacen.findMany({ where: filtro, orderBy: ORDEN_KARDEX_SAP });
+        let saldoCantidad = 0;
+        let saldoPeso = 0;
+        for (const r of registros) {
+            if (r.esIngresoEgreso) {
+                saldoCantidad += Number(r.ingresoCantVariables || r.ingresoCant || 0);
+                saldoPeso += Number(r.ingresoPesoVariables || r.ingresoPeso || 0);
+            } else {
+                saldoCantidad -= Number(r.egresoCantVariables || r.egresoCant || 0);
+                saldoPeso -= Number(r.egresoPesoVariables || r.egresoPeso || 0);
+            }
+            const finalCant = Math.max(0, saldoCantidad);
+            const finalPeso = Math.max(0, saldoPeso);
+            if (
+                cambio(r.saldoFinalCant, finalCant) ||
+                cambio(r.saldoFinalPeso, finalPeso) ||
+                cambio(r.saldoFinalCantVariables, finalCant) ||
+                cambio(r.saldoFinalPesoVariables, finalPeso)
+            ) {
+                await tx.kardexAlmacen.update({
+                    where: { id: r.id },
+                    data: {
+                        saldoFinalCant: finalCant,
+                        saldoFinalPeso: finalPeso,
+                        saldoFinalCantVariables: finalCant,
+                        saldoFinalPesoVariables: finalPeso,
+                    },
+                });
+                filasRecalculadas++;
+            }
+        }
+
+        const existente = await tx.saldosDetProductoCliente.findFirst({ where: filtro });
+        if (registros.length === 0 || (saldoCantidad === 0 && saldoPeso === 0)) {
+            // Sin kardex o saldo en cero: el saldo ya no existe
+            if (existente) {
+                await tx.saldosDetProductoCliente.delete({ where: { id: existente.id } });
+                saldosDetActualizados++;
+            }
+        } else if (existente) {
+            await tx.saldosDetProductoCliente.update({
+                where: { id: existente.id },
+                data: { saldoCantidad: Math.max(0, saldoCantidad), saldoPeso: Math.max(0, saldoPeso), actualizadoEn: new Date() },
+            });
+            saldosDetActualizados++;
+        } else {
+            await tx.saldosDetProductoCliente.create({
+                data: { ...filtro, saldoCantidad: Math.max(0, saldoCantidad), saldoPeso: Math.max(0, saldoPeso), actualizadoEn: new Date() },
+            });
+            saldosDetActualizados++;
+        }
+    }
+
+    // 2) Costo promedio móvil por fila y saldo general (por producto/almacén/propietario)
+    for (const g of combinaciones?.generales || []) {
+        const clave = {
+            empresaId: g.empresaId ? Number(g.empresaId) : null,
+            almacenId: g.almacenId ? Number(g.almacenId) : null,
+            productoId: g.productoId ? Number(g.productoId) : null,
+            clienteId: g.clienteId ? Number(g.clienteId) : null,
+            esCustodia: g.custodia,
+        };
+        const resultado = await valorizarClaveGeneralSAP(tx, clave);
+        filasRecalculadas += resultado.filasValorizadas;
+
+        const filtroSaldo = {
+            empresaId: clave.empresaId,
+            almacenId: clave.almacenId,
+            productoId: clave.productoId,
+            clienteId: clave.clienteId,
+            custodia: clave.esCustodia,
+        };
+        const existente = await tx.saldosProductoCliente.findFirst({ where: filtroSaldo });
+        if (resultado.registros === 0 || (resultado.saldoCantidad === 0 && resultado.saldoPeso === 0)) {
+            if (existente) {
+                await tx.saldosProductoCliente.delete({ where: { id: existente.id } });
+                saldosGenActualizados++;
+            }
+        } else {
+            const datosSaldo = {
+                saldoCantidad: Math.max(0, resultado.saldoCantidad),
+                saldoPeso: Math.max(0, resultado.saldoPeso),
+                costoUnitarioPromedio: Math.max(0, resultado.costoUnitarioPromedio),
+                actualizadoEn: new Date(),
+            };
+            if (existente) {
+                await tx.saldosProductoCliente.update({ where: { id: existente.id }, data: datosSaldo });
+            } else {
+                await tx.saldosProductoCliente.create({ data: { ...filtroSaldo, ...datosSaldo } });
+            }
+            saldosGenActualizados++;
+        }
+    }
+
+    return { saldosDetActualizados, saldosGenActualizados, filasRecalculadas };
 };
 
 // ============================================================================
@@ -1038,6 +1300,8 @@ export {
     limpiarSaldosHuerfanosSAP,
     regenerarKardexSAP,
     calcularSaldosAcumuladosKardexSAP,
+    valorizarKardexCostoPromedioSAP,
+    recalcularCadenaCompletaSAP,
     recalcularSaldosDetalladosSAP,
     recalcularSaldosGeneralesSAP,
     validarConsistenciaSAP,
@@ -1051,6 +1315,8 @@ export default {
     limpiarSaldosHuerfanosSAP,
     regenerarKardexSAP,
     calcularSaldosAcumuladosKardexSAP,
+    valorizarKardexCostoPromedioSAP,
+    recalcularCadenaCompletaSAP,
     recalcularSaldosDetalladosSAP,
     recalcularSaldosGeneralesSAP,
     validarConsistenciaSAP,

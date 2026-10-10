@@ -1,5 +1,4 @@
 // src/controllers/Almacen/generarKardex.controller.js
-import generarKardexService from '../../services/Almacen/generarKardex.service.js';
 import kardexSaldosSAPService from '../../services/Almacen/kardexSaldosSAP.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import prisma from '../../config/prismaClient.js';
@@ -15,7 +14,11 @@ import prisma from '../../config/prismaClient.js';
 export async function generarKardex(req, res, next) {
   try {
     const movimientoAlmacenId = BigInt(req.params.movimientoAlmacenId);
-    const resultado = await generarKardexService.generarKardexMovimiento(movimientoAlmacenId);
+    // Un solo motor para todo kardex: recalcula, desde este movimiento en adelante, cantidades, costos y saldos
+    // de todos los productos del movimiento (el servicio anterior ya no se usa)
+    const resultado = await prisma.$transaction(async (tx) => {
+      return await kardexSaldosSAPService.regenerarKardexYSaldosCompletoSAP(movimientoAlmacenId, tx);
+    });
     res.status(200).json(toJSONBigInt({
       success: true,
       message: 'Kardex generado exitosamente',

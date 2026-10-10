@@ -14,12 +14,13 @@
 // FUNCIONES GENÉRICAS:
 // 1. capturarCombinacionesAfectadas() - Fotografía del "antes"
 // 2. eliminarKardexDeMovimiento() - Elimina kardex
-// 3. recalcularSaldosAfectados() - Regenera saldos desde kardex restante
+// 3. recalcularSaldosAfectados() - Recalcula la cadena completa (cantidades, costos y saldos)
 //
 // ============================================================================
 
 import prisma from "../../config/prismaClient.js";
 import { ValidationError, DatabaseError } from "../../utils/errors.js";
+import { recalcularCadenaCompletaSAP } from "./kardexSaldosSAP.service.js";
 
 // ============================================================================
 // FUNCIÓN 1: CAPTURAR COMBINACIONES AFECTADAS
@@ -132,216 +133,20 @@ const eliminarKardexDeMovimiento = async (movimientoAlmacenId, tx) => {
 // FUNCIÓN 3: RECALCULAR SALDOS AFECTADOS
 // ============================================================================
 /**
- * Recalcula los saldos SOLO de los productos que fueron capturados
- * 
- * PROPÓSITO:
- * - Regenerar saldos detallados y generales desde el kardex restante
- * - Optimización: Solo recalcula productos afectados (no todos)
- * 
- * PROCESO:
- * 1. Para cada combinación DETALLADA:
- *    - Lee kardex restante con esos filtros
- *    - Suma ingresos - egresos
- *    - Actualiza SaldosDetProductoCliente
- *    - Si saldo = 0, elimina registro
- * 
- * 2. Para cada combinación GENERAL:
- *    - Lee kardex restante con esos filtros
- *    - Suma ingresos - egresos
- *    - Calcula costo promedio ponderado
- *    - Actualiza SaldosProductoCliente
- *    - Si saldo = 0, elimina registro
- * 
- * PATRÓN ERP MEGUI:
- * - findFirst + update/create (NO upsert con campos nullables)
- * - SaldosDetProductoCliente usa "esCustodia"
- * - SaldosProductoCliente usa "custodia"
- * 
- * @param {Object} combinaciones - { detalladas: [...], generales: [...] }
+ * Recalcula, desde el kardex restante, TODA la cadena de las combinaciones capturadas:
+ * cantidades acumuladas y costo promedio móvil de cada fila (incluidos los movimientos
+ * posteriores al eliminado) y los saldos detallado y general con su costo unitario promedio.
+ *
+ * Usa la misma rutina que la generación y regeneración del kardex (kardexSaldosSAP), de modo que el
+ * costo promedio coincide en todos los procesos.
+ *
+ * @param {Object} combinaciones - { detalladas, generales } capturadas ANTES de eliminar el kardex
  * @param {PrismaTransaction} tx - Transacción de Prisma
- * @returns {Promise<Object>} { saldosDetActualizados, saldosGenActualizados }
+ * @returns {Promise<{saldosDetActualizados:number, saldosGenActualizados:number}>}
  */
 const recalcularSaldosAfectados = async (combinaciones, tx) => {
-    let saldosDetActualizados = 0;
-    let saldosGenActualizados = 0;
-
-    // ========================================
-    // RECALCULAR SALDOS DETALLADOS
-    // ========================================
-    for (const combinacion of combinaciones.detalladas) {
-        // Construir filtro para buscar en kardex
-        const filtroKardex = {
-            empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
-            almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
-            productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
-            clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
-            esCustodia: combinacion.esCustodia,
-            lote: combinacion.lote,
-            fechaIngreso: combinacion.fechaIngreso ? new Date(combinacion.fechaIngreso) : null,
-            fechaProduccion: combinacion.fechaProduccion ? new Date(combinacion.fechaProduccion) : null,
-            fechaVencimiento: combinacion.fechaVencimiento ? new Date(combinacion.fechaVencimiento) : null,
-            estadoId: combinacion.estadoId ? Number(combinacion.estadoId) : null,
-            estadoCalidadId: combinacion.estadoCalidadId ? Number(combinacion.estadoCalidadId) : null,
-            numContenedor: combinacion.numContenedor,
-            nroSerie: combinacion.nroSerie,
-            ubicacionFisicaId: combinacion.ubicacionFisicaId ? Number(combinacion.ubicacionFisicaId) : null,
-        };
-
-        // Leer kardex restante y calcular saldo
-        const kardexRestante = await tx.kardexAlmacen.findMany({
-            where: filtroKardex,
-        });
-
-        let saldoCantidad = 0;
-        let saldoPeso = 0;
-
-        for (const k of kardexRestante) {
-            saldoCantidad += Number(k.ingresoCant || 0) - Number(k.egresoCant || 0);
-            saldoPeso += Number(k.ingresoPeso || 0) - Number(k.egresoPeso || 0);
-        }
-
-        // Buscar saldo existente (PATRÓN ERP MEGUI: findFirst)
-        const saldoExistente = await tx.saldosDetProductoCliente.findFirst({
-            where: filtroKardex,
-        });
-
-        if (saldoCantidad === 0 && saldoPeso === 0) {
-            // Si saldo es 0, eliminar si existe
-            if (saldoExistente) {
-                await tx.saldosDetProductoCliente.delete({
-                    where: { id: saldoExistente.id },
-                });
-                saldosDetActualizados++;
-            }
-        } else {
-            // Si saldo > 0, actualizar o crear
-            if (saldoExistente) {
-                await tx.saldosDetProductoCliente.update({
-                    where: { id: saldoExistente.id },
-                    data: {
-                        saldoCantidad: saldoCantidad,
-                        saldoPeso: saldoPeso,
-                        actualizadoEn: new Date(),
-                    },
-                });
-            } else {
-                // CREAR saldo si no existe
-                await tx.saldosDetProductoCliente.create({
-                    data: {
-                        empresaId: Number(combinacion.empresaId),
-                        almacenId: Number(combinacion.almacenId),
-                        productoId: Number(combinacion.productoId),
-                        clienteId: Number(combinacion.clienteId),
-                        esCustodia: combinacion.esCustodia,
-                        lote: combinacion.lote,
-                        fechaIngreso: combinacion.fechaIngreso ? new Date(combinacion.fechaIngreso) : null,
-                        fechaProduccion: combinacion.fechaProduccion ? new Date(combinacion.fechaProduccion) : null,
-                        fechaVencimiento: combinacion.fechaVencimiento ? new Date(combinacion.fechaVencimiento) : null,
-                        estadoId: combinacion.estadoId ? Number(combinacion.estadoId) : null,
-                        estadoCalidadId: combinacion.estadoCalidadId ? Number(combinacion.estadoCalidadId) : null,
-                        numContenedor: combinacion.numContenedor,
-                        nroSerie: combinacion.nroSerie,
-                        ubicacionFisicaId: combinacion.ubicacionFisicaId ? Number(combinacion.ubicacionFisicaId) : null,
-                        saldoCantidad: saldoCantidad,
-                        saldoPeso: saldoPeso,
-                        actualizadoEn: new Date(),
-                    },
-                });
-            }
-            saldosDetActualizados++;
-        }
-    }
-
-    // ========================================
-    // RECALCULAR SALDOS GENERALES
-    // ========================================
-    for (const combinacion of combinaciones.generales) {
-        // Construir filtro para buscar en kardex
-        // ⚠️ IMPORTANTE: KardexAlmacen usa "esCustodia"
-        const filtroKardex = {
-            empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
-            almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
-            productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
-            clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
-            esCustodia: combinacion.custodia, // ← Mapear custodia a esCustodia
-        };
-
-        // Leer kardex restante y calcular saldo + costo promedio
-        const kardexRestante = await tx.kardexAlmacen.findMany({
-            where: filtroKardex,
-        });
-
-        let saldoCantidad = 0;
-        let saldoPeso = 0;
-        let costoTotal = 0;
-
-        for (const k of kardexRestante) {
-            saldoCantidad += Number(k.ingresoCant || 0) - Number(k.egresoCant || 0);
-            saldoPeso += Number(k.ingresoPeso || 0) - Number(k.egresoPeso || 0);
-            costoTotal += Number(k.ingresoCant || 0) * Number(k.ingresoCantCostoUnit || 0);
-        }
-
-        const costoUnitarioPromedio = saldoCantidad > 0 ? costoTotal / saldoCantidad : 0;
-
-        // Construir filtro para buscar en SaldosProductoCliente
-        // ⚠️ IMPORTANTE: SaldosProductoCliente usa "custodia"
-        const filtroSaldo = {
-            empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
-            almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
-            productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
-            clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
-            custodia: combinacion.custodia,
-        };
-
-        // Buscar saldo existente (PATRÓN ERP MEGUI: findFirst)
-        const saldoExistente = await tx.saldosProductoCliente.findFirst({
-            where: filtroSaldo,
-        });
-
-        if (saldoCantidad === 0 && saldoPeso === 0) {
-            // Si saldo es 0, eliminar si existe
-            if (saldoExistente) {
-                await tx.saldosProductoCliente.delete({
-                    where: { id: saldoExistente.id },
-                });
-                saldosGenActualizados++;
-            }
-        } else {
-            // Si saldo > 0, actualizar o crear
-            if (saldoExistente) {
-                await tx.saldosProductoCliente.update({
-                    where: { id: saldoExistente.id },
-                    data: {
-                        saldoCantidad: saldoCantidad,
-                        saldoPeso: saldoPeso,
-                        costoUnitarioPromedio: costoUnitarioPromedio,
-                        actualizadoEn: new Date(),
-                    },
-                });
-            } else {
-                // CREAR saldo si no existe
-                await tx.saldosProductoCliente.create({
-                    data: {
-                        empresaId: Number(combinacion.empresaId),
-                        almacenId: Number(combinacion.almacenId),
-                        productoId: Number(combinacion.productoId),
-                        clienteId: Number(combinacion.clienteId),
-                        custodia: combinacion.custodia,
-                        saldoCantidad: saldoCantidad,
-                        saldoPeso: saldoPeso,
-                        costoUnitarioPromedio: costoUnitarioPromedio,
-                        actualizadoEn: new Date(),
-                    },
-                });
-            }
-            saldosGenActualizados++;
-        }
-    }
-
-    return {
-        saldosDetActualizados,
-        saldosGenActualizados,
-    };
+    const { saldosDetActualizados, saldosGenActualizados } = await recalcularCadenaCompletaSAP(combinaciones, tx);
+    return { saldosDetActualizados, saldosGenActualizados };
 };
 
 // ============================================================================

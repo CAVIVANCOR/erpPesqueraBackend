@@ -1495,6 +1495,25 @@ const calcularPesoDetalle = (detalle) => {
 };
 
 /**
+ * Datos comerciales del detalle del movimiento (unidad comercial de la compra):
+ * cantidad y costo unitario comerciales, tal como se ingresaron en la orden (cantidadCompra / precioUnitarioCompra).
+ * Si falta el precio comercial se deriva del costo total (cantidad × precio unitario base / cantidad comercial).
+ */
+const calcularDatosComerciales = (detalle) => {
+  const cantidadComercial = Number(detalle.cantidadCompra);
+  if (!(cantidadComercial > 0)) return { cantidadComercial: null, costoComercial: null };
+  const precioComercial = Number(detalle.precioUnitarioCompra);
+  const costoComercial =
+    precioComercial > 0
+      ? precioComercial
+      : (Number(detalle.cantidad) * Number(detalle.precioUnitario || 0)) / cantidadComercial;
+  return {
+    cantidadComercial: Math.round(cantidadComercial * 10000) / 10000,
+    costoComercial: Math.round(costoComercial * 10000) / 10000,
+  };
+};
+
+/**
  * Obtiene la dirección del proveedor según prioridad:
  * 1. Si solo tiene una dirección → asignar esa
  * 2. Si tiene más de una → buscar almacenPrincipal=true
@@ -1723,6 +1742,7 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         esCustodia: false,
         empresaId: orden.empresaId,
         costoUnitario: det.precioUnitario || 0,
+        ...calcularDatosComerciales(det),
         observaciones: null,
         detalleReqCompraId: det.detalleReqCompraId || null,
         ubicacionFisicaDestinoId: datosKardex.ubicacionFisicaId ? Number(datosKardex.ubicacionFisicaId) : null, // ⭐ AGREGAR ESTA LÍNEA
@@ -1804,10 +1824,15 @@ const regenerarKardex = async (id, usuarioId) => {
 
       if (!orden) throw new NotFoundError("OrdenCompra no encontrada");
 
-      // ✅ Validar que la orden esté APROBADA y tenga kardex generado
-      if (Number(orden.estadoId) !== ESTADO_ORDEN_COMPRA.APROBADO) {
+      // ✅ Mismos estados que al generar: APROBADA, PARTICIONADA o FACTURADA
+      const estadosPermitidosRegenerar = [
+        ESTADO_ORDEN_COMPRA.APROBADO,
+        ESTADO_ORDEN_COMPRA.PARTICIONADA,
+        ESTADO_ORDEN_COMPRA.FACTURADA,
+      ];
+      if (!estadosPermitidosRegenerar.includes(Number(orden.estadoId))) {
         throw new ValidationError(
-          "Solo se puede regenerar kardex de órdenes aprobadas",
+          "Solo se puede regenerar kardex de órdenes APROBADAS, PARTICIONADAS o FACTURADAS",
         );
       }
 
@@ -1818,12 +1843,26 @@ const regenerarKardex = async (id, usuarioId) => {
       }
 
       // ========================================
-      // PASO 2: RESETEAR ORDEN A ESTADO APROBADO
+      // PASO 1.5: CONSERVAR LO QUE SE ELIGIÓ AL GENERAR (almacén, concepto, lote, fechas, estados, ubicación)
+      // ========================================
+      const movimientoPrevio = await tx.movimientoAlmacen.findUnique({
+        where: { id: orden.movIngresoAlmacenId },
+        include: { detalles: { orderBy: { id: "asc" } } },
+      });
+      const detallePrevioPorProducto = new Map();
+      (movimientoPrevio?.detalles || []).forEach((d) => {
+        if (!detallePrevioPorProducto.has(Number(d.productoId))) {
+          detallePrevioPorProducto.set(Number(d.productoId), d);
+        }
+      });
+      const detallePrevioBase = movimientoPrevio?.detalles?.[0] || null;
+
+      // ========================================
+      // PASO 2: LIBERAR LA REFERENCIA AL MOVIMIENTO (el estado de la orden NO se modifica)
       // ========================================
       await tx.ordenCompra.update({
         where: { id },
         data: {
-          estadoId: ESTADO_ORDEN_COMPRA.APROBADO, // APROBADO
           movIngresoAlmacenId: null,
           actualizadoEn: new Date(),
         },
@@ -1857,7 +1896,9 @@ const regenerarKardex = async (id, usuarioId) => {
         throw new ValidationError("La dirección de recepción no existe");
       }
 
-      if (!direccion.conceptoAlmacenCompraId) {
+      const conceptoRegenerar =
+        movimientoPrevio?.conceptoMovAlmacenId || direccion.conceptoAlmacenCompraId;
+      if (!conceptoRegenerar) {
         throw new ValidationError(
           "La dirección de recepción no tiene concepto de almacén de compra configurado",
         );
@@ -1917,15 +1958,15 @@ const regenerarKardex = async (id, usuarioId) => {
       const cabecera = {
         empresaId: orden.empresaId,
         tipoDocumentoId: Number(13), // Nota de Ingreso
-        conceptoMovAlmacenId: direccion.conceptoAlmacenCompraId,
+        conceptoMovAlmacenId: conceptoRegenerar,
         serieDocId: serieMovAlmacen.id,
-        fechaDocumento: new Date(),
+        fechaDocumento: movimientoPrevio?.fechaDocumento || new Date(),
         entidadComercialId: orden.proveedorId,
         estadoDocAlmacenId: Number(30), // PENDIENTE
         esCustodia: false,
         personalRespAlmacen: parametroAprobador.personalRespId,
-        dirOrigenId: direccionOrigenId,
-        dirDestinoId: orden.direccionRecepcionAlmacenId,
+        dirOrigenId: movimientoPrevio?.dirOrigenId || direccionOrigenId,
+        dirDestinoId: movimientoPrevio?.dirDestinoId || orden.direccionRecepcionAlmacenId,
         ordenCompraId: orden.id,
         unidadNegocioId: orden.unidadNegocioId, // ⭐ AGREGAR ESTA LÍNEA
         observaciones: `Ingreso por Orden de Compra ${orden.numeroDocumento} (REGENERADO)`,
@@ -1938,25 +1979,31 @@ const regenerarKardex = async (id, usuarioId) => {
       const fechaVencimiento = new Date(fechaActual);
       fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
 
-      const detalles = orden.detalles.map((det) => ({
-        productoId: det.productoId,
-        cantidad: det.cantidad,
-        peso: calcularPesoDetalle(det),
-        lote: "",
-        fechaProduccion: fechaActual,
-        fechaVencimiento: fechaVencimiento,
-        fechaIngreso: fechaActual,
-        nroSerie: "",
-        nroContenedor: "",
-        estadoMercaderiaId: Number(6),
-        estadoCalidadId: Number(10),
-        entidadComercialId: orden.proveedorId,
-        esCustodia: false,
-        empresaId: orden.empresaId,
-        costoUnitario: det.precioUnitario || 0,
-        observaciones: null,
-        detalleReqCompraId: det.detalleReqCompraId || null,
-      }));
+      // Se reutiliza lo elegido al generar; solo si no existe el movimiento previo se usan valores por defecto
+      const detalles = orden.detalles.map((det) => {
+        const previo = detallePrevioPorProducto.get(Number(det.productoId)) || detallePrevioBase;
+        return {
+          productoId: det.productoId,
+          cantidad: det.cantidad,
+          peso: calcularPesoDetalle(det),
+          lote: previo ? previo.lote || "" : "",
+          fechaProduccion: previo ? previo.fechaProduccion : fechaActual,
+          fechaVencimiento: previo ? previo.fechaVencimiento : fechaVencimiento,
+          fechaIngreso: previo?.fechaIngreso || fechaActual,
+          nroSerie: previo ? previo.nroSerie || "" : "",
+          nroContenedor: previo ? previo.nroContenedor || "" : "",
+          estadoMercaderiaId: Number(previo?.estadoMercaderiaId || 6),
+          estadoCalidadId: Number(previo?.estadoCalidadId || 10),
+          entidadComercialId: orden.proveedorId,
+          esCustodia: false,
+          empresaId: orden.empresaId,
+          costoUnitario: det.precioUnitario || 0,
+          ...calcularDatosComerciales(det),
+          observaciones: null,
+          detalleReqCompraId: det.detalleReqCompraId || null,
+          ubicacionFisicaDestinoId: previo?.ubicacionFisicaDestinoId || null,
+        };
+      });
 
       // ========================================
       // PASO 9: CREAR NUEVO MOVIMIENTO CON KARDEX
@@ -1975,8 +2022,7 @@ const regenerarKardex = async (id, usuarioId) => {
       const ordenActualizada = await tx.ordenCompra.update({
         where: { id },
         data: {
-          // ✅ NO cambiar estadoId - mantener en APROBADA (39)
-          // El estado 50 (PARTICIONADA) solo se usa cuando se divide la OC en negra/blanca
+          // ✅ NO cambiar estadoId: se conserva el estado de la orden (aprobada, particionada o facturada)
           movIngresoAlmacenId: resultado.movimiento.id,
           actualizadoEn: new Date(),
         },

@@ -7,7 +7,7 @@ import {
 import {
   capturarCombinacionesAnterioresSAP,
   limpiarKardexAnteriorSAP,
-  limpiarSaldosHuerfanosSAP
+  recalcularCadenaCompletaSAP,
 } from './kardexSaldosSAP.service.js';
 
 /**
@@ -15,15 +15,15 @@ import {
  * SERVICIO PROFESIONAL: ELIMINAR MOVIMIENTO DE ALMACÉN COMPLETO
  * ============================================================================
  *
- * Elimina un movimiento de almacén, su kardex y regenera los saldos usando
- * las mismas funciones de recálculo que generarKardex.service.js para
- * garantizar saldos 100% correctos y en línea.
+ * Elimina un movimiento de almacén, su kardex y recalcula, desde ese movimiento en adelante,
+ * las cantidades acumuladas, el costo promedio móvil y los saldos (detallado y general) usando la
+ * misma rutina que la generación y regeneración del kardex (kardexSaldosSAP).
  *
   * PROCESO:
  * 1. Valida que el movimiento exista
  * 2. Captura combinaciones anteriores usando servicio SAP
  * 3. Elimina kardex del movimiento usando servicio SAP
- * 4. Limpia saldos huérfanos usando servicio SAP
+ * 4. Recalcula la cadena completa de esas combinaciones (cantidades, costos y saldos)
  * 5. Elimina los detalles del movimiento
  * 6. Elimina el movimiento de almacén
  * 7. Retorna resultado
@@ -86,12 +86,45 @@ const eliminarMovimientoAlmacenCompleto = async (
         );
       }
 
+      // ========================================
+      // VENTAS: una PreFactura puede tener un movimiento de salida por almacén
+      // ========================================
+      // La PreFactura apunta a uno de ellos (movSalidaAlmacenId). Si se elimina ese, la referencia pasa a otro
+      // movimiento de la misma venta; así la PreFactura no queda "sin kardex" mientras aún tiene salidas.
+      const advertencias = [];
+      if (movimiento.pedidoVentaId) {
+        const preFacturaOrigen = await tx.preFactura.findUnique({
+          where: { id: movimiento.pedidoVentaId },
+          select: { id: true, numeroDocumento: true, movSalidaAlmacenId: true },
+        });
+        if (preFacturaOrigen) {
+          const hermanos = await tx.movimientoAlmacen.findMany({
+            where: { pedidoVentaId: preFacturaOrigen.id, NOT: { id: movimiento.id } },
+            select: { id: true },
+            orderBy: { id: "asc" },
+          });
+          if (preFacturaOrigen.movSalidaAlmacenId && Number(preFacturaOrigen.movSalidaAlmacenId) === Number(movimiento.id)) {
+            await tx.preFactura.update({
+              where: { id: preFacturaOrigen.id },
+              data: { movSalidaAlmacenId: hermanos.length > 0 ? hermanos[0].id : null },
+            });
+          }
+          if (hermanos.length > 0) {
+            advertencias.push(
+              `La pre-factura ${preFacturaOrigen.numeroDocumento || preFacturaOrigen.id} conserva ${hermanos.length} movimiento(s) de salida de otros almacenes. Para volver a asignar el stock use "Reactivar" en la pre-factura, que elimina todos sus movimientos.`,
+            );
+          }
+        }
+      }
+
       const resultados = {
         movimientoId: movimiento.id,
         numeroDocumento: movimiento.numeroDocumento,
+        advertencias,
         kardexEliminados: 0,
         saldosDetRegenerados: 0,
         saldosGenRegenerados: 0,
+        filasRecalculadas: 0,
         detallesEliminados: 0,
         productosAfectados: [],
       };
@@ -111,7 +144,7 @@ const eliminarMovimientoAlmacenCompleto = async (
       );
       resultados.kardexEliminados = kardexEliminados;
       // ========================================
-      // PASO 4: RECALCULAR SALDOS DESDE KARDEX RESTANTE (SERVICIO SAP)
+      // PASO 4: RECALCULAR LA CADENA COMPLETA (SERVICIO SAP)
       // ========================================
       // Registrar productos afectados (usar combinaciones capturadas ANTES de eliminar)
       const productosUnicos = [
@@ -120,165 +153,13 @@ const eliminarMovimientoAlmacenCompleto = async (
       resultados.productosAfectados = productosUnicos.map((prodId) => ({
         productoId: prodId,
       }));
-      let saldosDetActualizados = 0;
-      let saldosGenActualizados = 0;
-      // Recalcular saldos detallados para cada combinación afectada
-      for (const combinacion of combinacionesAnteriores.detalladas) {
-        // Construir filtro para buscar kardex de esta combinación
-        const filtroKardex = {
-          empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
-          almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
-          productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
-          clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
-          esCustodia: combinacion.esCustodia,
-          lote: combinacion.lote,
-          fechaIngreso: combinacion.fechaIngreso ? new Date(combinacion.fechaIngreso) : null,
-          fechaProduccion: combinacion.fechaProduccion ? new Date(combinacion.fechaProduccion) : null,
-          fechaVencimiento: combinacion.fechaVencimiento ? new Date(combinacion.fechaVencimiento) : null,
-          estadoId: combinacion.estadoId ? Number(combinacion.estadoId) : null,
-          estadoCalidadId: combinacion.estadoCalidadId ? Number(combinacion.estadoCalidadId) : null,
-          numContenedor: combinacion.numContenedor,
-          nroSerie: combinacion.nroSerie,
-          ubicacionFisicaId: combinacion.ubicacionFisicaId ? Number(combinacion.ubicacionFisicaId) : null,
-        };
-        // Sumar ingresos y egresos del kardex restante
-        const kardexRestante = await tx.kardexAlmacen.findMany({
-          where: filtroKardex,
-        });
-        let saldoCantidad = 0;
-        let saldoPeso = 0;
-        for (const k of kardexRestante) {
-          saldoCantidad += Number(k.ingresoCant || 0) - Number(k.egresoCant || 0);
-          saldoPeso += Number(k.ingresoPeso || 0) - Number(k.egresoPeso || 0);
-        }
-        // Buscar saldo existente
-        const saldoExistente = await tx.saldosDetProductoCliente.findFirst({
-          where: filtroKardex,
-        });
-        if (saldoCantidad === 0 && saldoPeso === 0) {
-          // Si saldo es 0, eliminar si existe
-          if (saldoExistente) {
-            await tx.saldosDetProductoCliente.delete({
-              where: { id: saldoExistente.id },
-            });
-            saldosDetActualizados++;
-          }
-        } else {
-          // Si saldo > 0, actualizar o crear
-          if (saldoExistente) {
-            await tx.saldosDetProductoCliente.update({
-              where: { id: saldoExistente.id },
-              data: {
-                saldoCantidad: saldoCantidad,
-                saldoPeso: saldoPeso,
-                actualizadoEn: new Date(),
-              },
-            });
-          } else {
-            // CREAR saldo si no existe
-            await tx.saldosDetProductoCliente.create({
-              data: {
-                empresaId: Number(combinacion.empresaId),
-                almacenId: Number(combinacion.almacenId),
-                productoId: Number(combinacion.productoId),
-                clienteId: Number(combinacion.clienteId),
-                esCustodia: combinacion.esCustodia,
-                lote: combinacion.lote,
-                fechaIngreso: combinacion.fechaIngreso ? new Date(combinacion.fechaIngreso) : null,
-                fechaProduccion: combinacion.fechaProduccion ? new Date(combinacion.fechaProduccion) : null,
-                fechaVencimiento: combinacion.fechaVencimiento ? new Date(combinacion.fechaVencimiento) : null,
-                estadoId: combinacion.estadoId ? Number(combinacion.estadoId) : null,
-                estadoCalidadId: combinacion.estadoCalidadId ? Number(combinacion.estadoCalidadId) : null,
-                numContenedor: combinacion.numContenedor,
-                nroSerie: combinacion.nroSerie,
-                ubicacionFisicaId: combinacion.ubicacionFisicaId ? Number(combinacion.ubicacionFisicaId) : null,
-                saldoCantidad: saldoCantidad,
-                saldoPeso: saldoPeso,
-                actualizadoEn: new Date(),
-              },
-            });
-          }
-          saldosDetActualizados++;
-        }
-      }
 
-      // Recalcular saldos generales para cada combinación afectada
-      for (const combinacion of combinacionesAnteriores.generales) {
-        // Construir filtro para buscar kardex de esta combinación
-        const filtroKardex = {
-          empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
-          almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
-          productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
-          clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
-          esCustodia: combinacion.custodia,
-        };
-
-        // Sumar ingresos y egresos del kardex restante
-        const kardexRestante = await tx.kardexAlmacen.findMany({
-          where: filtroKardex,
-        });
-        let saldoCantidad = 0;
-        let saldoPeso = 0;
-        let costoTotal = 0;
-        for (const k of kardexRestante) {
-          saldoCantidad += Number(k.ingresoCant || 0) - Number(k.egresoCant || 0);
-          saldoPeso += Number(k.ingresoPeso || 0) - Number(k.egresoPeso || 0);
-          costoTotal += Number(k.ingresoCant || 0) * Number(k.ingresoCantCostoUnit || 0);
-        }
-        const costoUnitarioPromedio = saldoCantidad > 0 ? costoTotal / saldoCantidad : 0;
-        // Buscar saldo existente (SaldosProductoCliente usa 'custodia', no 'esCustodia')
-        const filtroSaldo = {
-          empresaId: combinacion.empresaId ? Number(combinacion.empresaId) : null,
-          almacenId: combinacion.almacenId ? Number(combinacion.almacenId) : null,
-          productoId: combinacion.productoId ? Number(combinacion.productoId) : null,
-          clienteId: combinacion.clienteId ? Number(combinacion.clienteId) : null,
-          custodia: combinacion.custodia,
-        };
-        const saldoExistente = await tx.saldosProductoCliente.findFirst({
-          where: filtroSaldo,
-        });
-        if (saldoCantidad === 0 && saldoPeso === 0) {
-          // Si saldo es 0, eliminar si existe
-          if (saldoExistente) {
-            await tx.saldosProductoCliente.delete({
-              where: { id: saldoExistente.id },
-            });
-            saldosGenActualizados++;
-          }
-        } else {
-          // Si saldo > 0, actualizar o crear
-          if (saldoExistente) {
-            await tx.saldosProductoCliente.update({
-              where: { id: saldoExistente.id },
-              data: {
-                saldoCantidad: saldoCantidad,
-                saldoPeso: saldoPeso,
-                costoUnitarioPromedio: costoUnitarioPromedio,
-                actualizadoEn: new Date(),
-              },
-            });
-          } else {
-            // CREAR saldo si no existe
-            await tx.saldosProductoCliente.create({
-              data: {
-                empresaId: Number(combinacion.empresaId),
-                almacenId: Number(combinacion.almacenId),
-                productoId: Number(combinacion.productoId),
-                clienteId: Number(combinacion.clienteId),
-                custodia: combinacion.custodia,
-                saldoCantidad: saldoCantidad,
-                saldoPeso: saldoPeso,
-                costoUnitarioPromedio: costoUnitarioPromedio,
-                actualizadoEn: new Date(),
-              },
-            });
-          }
-          saldosGenActualizados++;
-        }
-      }
-
-      resultados.saldosDetRegenerados = saldosDetActualizados;
-      resultados.saldosGenRegenerados = saldosGenActualizados;
+      // Recalcula, con el kardex restante, las cantidades y el costo promedio de cada fila de los
+      // movimientos posteriores y los saldos detallado y general
+      const cadena = await recalcularCadenaCompletaSAP(combinacionesAnteriores, tx);
+      resultados.saldosDetRegenerados = cadena.saldosDetActualizados;
+      resultados.saldosGenRegenerados = cadena.saldosGenActualizados;
+      resultados.filasRecalculadas = cadena.filasRecalculadas;
       // ========================================
       // PASO 5: ELIMINAR DETALLES DEL MOVIMIENTO
       // ========================================

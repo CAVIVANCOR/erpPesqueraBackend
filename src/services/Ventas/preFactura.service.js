@@ -161,6 +161,29 @@ async function validarClavesForaneas(data) {
     throw new ValidationError("El monedaId no existe.");
 }
 
+// Una venta puede tener N movimientos de salida (uno por almacén): se enlazan por MovimientoAlmacen.pedidoVentaId.
+// Se exponen en cada PreFactura como movimientosSalida y tieneMovimientosSalida.
+const adjuntarMovimientosSalida = async (preFacturas) => {
+  const ids = preFacturas.filter(Boolean).map((pf) => pf.id);
+  if (ids.length === 0) return;
+  const movimientos = await prisma.movimientoAlmacen.findMany({
+    where: { pedidoVentaId: { in: ids } },
+    select: { id: true, numeroDocumento: true, pedidoVentaId: true },
+    orderBy: { id: "asc" },
+  });
+  const porPreFactura = new Map();
+  for (const m of movimientos) {
+    const clave = Number(m.pedidoVentaId);
+    if (!porPreFactura.has(clave)) porPreFactura.set(clave, []);
+    porPreFactura.get(clave).push({ id: m.id, numeroDocumento: m.numeroDocumento });
+  }
+  for (const pf of preFacturas) {
+    if (!pf) continue;
+    pf.movimientosSalida = porPreFactura.get(Number(pf.id)) || [];
+    pf.tieneMovimientosSalida = pf.movimientosSalida.length > 0 || Boolean(pf.movSalidaAlmacenId);
+  }
+};
+
 const listar = async () => {
   try {
     const preFacturas = await prisma.preFactura.findMany({
@@ -216,6 +239,8 @@ const listar = async () => {
       },
       orderBy: { fechaDocumento: "desc" },
     });
+
+    await adjuntarMovimientosSalida(preFacturas);
 
     // Agregar montos en PEN para reportes SUNAT.
     // El TC aplicado sigue la regla centralizada en obtenerTipoCambioEfectivo():
@@ -294,6 +319,7 @@ const obtenerPorId = async (id) => {
       },
     });
     if (!pf) throw new NotFoundError("PreFactura no encontrada");
+    await adjuntarMovimientosSalida([pf]);
     return pf;
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
@@ -5110,6 +5136,41 @@ const eliminarMovimientosSalidaPreFactura = async (tx, preFactura) => {
 };
 
 /**
+ * Elimina el kardex de una venta: borra TODOS sus movimientos de salida (uno por almacén), revierte su kardex
+ * y recalcula, desde cada movimiento en adelante, cantidades, costo promedio y saldos. Todo en una transacción.
+ * Deja la PreFactura lista para asignar el stock y volver a generar.
+ */
+const eliminarKardexVenta = async (id) => {
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        const preFactura = await tx.preFactura.findUnique({
+          where: { id },
+          select: { id: true, numeroDocumento: true, movSalidaAlmacenId: true },
+        });
+        if (!preFactura) throw new NotFoundError("PreFactura no encontrada");
+
+        const total = await eliminarMovimientosSalidaPreFactura(tx, preFactura);
+        if (total.movimientos === 0) {
+          throw new ValidationError("La pre-factura no tiene movimientos de almacén generados.");
+        }
+        return {
+          mensaje: `Se eliminaron ${total.movimientos} movimiento(s) de almacén con su kardex y se actualizaron los saldos`,
+          resultados: total,
+        };
+      },
+      { timeout: 120000, maxWait: 125000 },
+    );
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && err.code.startsWith("P")) {
+      throw new DatabaseError("Error de base de datos", err.message);
+    }
+    throw err;
+  }
+};
+
+/**
  * Despacha el stock de una PreFactura emitida con lo que el usuario eligió en pantalla:
  * crea un movimiento de salida POR ALMACÉN, genera su kardex y actualiza los saldos, todo en una transacción.
  *
@@ -5234,6 +5295,24 @@ const despacharStock = async (id, payload, usuarioId) => {
         r.peso = Math.max(0, r.peso - l.peso);
       });
 
+      // ----- Proporción comercial por producto (respaldo si la línea no trae cantidadVenta) -----
+      // Igual que el formulario de movimiento: cantidadComercial = cantidad × factorAlmacén / factorComercial
+      const productosLinea = await tx.producto.findMany({
+        where: { id: { in: [...new Set(preFactura.detalles.map((d) => d.productoId))] } },
+        select: {
+          id: true,
+          unidadMedida: { select: { factorConversion: true } },
+          unidadMedidaComercial: { select: { factorConversion: true } },
+        },
+      });
+      const razonComercialPorProducto = new Map(
+        productosLinea.map((p) => {
+          const factorAlmacen = Number(p.unidadMedida?.factorConversion);
+          const factorComercial = Number(p.unidadMedidaComercial?.factorConversion);
+          return [Number(p.id), factorAlmacen > 0 && factorComercial > 0 ? factorAlmacen / factorComercial : null];
+        }),
+      );
+
       // ----- Agrupar por almacén: un movimiento por almacén -----
       const grupos = new Map();
       lineas.forEach((l) => {
@@ -5317,6 +5396,12 @@ const despacharStock = async (id, payload, usuarioId) => {
 
         const detalles = grupo.lineas.map((l) => {
           const s = saldoPorId.get(l.saldoId);
+          const lineaVenta = detallePorId.get(l.detalleId);
+          // Unidad comercial: se mantiene la proporción vendida de la línea (cantidadVenta / cantidad en unidad almacén)
+          const razonComercial =
+            Number(lineaVenta.cantidadVenta) > 0 && Number(lineaVenta.cantidad) > 0
+              ? Number(lineaVenta.cantidadVenta) / Number(lineaVenta.cantidad)
+              : (razonComercialPorProducto.get(Number(lineaVenta.productoId)) ?? null);
           return {
             productoId: s.productoId,
             cantidad: l.cantidad,
@@ -5333,8 +5418,11 @@ const despacharStock = async (id, payload, usuarioId) => {
             entidadComercialId: s.clienteId,
             esCustodia: false,
             empresaId: s.empresaId,
-            // El costo de salida lo calcula el kardex (costo promedio por producto); el precio de venta no es costo
+            // El costo real (promedio móvil del producto) lo calcula el motor de kardex y luego se copia aquí;
+            // nunca se usa el precio de venta como costo
             costoUnitario: 0,
+            cantidadComercial: razonComercial ? Math.round(l.cantidad * razonComercial * 10000) / 10000 : null,
+            costoComercial: null,
             observaciones: null,
             ubicacionFisicaOrigenId: s.ubicacionFisicaId || null,
             permitirDimensionesNulas: true,
@@ -5347,12 +5435,41 @@ const despacharStock = async (id, payload, usuarioId) => {
           usuarioId,
           tx,
         );
+        // El kardex ya quedó valorizado a costo promedio móvil: el detalle del movimiento copia ese costo
+        const detallesCreados = await tx.detalleMovimientoAlmacen.findMany({
+          where: { movimientoAlmacenId: resultado.movimiento.id },
+          select: { id: true, cantidad: true, cantidadComercial: true },
+        });
+        const detallePorKardex = new Map(detallesCreados.map((d) => [Number(d.id), d]));
+        const filasKardex = await tx.kardexAlmacen.findMany({
+          where: { movimientoAlmacenId: resultado.movimiento.id, esIngresoEgreso: false },
+        });
+        let valorTotal = 0;
+        for (const fila of filasKardex) {
+          const detalleMov = detallePorKardex.get(Number(fila.detalleMovimientoAlmacenId));
+          if (!detalleMov) continue;
+          const costoUnit = Math.round(Number(fila.egresoCantCostoUnit || 0) * 10000) / 10000;
+          valorTotal += Number(fila.egresoCantCostoTotal || 0);
+          const cantidadComercial = Number(detalleMov.cantidadComercial || 0);
+          await tx.detalleMovimientoAlmacen.update({
+            where: { id: detalleMov.id },
+            data: {
+              costoUnitario: costoUnit,
+              costoComercial:
+                cantidadComercial > 0
+                  ? Math.round(((costoUnit * Number(detalleMov.cantidad)) / cantidadComercial) * 10000) / 10000
+                  : null,
+            },
+          });
+        }
+
         movimientosCreados.push({
           id: resultado.movimiento.id,
           numeroDocumento: resultado.movimiento.numeroDocumento,
           almacenId: grupo.almacenId,
           conceptoMovAlmacenId: conceptoId,
           cantidadDetalles: resultado.movimiento.cantidadDetalles,
+          valorTotal: Math.round(valorTotal * 100) / 100,
         });
       }
 
@@ -5374,11 +5491,11 @@ const despacharStock = async (id, payload, usuarioId) => {
       const preFacturaActualizada = await tx.preFactura.update({
         where: { id: preFactura.id },
         data: {
-          movSalidaAlmacenId: movimientosCreados[0].id,
+          // Los movimientos se enlazan por MovimientoAlmacen.pedidoVentaId (pueden ser N, uno por almacén)
           fechaActualizacion: new Date(),
           actualizadoPor: usuarioId,
         },
-        select: { id: true, movSalidaAlmacenId: true, estadoId: true },
+        select: { id: true, estadoId: true },
       });
 
       return { preFactura: preFacturaActualizada, movimientos: movimientosCreados };
@@ -5964,6 +6081,7 @@ export default {
   generarKardex,
   regenerarKardex,
   despacharStock,
+  eliminarKardexVenta,
   actualizarTipoOperacionSunatMasivo,
   actualizarTipoAfectacionIGVMasivo,
   actualizarUnidadNegocioMasivo,
