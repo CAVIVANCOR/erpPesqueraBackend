@@ -210,6 +210,7 @@ async function validarDatosTransferenciaInterna(data, tx = null) {
   // ========================================
   let cuentaOrigen = null;
   let saldoOrigen = null;
+  let advertenciaSaldo = null;
 
   if (data.cuentaOrigenId) {
     // Validar campos requeridos para cuenta origen
@@ -238,21 +239,36 @@ async function validarDatosTransferenciaInterna(data, tx = null) {
                           Number(data.itfOrigen || 0) + 
                           Number(data.comisionOrigen || 0);
 
+    // El saldo corriente de una cuenta es único: se toma su último registro, igual que el resto de operaciones
+    // de tesorería (que calculan el saldo anterior solo por cuenta). Filtrar también por empresa podía devolver
+    // un registro antiguo cuando los movimientos de la cuenta se registraron con otra empresa (transferencias entre empresas).
     saldoOrigen = await db.saldoCuentaCorriente.findFirst({
-      where: {
-        cuentaCorrienteId: cuentaOrigen.id,
-        empresaId: Number(cuentaOrigen.empresaId) // ✅ Usar empresa de la cuenta
-      },
-      orderBy: { fecha: 'desc' }
+      where: { cuentaCorrienteId: cuentaOrigen.id },
+      orderBy: [{ fecha: 'desc' }, { id: 'desc' }]
     });
 
     const saldoDisponible = saldoOrigen ? Number(saldoOrigen.saldoActual) : 0;
     
+    // La falta de fondos NO impide la operación, pero exige confirmación explícita del usuario:
+    // sin confirmarSinFondos se responde con un aviso (codigo SALDO_INSUFICIENTE) y no se registra nada
     if (saldoDisponible < totalDebitado) {
-      throw new ValidationError(
-        `Saldo insuficiente en cuenta de origen. ` +
-        `Disponible: ${saldoDisponible}, Requerido: ${totalDebitado}`
-      );
+      if (data.confirmarSinFondos !== true) {
+        const aviso = new ValidationError(
+          `La cuenta de origen no tiene fondos suficientes. ` +
+          `Disponible: ${saldoDisponible.toFixed(2)}, Requerido: ${totalDebitado.toFixed(2)}.`
+        );
+        aviso.codigo = 'SALDO_INSUFICIENTE';
+        aviso.status = 409;
+        throw aviso;
+      }
+      advertenciaSaldo = {
+        saldoDisponible,
+        requerido: totalDebitado,
+        moneda: cuentaOrigen.moneda?.simbolo || null,
+        mensaje:
+          `La cuenta de origen no tiene fondos suficientes. ` +
+          `Disponible: ${saldoDisponible.toFixed(2)}, Requerido: ${totalDebitado.toFixed(2)}. La operación se realizó igualmente.`
+      };
     }
   }
 
@@ -307,7 +323,7 @@ async function validarDatosTransferenciaInterna(data, tx = null) {
     }
   }
 
-  return { cuentaOrigen, cuentaDestino, saldoOrigen };
+  return { cuentaOrigen, cuentaDestino, saldoOrigen, advertenciaSaldo };
 }
 
 // ════════════════════════════════════════════════════════════
@@ -974,7 +990,7 @@ export async function procesarTransferenciaInterna(data) {
       // ════════════════════════════════════════════════════════════
       // PASO 1: VALIDAR DATOS
       // ════════════════════════════════════════════════════════════
-      const { cuentaOrigen, cuentaDestino, saldoOrigen } = 
+      const { cuentaOrigen, cuentaDestino, saldoOrigen, advertenciaSaldo } = 
         await validarDatosTransferenciaInterna(data, tx);
 
       // ════════════════════════════════════════════════════════════
@@ -1482,6 +1498,7 @@ export async function procesarTransferenciaInterna(data) {
       // ========================================
       return {
         success: true,
+        advertenciaSaldo,
         correlativo,
         movimientoEgresoId: movimientoEgreso?.id || null,
         movimientoIngresoId: movimientoIngreso?.id || null,
@@ -1551,8 +1568,34 @@ export async function actualizarUrlVoucherBancario(movimientoId, url) {
   });
 }
 
+/**
+ * Saldo real de una cuenta corriente (último registro de saldo de la cuenta).
+ * La empresa se deduce de la propia cuenta: no depende de ningún filtro de pantalla.
+ * Se usa para avisar antes de procesar una operación cuando la cuenta de origen no tiene fondos.
+ */
+export async function obtenerSaldoCuenta(cuentaCorrienteId) {
+  const cuenta = await prisma.cuentaCorriente.findUnique({
+    where: { id: Number(cuentaCorrienteId) },
+    select: { id: true, empresaId: true, monedaId: true },
+  });
+  if (!cuenta) throw new NotFoundError('Cuenta corriente no encontrada.');
+
+  const ultimoSaldo = await prisma.saldoCuentaCorriente.findFirst({
+    where: { cuentaCorrienteId: cuenta.id },
+    orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+  });
+
+  return {
+    cuentaCorrienteId: cuenta.id,
+    empresaId: cuenta.empresaId,
+    monedaId: cuenta.monedaId,
+    saldoActual: ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0,
+  };
+}
+
 export default {
   procesarTransferenciaInterna,
+  obtenerSaldoCuenta,
   actualizarUrlVoucherConsolidado,
   actualizarUrlVoucherIndividual,
   actualizarUrlVoucherBancario

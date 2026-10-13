@@ -359,8 +359,21 @@ export const subirVoucherBancario = async (req, res, next) => {
   }
 };
 
+/**
+ * Saldo real de una cuenta corriente (para avisar de falta de fondos antes de procesar una operación)
+ */
+export const obtenerSaldoCuenta = async (req, res, next) => {
+  try {
+    const resultado = await transferenciaInternaService.obtenerSaldoCuenta(req.params.cuentaCorrienteId);
+    res.json(toJSONBigInt({ success: true, data: resultado }));
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   procesarTransferenciaInterna,
+  obtenerSaldoCuenta,
   actualizarUrlVoucherConsolidado,
   actualizarUrlVoucherIndividual,
   actualizarUrlVoucherBancario,

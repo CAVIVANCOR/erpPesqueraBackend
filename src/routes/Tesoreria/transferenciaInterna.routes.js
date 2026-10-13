@@ -54,6 +54,11 @@ const upload = multer({
 router.post('/', autenticarJWT, transferenciaInternaController.procesarTransferenciaInterna);
 
 // ════════════════════════════════════════════════════════════
+// GET: SALDO REAL DE UNA CUENTA (aviso de falta de fondos antes de procesar)
+// ════════════════════════════════════════════════════════════
+router.get('/saldo-cuenta/:cuentaCorrienteId', autenticarJWT, transferenciaInternaController.obtenerSaldoCuenta);
+
+// ════════════════════════════════════════════════════════════
 // PATCH: ACTUALIZAR URL VOUCHER CONSOLIDADO
 // ════════════════════════════════════════════════════════════
 router.patch(
