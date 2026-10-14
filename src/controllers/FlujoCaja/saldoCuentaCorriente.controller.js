@@ -213,6 +213,8 @@ const reprocesar = async (req, res, next) => {
   try {
     const data = await reprocesarSaldosCuentas({
       cuentaCorrienteIds: req.body?.cuentaCorrienteIds,
+      forzar: req.body?.forzar === true,
+      saldoIds: req.body?.saldoIds,
       usuarioId: req.user?.id || null,
     });
     res.json(toJSONBigInt({ success: true, data }));
@@ -221,7 +223,41 @@ const reprocesar = async (req, res, next) => {
   }
 };
 
+/**
+ * Igual que reprocesar, pero informa el avance en tiempo real: respuesta NDJSON (un JSON por línea).
+ * Eventos: inicio, cuenta, fila (cada registro), cuenta_fin, fin (resultado) o error.
+ * POST /api/saldos-cuenta-corriente/reprocesar-progreso   body: { cuentaCorrienteIds, forzar, saldoIds }
+ */
+const reprocesarConProgreso = async (req, res) => {
+  res.status(200);
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
+  const enviar = (evento) => {
+    if (res.writableEnded) return;
+    res.write(`${JSON.stringify(evento)}\n`);
+  };
+
+  try {
+    const data = await reprocesarSaldosCuentas({
+      cuentaCorrienteIds: req.body?.cuentaCorrienteIds,
+      forzar: req.body?.forzar === true,
+      saldoIds: req.body?.saldoIds,
+      usuarioId: req.user?.id || null,
+      onEvento: enviar,
+    });
+    enviar({ tipo: "fin", resultado: data });
+  } catch (err) {
+    enviar({ tipo: "error", mensaje: err?.message || "No se pudieron reprocesar los saldos." });
+  } finally {
+    res.end();
+  }
+};
+
 export default {
+  reprocesarConProgreso,
   reprocesar,
   listar,
   obtenerPorId,

@@ -8,6 +8,7 @@ router.get('/', saldoCuentaCorrienteController.listar);
 router.get('/historial', saldoCuentaCorrienteController.obtenerHistorial);
 router.get('/saldo-actual', saldoCuentaCorrienteController.calcularSaldoActual);
 router.post('/reprocesar', saldoCuentaCorrienteController.reprocesar);
+router.post('/reprocesar-progreso', saldoCuentaCorrienteController.reprocesarConProgreso);
 router.get('/por-movimiento/:movimientoCajaId', saldoCuentaCorrienteController.listarPorMovimiento);
 router.get('/:id', saldoCuentaCorrienteController.obtenerPorId);
 router.post('/', saldoCuentaCorrienteController.crear);

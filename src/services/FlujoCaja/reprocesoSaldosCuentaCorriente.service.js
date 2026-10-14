@@ -25,7 +25,7 @@ const CLAVE_BLOQUEO_CUENTA = 710100000000n + 1000000000n;
 const num = (valor) => Number(valor ?? 0);
 const r2 = (valor) => Math.round((Number(valor || 0) + Number.EPSILON) * 100) / 100;
 
-async function reprocesarCuenta(cuentaCorrienteId, usuarioId) {
+async function reprocesarCuenta(cuentaCorrienteId, usuarioId, { forzar = false, idsForzados = null, onEvento = null } = {}) {
   return prisma.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CLAVE_BLOQUEO_CUENTA + cuentaCorrienteId})`;
@@ -33,37 +33,73 @@ async function reprocesarCuenta(cuentaCorrienteId, usuarioId) {
       const filas = await tx.saldoCuentaCorriente.findMany({
         where: { cuentaCorrienteId },
         orderBy: [{ fecha: "asc" }, { id: "asc" }],
-        select: { id: true, saldoAnterior: true, ingresos: true, egresos: true, saldoActual: true, conciliado: true },
+        select: {
+          id: true,
+          fecha: true,
+          movimientoCajaId: true,
+          saldoAnterior: true,
+          ingresos: true,
+          egresos: true,
+          saldoActual: true,
+          conciliado: true,
+        },
       });
 
       let corriente = filas.length > 0 ? num(filas[0].saldoAnterior) : 0;
       let filasCorregidas = 0;
+      let filasReprocesadas = 0;
       let filasConciliadasCorregidas = 0;
 
-      for (const fila of filas) {
+      for (let indice = 0; indice < filas.length; indice++) {
+        const fila = filas[indice];
         const anterior = r2(corriente);
         const actual = r2(anterior + num(fila.ingresos) - num(fila.egresos));
-        if (r2(fila.saldoAnterior) !== anterior || r2(fila.saldoActual) !== actual) {
+        const difiere = r2(fila.saldoAnterior) !== anterior || r2(fila.saldoActual) !== actual;
+        // Forzado: se reescribe la fila aunque ya esté correcta (todas, o solo las indicadas en idsForzados)
+        const reescribir = difiere || (forzar && (!idsForzados || idsForzados.has(String(fila.id))));
+        if (reescribir) {
           await tx.saldoCuentaCorriente.update({
             where: { id: fila.id },
             data: { saldoAnterior: anterior, saldoActual: actual },
           });
-          filasCorregidas++;
-          if (fila.conciliado) filasConciliadasCorregidas++;
+          filasReprocesadas++;
+          if (difiere) {
+            filasCorregidas++;
+            if (fila.conciliado) filasConciliadasCorregidas++;
+          }
         }
         corriente = actual;
+
+        onEvento?.({
+          tipo: "fila",
+          cuentaCorrienteId: Number(cuentaCorrienteId),
+          indice: indice + 1,
+          totalCuenta: filas.length,
+          saldoId: Number(fila.id),
+          movimientoCajaId: fila.movimientoCajaId ? Number(fila.movimientoCajaId) : null,
+          fecha: fila.fecha,
+          ingresos: num(fila.ingresos),
+          egresos: num(fila.egresos),
+          saldoAnteriorAntes: r2(fila.saldoAnterior),
+          saldoAnterior: anterior,
+          saldoActualAntes: r2(fila.saldoActual),
+          saldoActual: actual,
+          conciliado: Boolean(fila.conciliado),
+          estado: difiere ? "corregido" : reescribir ? "reprocesado" : "correcto",
+        });
       }
 
       const ultima = filas.length > 0 ? filas[filas.length - 1] : null;
       const resultado = {
         cuentaCorrienteId: Number(cuentaCorrienteId),
         filas: filas.length,
+        filasReprocesadas,
         filasCorregidas,
         filasConciliadasCorregidas,
         saldoFinalAntes: ultima ? r2(ultima.saldoActual) : 0,
         saldoFinalDespues: r2(corriente),
       };
-      if (filasCorregidas > 0) {
+      if (filasReprocesadas > 0) {
         console.log(
           "[REPROCESO_SALDOS]",
           JSON.stringify({ ...resultado, usuarioId: usuarioId ? Number(usuarioId) : null, fecha: new Date().toISOString() }),
@@ -80,8 +116,12 @@ async function reprocesarCuenta(cuentaCorrienteId, usuarioId) {
  * @param {Object} params
  * @param {Array<number|string>} params.cuentaCorrienteIds - cuentas a reprocesar
  * @param {number|null} params.usuarioId - usuario que ejecuta (auditoría)
+ * @param {boolean} [params.forzar] - reescribe las filas aunque ya estén correctas
+ * @param {Array<number|string>} [params.saldoIds] - con forzar, limita la reescritura a estas filas
+ *   (la cadena se recalcula completa igualmente; las demás filas solo se escriben si difieren)
  */
-export async function reprocesarSaldosCuentas({ cuentaCorrienteIds, usuarioId }) {
+export async function reprocesarSaldosCuentas({ cuentaCorrienteIds, usuarioId, forzar = false, saldoIds = null, onEvento = null }) {
+  const idsForzados = Array.isArray(saldoIds) ? new Set(saldoIds.map((id) => String(id))) : null;
   const ids = [...new Set((Array.isArray(cuentaCorrienteIds) ? cuentaCorrienteIds : []).map((id) => String(id)))]
     .filter((id) => /^\d+$/.test(id))
     .map((id) => BigInt(id));
@@ -92,12 +132,49 @@ export async function reprocesarSaldosCuentas({ cuentaCorrienteIds, usuarioId })
   }
 
   try {
+    // Con seguimiento en tiempo real: se informa el total de registros antes de empezar
+    let nombres = new Map();
+    if (onEvento) {
+      const [conteos, infoCuentas] = await Promise.all([
+        prisma.saldoCuentaCorriente.groupBy({
+          by: ["cuentaCorrienteId"],
+          where: { cuentaCorrienteId: { in: ids } },
+          _count: { id: true },
+        }),
+        prisma.cuentaCorriente.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, numeroCuenta: true, descripcion: true, banco: { select: { nombre: true } } },
+        }),
+      ]);
+      const filasPorCuenta = new Map(conteos.map((c) => [String(c.cuentaCorrienteId), c._count.id]));
+      nombres = new Map(
+        infoCuentas.map((c) => [String(c.id), `${c.banco?.nombre || "Banco"} ${c.numeroCuenta || `#${c.id}`}${c.descripcion ? ` - ${c.descripcion}` : ""}`]),
+      );
+      onEvento({
+        tipo: "inicio",
+        totalCuentas: ids.length,
+        totalFilas: [...filasPorCuenta.values()].reduce((suma, n) => suma + n, 0),
+        forzar: Boolean(forzar),
+        cuentas: ids.map((id) => ({
+          cuentaCorrienteId: Number(id),
+          nombre: nombres.get(String(id)) || `Cuenta #${id}`,
+          filas: filasPorCuenta.get(String(id)) || 0,
+        })),
+      });
+    }
+
     const cuentas = [];
-    for (const id of ids) cuentas.push(await reprocesarCuenta(id, usuarioId));
+    for (const id of ids) {
+      onEvento?.({ tipo: "cuenta", cuentaCorrienteId: Number(id), nombre: nombres.get(String(id)) || `Cuenta #${id}` });
+      const resultadoCuenta = await reprocesarCuenta(id, usuarioId, { forzar: Boolean(forzar), idsForzados, onEvento });
+      cuentas.push(resultadoCuenta);
+      onEvento?.({ tipo: "cuenta_fin", nombre: nombres.get(String(id)) || `Cuenta #${id}`, ...resultadoCuenta });
+    }
 
     return {
       cuentasProcesadas: cuentas.length,
       filasRevisadas: cuentas.reduce((suma, c) => suma + c.filas, 0),
+      filasReprocesadas: cuentas.reduce((suma, c) => suma + c.filasReprocesadas, 0),
       filasCorregidas: cuentas.reduce((suma, c) => suma + c.filasCorregidas, 0),
       filasConciliadasCorregidas: cuentas.reduce((suma, c) => suma + c.filasConciliadasCorregidas, 0),
       cuentas,
