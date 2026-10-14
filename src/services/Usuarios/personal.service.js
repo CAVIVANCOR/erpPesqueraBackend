@@ -32,10 +32,21 @@ async function validarPersonal(data, excluirId = null) {
         empresaId: data.empresaId,
       };
     const existe = await prisma.personal.findFirst({ where });
-    if (existe)
+    if (existe) {
+      const nombre = `${existe.nombres || ""} ${existe.apellidos || ""}`.trim();
+      if (existe.cesado) {
+        const fechaCese = existe.fechaCese
+          ? ` desde el ${new Date(existe.fechaCese).toLocaleDateString("es-PE", { timeZone: "UTC" })}`
+          : "";
+        throw new ConflictError(
+          `El documento ${data.numeroDocumento} pertenece a ${nombre}, que figura como CESADO${fechaCese} en esta empresa. ` +
+            "No se puede crear un nuevo registro: edite ese personal y quite la marca de cesado para reactivarlo.",
+        );
+      }
       throw new ConflictError(
-        "Ya existe un personal con ese número de documento en la empresa.",
+        `Ya existe personal ACTIVO con el documento ${data.numeroDocumento}: ${nombre}.`,
       );
+    }
   }
 
   // Validar existencia de Empresa
