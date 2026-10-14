@@ -10,6 +10,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { registrarRetencionPercepcionDelPago } from "./retencionPercepcionPago.helper.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -1466,7 +1467,7 @@ async function actualizarSaldoCuentaCorriente({
     // Buscar último saldo en la BD
     const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
       where: { cuentaCorrienteId: Number(cuentaCorrienteId) },
-      orderBy: { fecha: 'desc' }
+      orderBy: [{ fecha: 'desc' }, { id: 'desc' }]
     });
     saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
   }
@@ -2085,101 +2086,17 @@ const procesarPagoEspecializado = async (data) => {
       // Código legacy comentado - no crear nuevas detracciones aquí
 
       // ════════════════════════════════════════════════════════════
-      // PASO 7: CREAR RETENCIÓN (si aplica)
+      // PASO 7 y 8: RETENCIÓN Y PERCEPCIÓN (patrón de la detracción)
+      // El documento ya existe (se genera con la Orden de Compra): se actualiza su importe pagado,
+      // saldo, estado y datos del comprobante, igual que la detracción. No se crean documentos nuevos.
       // ════════════════════════════════════════════════════════════
-      let retencion = null;
-      if (data.aplicaRetencion && data.retencion) {
-        const ret = data.retencion;
-
-        retencion = await tx.retencion.create({
-          data: {
-            empresaId: Number(data.empresaId),
-            tipoDocumentoId: TIPOS_DOCUMENTO.RETENCION,
-            numeroDocumento: ret.numeroDocumento,
-            fechaEmision: new Date(ret.fechaEmision),
-            fechaPago: new Date(data.fechaPago),
-            proveedorId: Number(cuentaPorPagar.proveedorId),
-            tipoDocProveedorId: Number(cuentaPorPagar.proveedor.tipoDocumentoId),
-            numeroDocProveedor: cuentaPorPagar.proveedor.numeroDocumento,
-            razonSocialProveedor: cuentaPorPagar.proveedor.razonSocial,
-            tipoRetencionId: ret.tipoRetencionId ? Number(ret.tipoRetencionId) : null,
-            tasaRetencion: Number(ret.tasaRetencion),
-            monedaId: Number(data.monedaPagoId),
-            importeTotal: Number(ret.importeTotal),
-            importeRetenido: Number(ret.importeRetenido),
-            importeNeto: Number(ret.importeTotal) - Number(ret.importeRetenido),
-            cuentaPorPagarId: null,
-            movimientoCajaId: movimientoEgreso.id,
-            nubefactEnviado: false,
-            estadoId: ESTADOS_RETENCION.VALIDADO,
-            declarado: false,
-            creadoPor: data.creadoPor || null
-          }
-        });
-
-        if (cuentaPorPagar.ordenCompra) {
-          await tx.detalleRetencion.create({
-            data: {
-              retencionId: retencion.id,
-              tipoDocumentoId: cuentaPorPagar.ordenCompra.tipoDocumentoId,
-              numeroDocumento: cuentaPorPagar.numeroDocumento,
-              fechaEmision: cuentaPorPagar.fechaEmision,
-              importeTotal: Number(ret.importeTotal),
-              importeRetenido: Number(ret.importeRetenido),
-              importeNeto: Number(ret.importeTotal) - Number(ret.importeRetenido),
-              fechaPago: new Date(data.fechaPago),
-              numeroPago: `OP-${correlativo}`
-            }
-          });
-        }
-      }
-
-      // ════════════════════════════════════════════════════════════
-      // PASO 8: CREAR PERCEPCIÓN (si aplica)
-      // ════════════════════════════════════════════════════════════
-      let percepcion = null;
-      if (data.aplicaPercepcion && data.percepcion) {
-        const per = data.percepcion;
-
-        percepcion = await tx.percepcion.create({
-          data: {
-            empresaId: Number(data.empresaId),
-            tipoDocumentoId: TIPOS_DOCUMENTO.PERCEPCION,
-            numeroDocumento: per.numeroDocumento,
-            fechaEmision: new Date(per.fechaEmision),
-            fechaCobro: new Date(data.fechaPago),
-            proveedorId: Number(cuentaPorPagar.proveedorId),
-            tipoDocProveedorId: Number(cuentaPorPagar.proveedor.tipoDocumentoId),
-            numeroDocProveedor: cuentaPorPagar.proveedor.numeroDocumento,
-            razonSocialProveedor: cuentaPorPagar.proveedor.razonSocial,
-            tipoPercepcionId: per.tipoPercepcionId ? Number(per.tipoPercepcionId) : null,
-            tasaPercepcion: Number(per.tasaPercepcion),
-            monedaId: Number(data.monedaPagoId),
-            importeTotal: Number(per.importeTotal),
-            importePercibido: Number(per.importePercibido),
-            importePagado: Number(per.importeTotal) + Number(per.importePercibido),
-            ordenCompraId: null,
-            cuentaPorPagarId: null,
-            estadoId: ESTADOS_PERCEPCION.VALIDADO,
-            aplicadaCredito: false,
-            observaciones: per.observaciones || `Percepción - Operación #${correlativo}`,
-            creadoPor: data.creadoPor || null
-          }
-        });
-
-        if (cuentaPorPagar.ordenCompra) {
-          await tx.detallePercepcion.create({
-            data: {
-              percepcionId: percepcion.id,
-              tipoDocumentoId: cuentaPorPagar.ordenCompra.tipoDocumentoId,
-              numeroDocumento: cuentaPorPagar.numeroDocumento,
-              fechaEmision: cuentaPorPagar.fechaEmision,
-              importeTotal: Number(per.importeTotal),
-              importePercibido: Number(per.importePercibido)
-            }
-          });
-        }
-      }
+      const { retencion, percepcion } = await registrarRetencionPercepcionDelPago({
+        tx,
+        data,
+        origen: 'COMPRA',
+        documentoId: cuentaPorPagar.ordenCompraId,
+        monedaDeudaId: cuentaPorPagar.monedaId
+      });
 
       // ════════════════════════════════════════════════════════════
       // PASO 9: ACTUALIZAR PAGO CON REFERENCIAS
@@ -3080,8 +2997,7 @@ const obtenerDetallePago = async (pagoId) => {
         include: {
           tipoRetencion: true,
           moneda: true,
-          estado: true,
-          detalles: true
+          estadoPago: true
         }
       });
     }
@@ -3097,8 +3013,7 @@ const obtenerDetallePago = async (pagoId) => {
         include: {
           tipoPercepcion: true,
           moneda: true,
-          estado: true,
-          detalles: true
+          estadoPago: true
         }
       });
     }

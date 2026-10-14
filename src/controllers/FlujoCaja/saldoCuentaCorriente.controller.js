@@ -1,5 +1,6 @@
 import saldoCuentaCorrienteService from '../../services/FlujoCaja/saldoCuentaCorriente.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
+import { reprocesarSaldosCuentas } from '../../services/FlujoCaja/reprocesoSaldosCuentaCorriente.service.js';
 
 /**
  * Lista todos los saldos de cuentas corrientes
@@ -204,7 +205,24 @@ const eliminarAsientoContable = async (req, res, next) => {
   }
 };
 
+/**
+ * Reprocesa la cadena de saldos de las cuentas indicadas
+ * POST /api/saldos-cuenta-corriente/reprocesar   body: { cuentaCorrienteIds: [] }
+ */
+const reprocesar = async (req, res, next) => {
+  try {
+    const data = await reprocesarSaldosCuentas({
+      cuentaCorrienteIds: req.body?.cuentaCorrienteIds,
+      usuarioId: req.user?.id || null,
+    });
+    res.json(toJSONBigInt({ success: true, data }));
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
+  reprocesar,
   listar,
   obtenerPorId,
   obtenerHistorial,

@@ -161,7 +161,7 @@ const actualizarSaldoCuentaCorriente = async ({
   } else {
     const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
       where: { cuentaCorrienteId: Number(cuentaCorrienteId) },
-      orderBy: { fecha: "desc" },
+      orderBy: [{ fecha: "desc" }, { id: "desc" }],
     });
     saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
   }

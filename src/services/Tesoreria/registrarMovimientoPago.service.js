@@ -268,7 +268,7 @@ const registrarPagoCuentaPorCobrar = async (datos) => {
       // Obtener último saldo de la cuenta
       const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
         where: { cuentaCorrienteId: Number(cuentaBancariaId) },
-        orderBy: { fecha: 'desc' },
+        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
       });
 
       const saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
@@ -546,7 +546,7 @@ const registrarPagoCuentaPorPagar = async (datos) => {
       // Obtener último saldo de la cuenta
       const ultimoSaldo = await tx.saldoCuentaCorriente.findFirst({
         where: { cuentaCorrienteId: Number(cuentaBancariaId) },
-        orderBy: { fecha: 'desc' },
+        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
       });
 
       const saldoAnterior = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;

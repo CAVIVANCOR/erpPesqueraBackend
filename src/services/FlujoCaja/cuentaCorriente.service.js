@@ -132,7 +132,7 @@ const obtenerPorId = async (id) => {
     // 2. ✅ CALCULAR saldoActual desde el último SaldoCuentaCorriente
     const ultimoSaldo = await prisma.saldoCuentaCorriente.findFirst({
       where: { cuentaCorrienteId: cuenta.id },
-      orderBy: { fecha: 'desc' },
+      orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
       select: { saldoActual: true, fecha: true },
     });
 

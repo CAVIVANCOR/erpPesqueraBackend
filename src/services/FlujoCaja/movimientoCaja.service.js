@@ -283,7 +283,7 @@ async function actualizarSaldosCuentasCorrientes(movimiento) {
     if (cuentaCorrienteOrigenId && empresaOrigenId) {
       const ultimoSaldoOrigen = await prisma.saldoCuentaCorriente.findFirst({
         where: { cuentaCorrienteId: cuentaCorrienteOrigenId },
-        orderBy: { fecha: "desc" },
+        orderBy: [{ fecha: "desc" }, { id: "desc" }],
       });
 
       const saldoAnteriorOrigen = ultimoSaldoOrigen
@@ -319,7 +319,7 @@ async function actualizarSaldosCuentasCorrientes(movimiento) {
     if (cuentaCorrienteDestinoId && empresaId) {
       const ultimoSaldoDestino = await prisma.saldoCuentaCorriente.findFirst({
         where: { cuentaCorrienteId: cuentaCorrienteDestinoId },
-        orderBy: { fecha: "desc" },
+        orderBy: [{ fecha: "desc" }, { id: "desc" }],
       });
 
       const saldoAnteriorDestino = ultimoSaldoDestino

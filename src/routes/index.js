@@ -276,6 +276,7 @@ import detraccionRoutes from './Tesoreria/detraccion.routes.js';
 import retencionRoutes from './Tesoreria/retencion.routes.js';
 import percepcionRoutes from './Tesoreria/percepcion.routes.js';
 import transferenciaInternaRoutes from './Tesoreria/transferenciaInterna.routes.js';
+import reversionOperacionCajaRoutes from './Tesoreria/reversionOperacionCaja.routes.js';
 
 
 const router = express.Router();
@@ -746,6 +747,7 @@ router.use('/tesoreria/detracciones', detraccionRoutes);
 router.use('/tesoreria/retenciones', retencionRoutes);
 router.use('/tesoreria/percepciones', percepcionRoutes);
 router.use('/tesoreria/transferencias', transferenciaInternaRoutes);
+router.use('/tesoreria/operaciones', reversionOperacionCajaRoutes);
 router.use('/tesoreria/pagos-deuda-tributaria', pagoDeudaTributariaRoutes);
 router.use('/tesoreria/pagos-letra-cambio', pagoLetraCambioRoutes);
 router.use('/tesoreria/endosos-letra-cambio', endosoLetraCambioRoutes);
