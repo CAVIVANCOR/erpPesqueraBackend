@@ -14,6 +14,7 @@ import {
 } from "../Almacen/kardexGenerico.service.js";
 import { aplicarSignoMonto, TIPO_DOC_ID } from '../../utils/tiposDocumento.constants.js';
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
+import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
 
 // ========================================
 // CONSTANTES PARA IMPUESTOS TRIBUTARIOS
@@ -910,11 +911,50 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
         throw new ValidationError("No se puede eliminar una orden anulada");
       }
 
+      // VALIDACIÓN: una compra con pagos no se puede eliminar
+      const cuentaPorPagarOC = await tx.cuentaPorPagar.findFirst({
+        where: { ordenCompraId: id },
+        include: {
+          pagos: { select: { id: true, medioPagoId: true, movimientoCajaId: true, refOperacionEspecializadaMovCaja: true } },
+        },
+      });
+      if (cuentaPorPagarOC) {
+        const movimientosTesoreria = await tx.movimientoCaja.findMany({
+          where: {
+            OR: [
+              { cuentaPorPagarId: cuentaPorPagarOC.id },
+              { pagosCuentaPorPagar: { some: { cuentaPorPagarId: cuentaPorPagarOC.id } } },
+            ],
+          },
+          select: { refOperacionEspecializadaMovCaja: true },
+        });
+        const cantidadPagos = cuentaPorPagarOC.pagos?.length || 0;
+        if (cantidadPagos > 0 || movimientosTesoreria.length > 0) {
+          const operaciones = [
+            ...new Set(
+              [...movimientosTesoreria.map((m) => m.refOperacionEspecializadaMovCaja),
+               ...(cuentaPorPagarOC.pagos || []).map((p) => p.refOperacionEspecializadaMovCaja)]
+                .filter(Boolean)
+                .map(String)
+            ),
+          ];
+          throw new ValidationError(
+            `No se puede eliminar la orden de compra ${ordenCompra.numeroDocumento || id}: su cuenta por pagar ya tiene ` +
+            `${cantidadPagos} pago(s) registrado(s)` +
+            (movimientosTesoreria.length > 0 ? ` y ${movimientosTesoreria.length} movimiento(s) de caja` : "") +
+            (operaciones.length > 0 ? ` (operación #${operaciones.join(", #")} de Tesorería)` : "") +
+            ". Primero revierta esos pagos (en Tesorería Pendientes: Revertir Operación) y luego elimine la orden."
+          );
+        }
+      }
+
       const resultados = {
         ordenesCompra: 0,
         detallesOrdenCompra: 0,
         cuentasPorPagar: 0,
         pagos: 0,
+        detracciones: 0,
+        retenciones: 0,
         movimientosAlmacen: 0,
         detallesMovAlmacen: 0,
         kardexEliminados: 0,
@@ -941,13 +981,16 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       }
 
       // PASO 3: ELIMINAR ASIENTOS CONTABLES
+      // Los de la orden, los de su cuenta por pagar y los que referencian su detracción, retención o percepción
       const asientosContables = await tx.asientoContable.findMany({
         where: {
-          ordenesCompra: {
-            some: {
-              id: id
-            }
-          },
+          OR: [
+            { ordenesCompra: { some: { id: id } } },
+            { cuentasPorPagar: { some: { ordenCompraId: id } } },
+            { detraccion: { ordenCompraId: id } },
+            { retencion: { ordenCompraId: id } },
+            { percepcion: { ordenCompraId: id } },
+          ],
         },
       });
 
@@ -969,18 +1012,25 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
         resultados.asientosContables = asientosContables.length;
       }
 
-      // PASO 4: ELIMINAR PERCEPCIONES
+      // PASO 4: ELIMINAR DETRACCIÓN, RETENCIÓN Y PERCEPCIÓN DE LA ORDEN
+      // (se generan junto con la orden; sin pagos ya no hay nada que las referencie)
+      const detraccionesResult = await tx.detraccion.deleteMany({
+        where: { ordenCompraId: id },
+      });
+      resultados.detracciones = Number(detraccionesResult.count);
+
+      const retencionesResult = await tx.retencion.deleteMany({
+        where: { ordenCompraId: id },
+      });
+      resultados.retenciones = Number(retencionesResult.count);
+
       const percepcionesResult = await tx.percepcion.deleteMany({
         where: { ordenCompraId: id },
       });
       resultados.percepciones = Number(percepcionesResult.count);
 
-      // PASO 5: DESVINCULAR REPUESTOS CONTRATISTAS OT
-      const repuestosResult = await tx.detRepuestosContratistaOT.updateMany({
-        where: { ordenCompraId: id },
-        data: { ordenCompraId: null },
-      });
-      resultados.repuestosContratistas = Number(repuestosResult.count);
+      // PASO 5: (sin acción) Los ítems de repuestos de contratistas ya no guardan la orden de compra:
+      // el control de facturación es a nivel de presupuesto, no hay nada que desvincular.
 
       // PASO 6: ELIMINAR DATOS ADICIONALES
       const datosResult = await tx.detDatosAdicionalesOrdenCompra.deleteMany({
@@ -988,22 +1038,10 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       });
       resultados.datosAdicionales = Number(datosResult.count);
 
-      // PASO 7: ELIMINAR CUENTA POR PAGAR Y PAGOS
-      const cuentaPorPagar = await tx.cuentaPorPagar.findFirst({
-        where: { ordenCompraId: id },
-        include: { pagos: true },
-      });
-
-      if (cuentaPorPagar) {
-        if (cuentaPorPagar.pagos?.length > 0) {
-          const pagosResult = await tx.pagoCuentaPorPagar.deleteMany({
-            where: { cuentaPorPagarId: cuentaPorPagar.id },
-          });
-          resultados.pagos = Number(pagosResult.count);
-        }
-
+      // PASO 7: ELIMINAR CUENTA POR PAGAR (ya se validó que no tiene pagos)
+      if (cuentaPorPagarOC) {
         await tx.cuentaPorPagar.delete({
-          where: { id: cuentaPorPagar.id },
+          where: { id: cuentaPorPagarOC.id },
         });
         resultados.cuentasPorPagar = 1;
       }
@@ -1035,6 +1073,18 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
         where: { id },
       });
       resultados.ordenesCompra = 1;
+
+      // PASO 11: Si la orden nació de un presupuesto de contratista, se recalculan sus montos
+      // (facturado, pagado y saldo) y los totales de la OT, que ya no deben incluirla.
+      if (
+        Number(ordenCompra.submoduloOrigenId) === SUBMODULO_ORIGEN.PRESUPUESTO_CONTRATISTA_OT &&
+        ordenCompra.procesoOrigenId
+      ) {
+        const { default: documentoCompraPresupuestoService } =
+          await import("../Mantenimiento/documentoCompraPresupuesto.service.js");
+        await documentoCompraPresupuestoService.recalcularMontosPresupuesto(ordenCompra.procesoOrigenId, tx);
+      }
+
       return {
         success: true,
         mensaje: "OrdenCompra eliminada exitosamente con todos sus registros relacionados",
