@@ -40,6 +40,14 @@ router.get(
   ordenCompraController.exportarRegistroComprasSUNAT
 );
 
+// Compras elegibles para el Registro de Compras (DEBE IR ANTES DE /:id)
+router.get(
+  '/registro-compras/elegibles',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.obtenerElegiblesRegistroCompras
+);
+
 
 // ========================================
 // RUTAS CRUD PARA ORDENCOMPRA

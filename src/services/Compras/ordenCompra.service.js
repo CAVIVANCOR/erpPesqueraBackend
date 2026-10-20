@@ -5408,6 +5408,102 @@ const actualizarTipoCambio = async (id, tipoCambio, usuarioId) => {
   }
 };
 
+// Quinto día hábil (lunes a viernes) del mes siguiente al período. El sistema no tiene tabla de feriados: los feriados
+// no se descuentan, así que el plazo podría ser unos días más corto que el legal en meses con feriados.
+const quintoDiaHabilMesSiguiente = (anio, mes) => {
+  const fecha = new Date(anio, mes, 1); // "mes" va de 1 a 12: como índice de JS ya es el mes siguiente
+  let habiles = 0;
+  while (habiles < 5) {
+    const dia = fecha.getDay();
+    if (dia !== 0 && dia !== 6) habiles++;
+    if (habiles < 5) fecha.setDate(fecha.getDate() + 1);
+  }
+  fecha.setHours(23, 59, 59, 999);
+  return fecha;
+};
+
+const formatearFechaCorta = (fecha) =>
+  `${String(fecha.getDate()).padStart(2, '0')}/${String(fecha.getMonth() + 1).padStart(2, '0')}/${fecha.getFullYear()}`;
+
+/**
+ * Registro de Compras: solo se declaran los comprobantes con detracción pagada por completo hasta el quinto día
+ * hábil del mes siguiente al período. Devuelve, por orden de compra, si cumple y el motivo cuando no cumple.
+ * Las compras sin detracción cumplen siempre (la retención y la percepción no condicionan el registro).
+ */
+async function evaluarDetraccionesRegistroCompras(ordenes, periodo) {
+  const plazo = quintoDiaHabilMesSiguiente(periodo.anio, periodo.mes);
+  const resultado = new Map();
+  const conDetraccion = ordenes.filter((oc) => oc.aplicaDetraccion);
+  ordenes.filter((oc) => !oc.aplicaDetraccion).forEach((oc) => resultado.set(Number(oc.id), { cumple: true }));
+  if (conDetraccion.length === 0) return { resultado, plazo };
+
+  const detracciones = await prisma.detraccion.findMany({
+    where: { ordenCompraId: { in: conDetraccion.map((oc) => oc.id) } },
+    select: { id: true, ordenCompraId: true, saldoPendiente: true },
+  });
+  const detraccionPorOrden = new Map(detracciones.map((d) => [Number(d.ordenCompraId), d]));
+
+  // Fecha del último pago de cada detracción (movimientos de caja no revertidos). El ITF y las comisiones de la
+  // operación llevan la misma fecha del pago, por eso no hace falta distinguirlos.
+  const movimientos = await prisma.movimientoCaja.groupBy({
+    by: ['detraccionId'],
+    where: { detraccionId: { in: detracciones.map((d) => d.id) }, NOT: { esReversion: true } },
+    _max: { fechaOperacionMovCaja: true },
+  });
+  const ultimoPago = new Map(movimientos.map((m) => [Number(m.detraccionId), m._max.fechaOperacionMovCaja]));
+
+  conDetraccion.forEach((oc) => {
+    const detraccion = detraccionPorOrden.get(Number(oc.id));
+    if (!detraccion) {
+      return resultado.set(Number(oc.id), { cumple: false, motivo: 'Tiene detracción pero no se generó su registro de detracción' });
+    }
+    if (Number(detraccion.saldoPendiente) > 0) {
+      return resultado.set(Number(oc.id), { cumple: false, motivo: `Detracción pendiente de pago (saldo ${Number(detraccion.saldoPendiente).toFixed(2)})` });
+    }
+    const fechaPago = ultimoPago.get(Number(detraccion.id));
+    if (!fechaPago) {
+      return resultado.set(Number(oc.id), { cumple: false, motivo: 'Detracción sin movimiento de pago registrado' });
+    }
+    if (new Date(fechaPago) > plazo) {
+      return resultado.set(Number(oc.id), {
+        cumple: false,
+        motivo: `Detracción pagada el ${formatearFechaCorta(new Date(fechaPago))}, después del plazo (${formatearFechaCorta(plazo)})`,
+      });
+    }
+    return resultado.set(Number(oc.id), { cumple: true });
+  });
+  return { resultado, plazo };
+}
+
+/**
+ * Compras fiscales con comprobante del período, separadas en las que se pueden declarar y las que quedan fuera por
+ * la regla de la detracción. Lo usan el TXT SUNAT (internamente) y el Excel/PDF del Registro de Compras.
+ */
+const obtenerElegiblesRegistroCompras = async (empresaId, periodoContableId) => {
+  const periodo = await prisma.periodoContable.findUnique({ where: { id: periodoContableId } });
+  if (!periodo) throw new NotFoundError('Periodo no encontrado');
+
+  const ordenes = await prisma.ordenCompra.findMany({
+    where: { empresaId, periodoContableId, comprobanteRecibido: true, esGerencial: false },
+    select: { id: true, numeroDocumento: true, aplicaDetraccion: true, total: true, proveedor: { select: { razonSocial: true } } },
+  });
+  const { resultado, plazo } = await evaluarDetraccionesRegistroCompras(ordenes, periodo);
+
+  return {
+    plazoDetraccion: plazo,
+    idsElegibles: ordenes.filter((oc) => resultado.get(Number(oc.id))?.cumple).map((oc) => oc.id),
+    excluidas: ordenes
+      .filter((oc) => !resultado.get(Number(oc.id))?.cumple)
+      .map((oc) => ({
+        id: oc.id,
+        numeroDocumento: oc.numeroDocumento,
+        proveedor: oc.proveedor?.razonSocial || '',
+        total: oc.total,
+        motivo: resultado.get(Number(oc.id))?.motivo,
+      })),
+  };
+};
+
 async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, incluirSaldosIniciales = false) {
   try {
     const [empresa, periodo] = await Promise.all([
@@ -5467,10 +5563,14 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
       ]
     });
 
+    // Detracción: solo se declaran los comprobantes con la detracción pagada hasta el quinto día hábil del mes siguiente
+    const { resultado: evaluacionDetraccion } = await evaluarDetraccionesRegistroCompras(ordenesCompra, periodo);
+
     // Filtrar solo documentos oficiales SUNAT: Factura (01), Boleta (03), NC (07), ND (08)
     let documentosOficialesSunat = ordenesCompra.filter(oc => {
       const codigo = oc.tipoDocumentoFinal?.codigoSunat;
-      return codigo === "01" || codigo === "03" || codigo === "07" || codigo === "08";
+      return (codigo === "01" || codigo === "03" || codigo === "07" || codigo === "08") &&
+        evaluacionDetraccion.get(Number(oc.id))?.cumple;
     });
 
     // Ordenar por fecha de emisión del comprobante del proveedor (fechaFacturacion) ASC.
@@ -5643,5 +5743,6 @@ export default {
   asignarActivoMasivo, // ⭐ AGREGADO: Asignación masiva de activo a órdenes de compra
   actualizarTipoCambio,
   obtenerTodos,
-  exportarRegistroComprasSUNAT
+  exportarRegistroComprasSUNAT,
+  obtenerElegiblesRegistroCompras
 };

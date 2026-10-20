@@ -516,3 +516,20 @@ export async function exportarRegistroComprasSUNAT(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * Compras elegibles para el Registro de Compras del período (detracción pagada hasta el quinto día hábil del mes
+ * siguiente) y las que quedan fuera con su motivo. Query: empresaId, periodoContableId
+ */
+export async function obtenerElegiblesRegistroCompras(req, res, next) {
+  try {
+    const { empresaId, periodoContableId } = req.query;
+    if (!empresaId || !periodoContableId) {
+      return res.status(400).json({ message: 'empresaId y periodoContableId son requeridos' });
+    }
+    const data = await ordenCompraService.obtenerElegiblesRegistroCompras(Number(empresaId), Number(periodoContableId));
+    res.json(toJSONBigInt(data));
+  } catch (err) {
+    next(err);
+  }
+}
