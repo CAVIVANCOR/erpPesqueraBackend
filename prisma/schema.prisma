@@ -6943,6 +6943,7 @@ model PagoCuentaPorCobrar {
   
   refOperacionEspecializadaMovCaja  BigInt?
   detraccionId                      BigInt?
+  prestamoBancarioId                BigInt?                         // ⭐ NUEVO: préstamo de factoring que respalda esta factura (medio FACTORING)
   notaCreditoPreFacturaId           BigInt?   @unique   // NC que originó este canje (medio CANJE-NC)
   urlVoucherOperacionConsolidado    String?
   urlPagoImpuesto                   String?
@@ -6962,6 +6963,7 @@ model PagoCuentaPorCobrar {
   asientosContables     AsientoContable[]  // Relación inversa
   detraccion            Detraccion?         @relation(fields: [detraccionId], references: [id])
   notaCreditoPreFactura PreFactura?         @relation("PagoCxCNotaCredito", fields: [notaCreditoPreFacturaId], references: [id])
+  prestamoBancario      PrestamoBancario?   @relation(fields: [prestamoBancarioId], references: [id])  // ⭐ NUEVO: factoring que respalda esta factura
   letraCanje            LetraCambioDocumento?                           // ⭐ NUEVO: si este cobro fue el canje de la CxC por una letra
 
   // ========================================
@@ -6978,6 +6980,7 @@ model PagoCuentaPorCobrar {
   @@index([refOperacionEspecializadaMovCaja])                        // ✅ AGREGAR ESTE
   @@index([tieneRetencion])                                          // ✅ AGREGADO
   @@index([tienePercepcion])                                         // ✅ AGREGADO
+  @@index([prestamoBancarioId])                                      // ⭐ NUEVO: facturas de un préstamo de factoring
 }
 
 // ============================================
@@ -8720,6 +8723,7 @@ model PrestamoBancario {
   cuotas                CuotaPrestamo[]
   garantias             GarantiaPrestamo[]
   pagosCuentaPorPagar   PagoCuentaPorPagar[]
+  pagosCuentaPorCobrar  PagoCuentaPorCobrar[]                       // ⭐ NUEVO: facturas entregadas al factoring (canje)
   asientosContables     AsientoContable[]
 
   // ========================================
