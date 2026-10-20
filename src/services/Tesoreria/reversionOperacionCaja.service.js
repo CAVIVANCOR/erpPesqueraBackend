@@ -13,6 +13,7 @@ import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
 import cuotaPrestamoService from "./cuotaPrestamo.service.js";
 import { importeEnSoles } from "../CuentasPorCobrarPagar/retencionPercepcionPago.helper.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
+import prestamoRelacionadoService from "./prestamoRelacionado.service.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -228,6 +229,8 @@ async function cargarOperacion(db, parametros) {
     pagosLetra,
     detMovs,
     prestamosDesembolso,
+    pagosPrestamoRel,
+    prestamosRelDesembolso,
     asientos,
     saldos,
     conciliaciones,
@@ -275,6 +278,15 @@ async function cargarOperacion(db, parametros) {
       where: { OR: [{ operacionMovCajaId: enMovimientos }, { refOperacionEspecializadaMovCaja: correlativo, empresaId }] },
     }),
     db.prestamoBancario.findMany({ where: { movimientoCajaDesembolsoId: enMovimientos } }),
+    db.pagoPrestamoRelacionado.findMany({
+      where: { OR: [{ movimientoCajaPrestatariaId: enMovimientos }, { movimientoCajaPrestamistaId: enMovimientos }] },
+      include: { prestamoRelacionado: true },
+    }),
+    db.prestamoRelacionado.findMany({
+      where: {
+        OR: [{ movimientoCajaDesembolsoPrestamistaId: enMovimientos }, { movimientoCajaDesembolsoPrestatariaId: enMovimientos }],
+      },
+    }),
     db.asientoContable.findMany({
       where: { submoduloOrigenId: submoduloCaja?.id ?? BigInt(SUBMODULO_MOVIMIENTOS_CAJA_DEFECTO), procesoOrigenId: enMovimientos },
       include: { periodoContable: { select: { id: true, estadoId: true, nombrePeriodo: true } } },
@@ -303,6 +315,8 @@ async function cargarOperacion(db, parametros) {
     pagosLetra,
     detMovs,
     prestamosDesembolso,
+    pagosPrestamoRel,
+    prestamosRelDesembolso,
     asientos,
     saldos,
     conciliaciones,
@@ -581,6 +595,36 @@ async function analizar(db, ctx) {
     });
   }
 
+  // ── Préstamos entre empresas relacionadas ───────────────────────────────
+  const gruposDevolucion = new Map();
+  for (const pago of ctx.pagosPrestamoRel) {
+    const id = clave(pago.prestamoRelacionadoId);
+    if (!gruposDevolucion.has(id)) gruposDevolucion.set(id, { prestamo: pago.prestamoRelacionado, aplicado: 0 });
+    gruposDevolucion.get(id).aplicado = r2(gruposDevolucion.get(id).aplicado + num(pago.montoAplicado));
+  }
+  for (const { prestamo, aplicado } of gruposDevolucion.values()) {
+    prestamos.push({
+      id: prestamo.id,
+      numeroPrestamo: prestamo.numeroPrestamo,
+      accion: `Se anula la devolución de ${aplicado.toFixed(2)}: el saldo pendiente del préstamo entre relacionadas sube de ${num(prestamo.saldoCapital).toFixed(2)} a ${r2(num(prestamo.saldoCapital) + aplicado).toFixed(2)} y vuelve a estar vigente`,
+    });
+  }
+  for (const prestamo of ctx.prestamosRelDesembolso) {
+    const devoluciones = await db.pagoPrestamoRelacionado.count({
+      where: { prestamoRelacionadoId: prestamo.id, id: { notIn: ctx.pagosPrestamoRel.map((p) => p.id) } },
+    });
+    if (devoluciones > 0) {
+      bloqueos.push(
+        `El préstamo entre relacionadas N° ${prestamo.numeroPrestamo} ya tiene ${devoluciones} devolución(es) registrada(s): primero revierta esas devoluciones.`,
+      );
+    }
+    prestamos.push({
+      id: prestamo.id,
+      numeroPrestamo: prestamo.numeroPrestamo,
+      accion: "El préstamo entre relacionadas se elimina junto con su desembolso",
+    });
+  }
+
   // ── Entregas a rendir (asignaciones) ────────────────────────────────────
   const asignaciones = [];
   for (const detMov of ctx.detMovs) {
@@ -786,6 +830,18 @@ export async function ejecutarReversion(tx, { motivo, usuarioId, ...parametros }
     });
   }
 
+  // 5b. Préstamos entre relacionadas: se eliminan las devoluciones y los desembolsos de la operación
+  //     y el saldo y estado de los préstamos con devoluciones se recalcula desde los pagos que quedan
+  if (ctx.pagosPrestamoRel.length > 0) {
+    await tx.pagoPrestamoRelacionado.deleteMany({ where: { id: { in: ctx.pagosPrestamoRel.map((p) => p.id) } } });
+    for (const prestamoId of unicos(ctx.pagosPrestamoRel.map((p) => p.prestamoRelacionadoId))) {
+      await prestamoRelacionadoService.recalcularPrestamo(tx, prestamoId);
+    }
+  }
+  if (ctx.prestamosRelDesembolso.length > 0) {
+    await tx.prestamoRelacionado.deleteMany({ where: { id: { in: ctx.prestamosRelDesembolso.map((p) => p.id) } } });
+  }
+
   // 6. Entregas a rendir: solo se limpian los campos de validación (el monto no se toca)
   const urlsDePagos = [...ctx.pagosCxC, ...ctx.pagosCxP, ...ctx.pagosPersonal, ...ctx.pagosTributaria, ...ctx.pagosCuota].flatMap((pago) =>
     Object.entries(pago)
@@ -853,7 +909,8 @@ export async function ejecutarReversion(tx, { motivo, usuarioId, ...parametros }
     movimientosEliminados: movIds.length,
     asientosEliminados: ctx.asientos.length,
     pagosEliminados:
-      ctx.pagosCxC.length + ctx.pagosCxP.length + ctx.pagosPersonal.length + ctx.pagosTributaria.length + ctx.pagosCuota.length,
+      ctx.pagosCxC.length + ctx.pagosCxP.length + ctx.pagosPersonal.length + ctx.pagosTributaria.length + ctx.pagosCuota.length +
+      ctx.pagosPrestamoRel.length,
     deudasRestauradas: plan.deudas.length,
     impuestosRestaurados: plan.impuestos.length,
     asignacionesRestauradas: ctx.detMovs.length,

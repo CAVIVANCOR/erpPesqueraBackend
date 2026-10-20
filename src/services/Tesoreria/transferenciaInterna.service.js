@@ -3,6 +3,7 @@ import { NotFoundError, DatabaseError, ValidationError } from '../../utils/error
 import correlativoService from './correlativoOperacionCaja.service.js';
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import periodoContableService from '../Contabilidad/periodoContable.service.js';
+import prestamoRelacionadoService from './prestamoRelacionado.service.js';
 import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
 import { ESTADO_ASIENTO_CONTABLE } from '../../utils/estados.constants.js';
 import { entidadDeBanco } from '../../utils/entidadBanco.js';
@@ -358,6 +359,7 @@ async function validarDatosTransferenciaInterna(data, tx = null) {
   const usaTipoPrestamo =
     tipoEgreso === TIPOS_PRESTAMO_RELACIONADO.EGRESO || tipoIngreso === TIPOS_PRESTAMO_RELACIONADO.INGRESO;
   let esPrestamoRelacionado = false;
+  let prestamoValidado = null;
 
   if (usaTipoPrestamo) {
     if (!cuentaOrigen || !cuentaDestino) {
@@ -380,10 +382,12 @@ async function validarDatosTransferenciaInterna(data, tx = null) {
         'Debe indicar si la operación es un Desembolso (nuevo préstamo) o una Devolución de un préstamo entre relacionadas.'
       );
     }
+    // Número del préstamo (desembolso) o préstamo y saldo (devolución): errores específicos antes de registrar nada
+    prestamoValidado = await prestamoRelacionadoService.validarOperacion(db, data, cuentaOrigen, cuentaDestino);
     esPrestamoRelacionado = true;
   }
 
-  return { cuentaOrigen, cuentaDestino, saldoOrigen, advertenciaSaldo, esPrestamoRelacionado };
+  return { cuentaOrigen, cuentaDestino, saldoOrigen, advertenciaSaldo, esPrestamoRelacionado, prestamoValidado };
 }
 
 // ════════════════════════════════════════════════════════════
@@ -715,6 +719,21 @@ async function crearAsientoSegunTipo(
   // Préstamo entre relacionadas: relacionada que se identifica en la línea de la cuenta por cobrar/pagar
   let entidadRelacionadaId = null;
   let cuentaConEntidadId = null;
+  // Monto del préstamo en su propia moneda (si no es soles): va en la línea de la cuenta de relacionadas
+  let montoMonedaExtranjeraPrestamo = null;
+
+  // Descripción del gasto (ITF / comisión) en la glosa. En un préstamo entre relacionadas la descripción del movimiento
+  // es la glosa larga de la operación (empresas, cuentas y montos de ambos lados), que ya consta en los asientos del
+  // préstamo: el gasto se describe con la operación, el N° del préstamo, su cuenta bancaria y el N° de operación.
+  const descripcionGasto = prestamoRelacionado
+    ? [
+        `${prestamoRelacionado.operacion === 'DESEMBOLSO' ? 'DESEMBOLSO' : 'DEVOLUCIÓN'} DE PRÉSTAMO ENTRE RELACIONADAS${prestamoRelacionado.numeroPrestamo ? ` N° ${prestamoRelacionado.numeroPrestamo}` : ''}`,
+        movimiento.cuentaCorrienteOrigen
+          ? `${movimiento.cuentaCorrienteOrigen.banco?.nombre || 'BANCO'} CTA. ${movimiento.cuentaCorrienteOrigen.numeroCuenta || movimiento.cuentaCorrienteOrigen.id}`
+          : null,
+        movimiento.refOperacionEspecializadaMovCaja ? `OP. N° ${movimiento.refOperacionEspecializadaMovCaja}` : null,
+      ].filter(Boolean).join(' - ')
+    : (movimiento.descripcion || 'TRANSFERENCIA');
 
   // ✅ PROFESIONAL: Diferenciar ITF y Comisión por descripción (mismo tipoMovimientoId: 163)
   const tipoMovimientoEsITFoComision = Number(movimiento.tipoMovimientoId) === TIPOS_MOVIMIENTO.ITF;
@@ -764,7 +783,7 @@ async function crearAsientoSegunTipo(
     cuentaDebe = cuentaGastoITF.id;
     cuentaHaber = movimiento.cuentaCorrienteOrigen.cuentaContable.id;
     centroCostoId = cuentaGastoITF.centroCostoId;
-    glosa = `POR EL ITF - ${movimiento.descripcion || 'TRANSFERENCIA'}`;
+    glosa = `POR EL ITF - ${descripcionGasto}`;
     
   }
   // ════════════════════════════════════════════════════════════
@@ -796,7 +815,7 @@ async function crearAsientoSegunTipo(
     cuentaDebe = cuentaGastoComision.id;
     cuentaHaber = movimiento.cuentaCorrienteOrigen.cuentaContable.id;
     centroCostoId = cuentaGastoComision.centroCostoId;
-    glosa = `POR LA COMISIÓN BANCARIA - ${movimiento.descripcion || 'TRANSFERENCIA'}`;
+    glosa = `POR LA COMISIÓN BANCARIA - ${descripcionGasto}`;
     
 
   }
@@ -814,7 +833,10 @@ async function crearAsientoSegunTipo(
     cuentaOrigen && cuentaDestino && !esMismaEmpresa &&
     [TIPOS_PRESTAMO_RELACIONADO.EGRESO, TIPOS_PRESTAMO_RELACIONADO.INGRESO].includes(Number(movimiento.tipoMovimientoId))
   ) {
-    const esMonedaExtranjera = monedaId !== 1;
+    // La cuenta de relacionadas sigue la moneda del PRÉSTAMO, no la del movimiento: un préstamo en dólares que la
+    // prestataria recibe en soles se registra igual en 171112/471112, con su monto en dólares en la línea.
+    const esMonedaExtranjera = Number(prestamoRelacionado.monedaPrestamoId) !== 1;
+    montoMonedaExtranjeraPrestamo = esMonedaExtranjera ? Number(prestamoRelacionado.montoPrestamo) : null;
     const cuentaPorCobrar = prestamoRelacionado.cuentas[esMonedaExtranjera ? CUENTAS_PRESTAMO_RELACIONADO.POR_COBRAR_ME : CUENTAS_PRESTAMO_RELACIONADO.POR_COBRAR_MN];
     const cuentaPorPagar = prestamoRelacionado.cuentas[esMonedaExtranjera ? CUENTAS_PRESTAMO_RELACIONADO.POR_PAGAR_ME : CUENTAS_PRESTAMO_RELACIONADO.POR_PAGAR_MN];
     const esEgresoPrestamo = Number(movimiento.tipoMovimientoId) === TIPOS_PRESTAMO_RELACIONADO.EGRESO;
@@ -826,7 +848,17 @@ async function crearAsientoSegunTipo(
     ];
     const nombreRelacionada = relacionada?.razonSocial || 'EMPRESA RELACIONADA';
     entidadRelacionadaId = relacionada?.entidadComercialId ? Number(relacionada.entidadComercialId) : null;
-    const detalle = movimiento.descripcion ? ` - ${movimiento.descripcion}` : '';
+
+    // Glosa descriptiva: operación, N° del préstamo, contraparte, monto, cuenta bancaria propia y N° de operación,
+    // para que el asiento se entienda por sí solo en el libro diario y en el mayor de relacionadas.
+    const cuentaPropia = esEgresoPrestamo ? cuentaOrigen : cuentaDestino;
+    const referencia = [
+      `POR ${[movimiento.moneda?.simbolo, montoOriginal.toFixed(2)].filter(Boolean).join(' ')}`,
+      `${cuentaPropia.banco?.nombre || 'BANCO'} CTA. ${cuentaPropia.numeroCuenta || cuentaPropia.id}`,
+      movimiento.refOperacionEspecializadaMovCaja ? `OP. N° ${movimiento.refOperacionEspecializadaMovCaja}` : null,
+      movimiento.numeroOperacionPagoBanco ? `NRO. OPERACIÓN BANCARIA ${movimiento.numeroOperacionPagoBanco}` : null,
+    ].filter(Boolean).join(' - ');
+    const nroPrestamo = prestamoRelacionado.numeroPrestamo ? ` N° ${prestamoRelacionado.numeroPrestamo}` : '';
 
     if (esEgresoPrestamo) {
       // Empresa ORIGEN: la que entrega el dinero
@@ -834,16 +866,16 @@ async function crearAsientoSegunTipo(
       cuentaDebe = esDesembolso ? cuentaPorCobrar.id : cuentaPorPagar.id;
       cuentaConEntidadId = cuentaDebe;
       glosa = esDesembolso
-        ? `PRÉSTAMO OTORGADO A ${nombreRelacionada}${detalle}`
-        : `DEVOLUCIÓN DE PRÉSTAMO A ${nombreRelacionada}${detalle}`;
+        ? `DESEMBOLSO DE PRÉSTAMO ENTRE RELACIONADAS${nroPrestamo} OTORGADO A ${nombreRelacionada} - ${referencia}`
+        : `DEVOLUCIÓN DE PRÉSTAMO ENTRE RELACIONADAS${nroPrestamo} RECIBIDO DE ${nombreRelacionada} - ${referencia}`;
     } else {
       // Empresa DESTINO: la que recibe el dinero
       cuentaDebe = cuentaDestino.cuentaContableId;
       cuentaHaber = esDesembolso ? cuentaPorPagar.id : cuentaPorCobrar.id;
       cuentaConEntidadId = cuentaHaber;
       glosa = esDesembolso
-        ? `PRÉSTAMO RECIBIDO DE ${nombreRelacionada}${detalle}`
-        : `COBRANZA DE PRÉSTAMO OTORGADO A ${nombreRelacionada}${detalle}`;
+        ? `RECEPCIÓN DE PRÉSTAMO ENTRE RELACIONADAS${nroPrestamo} OTORGADO POR ${nombreRelacionada} - ${referencia}`
+        : `COBRANZA DE PRÉSTAMO ENTRE RELACIONADAS${nroPrestamo} OTORGADO A ${nombreRelacionada} - ${referencia}`;
     }
   }
   // ════════════════════════════════════════════════════════════
@@ -1027,7 +1059,10 @@ async function crearAsientoSegunTipo(
             haber: 0,
             monedaId: 1,  // ✅ SIEMPRE PEN (1) - Los asientos contables son en soles
             tipoCambio: tipoCambio,
-            debeMonedaExtranjera: monedaId === 2 ? montoOriginal : null,  // ✅ Monto original en USD si aplica
+            // Moneda extranjera: en la línea de relacionadas va el monto del préstamo; en el resto, el original del movimiento
+            debeMonedaExtranjera: cuentaConEntidadId && cuentaDebe === cuentaConEntidadId && montoMonedaExtranjeraPrestamo != null
+              ? montoMonedaExtranjeraPrestamo
+              : (monedaId === 2 ? montoOriginal : null),
             haberMonedaExtranjera: null,
             centroCostoId: centroCostoId,  // ✅ Para ITF y Comisión
             entidadComercialId: cuentaConEntidadId && cuentaDebe === cuentaConEntidadId ? entidadRelacionadaId : null,
@@ -1048,7 +1083,9 @@ async function crearAsientoSegunTipo(
             monedaId: 1,  // ✅ SIEMPRE PEN (1) - Los asientos contables son en soles
             tipoCambio: tipoCambio,
             debeMonedaExtranjera: null,
-            haberMonedaExtranjera: monedaId === 2 ? montoOriginal : null,  // ✅ Monto original en USD si aplica
+            haberMonedaExtranjera: cuentaConEntidadId && cuentaHaber === cuentaConEntidadId && montoMonedaExtranjeraPrestamo != null
+              ? montoMonedaExtranjeraPrestamo
+              : (monedaId === 2 ? montoOriginal : null),
             centroCostoId: null,
             entidadComercialId: cuentaConEntidadId && cuentaHaber === cuentaConEntidadId ? entidadRelacionadaId : null,
             tipoDocumentoOrigenId: null,
@@ -1128,7 +1165,7 @@ export async function procesarTransferenciaInterna(data) {
       // ════════════════════════════════════════════════════════════
       // PASO 1: VALIDAR DATOS
       // ════════════════════════════════════════════════════════════
-      const { cuentaOrigen, cuentaDestino, saldoOrigen, advertenciaSaldo, esPrestamoRelacionado } = 
+      const { cuentaOrigen, cuentaDestino, saldoOrigen, advertenciaSaldo, esPrestamoRelacionado, prestamoValidado } = 
         await validarDatosTransferenciaInterna(data, tx);
 
       // ════════════════════════════════════════════════════════════
@@ -1504,15 +1541,34 @@ export async function procesarTransferenciaInterna(data) {
       ].filter(m => m !== null && Number(m.monto) > 0);
 
 
-      // Préstamo entre relacionadas: datos de ambas empresas para identificar a la relacionada en el asiento
+      // Préstamo entre relacionadas: se registra el préstamo (desembolso) o la devolución con los movimientos ya creados.
+      // Va ANTES de los asientos porque la glosa de cada asiento cita el N° del préstamo (PR-000001), que nace aquí.
+      let registroPrestamo = null;
       let prestamoRelacionado = null;
       if (esPrestamoRelacionado) {
+        registroPrestamo = await prestamoRelacionadoService.registrarOperacion(tx, {
+          data,
+          validacion: prestamoValidado,
+          cuentaOrigen,
+          cuentaDestino,
+          movimientoEgreso,
+          movimientoIngreso,
+          correlativo,
+          periodoContable,
+          usuarioId: data.usuarioId
+        });
+        // Datos de ambas empresas para identificar a la relacionada en el asiento
         const empresasPrestamo = await tx.empresa.findMany({
           where: { id: { in: [Number(cuentaOrigen.empresaId), Number(cuentaDestino.empresaId)] } },
           select: { id: true, razonSocial: true, entidadComercialId: true }
         });
+        const esDevolucion = prestamoValidado.operacion === 'DEVOLUCION';
         prestamoRelacionado = {
           operacion: data.operacionPrestamoRelacionado,
+          numeroPrestamo: registroPrestamo.numeroPrestamo,
+          // Moneda y monto del préstamo: desembolso = los de la cuenta de la prestamista; devolución = capital aplicado
+          monedaPrestamoId: esDevolucion ? prestamoValidado.prestamo.monedaId : cuentaOrigen.monedaId,
+          montoPrestamo: esDevolucion ? prestamoValidado.montoAplicado : Number(data.monto),
           empresas: Object.fromEntries(empresasPrestamo.map(e => [Number(e.id), e]))
         };
       }
@@ -1669,7 +1725,9 @@ export async function procesarTransferenciaInterna(data) {
           comisionDestino: movimientosMap[movimientoComisionDestino?.id?.toString()] || null
         },
         saldosCuentaCorriente,
-        asientosContables: asientosGenerados
+        asientosContables: asientosGenerados,
+        prestamoRelacionadoId: registroPrestamo?.prestamoRelacionadoId || null,
+        pagoPrestamoRelacionadoId: registroPrestamo?.pagoPrestamoRelacionadoId || null
       };
     } catch (error) {
       console.error('❌ Error en procesarTransferenciaInterna:', error);

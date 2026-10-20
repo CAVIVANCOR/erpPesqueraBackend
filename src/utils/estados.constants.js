@@ -140,6 +140,14 @@ export const ESTADO_PRESTAMO_BANCARIO = {
   ANULADO: 85,
 };
 
+// Préstamos entre empresas relacionadas: usan los mismos estados del catálogo PRESTAMOS BANCARIO
+// (VIGENTE mientras tenga saldo, PAGADO al devolver todo el capital, ANULADO al revertir el desembolso)
+export const ESTADO_PRESTAMO_RELACIONADO = {
+  VIGENTE: ESTADO_PRESTAMO_BANCARIO.VIGENTE,
+  PAGADO: ESTADO_PRESTAMO_BANCARIO.PAGADO,
+  ANULADO: ESTADO_PRESTAMO_BANCARIO.ANULADO,
+};
+
 // Estados que el cron recalcula según sus cuotas. PAGADO también se recalcula: es un estado
 // derivado (todas las cuotas canceladas) y debe reabrirse si el préstamo tiene cuotas por pagar.
 // APROBADO solo lo mueve Caja al registrar el desembolso; REFINANCIADO y ANULADO se respetan.
