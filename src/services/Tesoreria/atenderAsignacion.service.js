@@ -308,11 +308,10 @@ const atenderAsignacion = async (datos) => {
       if (detMov.validadoTesoreria) {
         throw new ValidationError("Esta asignación ya fue atendida");
       }
-      if (
-        detMov.formaParteCalculoEntregaARendir !== true ||
-        detMov.entidadComercialId !== null
-      ) {
-        throw new ValidationError("Este registro no es una asignación válida");
+      if (detMov.formaParteCalculoEntregaARendir !== true) {
+        throw new ValidationError(
+          "Este registro no es una asignación válida: no forma parte del cálculo de la entrega a rendir.",
+        );
       }
       if (!detMov.monedaId) {
         throw new ValidationError("La asignación no tiene moneda definida");
