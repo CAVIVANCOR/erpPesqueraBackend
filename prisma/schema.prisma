@@ -6177,6 +6177,7 @@ model PeriodoContable {
   pagosDeudaTributaria  PagoDeudaTributaria[]
   pagosPrestamoRelacionado  PagoPrestamoRelacionado[]
   prestamosRelacionados  PrestamoRelacionado[]
+  pagosLetraCambio       PagoLetraCambio[]                                // ⭐ NUEVO: pagos de letras de este período contable
 
   @@unique([empresaId, anio, mes])
   @@index([empresaId])
@@ -6840,6 +6841,7 @@ model CuentaPorCobrar {
   pagos                     PagoCuentaPorCobrar[]                        // Pagos recibidos
   detallesFlujoCaja         DetalleFlujoCajaProyectado[]                 // Proyección de flujo de caja
   letrasCambio              LetraCambio[]                                // Letras de cambio generadas
+  letrasCanje               LetraCambioDocumento[]                       // ⭐ NUEVO: letras que respaldan esta CxC (canje)
   asientosContables         AsientoContable[]                           // Relación inversa - Asientos generados
 
   movimientosCaja           MovimientoCaja[]    // ✅ AGREGAR - Todos los pagos vinculados a esta CxC
@@ -6960,6 +6962,7 @@ model PagoCuentaPorCobrar {
   asientosContables     AsientoContable[]  // Relación inversa
   detraccion            Detraccion?         @relation(fields: [detraccionId], references: [id])
   notaCreditoPreFactura PreFactura?         @relation("PagoCxCNotaCredito", fields: [notaCreditoPreFacturaId], references: [id])
+  letraCanje            LetraCambioDocumento?                           // ⭐ NUEVO: si este cobro fue el canje de la CxC por una letra
 
   // ========================================
   // ÍNDICES
@@ -7073,6 +7076,7 @@ model CuentaPorPagar {
   detallesFlujoCaja         DetalleFlujoCajaProyectado[]            // Proyección de flujo de caja
   asientosContables         AsientoContable[]  // Relación inversa - Asientos generados
   letrasCambio              LetraCambio[]
+  letrasCanje               LetraCambioDocumento[]                       // ⭐ NUEVO: letras que respaldan esta CxP (canje)
 
   movimientosCaja           MovimientoCaja[]    // ✅ AGREGAR - Todos los pagos vinculados a esta CxP
 
@@ -7205,6 +7209,7 @@ model PagoCuentaPorPagar {
   asientosContables     AsientoContable[]  // Relación inversa
   detraccion            Detraccion?         @relation(fields: [detraccionId], references: [id])  // ✅ NUEVO
   notaCreditoOrdenCompra OrdenCompra?       @relation("PagoCxPNotaCredito", fields: [notaCreditoOrdenCompraId], references: [id])
+  letraCanje            LetraCambioDocumento?                           // ⭐ NUEVO: si este pago fue el canje de la CxP por una letra
 
   // ========================================
   // ÍNDICES
@@ -7714,6 +7719,9 @@ model UbicacionLetra {
 // ============================================
 // LetraCambio
 // Letras de Cambio por Cobrar o Pagar
+// Una letra puede respaldar varias facturas (LetraCambioDocumento)
+// Una letra refinanciada genera N letras nuevas (letraRenovadaId apunta a la letra origen)
+// Intereses y mora NO se calculan: se ingresan manualmente en cada PagoLetraCambio
 // ============================================
 
 model LetraCambio {
@@ -7742,11 +7750,14 @@ model LetraCambio {
   
   // Montos
   monedaId              BigInt
-  montoOriginal         Decimal     @db.Decimal(18, 2)
+  montoOriginal         Decimal     @db.Decimal(18, 2)  // ⭐ MODIFICADO: capital emitido (sin impuestos ni intereses)
+  saldoCapital          Decimal     @default(0) @db.Decimal(18, 2)  // ⭐ NUEVO: montoOriginal - capital pagado (se recalcula con cada pago)
+  interesPagado         Decimal     @default(0) @db.Decimal(18, 2)  // ⭐ NUEVO: acumulado de intereses pagados (informativo)
+  moraPagada            Decimal     @default(0) @db.Decimal(18, 2)  // ⭐ NUEVO: acumulado de mora pagada (informativo)
   
   // Origen
-  cuentaPorCobrarId     BigInt?
-  cuentaPorPagarId      BigInt?
+  cuentaPorCobrarId     BigInt?                                      // ⭐ MODIFICADO: en desuso, el origen está en LetraCambioDocumento
+  cuentaPorPagarId      BigInt?                                      // ⭐ MODIFICADO: en desuso, el origen está en LetraCambioDocumento
   
   // Estado
   estadoId              BigInt
@@ -7758,14 +7769,16 @@ model LetraCambio {
   montoDescuento        Decimal?    @db.Decimal(18, 2)
   tasaDescuento         Decimal?    @db.Decimal(5, 2)
   
-  // Renovación
-  renovada              Boolean     @default(false)
-  letraRenovadaId       BigInt?
+  // Refinanciación (letra origen -> N letras nuevas)
+  renovada              Boolean     @default(false)     // ⭐ MODIFICADO: true en la letra ORIGEN que fue refinanciada
+  letraRenovadaId       BigInt?                          // ⭐ MODIFICADO: en cada letra NUEVA, apunta a su letra origen
+  fechaRefinanciacion   DateTime?                        // ⭐ NUEVO: fecha en que la letra fue refinanciada
   
   // Protesto
   protestada            Boolean     @default(false)
   fechaProtesto         DateTime?
   motivoProtesto        String?     @db.Text
+  fechaLimiteProtesto   DateTime?                        // ⭐ NUEVO: vencimiento + 7 días hábiles (lunes a viernes)
   
   // Ubicación física
   ubicacionLetraId      BigInt?
@@ -7796,6 +7809,7 @@ model LetraCambio {
   pagos                 PagoLetraCambio[]
   renovaciones          LetraCambio[]           @relation("RenovacionLetra")
   endosos               EndosoLetraCambio[]
+  documentos            LetraCambioDocumento[]  // ⭐ NUEVO: facturas que respalda esta letra (canje)
   
   @@index([empresaId, fechaVencimiento])
   @@index([tipoLetra])
@@ -7808,11 +7822,55 @@ model LetraCambio {
   @@index([tipoDocumentoId])
   @@index([serieDocId])
   @@index([ubicacionLetraId])
+  @@index([letraRenovadaId])                           // ⭐ NUEVO: buscar las letras nacidas de una refinanciación
+  @@index([fechaLimiteProtesto])                       // ⭐ NUEVO: el proceso diario busca letras por vencer/protestar
+}
+
+// ============================================
+// LetraCambioDocumento
+// Facturas (CxP o CxC) que respalda cada letra de cambio (canje)
+// Una letra puede respaldar varias facturas y una factura puede repartirse en varias letras
+// El impuesto (detracción, retención, percepción) de la factura se paga cuando
+// capitalPagado alcanza montoCanjeado en TODAS las letras del documento (refinanciadas incluidas)
+// ============================================
+
+model LetraCambioDocumento {
+  id                    BigInt      @id @default(autoincrement())
+  letraCambioId         BigInt
+
+  // Documento canjeado (uno de los dos)
+  cuentaPorPagarId      BigInt?                                      // COMPRAS: CxP canjeada
+  cuentaPorCobrarId     BigInt?                                      // VENTAS: CxC canjeada
+
+  // Montos
+  montoCanjeado         Decimal     @db.Decimal(18, 2)               // Porción del capital de la letra que corresponde a esta factura
+  capitalPagado         Decimal     @default(0) @db.Decimal(18, 2)   // Capital pagado atribuido a esta factura (prorrata de cada pago)
+
+  // Cancelación de la deuda original por canje (sin movimiento de caja)
+  pagoCanjeCxPId        BigInt?     @unique                          // PagoCuentaPorPagar que canceló la CxP por canje
+  pagoCanjeCxCId        BigInt?     @unique                          // PagoCuentaPorCobrar que canceló la CxC por canje
+
+  // Auditoría
+  creadoEn              DateTime    @default(now())
+  creadoPor             BigInt?
+
+  // Relaciones
+  letraCambio           LetraCambio           @relation(fields: [letraCambioId], references: [id])
+  cuentaPorPagar        CuentaPorPagar?       @relation(fields: [cuentaPorPagarId], references: [id])
+  cuentaPorCobrar       CuentaPorCobrar?      @relation(fields: [cuentaPorCobrarId], references: [id])
+  pagoCanjeCxP          PagoCuentaPorPagar?   @relation(fields: [pagoCanjeCxPId], references: [id])
+  pagoCanjeCxC          PagoCuentaPorCobrar?  @relation(fields: [pagoCanjeCxCId], references: [id])
+
+  @@index([letraCambioId])
+  @@index([cuentaPorPagarId])
+  @@index([cuentaPorCobrarId])
 }
 
 // ============================================
 // PagoLetraCambio
 // Pagos realizados a letras de cambio
+// montoPago = montoCapital + montoInteres + montoMora
+// Intereses y mora se ingresan manualmente el día del pago
 // ============================================
 
 model PagoLetraCambio {
@@ -7820,8 +7878,14 @@ model PagoLetraCambio {
   letraCambioId         BigInt
   
   fechaPago             DateTime
-  montoPago             Decimal     @db.Decimal(18, 2)
+  montoPago             Decimal     @db.Decimal(18, 2)  // ⭐ MODIFICADO: total desembolsado = capital + interés + mora
   monedaId              BigInt
+  tipoCambio            Decimal?    @db.Decimal(10, 4)  // ⭐ NUEVO: si se paga en moneda distinta a la de la letra
+  
+  // Desglose del pago
+  montoCapital          Decimal     @default(0) @db.Decimal(18, 2)  // ⭐ NUEVO: reduce el saldo de capital de la letra
+  montoInteres          Decimal     @default(0) @db.Decimal(18, 2)  // ⭐ NUEVO: manual; va a gasto/ingreso financiero
+  montoMora             Decimal     @default(0) @db.Decimal(18, 2)  // ⭐ NUEVO: manual; va a gasto/ingreso por mora
   
   // Medio de pago
   medioPagoId           BigInt
@@ -7830,6 +7894,10 @@ model PagoLetraCambio {
   
   // Vinculación con caja
   movimientoCajaId      BigInt?
+  
+  // Integración contable
+  fechaContable         DateTime    @default(now())     // ⭐ NUEVO: fecha del período contable
+  periodoContableId     BigInt?                          // ⭐ NUEVO: período contable (para control de cierre)
   
   observaciones         String?     @db.Text
   
@@ -7845,10 +7913,12 @@ model PagoLetraCambio {
   banco                 Banco?              @relation(fields: [bancoId], references: [id])
   movimientoCaja        MovimientoCaja?     @relation(fields: [movimientoCajaId], references: [id])
   registrador           Personal?           @relation(fields: [registradoPor], references: [id])
+  periodoContable       PeriodoContable?    @relation(fields: [periodoContableId], references: [id])  // ⭐ NUEVO
   
   @@index([letraCambioId])
   @@index([fechaPago])
   @@index([movimientoCajaId])
+  @@index([refOperacionEspecializadaMovCaja])        // ⭐ NUEVO: la reversión busca por operación de Tesorería
 }
 
 
