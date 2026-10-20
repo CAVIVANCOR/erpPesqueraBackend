@@ -27,41 +27,13 @@ async function validarClavesForaneas(data) {
     prisma.centroCosto.findUnique({ where: { id: data.centroCostoId } }),
   ];
 
-  // Agregar validación de Empresa si se proporciona empresaId
-  if (data.empresaId) {
-    validaciones.push(
-      prisma.empresa.findUnique({
-        where: { id: data.empresaId },
-      }),
-    );
-  }
-
-  // Agregar validación de ModuloSistema si se proporciona moduloOrigenId
-  if (data.moduloOrigenId) {
-    validaciones.push(
-      prisma.moduloSistema.findUnique({
-        where: { id: data.moduloOrigenId },
-      }),
-    );
-  }
-
-  // Agregar validación de ModuloSistema si se proporciona moduloOrigenMovCajaId
-  if (data.moduloOrigenMovCajaId) {
-    validaciones.push(
-      prisma.moduloSistema.findUnique({
-        where: { id: data.moduloOrigenMovCajaId },
-      }),
-    );
-  }
-
-  // Agregar validación de EntidadComercial si se proporciona entidadComercialId
-  if (data.entidadComercialId) {
-    validaciones.push(
-      prisma.entidadComercial.findUnique({
-        where: { id: data.entidadComercialId },
-      }),
-    );
-  }
+  // Cada validación opcional ocupa SIEMPRE su posición (null si el dato no viene): el resultado se lee por orden
+  validaciones.push(
+    data.empresaId ? prisma.empresa.findUnique({ where: { id: data.empresaId } }) : Promise.resolve(null),
+    data.moduloOrigenId ? prisma.moduloSistema.findUnique({ where: { id: data.moduloOrigenId } }) : Promise.resolve(null),
+    data.moduloOrigenMovCajaId ? prisma.moduloSistema.findUnique({ where: { id: data.moduloOrigenMovCajaId } }) : Promise.resolve(null),
+    data.entidadComercialId ? prisma.entidadComercial.findUnique({ where: { id: data.entidadComercialId } }) : Promise.resolve(null),
+  );
 
   const [
     responsable,
@@ -242,7 +214,10 @@ const crear = async (data, usuarioId = null) => {
       select: { modeloDocumentoOrigen: true },
     });
     const origenPendienteOrdenCompra =
-      Number(data.documentoOrigenId) === 0 && moduloOrigenCreacion?.modeloDocumentoOrigen === "OrdenCompra";
+      data.documentoOrigenId !== null &&
+      data.documentoOrigenId !== undefined &&
+      Number(data.documentoOrigenId) === 0 &&
+      moduloOrigenCreacion?.modeloDocumentoOrigen === "OrdenCompra";
     if (!origenPendienteOrdenCompra) {
       data.documentoOrigenId = data.documentoOrigenId || 37; // Temporada actual
     }

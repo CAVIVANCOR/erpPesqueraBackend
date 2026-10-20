@@ -11,6 +11,7 @@ import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { ESTADO_ASIENTO_CONTABLE, ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
 import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
 import { entidadDeBanco } from "../../utils/entidadBanco.js";
+import { prepararDesembolsoFactoring, registrarDesembolsoFactoring, recomprarFacturasPorPagoCuota } from "./factoringPrestamo.service.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -920,6 +921,15 @@ const procesarPagoCuotas = async (datos) => {
         });
         asientos.push(...cargos.asientos);
 
+        // [CASO B] FACTORING con recurso: al pagar MEGUI la cuota, las facturas entregadas en descuento vuelven
+        // a cartera (DEBE 121201 / HABER 121401) y su cuenta por cobrar se reabre para cobrarse al cliente
+        let facturasRecompradas = [];
+        if (esFactoring) {
+          const recompra = await recomprarFacturasPorPagoCuota(tx, { prestamo, ctx, egreso, usuarioId });
+          asientos.push(...recompra.asientos);
+          facturasRecompradas = recompra.facturas;
+        }
+
         await tx.movimientoCaja.updateMany({
           where: {
             id: {
@@ -962,6 +972,7 @@ const procesarPagoCuotas = async (datos) => {
             distribucion,
             resumen: {
               cuotasPagadas: distribucion.length,
+              facturasRecompradas,
               montoPagado: montoTotal,
               itf,
               comision,
@@ -1062,7 +1073,11 @@ const procesarDesembolso = async (datos) => {
           tipoCambio: datos.tipoCambio,
         });
         const esFactoring = Boolean(prestamo.tipoPrestamo?.esFactoring);
-        const cuentaCapital = await obtenerCuentaCapital(tx, prestamo, "DESEMBOLSO", ctx.esMonedaNacional);
+        // [CASO B] FACTORING: se desembolsa contra facturas (canje + descuento a 673111, ver factoringPrestamo.service.js)
+        const factoring = esFactoring ? await prepararDesembolsoFactoring(tx, { prestamo, ctx, datos }) : null;
+        const cuentaCapital = esFactoring ? null : await obtenerCuentaCapital(tx, prestamo, "DESEMBOLSO", ctx.esMonedaNacional);
+        // El ingreso de caja es lo que deposita la entidad: en factoring, el NETO (bruto - descuento)
+        const montoIngreso = esFactoring ? factoring.neto : montoDesembolso;
 
         // ════════════════════════════════════════════════════════════
         // 3. GLOSA según el caso
@@ -1105,7 +1120,7 @@ const procesarDesembolso = async (datos) => {
           data: {
             ...baseMovimiento,
             tipoMovimientoId: ctx.tipoMovimiento.id,
-            monto: montoDesembolso,
+            monto: montoIngreso,
             cuentaCorrienteDestinoId: ctx.cuenta.id,
             descripcion: descripcionMovimiento,
             numeroOperacionPagoBanco: numeroOperacion || null,
@@ -1126,28 +1141,31 @@ const procesarDesembolso = async (datos) => {
           creadoPor: usuarioId,
         };
 
-        const asientos = [
-          await crearAsiento({
-            ...paramsAsiento,
-            movimiento: ingreso.movimiento,
-            lineasDebe: [{ cuentaId: ctx.cuenta.cuentaContableId, monto: montoDesembolso }],
-            lineasHaber: [
-              {
-                cuentaId: cuentaCapital.id,
-                monto: montoDesembolso,
-                // Tercero: banco prestamista (obligación financiera)
-                entidadComercialId: ctx.entidadPrestamista,
-                procesoId: prestamo.id,
-                documento: {
-                  numeroDocumentoOrigen: prestamo.numeroPrestamo,
-                  fechaDocumentoOrigen: prestamo.fechaDesembolso,
-                  fechaVenceDocumentoOrigen: prestamo.fechaVencimiento,
-                },
-              },
-            ],
-            glosa: descripcionMovimiento,
-          }),
-        ];
+        const asientos = esFactoring
+          ? // [CASO B] FACTORING: canje de las facturas + DEBE banco (neto) y 673111 (descuento) · HABER préstamo (bruto)
+            await registrarDesembolsoFactoring(tx, { prestamo, ctx, factoring, ingreso, usuarioId })
+          : [
+              await crearAsiento({
+                ...paramsAsiento,
+                movimiento: ingreso.movimiento,
+                lineasDebe: [{ cuentaId: ctx.cuenta.cuentaContableId, monto: montoDesembolso }],
+                lineasHaber: [
+                  {
+                    cuentaId: cuentaCapital.id,
+                    monto: montoDesembolso,
+                    // Tercero: banco prestamista (obligación financiera)
+                    entidadComercialId: ctx.entidadPrestamista,
+                    procesoId: prestamo.id,
+                    documento: {
+                      numeroDocumentoOrigen: prestamo.numeroPrestamo,
+                      fechaDocumentoOrigen: prestamo.fechaDesembolso,
+                      fechaVenceDocumentoOrigen: prestamo.fechaVencimiento,
+                    },
+                  },
+                ],
+                glosa: descripcionMovimiento,
+              }),
+            ];
 
         // ITF y comisión del banco (iguales en ambos casos)
         const cargos = await registrarCargosBancarios({
@@ -1215,9 +1233,17 @@ const procesarDesembolso = async (datos) => {
             asientosContables: asientos,
             resumen: {
               montoDesembolsado: montoDesembolso,
+              ...(factoring && {
+                factoring: {
+                  facturas: factoring.facturas.length,
+                  bruto: factoring.bruto,
+                  neto: factoring.neto,
+                  descuento: factoring.descuento,
+                },
+              }),
               itf,
               comision,
-              totalNeto: redondear2(montoDesembolso - itf - comision),
+              totalNeto: redondear2(montoIngreso - itf - comision),
               saldoFinalCuenta: respuesta.saldoFinalCuenta,
               movimientosCreados: respuesta.movimientosCreados,
             },

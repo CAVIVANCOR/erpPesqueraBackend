@@ -312,8 +312,26 @@ async function cargarOperacion(db, parametros) {
     db.movimientoCaja.count({ where: { movimientoRevertidoId: enMovimientos } }),
   ]);
 
+  // Factoring: facturas que volvieron a cartera con esta operación (líneas de sus asientos que apuntan al pago de canje)
+  const submoduloPagoCxC = await db.submoduloSistema.findFirst({ where: { ruta: "pagoCuentaPorCobrar", activo: true }, select: { id: true } });
+  const lineasRecompra =
+    submoduloPagoCxC && asientos.length > 0
+      ? await db.detalleAsientoContable.findMany({
+          where: { asientoContableId: { in: asientos.map((a) => a.id) }, submoduloOrigenLineaId: submoduloPagoCxC.id },
+          select: { procesoOrigenLineaId: true },
+        })
+      : [];
+  const pagosRecompra =
+    lineasRecompra.length > 0
+      ? await db.pagoCuentaPorCobrar.findMany({
+          where: { id: { in: unicos(lineasRecompra.map((l) => l.procesoOrigenLineaId)) } },
+          include: { cuentaPorCobrar: true },
+        })
+      : [];
+
   return {
     clave: { empresaId, correlativo },
+    pagosRecompra,
     movimientos,
     movIds,
     pagosCxC,
@@ -353,10 +371,12 @@ function agruparPorDeuda(pagos, campoDeudaId, campoDeuda, campoMonto) {
 }
 
 /** Calcula cómo quedaría cada deuda (sin escribir nada). */
-function proyectarDeuda({ tipo, deuda, aplicado, estados, maximoSaldo, pagadoAnterior = 0 }) {
+function proyectarDeuda({ tipo, deuda, aplicado, estados, maximoSaldo, pagadoAnterior = 0, revierteCanje = false }) {
   const pagadoDespues = r2(Math.max(0, num(deuda.montoPagado) - aplicado));
   const saldoDespues = r2(Math.min(maximoSaldo, num(deuda.saldoPendiente) + aplicado));
-  const estadoDespues = estadoDeuda(estados, deuda.estadoId, saldoDespues, pagadoDespues + pagadoAnterior, deuda.fechaVencimiento);
+  // Si lo que se revierte es el canje que dejó la factura en CANJEADA (factoring), vuelve a calcularse como pendiente
+  const estadoActual = revierteCanje && Number(deuda.estadoId) === Number(ESTADO_CUENTA_POR_COBRAR.CANJEADO) ? estados.PENDIENTE : deuda.estadoId;
+  const estadoDespues = estadoDeuda(estados, estadoActual, saldoDespues, pagadoDespues + pagadoAnterior, deuda.fechaVencimiento);
   return {
     tipo,
     id: deuda.id,
@@ -489,7 +509,9 @@ async function analizar(db, ctx) {
   // ── Deudas ──────────────────────────────────────────────────────────────
   const deudas = [];
   for (const g of agruparPorDeuda(ctx.pagosCxC, "cuentaPorCobrarId", "cuentaPorCobrar", "montoAplicadoDeuda").values()) {
-    deudas.push(proyectarDeuda({ tipo: "Cuenta por cobrar", deuda: g.deuda, aplicado: g.aplicado, estados: ESTADOS_CXC, maximoSaldo: num(g.deuda.montoTotal) }));
+    // Un pago ligado a un préstamo de factoring (prestamoBancarioId, sin caja) es el canje de la factura
+    const revierteCanje = g.pagos.some((p) => p.prestamoBancarioId);
+    deudas.push(proyectarDeuda({ tipo: "Cuenta por cobrar", deuda: g.deuda, aplicado: g.aplicado, estados: ESTADOS_CXC, maximoSaldo: num(g.deuda.montoTotal), revierteCanje }));
   }
   for (const g of agruparPorDeuda(ctx.pagosCxP, "cuentaPorPagarId", "cuentaPorPagar", "montoAplicadoDeuda").values()) {
     deudas.push(proyectarDeuda({ tipo: "Cuenta por pagar", deuda: g.deuda, aplicado: g.aplicado, estados: ESTADOS_CXP, maximoSaldo: num(g.deuda.montoTotal) }));
@@ -618,6 +640,23 @@ async function analizar(db, ctx) {
       id: prestamo.id,
       numeroPrestamo: prestamo.numeroPrestamo,
       accion: "El desembolso se anula: el préstamo vuelve a APROBADO y reaparece como desembolso pendiente",
+    });
+  }
+
+  // ── Factoring: facturas que vuelven a estar canjeadas (el pago de la cuota las había devuelto a cartera) ──
+  for (const pago of ctx.pagosRecompra) {
+    const factura = pago.cuentaPorCobrar;
+    const aplicado = num(pago.montoAplicadoDeuda);
+    if (Math.abs(num(factura.saldoPendiente) - aplicado) > 0.01) {
+      bloqueos.push(
+        `La factura ${etiquetaDocumento(factura)} ya tiene cobros o cambios después de volver a cartera: revierta primero esos cobros para poder revertir el pago de la cuota.`,
+      );
+    }
+    prestamos.push({
+      id: pago.id,
+      etiqueta: "Factura",
+      numeroPrestamo: etiquetaDocumento(factura),
+      accion: `Vuelve a estar en descuento (CANJEADA): su saldo ${aplicado.toFixed(2)} se cancela otra vez y se elimina su asiento de recompra`,
     });
   }
 
@@ -834,6 +873,18 @@ export async function ejecutarReversion(tx, { motivo, usuarioId, ...parametros }
 
   for (const proyeccion of plan.deudas) {
     await actualizarDeuda(porDelegado[proyeccion.tipo], proyeccion, { actualizadoPor: usuarioId ? BigInt(usuarioId) : null });
+  }
+
+  // 3b. Factoring: las facturas devueltas a cartera por el pago de la cuota vuelven a quedar canjeadas
+  for (const pago of ctx.pagosRecompra) {
+    await tx.cuentaPorCobrar.update({
+      where: { id: pago.cuentaPorCobrarId },
+      data: {
+        montoPagado: r2(num(pago.cuentaPorCobrar.montoPagado) + num(pago.montoAplicadoDeuda)),
+        saldoPendiente: 0,
+        estadoId: ESTADO_CUENTA_POR_COBRAR.CANJEADO,
+      },
+    });
   }
 
   // 4. Detracción / retención / percepción (patrón de la detracción)
