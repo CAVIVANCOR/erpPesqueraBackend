@@ -1,4 +1,5 @@
 import cuotaPrestamoService from "./cuotaPrestamo.service.js";
+import letraCambioProcesoService from "./letraCambioProceso.service.js";
 
 /**
  * Servicio de tareas automáticas para Tesorería
@@ -43,6 +44,13 @@ export async function ejecutarTareasAutomaticas() {
     resultados.tareas.push({
       nombre: "Actualización de cuotas vencidas",
       resultado: resultadoCuotas,
+    });
+
+    // Tarea 2: Letras de cambio vencidas y protestadas (protesto a los 7 días hábiles del vencimiento)
+    const resultadoLetras = await letraCambioProcesoService.actualizarVencimientosYProtestos();
+    resultados.tareas.push({
+      nombre: "Vencimiento y protesto de letras de cambio",
+      resultado: resultadoLetras,
     });
 
     // Aquí se pueden agregar más tareas automáticas en el futuro:

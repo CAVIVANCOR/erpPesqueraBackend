@@ -14,6 +14,7 @@ import cuotaPrestamoService from "./cuotaPrestamo.service.js";
 import { importeEnSoles } from "../CuentasPorCobrarPagar/retencionPercepcionPago.helper.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import prestamoRelacionadoService from "./prestamoRelacionado.service.js";
+import { recalcularLetra } from "./pagoLetraCambioEspecializado.service.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -273,7 +274,15 @@ async function cargarOperacion(db, parametros) {
       },
       include: { cuotaPrestamo: { include: { prestamo: true } } },
     }),
-    db.pagoLetraCambio.findMany({ where: { movimientoCajaId: enMovimientos }, select: { id: true } }),
+    db.pagoLetraCambio.findMany({
+      where: {
+        OR: [
+          { movimientoCajaId: enMovimientos },
+          { refOperacionEspecializadaMovCaja: correlativo, letraCambio: { empresaId } },
+        ],
+      },
+      include: { letraCambio: { include: { estado: true } } },
+    }),
     db.detMovsEntregaRendir.findMany({
       where: { OR: [{ operacionMovCajaId: enMovimientos }, { refOperacionEspecializadaMovCaja: correlativo, empresaId }] },
     }),
@@ -373,9 +382,6 @@ async function analizar(db, ctx) {
   }
   if (ctx.reversionesPrevias > 0) {
     bloqueos.push("Alguno de los movimientos ya fue revertido con la función antigua de reversión.");
-  }
-  if (ctx.pagosLetra.length > 0) {
-    bloqueos.push("La operación incluye pagos de letras de cambio: la reversión de letras no está soportada.");
   }
   if (ctx.conciliaciones > 0) {
     bloqueos.push("La operación tiene movimientos incluidos en una conciliación bancaria.");
@@ -567,6 +573,26 @@ async function analizar(db, ctx) {
 
   // ── Préstamos ───────────────────────────────────────────────────────────
   const prestamos = [];
+
+  // Pagos de letras de cambio: se anula el pago y el capital, intereses y mora vuelven a la letra
+  const gruposLetra = new Map();
+  for (const pago of ctx.pagosLetra) {
+    const id = clave(pago.letraCambioId);
+    if (!gruposLetra.has(id)) gruposLetra.set(id, { letra: pago.letraCambio, capital: 0 });
+    gruposLetra.get(id).capital = r2(gruposLetra.get(id).capital + num(pago.montoCapital));
+  }
+  for (const { letra, capital } of gruposLetra.values()) {
+    const descripcionEstado = letra.estado?.descripcion;
+    if (["REFINANCIADA", "ANULADA"].includes(descripcionEstado)) {
+      bloqueos.push(`La letra ${letra.numeroDocumento} está ${descripcionEstado}: ${descripcionEstado === "REFINANCIADA" ? "primero revierta su refinanciación" : "no admite reversiones"}.`);
+    }
+    prestamos.push({
+      id: letra.id,
+      etiqueta: "Letra",
+      numeroPrestamo: letra.numeroDocumento,
+      accion: `Se anula el pago: el saldo de capital de la letra sube de ${num(letra.saldoCapital).toFixed(2)} a ${r2(num(letra.saldoCapital) + capital).toFixed(2)} y se descuentan los intereses y la mora pagados`,
+    });
+  }
   const prestamosCuotas = new Map();
   for (const pago of ctx.pagosCuota) {
     const prestamo = pago.cuotaPrestamo?.prestamo;
@@ -798,6 +824,13 @@ export async function ejecutarReversion(tx, { motivo, usuarioId, ...parametros }
   if (ctx.pagosPersonal.length > 0) await tx.pagoDeudaPersonal.deleteMany({ where: { id: { in: ctx.pagosPersonal.map((p) => p.id) } } });
   if (ctx.pagosTributaria.length > 0) await tx.pagoDeudaTributaria.deleteMany({ where: { id: { in: ctx.pagosTributaria.map((p) => p.id) } } });
   if (ctx.pagosCuota.length > 0) await tx.pagoCuotaPrestamo.deleteMany({ where: { id: { in: ctx.pagosCuota.map((p) => p.id) } } });
+  // Pagos de letras: se eliminan y cada letra se recalcula desde los pagos que quedan
+  if (ctx.pagosLetra.length > 0) {
+    await tx.pagoLetraCambio.deleteMany({ where: { id: { in: ctx.pagosLetra.map((p) => p.id) } } });
+    for (const letraId of unicos(ctx.pagosLetra.map((p) => p.letraCambioId))) {
+      await recalcularLetra(tx, letraId);
+    }
+  }
 
   for (const proyeccion of plan.deudas) {
     await actualizarDeuda(porDelegado[proyeccion.tipo], proyeccion, { actualizadoPor: usuarioId ? BigInt(usuarioId) : null });
@@ -910,7 +943,7 @@ export async function ejecutarReversion(tx, { motivo, usuarioId, ...parametros }
     asientosEliminados: ctx.asientos.length,
     pagosEliminados:
       ctx.pagosCxC.length + ctx.pagosCxP.length + ctx.pagosPersonal.length + ctx.pagosTributaria.length + ctx.pagosCuota.length +
-      ctx.pagosPrestamoRel.length,
+      ctx.pagosPrestamoRel.length + ctx.pagosLetra.length,
     deudasRestauradas: plan.deudas.length,
     impuestosRestaurados: plan.impuestos.length,
     asignacionesRestauradas: ctx.detMovs.length,
@@ -1011,7 +1044,7 @@ export async function listarOperaciones({ empresaId, desde, hasta, busqueda, lim
     // Clasificación de cada operación por los pagos asociados a sus movimientos
     const todosLosIds = movimientos.map((m) => m.id);
     const enTodos = { in: todosLosIds };
-    const [cxc, cxp, personal, tributaria, cuotas, desembolsos, asignaciones] = await Promise.all([
+    const [cxc, cxp, personal, tributaria, cuotas, desembolsos, asignaciones, letras] = await Promise.all([
       prisma.pagoCuentaPorCobrar.findMany({ where: { movimientoCajaId: enTodos }, select: { movimientoCajaId: true, cuentaPorCobrarId: true } }),
       prisma.pagoCuentaPorPagar.findMany({ where: { movimientoCajaId: enTodos }, select: { movimientoCajaId: true, cuentaPorPagarId: true } }),
       prisma.pagoDeudaPersonal.findMany({ where: { movimientoCajaId: enTodos }, select: { movimientoCajaId: true } }),
@@ -1019,6 +1052,7 @@ export async function listarOperaciones({ empresaId, desde, hasta, busqueda, lim
       prisma.pagoCuotaPrestamo.findMany({ where: { movimientoCajaId: enTodos }, select: { movimientoCajaId: true } }),
       prisma.prestamoBancario.findMany({ where: { movimientoCajaDesembolsoId: enTodos }, select: { movimientoCajaDesembolsoId: true } }),
       prisma.detMovsEntregaRendir.findMany({ where: { operacionMovCajaId: enTodos }, select: { operacionMovCajaId: true } }),
+      prisma.pagoLetraCambio.findMany({ where: { movimientoCajaId: enTodos }, select: { movimientoCajaId: true, letraCambio: { select: { tipoLetra: true } } } }),
     ]);
     const conjunto = (filas, campo) => new Set(filas.map((f) => clave(f[campo])));
     const idsCxC = conjunto(cxc, "movimientoCajaId");
@@ -1028,6 +1062,7 @@ export async function listarOperaciones({ empresaId, desde, hasta, busqueda, lim
     const idsCuotas = conjunto(cuotas, "movimientoCajaId");
     const idsDesembolsos = conjunto(desembolsos, "movimientoCajaDesembolsoId");
     const idsAsignaciones = conjunto(asignaciones, "operacionMovCajaId");
+    const idsLetras = conjunto(letras, "movimientoCajaId");
 
     const filas = operaciones.map((op) => {
       const ids = op.movimientos.map((m) => clave(m.id));
@@ -1044,6 +1079,7 @@ export async function listarOperaciones({ empresaId, desde, hasta, busqueda, lim
       else if (contiene(idsCuotas)) tipo = "Pago de cuotas de préstamo";
       else if (contiene(idsDesembolsos)) tipo = "Desembolso de préstamo";
       else if (contiene(idsAsignaciones)) tipo = "Entrega de fondos";
+      else if (contiene(idsLetras)) tipo = letras.some((l) => ids.includes(clave(l.movimientoCajaId)) && l.letraCambio?.tipoLetra === "COBRAR") ? "Cobranza de letra de cambio" : "Pago de letra de cambio";
 
       const principales = op.movimientos.filter((m) => Number(m.tipoMovimientoId) !== TIPO_MOVIMIENTO_ITF_COMISION);
       const principal = (principales.length > 0 ? principales : op.movimientos).reduce((a, b) => (num(b.monto) > num(a.monto) ? b : a));

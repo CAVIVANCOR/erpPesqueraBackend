@@ -236,7 +236,16 @@ const crear = async (data, usuarioId = null) => {
     // Asignar defaults si no vienen
     data.empresaId = data.empresaId || 1; // MEGUI
     data.moduloOrigenId = data.moduloOrigenId || 2; // Pesca Industrial
-    data.documentoOrigenId = data.documentoOrigenId || 37; // Temporada actual
+    // Gasto urgente: origen COMPRAS (modelo OrdenCompra) con documento 0 = pendiente de generar la Orden de Compra
+    const moduloOrigenCreacion = await prisma.moduloSistema.findUnique({
+      where: { id: BigInt(data.moduloOrigenId) },
+      select: { modeloDocumentoOrigen: true },
+    });
+    const origenPendienteOrdenCompra =
+      Number(data.documentoOrigenId) === 0 && moduloOrigenCreacion?.modeloDocumentoOrigen === "OrdenCompra";
+    if (!origenPendienteOrdenCompra) {
+      data.documentoOrigenId = data.documentoOrigenId || 37; // Temporada actual
+    }
 
     // Campos de auditoría
     if (usuarioId) {
@@ -1414,6 +1423,19 @@ const asignarActivoMasivo = async (activoId, movimientosIds) => {
  * Generar documentos financieros automáticamente desde DetMovsEntregaRendir
  * Genera: OrdenCompra → CuentaPorPagar → Pago → 2 Asientos Contables
  */
+/**
+ * Gasto urgente: su origen es el módulo COMPRAS con documento 0 (pendiente). Cuando existe la Orden de Compra
+ * (generada o vinculada), el origen del movimiento pasa a apuntar a ella. Los demás movimientos conservan su origen.
+ */
+async function vincularOrigenConOrdenCompra(db, detMov, ordenCompraId, ordenCompraReemplazadaId = null) {
+  const documentoActual = Number(detMov.documentoOrigenId);
+  // Pendiente (0) o apuntando a la OC que se regeneró (acción C): en ambos casos pasa a la OC vigente
+  if (documentoActual !== 0 && !(ordenCompraReemplazadaId && documentoActual === Number(ordenCompraReemplazadaId))) return;
+  const modulo = await db.moduloSistema.findUnique({ where: { id: detMov.moduloOrigenId }, select: { modeloDocumentoOrigen: true } });
+  if (modulo?.modeloDocumentoOrigen !== "OrdenCompra") return;
+  await db.detMovsEntregaRendir.update({ where: { id: detMov.id }, data: { documentoOrigenId: BigInt(ordenCompraId) } });
+}
+
 async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, esGastoDirecto = false) {
   const detMov = await prisma.detMovsEntregaRendir.findUnique({
     where: { id: Number(detMovId) },
@@ -1573,6 +1595,7 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
           data: { validadoTesoreria: true, fechaValidacionTesoreria: detMov.fechaMovimiento },
         }),
       ]);
+      await vincularOrigenConOrdenCompra(prisma, detMov, ordenCompraExistente.id);
 
       return {
         success: true,
@@ -1911,6 +1934,9 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
       },
     });
     }
+
+    // Gasto urgente: el origen del movimiento pasa a ser la Orden de Compra generada o vinculada
+    await vincularOrigenConOrdenCompra(tx, detMov, ordenCompra.id, ordenCompraARegenerar?.id);
 
     // ACCIÓN B: se reutiliza la CxP de la OC vinculada si ya existe; si no, se crea
     let cuentaPorPagar = ordenCompraVinculada

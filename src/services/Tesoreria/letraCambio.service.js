@@ -1,5 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { DIAS_HABILES_PROTESTO } from '../../utils/letrasCambio.constants.js';
+import { sumarDiasHabiles } from './letraCambioBase.service.js';
 
 /**
  * Servicio CRUD para LetraCambio
@@ -202,6 +204,8 @@ const crear = async (data) => {
         beneficiarioId: data.beneficiarioId,
         avalId: data.avalId || null,
         montoOriginal: data.montoOriginal,
+        saldoCapital: data.montoOriginal,
+        fechaLimiteProtesto: sumarDiasHabiles(new Date(data.fechaVencimiento), DIAS_HABILES_PROTESTO),
         monedaId: data.monedaId,
         cuentaPorCobrarId: data.cuentaPorCobrarId || null,
         cuentaPorPagarId: data.cuentaPorPagarId || null,
