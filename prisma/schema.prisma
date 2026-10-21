@@ -1533,6 +1533,7 @@ model CuentaCorriente {
   detraccionesProveedor           Detraccion[]    @relation("CuentaBNSunatProveedor")   // ✅ MODIFICAR nombre
   prestamosRelacionadosComoPrestamista  PrestamoRelacionado[]  @relation("PrestamoRelacionadoCtaPrestamista")
   prestamosRelacionadosComoPrestataria  PrestamoRelacionado[]  @relation("PrestamoRelacionadoCtaPrestataria")
+  prestamosEntidad                      PrestamoEntidad[] @relation("PrestamoEntidadCuentaCorriente")
   // ========================================
   // ÍNDICES
   // ========================================
@@ -2604,8 +2605,9 @@ model Empresa {
   percepciones             Percepcion[]        // ✅ AGREGAR - Todas las percepciones de esta empresa
   prestamosRelacionadosOtorgados   PrestamoRelacionado[]  @relation("PrestamoRelacionadoPrestamista")
   prestamosRelacionadosRecibidos   PrestamoRelacionado[]  @relation("PrestamoRelacionadoPrestataria")
+  prestamosEntidad         PrestamoEntidad[]
 
-@@index([monedaCalculosLiqId])
+  @@index([monedaCalculosLiqId])
 
 }
 
@@ -2754,6 +2756,7 @@ model EntidadComercial {
   letrasAval                      LetraCambio[]           @relation("LetraAval")
   endososComoEndosante            EndosoLetraCambio[]     @relation("Endosante")
   endososComoEndosatario          EndosoLetraCambio[]     @relation("Endosatario")
+  prestamosEntidad                PrestamoEntidad[]
   detallesAsientos                DetalleAsientoContable[]
     // Relación inversa para TarifaCostoExportacionRuta
   tarifasRutaProveedor            TarifaCostoExportacionRuta[] @relation("ProveedorTarifaRuta")
@@ -3314,8 +3317,8 @@ model EstadoMultiFuncion {
   deudasConPersonal               DeudaConPersonal[]  // 🆕 AGREGAR ESTA LÍNEA
   deudasTributarias               DeudaTributaria[]   // 🆕 AGREGAR ESTA LÍNEA
   cuotasPrestamo                  CuotaPrestamo[]     @relation("EstadoCuotaPrestamo")  // Estado de la cuota (tipo CUOTAS PRESTAMO BANCARIO)
-  prestamosRelacionados  PrestamoRelacionado[]  @relation("EstadoPrestamoRelacionado")
-
+  prestamosRelacionados           PrestamoRelacionado[]  @relation("EstadoPrestamoRelacionado")
+  prestamosEntidad                PrestamoEntidad[] @relation("EstadoPrestamoEntidad")
 
   detraccionesEstadoPago          Detraccion[]    @relation("EstadoPagoDetraccion")  // ✅ AGREGAR
   retencionesEstadoPago           Retencion[]     @relation("EstadoPagoRetencion")    // ✅ AGREGAR
@@ -3640,6 +3643,8 @@ model Moneda {
   pagosPrestamoRelMonedaPrestamo       PagoPrestamoRelacionado[] @relation("PagoPrestamoRelMonedaPrestamo")
   pagosPrestamoRelMonedaPrestataria    PagoPrestamoRelacionado[] @relation("PagoPrestamoRelMonedaPrestataria")
   pagosPrestamoRelMonedaPrestamista    PagoPrestamoRelacionado[] @relation("PagoPrestamoRelMonedaPrestamista")
+  prestamosEntidad                     PrestamoEntidad[] @relation("PrestamoEntidadMoneda")
+  pagosPrestamoEntidad                 PagoPrestamoEntidad[] @relation("PagoPrestamoEntidadMoneda")
 
 }
 
@@ -3932,6 +3937,8 @@ model MovimientoCaja {
   desembolsosPrestamoRelPrestataria  PrestamoRelacionado[]      @relation("DesembolsoPrestamoRelPrestataria")
   pagosPrestamoRelPrestatario        PagoPrestamoRelacionado[]  @relation("PagoPrestamoRelPrestataria")
   pagosPrestamoRelPrestamista        PagoPrestamoRelacionado[]  @relation("PagoPrestamoRelPrestamista")
+  desembolsosPrestamoEntidad         PrestamoEntidad[]        @relation("DesembolsoPrestamoEntidad")
+  pagosPrestamoEntidad               PagoPrestamoEntidad[]    @relation("PagoPrestamoEntidadMovimiento")
 
   // ========================================
   // 🆕 ÍNDICES
@@ -6178,6 +6185,8 @@ model PeriodoContable {
   pagosPrestamoRelacionado  PagoPrestamoRelacionado[]
   prestamosRelacionados  PrestamoRelacionado[]
   pagosLetraCambio       PagoLetraCambio[]                                // ⭐ NUEVO: pagos de letras de este período contable
+  prestamosEntidad       PrestamoEntidad[]
+  pagosPrestamoEntidad   PagoPrestamoEntidad[]
 
   @@unique([empresaId, anio, mes])
   @@index([empresaId])
@@ -7259,6 +7268,8 @@ model MedioPago {
   prestamosRelacionadosMedioPrestataria  PrestamoRelacionado[]     @relation("PrestamoRelacionadoMedioPrestataria")
   pagosPrestamoRelMedioPrestataria       PagoPrestamoRelacionado[] @relation("PagoPrestamoRelMedioPrestataria")
   pagosPrestamoRelMedioPrestamista       PagoPrestamoRelacionado[] @relation("PagoPrestamoRelMedioPrestamista")
+  prestamosEntidad                       PrestamoEntidad[] @relation("PrestamoEntidadMedioPago")
+  pagosPrestamoEntidad                   PagoPrestamoEntidad[] @relation("PagoPrestamoEntidadMedioPago")
 
   @@index([activo])
 }
@@ -9023,6 +9034,182 @@ model PagoPrestamoRelacionado {
   @@index([fechaPago])
   @@index([periodoContableId])
 }
+
+
+// ============================================
+// PrestamoEntidad
+// Préstamos con accionistas y terceros (solo capital, sin intereses ni mora)
+//   RECIBIDO: la empresa es la deudora  → pasivo 441111/441112 (accionista) o 461101/461102 (tercero)
+//   OTORGADO: la empresa es la acreedora → activo 142211/142212 (accionista) o 161201 (tercero)
+// El usuario elige en cada préstamo si la contraparte es accionista o tercero
+// ============================================
+
+model PrestamoEntidad {
+  id                    BigInt                  @id @default(autoincrement())
+
+  // ========================================
+  // IDENTIFICACIÓN
+  // ========================================
+  empresaId             BigInt                                       // Empresa que presta o recibe el préstamo
+  entidadComercialId    BigInt                                       // Contraparte: accionista o tercero
+  sentido               String                  @db.VarChar(10)      // RECIBIDO | OTORGADO
+  esAccionista          Boolean                 @default(false)      // true = accionista, false = tercero (lo elige el usuario)
+  numeroPrestamo        String                  @db.VarChar(50)      // Número interno (único por empresa)
+  esGerencial           Boolean                 @default(false)      // false = FISCAL, true = GERENCIAL
+
+  // ========================================
+  // SALDO INICIAL (préstamos anteriores al sistema)
+  // ========================================
+  esSaldoInicial        Boolean                 @default(false)      // true = préstamo anterior al sistema (sin movimiento de caja)
+  montoPagadoAnterior   Decimal                 @default(0.00) @db.Decimal(18, 2)  // Pagos o cobros anteriores al sistema
+
+  // ========================================
+  // DESEMBOLSO (INTEGRACIÓN CON CAJA)
+  // ========================================
+  numeroOperacion       String?                 @db.VarChar(40)      // Número de operación bancaria
+  cuentaCorrienteId     BigInt?                                      // Cuenta donde entra (recibido) o de donde sale (otorgado) el dinero
+  movimientoCajaDesembolsoId        BigInt?                          // Ingreso (recibido) o egreso (otorgado) del desembolso
+  refOperacionEspecializadaMovCaja  BigInt?                          // Correlativo de la operación de Tesorería del desembolso
+  medioPagoId           BigInt?                                      // Medio de pago del desembolso
+
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  fechaContable         DateTime?               @default(now())      // Fecha del asiento (saldo inicial: fecha de apertura)
+  periodoContableId     BigInt?                                      // Período contable (para control de cierre)
+
+  // ========================================
+  // FECHAS
+  // ========================================
+  fechaDesembolso       DateTime                                     // Fecha real del desembolso
+  fechaVencimiento      DateTime?                                    // Fecha prevista de devolución (opcional)
+
+  // ========================================
+  // MONTOS (solo capital; la cuenta bancaria debe estar en la moneda del préstamo)
+  // ========================================
+  monedaId              BigInt
+  montoDesembolsado     Decimal                 @db.Decimal(18, 2)   // Capital prestado
+  tipoCambioAplicado    Decimal?                @db.Decimal(10, 4)   // Tipo de cambio del desembolso (moneda extranjera)
+
+  // ========================================
+  // SALDOS (se recalculan: montoDesembolsado - montoPagadoAnterior - capitalPagado)
+  // ========================================
+  saldoCapital          Decimal                 @db.Decimal(18, 2)   // Capital pendiente
+  capitalPagado         Decimal                 @default(0.00) @db.Decimal(18, 2)  // Pagado o cobrado desde el sistema
+
+  estadoId              BigInt                                       // VIGENTE | PAGADO | ANULADO
+  observaciones         String?                 @db.Text
+
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+
+  // ========================================
+  // RELACIONES
+  // ========================================
+  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
+  entidadComercial      EntidadComercial        @relation(fields: [entidadComercialId], references: [id])
+  cuentaCorriente       CuentaCorriente?        @relation("PrestamoEntidadCuentaCorriente", fields: [cuentaCorrienteId], references: [id])
+  movimientoCajaDesembolso  MovimientoCaja?     @relation("DesembolsoPrestamoEntidad", fields: [movimientoCajaDesembolsoId], references: [id])
+  medioPago             MedioPago?              @relation("PrestamoEntidadMedioPago", fields: [medioPagoId], references: [id])
+  moneda                Moneda                  @relation("PrestamoEntidadMoneda", fields: [monedaId], references: [id])
+  periodoContable       PeriodoContable?        @relation(fields: [periodoContableId], references: [id])
+  estado                EstadoMultiFuncion      @relation("EstadoPrestamoEntidad", fields: [estadoId], references: [id])
+
+  pagos                 PagoPrestamoEntidad[]
+
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@unique([empresaId, numeroPrestamo])
+  @@index([empresaId, estadoId])
+  @@index([entidadComercialId])
+  @@index([sentido])
+  @@index([esAccionista])
+  @@index([estadoId])
+  @@index([esSaldoInicial])
+  @@index([fechaVencimiento])
+  @@index([cuentaCorrienteId])
+  @@index([movimientoCajaDesembolsoId])
+  @@index([medioPagoId])
+  @@index([periodoContableId])
+  @@index([refOperacionEspecializadaMovCaja])
+}
+
+// ============================================
+// PagoPrestamoEntidad
+// Pagos (recibido) o cobros (otorgado) del capital de un préstamo con accionista o tercero
+// ============================================
+
+model PagoPrestamoEntidad {
+  id                    BigInt                  @id @default(autoincrement())
+  prestamoEntidadId     BigInt                                       // Préstamo al que se aplica el pago o cobro
+  fechaPago             DateTime                                     // Fecha real del pago o cobro
+  numeroOperacion       String?                 @db.VarChar(40)      // Número de operación bancaria
+
+  // ========================================
+  // APLICACIÓN AL PRÉSTAMO
+  // ========================================
+  montoAplicado         Decimal                 @db.Decimal(18, 2)   // Capital que se descuenta del saldo
+  monedaId              BigInt                                       // Moneda del préstamo y del movimiento
+  tipoCambio            Decimal                 @default(1) @db.Decimal(10, 4)  // TC del día (1 en soles)
+
+  // ========================================
+  // CAJA
+  // ========================================
+  medioPagoId           BigInt?                                      // Medio de pago
+  movimientoCajaId      BigInt?                                      // Egreso (recibido) o ingreso (otorgado)
+
+  observaciones         String?                 @db.Text
+
+  // ========================================
+  // AUDITORÍA
+  // ========================================
+  creadoEn              DateTime                @default(now())
+  creadoPor             BigInt?
+  actualizadoEn         DateTime                @updatedAt
+  actualizadoPor        BigInt?
+  refOperacionEspecializadaMovCaja  BigInt?
+  urlVoucherOperacionConsolidado    String?
+  urlComprobanteOperacion           String?
+
+  // ========================================
+  // INTEGRACIÓN CONTABLE
+  // ========================================
+  fechaContable         DateTime                @default(now())
+  periodoContableId     BigInt?
+
+  // ========================================
+  // RELACIONES
+  // ========================================
+  prestamoEntidad       PrestamoEntidad         @relation(fields: [prestamoEntidadId], references: [id])
+  moneda                Moneda                  @relation("PagoPrestamoEntidadMoneda", fields: [monedaId], references: [id])
+  medioPago             MedioPago?              @relation("PagoPrestamoEntidadMedioPago", fields: [medioPagoId], references: [id])
+  movimientoCaja        MovimientoCaja?         @relation("PagoPrestamoEntidadMovimiento", fields: [movimientoCajaId], references: [id])
+  periodoContable       PeriodoContable?        @relation(fields: [periodoContableId], references: [id])
+
+  // ========================================
+  // ÍNDICES
+  // ========================================
+  @@index([prestamoEntidadId])
+  @@index([medioPagoId])
+  @@index([movimientoCajaId])
+  @@index([refOperacionEspecializadaMovCaja])
+  @@index([fechaPago])
+  @@index([periodoContableId])
+}
+
+
+
+
+
+
+
+
 // ============================================
 // MODELO 2.4: Garantía de Préstamo
 // ============================================
