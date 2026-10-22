@@ -89,8 +89,6 @@ const ESTADOS_PRESTAMO_OPERABLES = [ESTADOS_PRESTAMO.DESEMBOLSADO, ESTADOS_PREST
 const ESTADO_MOVIMIENTO_CAJA_VALIDADO = 21;
 // ITF y comisión comparten el mismo tipo de movimiento
 const TIPO_MOVIMIENTO_ITF_COMISION = 163;
-// Pago del descuento / interés del factoring (egreso aparte del ingreso del desembolso)
-const TIPO_MOVIMIENTO_INTERESES = 164;
 const MONEDA_NACIONAL_ID = 1;
 const SUBMODULO_ORIGEN_PRESTAMO_ID = SUBMODULO_ORIGEN.PRESTAMO_BANCARIO;
 
@@ -505,8 +503,8 @@ const registrarCargosBancarios = async ({
 };
 
 /** Arma la respuesta común: movimientos completos, saldos de la cuenta y resumen. */
-const armarRespuestaMovimientos = async ({ tx, principal, interesRegistro = null, itfRegistro, comisionRegistro, etiquetaPrincipal }) => {
-  const registros = [principal, interesRegistro, itfRegistro, comisionRegistro].filter(Boolean);
+const armarRespuestaMovimientos = async ({ tx, principal, itfRegistro, comisionRegistro, etiquetaPrincipal }) => {
+  const registros = [principal, itfRegistro, comisionRegistro].filter(Boolean);
   const ids = registros.map((r) => r.movimiento.id);
 
   const movimientosCompletos = await tx.movimientoCaja.findMany({
@@ -528,7 +526,6 @@ const armarRespuestaMovimientos = async ({ tx, principal, interesRegistro = null
 
   const etiquetas = {
     [principal.movimiento.id]: etiquetaPrincipal,
-    ...(interesRegistro && { [interesRegistro.movimiento.id]: "Interés" }),
     ...(itfRegistro && { [itfRegistro.movimiento.id]: "ITF" }),
     ...(comisionRegistro && { [comisionRegistro.movimiento.id]: "Comisión" }),
   };
@@ -550,12 +547,11 @@ const armarRespuestaMovimientos = async ({ tx, principal, interesRegistro = null
   return {
     movimientos: {
       principal: porId[principal.movimiento.id.toString()] || null,
-      interes: interesRegistro ? porId[interesRegistro.movimiento.id.toString()] : null,
       itf: itfRegistro ? porId[itfRegistro.movimiento.id.toString()] : null,
       comision: comisionRegistro ? porId[comisionRegistro.movimiento.id.toString()] : null,
     },
     saldosCuentaCorriente,
-    saldoFinalCuenta: comisionRegistro?.saldoActual ?? itfRegistro?.saldoActual ?? interesRegistro?.saldoActual ?? principal.saldoActual,
+    saldoFinalCuenta: comisionRegistro?.saldoActual ?? itfRegistro?.saldoActual ?? principal.saldoActual,
     movimientosCreados: registros.length,
   };
 };
@@ -1080,9 +1076,9 @@ const procesarDesembolso = async (datos) => {
         // [CASO B] FACTORING: se desembolsa contra facturas (canje + descuento a 673111, ver factoringPrestamo.service.js)
         const factoring = esFactoring ? await prepararDesembolsoFactoring(tx, { prestamo, ctx, datos }) : null;
         const cuentaCapital = esFactoring ? null : await obtenerCuentaCapital(tx, prestamo, "DESEMBOLSO", ctx.esMonedaNacional);
-        // Ingreso de caja: el monto del préstamo. En factoring, el neto depositado si el banco descontó el interés,
-        // o el bruto si el interés se cobra aparte (con su propio movimiento de egreso). ITF y comisión nunca se restan.
-        const montoIngreso = esFactoring ? (factoring.interesAparte ? factoring.bruto : factoring.neto) : montoDesembolso;
+        // Ingreso de caja: el monto del préstamo. En factoring, el neto depositado (bruto menos el interés que el banco
+        // descontó por adelantado; igual al bruto si el interés es diferido). ITF y comisión nunca se restan.
+        const montoIngreso = esFactoring ? factoring.neto : montoDesembolso;
 
         // ════════════════════════════════════════════════════════════
         // 3. GLOSA según el caso
@@ -1133,24 +1129,6 @@ const procesarDesembolso = async (datos) => {
           },
         });
 
-        // [CASO B] Pago del descuento / interés de factoring: egreso propio, en cascada tras el ingreso
-        const interesRegistro =
-          factoring && factoring.interesAparte && factoring.descuento > 0
-            ? await registrarMovimiento({
-                tx,
-                cuenta: ctx.cuenta,
-                esIngreso: false,
-                saldoAnteriorManual: ingreso.saldoActual,
-                data: {
-                  ...baseMovimiento,
-                  tipoMovimientoId: TIPO_MOVIMIENTO_INTERESES,
-                  monto: factoring.descuento,
-                  cuentaCorrienteOrigenId: ctx.cuenta.id,
-                  descripcion: `DESCUENTO / INTERES FACTORING - ${descripcionMovimiento}`,
-                },
-              })
-            : null;
-
         // ════════════════════════════════════════════════════════════
         // 5. ASIENTOS: DEBE banco · HABER capital (451 [CASO A] / 166 [CASO B])
         // ════════════════════════════════════════════════════════════
@@ -1166,7 +1144,7 @@ const procesarDesembolso = async (datos) => {
 
         const asientos = esFactoring
           ? // [CASO B] FACTORING: canje de las facturas + DEBE banco (neto) y 673111 (descuento) · HABER préstamo (bruto)
-            await registrarDesembolsoFactoring(tx, { prestamo, ctx, factoring, ingreso, interes: interesRegistro, usuarioId })
+            await registrarDesembolsoFactoring(tx, { prestamo, ctx, factoring, ingreso, usuarioId })
           : [
               await crearAsiento({
                 ...paramsAsiento,
@@ -1194,7 +1172,7 @@ const procesarDesembolso = async (datos) => {
         const cargos = await registrarCargosBancarios({
           tx,
           ctx,
-          principal: interesRegistro || ingreso,
+          principal: ingreso,
           baseMovimiento,
           descripcionMovimiento,
           itf,
@@ -1206,7 +1184,7 @@ const procesarDesembolso = async (datos) => {
         await tx.movimientoCaja.updateMany({
           where: {
             id: {
-              in: [ingreso.movimiento.id, interesRegistro?.movimiento.id, cargos.itfRegistro?.movimiento.id, cargos.comisionRegistro?.movimiento.id].filter(Boolean),
+              in: [ingreso.movimiento.id, cargos.itfRegistro?.movimiento.id, cargos.comisionRegistro?.movimiento.id].filter(Boolean),
             },
           },
           data: { asientosGenerados: true },
@@ -1230,7 +1208,6 @@ const procesarDesembolso = async (datos) => {
         const respuesta = await armarRespuestaMovimientos({
           tx,
           principal: ingreso,
-          interesRegistro,
           itfRegistro: cargos.itfRegistro,
           comisionRegistro: cargos.comisionRegistro,
           etiquetaPrincipal: "Ingreso",
@@ -1250,7 +1227,6 @@ const procesarDesembolso = async (datos) => {
               montoDesembolsado: montoDesembolso,
             },
             movimientoPrincipalId: ingreso.movimiento.id,
-            movimientoInteresId: interesRegistro?.movimiento.id || null,
             movimientoITFId: cargos.itfRegistro?.movimiento.id || null,
             movimientoComisionId: cargos.comisionRegistro?.movimiento.id || null,
             movimientos: respuesta.movimientos,
@@ -1264,7 +1240,7 @@ const procesarDesembolso = async (datos) => {
                   bruto: factoring.bruto,
                   neto: factoring.neto,
                   descuento: factoring.descuento,
-                  interesAparte: factoring.interesAparte,
+                  interesDescontado: factoring.interesDescontado,
                   montoPrestamo: factoring.montoPrestamo,
                   diferenciaPrestamo: factoring.diferenciaPrestamo,
                 },

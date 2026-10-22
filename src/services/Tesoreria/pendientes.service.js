@@ -1381,6 +1381,7 @@ const listarPendientes = async (filtros = {}) => {
           tasaMoratoria: prestamo.tasaMoratoria,
           cuentaCorrienteId: prestamo.cuentaCorrienteId,
           esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
+          interesDescontado: Boolean(prestamo.interesDescontado),
           tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
           // Ids para armar y aplicar el filtro especializado (banco, tipo de préstamo y préstamo)
           bancoId: prestamo.bancoId,
@@ -1437,6 +1438,7 @@ const listarPendientes = async (filtros = {}) => {
         cuentaCorrienteId: prestamo.cuentaCorrienteId,
         comisionInicial: prestamo.comisionInicial,
         esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
+        interesDescontado: Boolean(prestamo.interesDescontado),
         tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
         bancoId: prestamo.bancoId,
         tipoPrestamoId: prestamo.tipoPrestamoId,

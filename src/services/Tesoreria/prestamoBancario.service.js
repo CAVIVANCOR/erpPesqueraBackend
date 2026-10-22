@@ -198,7 +198,10 @@ function calcularCronogramaCuotas(prestamo) {
     comisionMantenimiento,
     seguroDesgravamen,
     periodoGracia,
+    interesDescontado,
   } = prestamo;
+  // Factoring con interés descontado al desembolsar: el interés ya se cobró, las cuotas son solo de capital
+  const sinInteres = Boolean(interesDescontado);
 
   const cuotas = [];
   const tasaMensual = tasaInteresAnual / 100 / 12;
@@ -225,12 +228,15 @@ function calcularCronogramaCuotas(prestamo) {
     );
 
     let montoCapital = 0;
-    let montoInteres = saldoCapital * tasaPorPeriodo;
+    let montoInteres = sinInteres ? 0 : saldoCapital * tasaPorPeriodo;
 
     // Aplicar período de gracia
     const enGracia = i <= graciaMeses / mesesEntreCuotas;
 
-    if (!enGracia) {
+    if (sinInteres) {
+      // Capital en partes iguales; la última cuota absorbe el redondeo
+      montoCapital = i === numeroCuotas ? saldoCapital : parseFloat((parseFloat(montoDesembolsado) / numeroCuotas).toFixed(2));
+    } else if (!enGracia) {
       // Calcular amortización según tipo
       switch (tipoAmortizacion) {
         case "FRANCES": {
@@ -415,6 +421,10 @@ const crear = async (data) => {
 
     await validarPrestamoBancario(data);
 
+    // Solo un factoring puede tener el interés descontado por adelantado
+    const tipoPrestamoDef = await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId }, select: { esFactoring: true } });
+    const interesDescontado = Boolean(data.interesDescontado) && Boolean(tipoPrestamoDef?.esFactoring);
+
     // Calcular tipo de cambio si no viene en data
     let tipoCambioAplicado = data.tipoCambioAplicado;
     if (!tipoCambioAplicado && data.fechaDesembolso) {
@@ -439,7 +449,7 @@ const crear = async (data) => {
       : 0;
 
     // Generar cronograma de cuotas
-    const cuotas = calcularCronogramaCuotas(data);
+    const cuotas = calcularCronogramaCuotas({ ...data, interesDescontado });
 
     // Normalizar datos: convertir strings vacíos en null para campos enum y opcionales
     const datosNormalizados = {
@@ -488,6 +498,7 @@ const crear = async (data) => {
       const nuevoPrestamo = await tx.prestamoBancario.create({
         data: {
           ...datosNormalizados,
+          interesDescontado,
           tipoCambioAplicado,
           saldoCapital,
           saldoInteres,
@@ -575,6 +586,29 @@ const actualizar = async (id, data) => {
 
     await validarPrestamoBancario({ ...data, id });
 
+    // Modalidad del interés del factoring (descontado por adelantado / diferido en las cuotas)
+    const tipoPrestamoDef = await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId }, select: { esFactoring: true } });
+    const interesDescontado =
+      data.interesDescontado === undefined
+        ? Boolean(existente.interesDescontado)
+        : Boolean(data.interesDescontado) && Boolean(tipoPrestamoDef?.esFactoring);
+    const cambioModalidad = interesDescontado !== Boolean(existente.interesDescontado);
+    // Cambiar la modalidad regenera el cronograma: solo se permite sin desembolso ni pagos (los saldos iniciales no regeneran)
+    const regenerarCuotas = cambioModalidad && !existente.esSaldoInicial;
+    if (regenerarCuotas) {
+      if (existente.movimientoCajaDesembolsoId) {
+        throw new ValidationError(
+          `El préstamo ${existente.numeroPrestamo} ya tiene su desembolso registrado: no se puede cambiar cómo se cobra el interés (descontado por adelantado o diferido en las cuotas).`,
+        );
+      }
+      const pagosCuotas = await prisma.pagoCuotaPrestamo.count({ where: { cuotaPrestamo: { prestamoBancarioId: id } } });
+      if (pagosCuotas > 0) {
+        throw new ValidationError(
+          `El préstamo ${existente.numeroPrestamo} ya tiene ${pagosCuotas} pago(s) de cuotas: no se puede cambiar cómo se cobra el interés. Revierta primero esos pagos.`,
+        );
+      }
+    }
+
     // Calcular tipo de cambio SOLO si el usuario NO lo estableció manualmente
     let tipoCambioAplicado;
 
@@ -648,6 +682,7 @@ const actualizar = async (id, data) => {
       where: { id },
       data: {
         ...datosNormalizados,
+        interesDescontado,
         tipoCambioAplicado: tipoCambioAplicado,
         fechaContable: data.fechaContable ? new Date(data.fechaContable) : undefined,
         esSaldoInicial: data.esSaldoInicial !== undefined ? data.esSaldoInicial : undefined,
@@ -665,6 +700,15 @@ const actualizar = async (id, data) => {
         },
       },
     });
+
+    // Cambio de modalidad del interés: el cronograma se regenera (cuotas solo de capital o con interés)
+    if (regenerarCuotas) {
+      const cuotasNuevas = calcularCronogramaCuotas({ ...data, interesDescontado });
+      await prisma.$transaction([
+        prisma.cuotaPrestamo.deleteMany({ where: { prestamoBancarioId: id } }),
+        prisma.cuotaPrestamo.createMany({ data: cuotasNuevas.map((cuota) => ({ ...cuota, prestamoBancarioId: id })) }),
+      ]);
+    }
 
     // ⭐ RECALCULAR TODO DESDE LOS PAGOS: estados de cuotas, totales de cada cuota, saldos y estado
     // del préstamo (misma función que usan el cron y el botón de la lista)

@@ -12,7 +12,9 @@
 - La reversión se hace por operación (`/api/tesoreria/operaciones`), no por movimiento suelto.
 - ITF y comisión bancaria SIEMPRE son movimientos de caja (egresos) y asientos aparte y adicionales: nunca se restan del monto principal ni del depósito del banco.
 - Factoring: el banco financia el 100 % de cada factura; todas se cancelan (canje) por su saldo completo aunque el monto del préstamo no las cubra (solo se avisa).
-  El interés puede ir DESCONTADO del desembolso (un ingreso por el neto, un asiento) o COBRADO APARTE (ingreso por el bruto + egreso del interés); en ambos, el pasivo 454911 va por el bruto.
+  La modalidad del interés la define el préstamo (`PrestamoBancario.interesDescontado`): DESCONTADO por adelantado (el banco deposita el neto: un ingreso, un asiento,
+  cuotas solo de capital) o DIFERIDO en las cuotas (el banco deposita el bruto, sin descuento). En ambos, el pasivo 454911 va por el bruto. El factoring admite N cuotas (normalmente 1).
+- Terminología de préstamos con accionistas y terceros: solo "Prestamista" y "Deudor" (valores internos OTORGADO = la empresa es el Prestamista, RECIBIDO = la empresa es el Deudor); operaciones: Desembolso y Devolución.
 - Orden de la cadena de saldos de cuenta: fecha e id (el id desempata; siempre `orderBy: [{ fecha: 'desc' }, { id: 'desc' }]`).
 
 ## Esquema de base de datos (PROHIBIDO modificar: solo lo hace el usuario)

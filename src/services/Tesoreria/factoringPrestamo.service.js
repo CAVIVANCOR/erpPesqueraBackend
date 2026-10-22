@@ -22,8 +22,6 @@ import {
   crearAsientoLetra,
 } from "./letraCambioBase.service.js";
 
-// Tipo de movimiento de caja (egreso) del pago del descuento / interés
-const TIPO_MOVIMIENTO_INTERESES = 164;
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -38,12 +36,11 @@ const TIPO_MOVIMIENTO_INTERESES = 164;
  *        (PagoCuentaPorCobrar.prestamoBancarioId). La CxC queda CANJEADA.
  *        Asiento: DEBE 121401/121402 facturas por cobrar en descuento · HABER 121201/121202 cartera
  *     b) El banco financia el 100 % de cada factura (bruto = suma de los saldos); todas se cancelan siempre por su saldo
- *        completo, aunque el monto del préstamo no las cubra. El descuento / interés lo ingresa el usuario y se cobra de
- *        dos formas (ITF y comisión bancaria NUNCA se restan: siempre son movimientos aparte):
- *        - DESCONTADO (por defecto): el banco deposita el neto. Un solo ingreso por el neto y un solo asiento:
- *            DEBE banco (neto) · DEBE 673111 (descuento) · HABER 454911/454912 préstamo (bruto)
- *        - APARTE: el banco deposita el bruto y debita el interés después. Ingreso por el bruto + egreso propio por el
- *            interés (tipo INTERESES FINANCIEROS), cada uno con su asiento.
+ *        completo, aunque el monto del préstamo no las cubra. La modalidad del interés la define el préstamo
+ *        (PrestamoBancario.interesDescontado). ITF y comisión bancaria NUNCA se restan: siempre son movimientos aparte.
+ *        - DESCONTADO por adelantado: el banco deposita el neto (bruto - interés). Un solo ingreso por el neto y un solo asiento:
+ *            DEBE banco (neto) · DEBE 673111 (interés) · HABER 454911/454912 préstamo (bruto). Las cuotas son solo de capital.
+ *        - DIFERIDO: el banco deposita el bruto, sin descuento: DEBE banco · HABER 454911/454912. El interés va en las cuotas.
  *     Ambos asientos cuelgan del movimiento de caja: la reversión de la operación los deshace, devuelve las
  *     facturas a pendientes y el préstamo vuelve a APROBADO.
  *
@@ -107,23 +104,21 @@ export async function prepararDesembolsoFactoring(tx, { prestamo, ctx, datos }) 
   // La diferencia con el préstamo no bloquea: se informa en la respuesta para que se revise el capital del préstamo.
   const montoPrestamo = r2(num(prestamo.montoDesembolsado));
   const diferenciaPrestamo = r2(bruto - montoPrestamo);
-  const interesAparte = datos.interesAparte === true || datos.interesAparte === "true";
+  // Modalidad del interés definida en el préstamo: descontado por adelantado (el banco deposita el neto) o diferido en las cuotas
+  const interesDescontado = Boolean(prestamo.interesDescontado);
 
   // El descuento / interés lo ingresa el usuario (no incluye ITF ni comisión bancaria, que son movimientos aparte)
   const descuento = r2(datos.montoDescuento);
-  if (descuento < 0) throw new ValidationError("El descuento / interés del factoring no puede ser negativo.");
+  if (descuento < 0) throw new ValidationError("El interés descontado del factoring no puede ser negativo.");
+  if (!interesDescontado && descuento > 0) {
+    throw new ValidationError(
+      `El préstamo ${prestamo.numeroPrestamo} cobra el interés en las cuotas (diferido): el banco deposita el total de las facturas y no hay descuento en el desembolso. Deje el interés en cero o cambie la modalidad del interés en Préstamo Bancario.`,
+    );
+  }
   if (descuento >= bruto) {
-    throw new ValidationError(`El descuento / interés (${descuento.toFixed(2)}) debe ser menor al total de las facturas (${bruto.toFixed(2)}).`);
+    throw new ValidationError(`El interés descontado (${descuento.toFixed(2)}) debe ser menor al total de las facturas (${bruto.toFixed(2)}).`);
   }
   const neto = r2(bruto - descuento);
-  if (descuento > 0 && interesAparte) {
-    const tipoInteres = await tx.tipoMovEntregaRendir.findFirst({ where: { id: TIPO_MOVIMIENTO_INTERESES, activo: true } });
-    if (!tipoInteres) {
-      throw new ValidationError(
-        `No existe o está inactivo el tipo de movimiento de caja INTERESES FINANCIEROS (id ${TIPO_MOVIMIENTO_INTERESES}), necesario para registrar el pago del descuento / interés.`,
-      );
-    }
-  }
 
   const clave = etiquetaMoneda(prestamo.monedaId);
   const codigos = [CUENTAS.descuento[clave], CUENTAS.cartera[clave], CUENTAS.capital[clave]];
@@ -137,7 +132,7 @@ export async function prepararDesembolsoFactoring(tx, { prestamo, ctx, datos }) 
     bruto,
     neto,
     descuento,
-    interesAparte,
+    interesDescontado,
     montoPrestamo,
     diferenciaPrestamo,
     cuentaDescuento: cuenta(CUENTAS.descuento[clave]),
@@ -150,8 +145,7 @@ export async function prepararDesembolsoFactoring(tx, { prestamo, ctx, datos }) 
 }
 
 /** Canje de las facturas + asientos del canje y del desembolso. Devuelve los asientos creados. */
-/** interes: registro del movimiento de egreso por el descuento / interés (null si no hay descuento). */
-export async function registrarDesembolsoFactoring(tx, { prestamo, ctx, factoring, ingreso, interes, usuarioId }) {
+export async function registrarDesembolsoFactoring(tx, { prestamo, ctx, factoring, ingreso, usuarioId }) {
   const personalId = await obtenerPersonalDeUsuario(tx, usuarioId);
   const extranjera = Number(prestamo.monedaId) !== 1;
   const aSoles = (monto) => (extranjera ? r2(monto * ctx.tc) : r2(monto));
@@ -227,14 +221,11 @@ export async function registrarDesembolsoFactoring(tx, { prestamo, ctx, factorin
     lineas: lineasCanje,
   });
 
-  // b) Asiento del ingreso.
-  //    DESCONTADO: DEBE banco (neto) · DEBE 673111 (descuento) · HABER préstamo (bruto)
-  //    APARTE:     DEBE banco (bruto) · HABER préstamo (bruto); el interés tiene su propio asiento (c)
-  const montoBanco = factoring.interesAparte ? factoring.bruto : factoring.neto;
+  // b) Asiento del ingreso: DEBE banco (neto) · DEBE 673111 (interés descontado, si lo hay) · HABER préstamo (bruto)
   const lineasIngreso = [
-    { planCuentaId: ctx.cuenta.cuentaContableId, debe: aSoles(montoBanco), haber: 0, debeME: extranjera ? montoBanco : null, haberME: null },
+    { planCuentaId: ctx.cuenta.cuentaContableId, debe: aSoles(factoring.neto), haber: 0, debeME: extranjera ? factoring.neto : null, haberME: null },
   ];
-  if (!factoring.interesAparte && factoring.descuento > 0) {
+  if (factoring.descuento > 0) {
     lineasIngreso.push({
       planCuentaId: factoring.cuentaInteres.id,
       debe: aSoles(factoring.descuento),
@@ -248,7 +239,7 @@ export async function registrarDesembolsoFactoring(tx, { prestamo, ctx, factorin
   const asientoDesembolso = await crearAsientoLetra(tx, {
     ...parametrosAsiento,
     tipoLibroId: TIPO_LIBRO.CAJA_BANCOS,
-    glosa: `POR INGRESO DE FACTORING ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo} - BRUTO ${factoring.bruto.toFixed(2)} - DESCUENTO ${factoring.descuento.toFixed(2)} - NETO ${factoring.neto.toFixed(2)}`,
+    glosa: `POR INGRESO DE FACTORING ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo} - BRUTO ${factoring.bruto.toFixed(2)} - INTERES DESCONTADO ${factoring.descuento.toFixed(2)} - NETO ${factoring.neto.toFixed(2)}`,
     totalCabecera: factoring.bruto,
     lineas: [
       ...lineasIngreso,
@@ -265,34 +256,8 @@ export async function registrarDesembolsoFactoring(tx, { prestamo, ctx, factorin
       },
     ],
   });
-  const asientos = [asientoCanje, asientoDesembolso];
 
-  // c) Asiento del pago del descuento / interés (movimiento de egreso propio): DEBE 673111 · HABER banco
-  if (factoring.interesAparte && interes && factoring.descuento > 0) {
-    asientos.push(
-      await crearAsientoLetra(tx, {
-        ...parametrosAsiento,
-        procesoOrigenId: interes.movimiento.id,
-        tipoLibroId: TIPO_LIBRO.CAJA_BANCOS,
-        glosa: `POR EL DESCUENTO / INTERES DE FACTORING ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo}`,
-        totalCabecera: factoring.descuento,
-        lineas: [
-          {
-            planCuentaId: factoring.cuentaInteres.id,
-            debe: aSoles(factoring.descuento),
-            haber: 0,
-            debeME: extranjera ? factoring.descuento : null,
-            haberME: null,
-            centroCostoId: factoring.centroCostoInteres,
-            entidadComercialId: entidadBanco,
-          },
-          { planCuentaId: ctx.cuenta.cuentaContableId, debe: 0, haber: aSoles(factoring.descuento), debeME: null, haberME: extranjera ? factoring.descuento : null },
-        ],
-      }),
-    );
-  }
-
-  return asientos;
+  return [asientoCanje, asientoDesembolso];
 }
 
 // ════════════════════════════════════════════════════════════
@@ -620,7 +585,9 @@ export async function liquidarPorCobro(datos) {
       for (const c of cuotas) {
         if (num(c.montoInteres) > 0 || num(c.montoSeguro) > 0 || num(c.montoComision) > 0) {
           throw new ValidationError(
-            `La cuota ${c.numeroCuota} del préstamo ${prestamo.numeroPrestamo} tiene intereses, seguro o comisión: en factoring el descuento se cobra al desembolsar y las cuotas deben ser solo capital. Corrija el cronograma en Préstamo Bancario.`,
+            prestamo.interesDescontado
+              ? `La cuota ${c.numeroCuota} del préstamo ${prestamo.numeroPrestamo} tiene intereses, seguro o comisión, pero este factoring tiene el interés descontado por adelantado: sus cuotas deben ser solo capital. Corrija el cronograma en Préstamo Bancario.`
+              : `La cuota ${c.numeroCuota} del préstamo ${prestamo.numeroPrestamo} incluye intereses, seguro o comisión (interés diferido en las cuotas). La liquidación por cobro directo del cliente solo aplica a un factoring con el interés descontado por adelantado; este préstamo se cancela registrando el pago de la cuota en Tesorería Pendientes.`,
           );
         }
       }
