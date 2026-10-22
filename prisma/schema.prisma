@@ -8609,7 +8609,7 @@ model PrestamoBancario {
   movimientoCajaDesembolsoId  BigInt?           // Movimiento de caja del desembolso
   fechaContable               DateTime?    @default(now())
   esSaldoInicial              Boolean      @default(false)                      // 🆕 NUEVO CAMPO
-
+  interesDescontado           Boolean      @default(false)                      // Factoring: true = el banco descontó el interés al desembolsar (cuotas solo de capital); false = el interés se cobra en las cuotas
   
     // ========================================
   // CAMPOS ESPECÍFICOS PARA GARANTÍAS/CARTAS (NUEVOS)
