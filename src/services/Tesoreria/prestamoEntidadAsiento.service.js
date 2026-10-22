@@ -133,7 +133,7 @@ export async function generarAsientoApertura(prestamoId, usuarioId = null) {
       const numeroAsiento = `ASI-${new Date().getFullYear()}-${String(correlativo).padStart(6, "0")}`;
       const tipo = prestamo.esAccionista ? "ACCIONISTA" : "TERCERO";
       const recibido = prestamo.sentido === SENTIDO.RECIBIDO;
-      const glosa = `SALDO INICIAL PRÉSTAMO N° ${prestamo.numeroPrestamo} ${recibido ? "RECIBIDO DE" : "OTORGADO A"} ${tipo} ${prestamo.entidadComercial.razonSocial}`;
+      const glosa = `SALDO INICIAL PRÉSTAMO N° ${prestamo.numeroPrestamo} ${recibido ? "RECIBIDO DEL PRESTAMISTA" : "OTORGADO AL DEUDOR"} ${tipo} ${prestamo.entidadComercial.razonSocial}`;
 
       const linea = (numeroLinea, cuentaLinea, esDebe, conEntidad) => ({
         numeroLinea,

@@ -1570,7 +1570,7 @@ const ejecutarPagoSoloDetraccion = async (tx, data) => {
       montoITF: 0,
       montoComision: 0,
       montoDetraccion: montoDetraccion,
-      montoNetoCaja: 0,
+      montoAcreditado: 0,
       montoAplicadoDeuda: montoDetraccion,
       saldoPendiente: saldoPendiente
     }
@@ -2253,9 +2253,7 @@ const procesarPagoEspecializado = async (data) => {
           montoITF: movimientoITF ? Number(movimientoITF.monto) : 0,
           montoComision: movimientoComision ? Number(movimientoComision.monto) : 0,
           montoDetraccion: movimientoAutodetraccionEgreso ? Number(movimientoAutodetraccionEgreso.monto) : 0,
-          montoNetoCaja: Number(movimientoIngreso.monto) -
-            (movimientoITF ? Number(movimientoITF.monto) : 0) -
-            (movimientoComision ? Number(movimientoComision.monto) : 0),
+          montoAcreditado: Number(movimientoIngreso.monto),
           montoAplicadoDeuda: Number(data.montoAplicadoDeuda),
           saldoPendiente: saldoPendiente
         }
@@ -2738,9 +2736,7 @@ const obtenerResumenOperacion = async (empresaId, correlativo) => {
         montoDetraccion: totalDetraccion,
         montoRetencion: totalRetencion,
         montoPercepcion: totalPercepcion,
-        montoNetoCaja: totalMontoPagado -
-          (movimientoITF ? Number(movimientoITF.monto) : 0) -
-          (movimientoComision ? Number(movimientoComision.monto) : 0),
+        montoAcreditado: totalMontoPagado,
         deudaCancelada: totalMontoAplicado
       },
       pagos: operacion.pagos,

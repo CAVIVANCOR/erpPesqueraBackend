@@ -91,7 +91,11 @@ const listarVigentes = async ({ empresaId, sentido, entidadComercialId }) => {
       ...(sentido ? { sentido } : {}),
       ...(entidadComercialId ? { entidadComercialId: BigInt(entidadComercialId) } : {}),
     },
-    include: { entidadComercial: { select: { id: true, razonSocial: true } }, moneda: { select: { id: true, simbolo: true } } },
+    include: {
+      empresa: { select: { id: true, razonSocial: true } },
+      entidadComercial: { select: { id: true, razonSocial: true } },
+      moneda: { select: { id: true, simbolo: true } },
+    },
     orderBy: [{ fechaDesembolso: "asc" }, { id: "asc" }],
   });
   return prestamos.map((p) => ({
@@ -100,6 +104,7 @@ const listarVigentes = async ({ empresaId, sentido, entidadComercialId }) => {
     sentido: p.sentido,
     esAccionista: p.esAccionista,
     entidadComercialId: p.entidadComercialId,
+    empresa: p.empresa?.razonSocial || "",
     entidad: p.entidadComercial?.razonSocial || "",
     fechaDesembolso: p.fechaDesembolso,
     fechaVencimiento: p.fechaVencimiento,
@@ -130,6 +135,8 @@ const obtenerPorId = async (id) => {
     const incluirMov = {
       tipoMovimiento: { select: { id: true, nombre: true, esIngreso: true } },
       moneda: { select: { id: true, simbolo: true } },
+      empresa: { select: { id: true, razonSocial: true } },
+      medioPago: true,
       cuentaCorrienteDestino: { include: { banco: true } },
       cuentaCorrienteOrigen: { include: { banco: true } },
     };
@@ -158,13 +165,13 @@ async function validarSaldoInicial(db, data) {
   const faltantes = [];
   if (!data.empresaId) faltantes.push("Empresa");
   if (!data.entidadComercialId) faltantes.push("Accionista / tercero");
-  if (!data.sentido) faltantes.push("Sentido del préstamo (recibido u otorgado)");
+  if (!data.sentido) faltantes.push("Rol de la empresa (Prestamista o Deudor)");
   if (!data.monedaId) faltantes.push("Moneda");
   if (!data.fechaDesembolso) faltantes.push("Fecha de desembolso");
   if (!(num(data.montoDesembolsado) > 0)) faltantes.push("Monto desembolsado (mayor a cero)");
   if (faltantes.length > 0) throw new ValidationError(`Faltan campos obligatorios: ${faltantes.join(", ")}.`);
   if (!Object.values(SENTIDO).includes(data.sentido)) {
-    throw new ValidationError("El sentido del préstamo debe ser RECIBIDO u OTORGADO.");
+    throw new ValidationError("El rol de la empresa debe ser Prestamista o Deudor.");
   }
   const pagadoAnterior = num(data.montoPagadoAnterior);
   if (pagadoAnterior < 0 || pagadoAnterior > num(data.montoDesembolsado)) {
@@ -193,7 +200,7 @@ const crear = async (data, usuarioId = null) => {
         entidadComercialId: BigInt(data.entidadComercialId),
         sentido: data.sentido,
         esAccionista: Boolean(data.esAccionista),
-        esGerencial: false,
+        esGerencial: Boolean(data.esGerencial),
         esSaldoInicial: true,
         montoPagadoAnterior,
         fechaContable: aFecha(data.fechaContable) || fechaDesembolso,
@@ -256,6 +263,7 @@ const actualizar = async (id, data, usuarioId = null) => {
           entidadComercialId: BigInt(data.entidadComercialId),
           sentido: data.sentido,
           esAccionista: Boolean(data.esAccionista),
+          esGerencial: Boolean(data.esGerencial),
           montoPagadoAnterior: r2(data.montoPagadoAnterior),
           fechaContable: aFecha(data.fechaContable) || fechaDesembolso,
           fechaDesembolso,
@@ -292,7 +300,7 @@ const eliminar = async (id) => {
     }
     if (existente._count.pagos > 0) {
       throw new ConflictError(
-        `No se puede eliminar el préstamo N° ${existente.numeroPrestamo} porque tiene ${existente._count.pagos} pago(s) o cobro(s) registrado(s). Primero revierta esas operaciones desde Tesorería Pendientes.`,
+        `No se puede eliminar el préstamo N° ${existente.numeroPrestamo} porque tiene ${existente._count.pagos} devolución(es) registrada(s). Primero revierta esas operaciones desde Tesorería Pendientes.`,
       );
     }
     const asientos = await contarAsientosApertura(prisma, existente.id);

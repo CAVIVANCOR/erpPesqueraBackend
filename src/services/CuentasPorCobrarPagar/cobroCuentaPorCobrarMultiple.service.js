@@ -851,7 +851,7 @@ const procesarCobroMultiple = async (datos) => {
               montoCobrado: montoTotal,
               itf,
               comision,
-              totalNeto: redondear2(montoTotal - itf - comision),
+              montoAcreditado: redondear2(montoTotal),
               saldoFinalCuenta,
               movimientosCreados: 1 + (itfRegistro ? 1 : 0) + (comisionRegistro ? 1 : 0),
             },

@@ -2,7 +2,9 @@
 // CONSTANTES: PRÉSTAMOS CON ACCIONISTAS Y TERCEROS (bidireccional, solo capital)
 // ════════════════════════════════════════════════════════════
 
-// RECIBIDO: la empresa es la deudora. OTORGADO: la empresa es la acreedora.
+// Valores internos. En pantalla solo existen dos términos:
+//   RECIBIDO = la empresa es el DEUDOR (recibe el préstamo y debe devolverlo)
+//   OTORGADO = la empresa es el PRESTAMISTA (presta el dinero)
 export const SENTIDO_PRESTAMO_ENTIDAD = {
   RECIBIDO: "RECIBIDO",
   OTORGADO: "OTORGADO",

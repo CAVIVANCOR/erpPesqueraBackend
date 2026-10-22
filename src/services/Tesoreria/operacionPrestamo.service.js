@@ -1080,8 +1080,9 @@ const procesarDesembolso = async (datos) => {
         // [CASO B] FACTORING: se desembolsa contra facturas (canje + descuento a 673111, ver factoringPrestamo.service.js)
         const factoring = esFactoring ? await prepararDesembolsoFactoring(tx, { prestamo, ctx, datos }) : null;
         const cuentaCapital = esFactoring ? null : await obtenerCuentaCapital(tx, prestamo, "DESEMBOLSO", ctx.esMonedaNacional);
-        // El ingreso de caja es el monto del préstamo; en factoring, el descuento / interés sale con su propio movimiento de egreso
-        const montoIngreso = esFactoring ? factoring.bruto : montoDesembolso;
+        // Ingreso de caja: el monto del préstamo. En factoring, el neto depositado si el banco descontó el interés,
+        // o el bruto si el interés se cobra aparte (con su propio movimiento de egreso). ITF y comisión nunca se restan.
+        const montoIngreso = esFactoring ? (factoring.interesAparte ? factoring.bruto : factoring.neto) : montoDesembolso;
 
         // ════════════════════════════════════════════════════════════
         // 3. GLOSA según el caso
@@ -1134,7 +1135,7 @@ const procesarDesembolso = async (datos) => {
 
         // [CASO B] Pago del descuento / interés de factoring: egreso propio, en cascada tras el ingreso
         const interesRegistro =
-          factoring && factoring.descuento > 0
+          factoring && factoring.interesAparte && factoring.descuento > 0
             ? await registrarMovimiento({
                 tx,
                 cuenta: ctx.cuenta,
@@ -1263,11 +1264,14 @@ const procesarDesembolso = async (datos) => {
                   bruto: factoring.bruto,
                   neto: factoring.neto,
                   descuento: factoring.descuento,
+                  interesAparte: factoring.interesAparte,
+                  montoPrestamo: factoring.montoPrestamo,
+                  diferenciaPrestamo: factoring.diferenciaPrestamo,
                 },
               }),
               itf,
               comision,
-              totalNeto: redondear2(montoIngreso - (factoring?.descuento || 0) - itf - comision),
+              montoAcreditado: redondear2(montoIngreso),
               saldoFinalCuenta: respuesta.saldoFinalCuenta,
               movimientosCreados: respuesta.movimientosCreados,
             },

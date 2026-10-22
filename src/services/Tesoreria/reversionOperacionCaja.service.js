@@ -712,7 +712,7 @@ async function analizar(db, ctx) {
       id: prestamo.id,
       etiqueta: "Préstamo",
       numeroPrestamo: prestamo.numeroPrestamo,
-      accion: `Se anula el ${prestamo.sentido === "RECIBIDO" ? "pago" : "cobro"} de ${aplicado.toFixed(2)}: el saldo pendiente del préstamo sube de ${num(prestamo.saldoCapital).toFixed(2)} a ${r2(num(prestamo.saldoCapital) + aplicado).toFixed(2)} y vuelve a estar vigente`,
+      accion: `Se anula la devolución de ${aplicado.toFixed(2)}: el saldo pendiente del préstamo sube de ${num(prestamo.saldoCapital).toFixed(2)} a ${r2(num(prestamo.saldoCapital) + aplicado).toFixed(2)} y vuelve a estar vigente`,
     });
   }
   for (const prestamo of ctx.prestamosEntDesembolso) {
@@ -721,7 +721,7 @@ async function analizar(db, ctx) {
     });
     if (pagos > 0) {
       bloqueos.push(
-        `El préstamo N° ${prestamo.numeroPrestamo} ya tiene ${pagos} ${prestamo.sentido === "RECIBIDO" ? "pago(s)" : "cobro(s)"} registrado(s): primero revierta esas operaciones.`,
+        `El préstamo N° ${prestamo.numeroPrestamo} ya tiene ${pagos} devolución(es) registrada(s): primero revierta esas operaciones.`,
       );
     }
     prestamos.push({
@@ -1187,8 +1187,8 @@ export async function listarOperaciones({ empresaId, desde, hasta, busqueda, lim
       else if (contiene(idsCuotas)) tipo = "Pago de cuotas de préstamo";
       else if (contiene(idsDesembolsos)) tipo = "Desembolso de préstamo";
       else if (contiene(idsAsignaciones)) tipo = "Entrega de fondos";
-      else if (contiene(idsDesembolsosEnt)) tipo = desembolsosEnt.some((d) => ids.includes(clave(d.movimientoCajaDesembolsoId)) && d.sentido === "OTORGADO") ? "Préstamo otorgado a accionista / tercero" : "Préstamo recibido de accionista / tercero";
-      else if (contiene(idsPagosEnt)) tipo = pagosEnt.some((p) => ids.includes(clave(p.movimientoCajaId)) && p.prestamoEntidad?.sentido === "OTORGADO") ? "Cobranza de préstamo a accionista / tercero" : "Pago de préstamo a accionista / tercero";
+      else if (contiene(idsDesembolsosEnt)) tipo = desembolsosEnt.some((d) => ids.includes(clave(d.movimientoCajaDesembolsoId)) && d.sentido === "OTORGADO") ? "Desembolso de préstamo (Prestamista)" : "Desembolso de préstamo (Deudor)";
+      else if (contiene(idsPagosEnt)) tipo = pagosEnt.some((p) => ids.includes(clave(p.movimientoCajaId)) && p.prestamoEntidad?.sentido === "OTORGADO") ? "Devolución de préstamo (Prestamista)" : "Devolución de préstamo (Deudor)";
       else if (contiene(idsLetras)) tipo = letras.some((l) => ids.includes(clave(l.movimientoCajaId)) && l.letraCambio?.tipoLetra === "COBRAR") ? "Cobranza de letra de cambio" : "Pago de letra de cambio";
 
       const principales = op.movimientos.filter((m) => Number(m.tipoMovimientoId) !== TIPO_MOVIMIENTO_ITF_COMISION);

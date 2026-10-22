@@ -64,7 +64,7 @@ async function procesar(datos, operacion) {
       let sentido;
       let esAccionista;
       if (operacion === TIPOS_OPERACION.PAGO) {
-        if (!datos.prestamoEntidadId) throw new ValidationError("Seleccione el préstamo al que se aplica el pago o cobro.");
+        if (!datos.prestamoEntidadId) throw new ValidationError("Seleccione el préstamo al que se aplica la devolución.");
         await tx.$queryRaw`SELECT id FROM "PrestamoEntidad" WHERE id = ${BigInt(datos.prestamoEntidadId)} FOR UPDATE`;
         prestamo = await tx.prestamoEntidad.findUnique({
           where: { id: BigInt(datos.prestamoEntidadId) },
@@ -72,7 +72,7 @@ async function procesar(datos, operacion) {
         });
         if (!prestamo) throw new NotFoundError("El préstamo seleccionado no existe.");
         if (Number(prestamo.estadoId) !== ESTADO.VIGENTE) {
-          throw new ValidationError(`El préstamo N° ${prestamo.numeroPrestamo} no admite pagos ni cobros porque no está vigente (ya fue pagado o anulado).`);
+          throw new ValidationError(`El préstamo N° ${prestamo.numeroPrestamo} no admite devoluciones porque no está vigente (ya fue pagado o anulado).`);
         }
         const saldo = r2(num(prestamo.saldoCapital));
         if (monto > saldo + TOLERANCIA) {
@@ -86,12 +86,13 @@ async function procesar(datos, operacion) {
         esAccionista = prestamo.esAccionista;
       } else {
         if (!datos.empresaId) throw new ValidationError("Seleccione la empresa del préstamo.");
-        if (!datos.entidadComercialId) throw new ValidationError("Seleccione el accionista o tercero del préstamo.");
         if (!Object.values(SENTIDO).includes(datos.sentido)) {
-          throw new ValidationError("Indique si el préstamo es RECIBIDO (la empresa es la deudora) u OTORGADO (la empresa es la acreedora).");
+          throw new ValidationError("Indique si la empresa es Prestamista (presta el dinero) o Deudor (recibe el préstamo y debe devolverlo).");
         }
+        const otraParte = datos.sentido === SENTIDO.RECIBIDO ? "Prestamista" : "Deudor";
+        if (!datos.entidadComercialId) throw new ValidationError(`Seleccione el ${otraParte} del préstamo.`);
         if (datos.esAccionista === undefined || datos.esAccionista === null || datos.esAccionista === "") {
-          throw new ValidationError("Indique si la contraparte es accionista o tercero.");
+          throw new ValidationError(`Indique si el ${otraParte} es accionista o tercero.`);
         }
         if (datos.fechaVencimiento && new Date(datos.fechaVencimiento) < new Date(fecha)) {
           throw new ValidationError("La fecha de vencimiento no puede ser anterior a la fecha de desembolso.");
@@ -105,7 +106,7 @@ async function procesar(datos, operacion) {
       const empresa = await tx.empresa.findUnique({ where: { id: empresaId }, select: { id: true, razonSocial: true } });
       if (!empresa) throw new NotFoundError("La empresa del préstamo no existe.");
       const contraparte = await tx.entidadComercial.findUnique({ where: { id: entidadId }, select: { id: true, razonSocial: true } });
-      if (!contraparte) throw new NotFoundError("El accionista o tercero del préstamo no existe.");
+      if (!contraparte) throw new NotFoundError(`El ${sentido === SENTIDO.RECIBIDO ? "Prestamista" : "Deudor"} del préstamo no existe.`);
 
       // El loan account va al DEBE al otorgar el préstamo o al pagar uno recibido; el banco va al lado contrario
       const loanEnDebe = (operacion === TIPOS_OPERACION.DESEMBOLSO) === (sentido === SENTIDO.OTORGADO);
@@ -158,6 +159,8 @@ async function procesar(datos, operacion) {
       if (!submoduloMovCaja) throw new ValidationError('No se encontró el submódulo "MovimientoCaja".');
       const submoduloPrestamo = await tx.submoduloSistema.findFirst({ where: { ruta: RUTA_SUBMODULO_PRESTAMO_ENTIDAD, activo: true } });
 
+      // El pago o cobro hereda el libro (fiscal / gerencial) del préstamo; el desembolso lo define el usuario
+      const esGerencial = prestamo ? Boolean(prestamo.esGerencial) : Boolean(aBooleano(datos.esGerencial));
       const fechaContable = new Date(fecha);
       const correlativo = await correlativoService.generarCorrelativo(empresaId, tx);
       const periodo = await obtenerPeriodoAbierto(tx, empresaId, fechaContable, empresa.razonSocial);
@@ -170,7 +173,7 @@ async function procesar(datos, operacion) {
           entidadComercialId: entidadId,
           sentido,
           esAccionista,
-          esGerencial: false,
+          esGerencial,
           numeroOperacion,
           cuentaCorrienteId: BigInt(cuenta.id),
           refOperacionEspecializadaMovCaja: correlativo,
@@ -193,11 +196,11 @@ async function procesar(datos, operacion) {
       const etiquetaOperacion =
         operacion === TIPOS_OPERACION.DESEMBOLSO
           ? sentido === SENTIDO.RECIBIDO
-            ? `PRÉSTAMO RECIBIDO DE ${tipoContraparte}`
-            : `PRÉSTAMO OTORGADO A ${tipoContraparte}`
+            ? `PRÉSTAMO RECIBIDO DEL PRESTAMISTA ${tipoContraparte}`
+            : `PRÉSTAMO OTORGADO AL DEUDOR ${tipoContraparte}`
           : sentido === SENTIDO.RECIBIDO
-            ? `PAGO DE PRÉSTAMO A ${tipoContraparte}`
-            : `COBRANZA DE PRÉSTAMO A ${tipoContraparte}`;
+            ? `DEVOLUCIÓN DE PRÉSTAMO AL PRESTAMISTA ${tipoContraparte}`
+            : `DEVOLUCIÓN DE PRÉSTAMO DEL DEUDOR ${tipoContraparte}`;
       const descripcionMovimiento =
         (datos.descripcion && String(datos.descripcion).trim()) ||
         `${etiquetaOperacion} ${contraparte.razonSocial} - PRÉSTAMO N° ${prestamo.numeroPrestamo} - ${cuenta.banco?.nombre || "BANCO"} CTA. ${cuenta.numeroCuenta || cuenta.id}`;
@@ -233,7 +236,7 @@ async function procesar(datos, operacion) {
         medioPagoId: Number(medioPagoId),
         fechaOperacionMovCaja: fechaContable,
         estadoId: ESTADO_MOVIMIENTO_CAJA_VALIDADO,
-        esGerencial: false,
+        esGerencial,
         tipoCambio: tc,
         usuarioId: usuarioId ? Number(usuarioId) : null,
         moduloOrigenMotivoOperacionId: submoduloPrestamo?.id || null,
@@ -330,7 +333,7 @@ async function procesar(datos, operacion) {
         haberME: loanEnDebe && extranjera ? monto : null,
         entidadComercialId: null,
       };
-      const paramsAsiento = { empresaId, periodo, fecha: fechaContable, tipoLibroId: TIPO_LIBRO.CAJA_BANCOS, submodulo: submoduloMovCaja, tipoCambio: tc, usuarioId };
+      const paramsAsiento = { empresaId, periodo, fecha: fechaContable, tipoLibroId: TIPO_LIBRO.CAJA_BANCOS, submodulo: submoduloMovCaja, tipoCambio: tc, usuarioId, esGerencial };
       const asientos = [
         await crearAsientoLetra(tx, {
           ...paramsAsiento,
@@ -386,12 +389,24 @@ async function procesar(datos, operacion) {
         orderBy: { id: "asc" },
       });
       const prestamoFinal = await tx.prestamoEntidad.findUnique({ where: { id: prestamo.id } });
-      const accion = operacion === TIPOS_OPERACION.DESEMBOLSO ? "Desembolso" : sentido === SENTIDO.RECIBIDO ? "Pago" : "Cobranza";
+      const accion = operacion === TIPOS_OPERACION.DESEMBOLSO ? "Desembolso" : "Devolución";
 
       return {
         success: true,
         message: `${accion} del préstamo ${prestamo.numeroPrestamo} registrado exitosamente`,
         data: {
+          operacion,
+          sentido,
+          esAccionista,
+          prestamo: {
+            id: prestamo.id,
+            numeroPrestamo: prestamo.numeroPrestamo,
+            contraparte: contraparte.razonSocial,
+            tipoContraparte,
+            montoDesembolsado: num(prestamoFinal.montoDesembolsado),
+            saldoCapital: num(prestamoFinal.saldoCapital),
+            simbolo: cuenta.moneda.simbolo,
+          },
           correlativo: Number(correlativo),
           prestamoEntidadId: prestamo.id,
           pagoPrestamoEntidadId: pago?.id || null,
@@ -414,7 +429,15 @@ async function procesar(datos, operacion) {
               egresos: Number(s.egresos),
               saldoActual: Number(s.saldoActual),
             })),
-          asientosContables: asientos.map((a) => ({ id: a.id, numeroAsiento: a.numeroAsiento })),
+          asientosContables: asientos.map((a) => ({
+            id: a.id,
+            numeroAsiento: a.numeroAsiento,
+            procesoOrigenId: a.procesoOrigenId,
+            glosa: a.glosa,
+            totalDebe: Number(a.totalDebe),
+            totalHaber: Number(a.totalHaber),
+            moneda: { id: cuenta.moneda.id, simbolo: cuenta.moneda.simbolo },
+          })),
           resumen: {
             operacion,
             sentido,

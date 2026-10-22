@@ -178,6 +178,7 @@ export async function crearAsientoLetra(tx, {
   totalCabecera,
   lineas,
   usuarioId,
+  esGerencial = false,
 }) {
   const estadoPendiente = await tx.estadoMultiFuncion.findUnique({ where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) } });
   if (!estadoPendiente) throw new NotFoundError("No se encontró el estado PENDIENTE para asientos contables.");
@@ -213,9 +214,9 @@ export async function crearAsientoLetra(tx, {
       correlativo,
       fechaAsiento: new Date(fecha),
       glosa,
-      tipoLibro: "FISCAL",
+      tipoLibro: esGerencial ? "GERENCIAL" : "FISCAL",
       tipoLibroId,
-      esGerencial: false,
+      esGerencial: Boolean(esGerencial),
       esSaldoInicial: false,
       origenAsiento: "AUTOMATICO",
       submoduloOrigenId: submodulo.id,
