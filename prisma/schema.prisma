@@ -1467,7 +1467,6 @@ model MotivoNotaCreditoDebito {
 }
 
 
-
 model CuentaCorriente {
   id                                                                      BigInt              @id @default(autoincrement())
   empresaId                                                               BigInt
@@ -1490,6 +1489,13 @@ model CuentaCorriente {
   actualizadoEn           DateTime?           @updatedAt
   creadoPorId             BigInt?
   actualizadoPorId        BigInt?
+
+  // ========================================
+  // 🆕 TARJETA DE CRÉDITO (solo se llenan en cuentas de tipo tarjeta; vacíos en cuentas bancarias)
+  // ========================================
+  limiteCredito           Decimal?            @db.Decimal(18, 2)   // 🆕 TARJETA: línea de crédito aprobada (ej. 5000)
+  diaCierre               Int?                                     // 🆕 TARJETA: día del mes en que cierra el estado de cuenta (1-31)
+  diaPago                 Int?                                     // 🆕 TARJETA: día del mes en que vence el pago (1-31)
 
   // ========================================
   // 🆕 CAMPO PARA VINCULAR CON PLAN CONTABLE
@@ -5188,6 +5194,7 @@ model TipoCuentaCorriente {
   nombre          String            @unique
   descripcion     String?
   activo          Boolean           @default(true)
+  esTarjetaCredito  Boolean  @default(false)   // 🆕 TARJETA: marca las cuentas de este tipo como tarjeta de crédito
 
   cuentas     CuentaCorriente[]
 }
@@ -9538,7 +9545,8 @@ model TipoPrestamo {
   esLeasing             Boolean                 @default(false)              // SI ES TIPO LEASING
   esFactoring           Boolean                 @default(false)              // SI ES FACTORING
   permiteRefinanciar    Boolean                 @default(true)               // SI PERMITE SER REFINANCIADO
-  
+  esTarjetaCredito  Boolean  @default(false)   // 🆕 TARJETA: préstamo de compra en cuotas con tarjeta (usa 454611/454612)
+
   // ========================================
   // CONFIGURACION INTERFAZ DE USUARIO
   // ========================================
