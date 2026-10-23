@@ -143,8 +143,9 @@ const obtenerSaldoConsolidado = async (empresaId = null) => {
       ? { empresaId: Number(empresaId), activa: true }
       : { activa: true };
 
+    // El consolidado es de caja y bancos: la deuda de las tarjetas de crédito se informa aparte
     const cuentas = await prisma.cuentaCorriente.findMany({
-      where,
+      where: { ...where, tipoCuentaCorriente: { esTarjetaCredito: false } },
       include: {
         moneda: {
           select: {
@@ -163,6 +164,33 @@ const obtenerSaldoConsolidado = async (empresaId = null) => {
           take: 1,
         },
       },
+    });
+
+    // Tarjetas de crédito: el saldo negativo es la deuda y lo disponible es la línea menos la deuda
+    const tarjetas = await prisma.cuentaCorriente.findMany({
+      where: { ...where, tipoCuentaCorriente: { esTarjetaCredito: true } },
+      include: {
+        banco: { select: { nombre: true } },
+        moneda: { select: { id: true, simbolo: true, codigoSunat: true } },
+        saldos: { select: { saldoActual: true }, orderBy: [{ fecha: "desc" }, { id: "desc" }], take: 1 },
+      },
+      orderBy: { id: "asc" },
+    });
+    const tarjetasCredito = tarjetas.map((t) => {
+      const saldo = Number(t.saldos?.[0]?.saldoActual || 0);
+      const limite = t.limiteCredito !== null ? Number(t.limiteCredito) : 0;
+      return {
+        cuentaCorrienteId: t.id,
+        banco: t.banco?.nombre || null,
+        numeroCuenta: t.numeroCuenta,
+        descripcion: t.descripcion,
+        moneda: t.moneda,
+        limiteCredito: limite,
+        deuda: Math.max(0, Number((-saldo).toFixed(2))),
+        disponible: Number((limite + saldo).toFixed(2)),
+        diaCierre: t.diaCierre,
+        diaPago: t.diaPago,
+      };
     });
 
     // ✅ CORREGIDO: Usar tipo de cambio fijo (NO existe modelo TipoCambio)
@@ -206,6 +234,7 @@ const obtenerSaldoConsolidado = async (empresaId = null) => {
         total: Number(d.total.toFixed(2)),
         cantidadCuentas: d.cantidadCuentas,
       })),
+      tarjetasCredito,
     };
   } catch (err) {
     if (err.code && err.code.startsWith("P")) {

@@ -99,6 +99,8 @@ const CUENTAS_CAPITAL = {
   // [CASO B] factoring: ingreso → FACTORING CLIENTE (166) · pago → FACTORING (454)
   FACTORING_INGRESO: { soles: "166111", dolares: "166112" },
   FACTORING_PAGO: { soles: "454911", dolares: "454912" },
+  // [CASO C] compra en cuotas con tarjeta de crédito: TARJETAS DE CREDITO M.N. / M.E.
+  TARJETA: { soles: "454611", dolares: "454612" },
 };
 
 // Cuentas de gasto de la cuota, comunes a ambos casos
@@ -406,6 +408,9 @@ const obtenerCuentaCapital = async (tx, prestamo, operacion, esMonedaNacional) =
   if (prestamo.tipoPrestamo?.esFactoring) {
     // [CASO B] FACTORING
     codigos = operacion === "DESEMBOLSO" ? CUENTAS_CAPITAL.FACTORING_INGRESO : CUENTAS_CAPITAL.FACTORING_PAGO;
+  } else if (prestamo.tipoPrestamo?.esTarjetaCredito) {
+    // [CASO C] TARJETA DE CRÉDITO: la deuda de las cuotas va a 4546, no a 4511
+    codigos = CUENTAS_CAPITAL.TARJETA;
   } else {
     // [CASO A] PRÉSTAMO ESTÁNDAR
     codigos = CUENTAS_CAPITAL.ESTANDAR;
@@ -1056,6 +1061,15 @@ const procesarDesembolso = async (datos) => {
         const montoDesembolso = Number(prestamo.montoDesembolsado);
         if (!(montoDesembolso > 0)) {
           throw new ValidationError("El préstamo no tiene un monto desembolsado mayor a cero");
+        }
+
+        // Un préstamo de tarjeta de crédito no recibe dinero: la compra se financia en cuotas cancelando
+        // facturas por pagar contra la deuda 4546. Un desembolso en caja registraría un ingreso inexistente.
+        if (prestamo.tipoPrestamo?.esTarjetaCredito) {
+          throw new ValidationError(
+            `El préstamo ${prestamo.numeroPrestamo} es de tipo tarjeta de crédito (${prestamo.tipoPrestamo.descripcion}): no se desembolsa en caja porque no ingresa dinero al banco. ` +
+              "Registre la compra en cuotas con la operación de tarjeta de crédito."
+          );
         }
 
         // ════════════════════════════════════════════════════════════

@@ -7,9 +7,14 @@ export default function toJSONBigInt(obj) {
     return obj;
   }
   
+  // BigInt suelto (p. ej. elementos de un arreglo de ids): JSON no lo serializa y lanzaba "Do not know how to serialize a BigInt"
+  if (typeof obj === 'bigint') {
+    return obj.toString();
+  }
+
   // Manejar arrays
   if (Array.isArray(obj)) {
-    return obj.map(toJSONBigInt);
+    return obj.map((elemento) => toJSONBigInt(elemento));
   }
   
   // Manejar objetos

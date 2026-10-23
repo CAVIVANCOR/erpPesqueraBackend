@@ -1788,7 +1788,7 @@ export async function actualizarUrlVoucherBancario(movimientoId, url) {
 export async function obtenerSaldoCuenta(cuentaCorrienteId) {
   const cuenta = await prisma.cuentaCorriente.findUnique({
     where: { id: Number(cuentaCorrienteId) },
-    select: { id: true, empresaId: true, monedaId: true },
+    select: { id: true, empresaId: true, monedaId: true, limiteCredito: true, tipoCuentaCorriente: { select: { esTarjetaCredito: true } } },
   });
   if (!cuenta) throw new NotFoundError('Cuenta corriente no encontrada.');
 
@@ -1797,11 +1797,20 @@ export async function obtenerSaldoCuenta(cuentaCorrienteId) {
     orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
   });
 
+  const saldoActual = ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0;
+  const esTarjetaCredito = Boolean(cuenta.tipoCuentaCorriente?.esTarjetaCredito);
+  const limiteCredito = cuenta.limiteCredito !== null ? Number(cuenta.limiteCredito) : null;
+
   return {
     cuentaCorrienteId: cuenta.id,
     empresaId: cuenta.empresaId,
     monedaId: cuenta.monedaId,
-    saldoActual: ultimoSaldo ? Number(ultimoSaldo.saldoActual) : 0,
+    saldoActual,
+    esTarjetaCredito,
+    limiteCredito,
+    // En una tarjeta el saldo negativo es la deuda: lo disponible es la línea menos lo usado.
+    // En el resto de cuentas lo disponible es el saldo.
+    disponible: esTarjetaCredito ? (limiteCredito ?? 0) + saldoActual : saldoActual,
   };
 }
 

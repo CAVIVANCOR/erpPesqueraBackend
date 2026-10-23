@@ -16,6 +16,12 @@
   cuotas solo de capital) o DIFERIDO en las cuotas (el banco deposita el bruto, sin descuento). En ambos, el pasivo 454911 va por el bruto. El factoring admite N cuotas (normalmente 1).
 - Terminología de préstamos con accionistas y terceros: solo "Prestamista" y "Deudor" (valores internos OTORGADO = la empresa es el Prestamista, RECIBIDO = la empresa es el Deudor); operaciones: Desembolso y Devolución.
 - Orden de la cadena de saldos de cuenta: fecha e id (el id desempata; siempre `orderBy: [{ fecha: 'desc' }, { id: 'desc' }]`).
+- Tarjetas de crédito empresariales: cada tarjeta es una `CuentaCorriente` cuyo `TipoCuentaCorriente.esTarjetaCredito = true`, con cuenta contable 454611 (soles) / 454612 (dólares),
+  `limiteCredito`, `diaCierre` y `diaPago`. El saldo negativo de la tarjeta es la deuda; disponible = límite + saldo (`obtenerSaldoCuenta`).
+  Compra: pago normal de la CxP o gasto con la cuenta tarjeta (DEBE 421201 / HABER 454611, movimiento de caja reversible). Pago de la tarjeta: transferencia interna
+  banco → tarjeta (DEBE 454611 / HABER banco). Intereses y comisiones que el banco carga a la tarjeta: Gastos Bancarios sobre la cuenta tarjeta (DEBE 673111 o 679401 / HABER 454611).
+  No hay cronograma por compra: las cuotas se pagan con el monto del estado de cuenta. Un `PrestamoBancario` de tipo `esTarjetaCredito` no se desembolsa en caja.
+  El saldo consolidado de caja excluye las tarjetas; su deuda, línea, disponible y fechas de cierre y pago se informan aparte (`tarjetasCredito`).
 
 ## Esquema de base de datos (PROHIBIDO modificar: solo lo hace el usuario)
 - NUNCA editar `prisma/schema.prisma`, NUNCA crear ni ejecutar migraciones (`prisma migrate`, `db push`, SQL de estructura). Solo el usuario modifica el esquema.
