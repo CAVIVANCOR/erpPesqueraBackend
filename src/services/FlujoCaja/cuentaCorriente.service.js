@@ -334,17 +334,65 @@ const actualizar = async (id, data) => {
   }
 };
 
+// Tablas que referencian una cuenta corriente: delegado de Prisma, campo y descripción para el usuario
+const REFERENCIAS_CUENTA = [
+  { modelo: "movimientoCaja", campo: "cuentaCorrienteOrigenId", descripcion: "Movimientos de caja (como cuenta de origen)" },
+  { modelo: "movimientoCaja", campo: "cuentaCorrienteDestinoId", descripcion: "Movimientos de caja (como cuenta de destino)" },
+  { modelo: "saldoCuentaCorriente", campo: "cuentaCorrienteId", descripcion: "Saldos de la cuenta corriente" },
+  { modelo: "pagoCuentaPorCobrar", campo: "cuentaBancariaId", descripcion: "Cobros de cuentas por cobrar" },
+  { modelo: "pagoCuentaPorPagar", campo: "cuentaBancariaId", descripcion: "Pagos de cuentas por pagar" },
+  { modelo: "conciliacionBancaria", campo: "cuentaCorrienteId", descripcion: "Conciliaciones bancarias" },
+  { modelo: "detraccion", campo: "cuentaBNSunatPropiaId", descripcion: "Detracciones (como cuenta BN propia)" },
+  { modelo: "detraccion", campo: "cuentaBNSunatProveedorId", descripcion: "Detracciones (como cuenta BN del proveedor)" },
+  { modelo: "prestamoBancario", campo: "cuentaCorrienteId", descripcion: "Préstamos bancarios" },
+  { modelo: "prestamoRelacionado", campo: "cuentaCorrientePrestamistaId", descripcion: "Préstamos entre relacionadas (cuenta del prestamista)" },
+  { modelo: "prestamoRelacionado", campo: "cuentaCorrientePrestatariaId", descripcion: "Préstamos entre relacionadas (cuenta de la prestataria)" },
+  { modelo: "prestamoEntidad", campo: "cuentaCorrienteId", descripcion: "Préstamos con accionistas y terceros" },
+];
+
+/** Registros de otras tablas que referencian la cuenta corriente (solo las que tienen registros). */
+const obtenerReferencias = async (id) => {
+  const cuenta = await prisma.cuentaCorriente.findUnique({
+    where: { id },
+    select: { id: true, numeroCuenta: true, banco: { select: { nombre: true } } },
+  });
+  if (!cuenta) throw new NotFoundError("Cuenta corriente no encontrada");
+  const conteos = await Promise.all(
+    REFERENCIAS_CUENTA.map(async (r) => ({
+      tabla: r.modelo,
+      campo: r.campo,
+      descripcion: r.descripcion,
+      cantidad: await prisma[r.modelo].count({ where: { [r.campo]: id } }),
+    })),
+  );
+  const referencias = conteos.filter((c) => c.cantidad > 0);
+  return {
+    cuenta: { id: cuenta.id, numeroCuenta: cuenta.numeroCuenta, banco: cuenta.banco?.nombre || null },
+    tieneReferencias: referencias.length > 0,
+    referencias,
+  };
+};
+
 const eliminar = async (id) => {
   try {
+    const { cuenta, referencias } = await obtenerReferencias(id);
+    if (referencias.length > 0) {
+      const detalle = referencias.map((r) => `${r.descripcion}: ${r.cantidad}`).join("; ");
+      throw new ConflictError(
+        `No se puede eliminar la cuenta corriente ${cuenta.numeroCuenta}${cuenta.banco ? ` del banco ${cuenta.banco}` : ""} porque tiene registros asociados en: ${detalle}. Elimine o reasigne esos registros antes de eliminar la cuenta; si ya tiene movimientos, lo recomendable es desactivarla.`,
+        referencias,
+      );
+    }
     await prisma.cuentaCorriente.delete({ where: { id } });
     return true;
   } catch (err) {
+    if (err instanceof ConflictError || err instanceof NotFoundError) throw err;
     if (err.code === "P2025")
       throw new NotFoundError("Cuenta corriente no encontrada");
-    // P2003: Foreign key violation (referenciada en MovimientoCaja u otra)
+    // P2003: Foreign key violation de una tabla que no figura en la verificación previa
     if (err.code === "P2003")
       throw new ConflictError(
-        "No se puede eliminar la cuenta corriente porque está asociada a movimientos de caja u otros registros."
+        "No se puede eliminar la cuenta corriente porque otra tabla todavía la referencia (" + (err.meta?.field_name || err.meta?.constraint || "restricción de la base de datos") + ")."
       );
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -358,4 +406,5 @@ export default {
   crear,
   actualizar,
   eliminar,
+  obtenerReferencias,
 };

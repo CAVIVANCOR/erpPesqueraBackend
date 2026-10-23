@@ -37,6 +37,15 @@ const actualizar = async (req, res, next) => {
   }
 };
 
+const referencias = async (req, res, next) => {
+  try {
+    const resultado = await cuentaCorrienteService.obtenerReferencias(Number(req.params.id));
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+};
+
 const eliminar = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -52,5 +61,6 @@ export default {
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  referencias
 };

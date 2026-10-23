@@ -38,6 +38,13 @@ router.put(
   cuentaCorrienteController.actualizar
 );
 
+router.get(
+  '/:id/referencias', 
+  autenticarJWT, 
+  checkPermission('cuentaCorriente', 'eliminar'),
+  cuentaCorrienteController.referencias
+);
+
 router.delete(
   '/:id', 
   autenticarJWT, 
