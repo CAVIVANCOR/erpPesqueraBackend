@@ -17,6 +17,5 @@ router.get('/factoring/facturas-disponibles', operacionPrestamoController.factur
 router.get('/factoring/prestamos', operacionPrestamoController.prestamosFactoring);
 router.get('/factoring/prestamos/:id', operacionPrestamoController.detalleFactoring);
 router.post('/factoring/liquidar', operacionPrestamoController.liquidarFactoring);
-router.post('/factoring/liquidaciones/:pagoId/anular', operacionPrestamoController.anularLiquidacionFactoring);
 
 export default router;

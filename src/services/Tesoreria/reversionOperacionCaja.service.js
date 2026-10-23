@@ -1189,6 +1189,7 @@ export async function listarOperaciones({ empresaId, desde, hasta, busqueda, lim
       else if (contiene(idsAsignaciones)) tipo = "Entrega de fondos";
       else if (contiene(idsDesembolsosEnt)) tipo = desembolsosEnt.some((d) => ids.includes(clave(d.movimientoCajaDesembolsoId)) && d.sentido === "OTORGADO") ? "Desembolso de préstamo (Prestamista)" : "Desembolso de préstamo (Deudor)";
       else if (contiene(idsPagosEnt)) tipo = pagosEnt.some((p) => ids.includes(clave(p.movimientoCajaId)) && p.prestamoEntidad?.sentido === "OTORGADO") ? "Devolución de préstamo (Prestamista)" : "Devolución de préstamo (Deudor)";
+      else if (op.movimientos.every((m) => Number(m.tipoMovimientoId) === TIPO_MOVIMIENTO_ITF_COMISION)) tipo = "Gastos bancarios";
       else if (contiene(idsLetras)) tipo = letras.some((l) => ids.includes(clave(l.movimientoCajaId)) && l.letraCambio?.tipoLetra === "COBRAR") ? "Cobranza de letra de cambio" : "Pago de letra de cambio";
 
       const principales = op.movimientos.filter((m) => Number(m.tipoMovimientoId) !== TIPO_MOVIMIENTO_ITF_COMISION);

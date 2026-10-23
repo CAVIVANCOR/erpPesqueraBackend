@@ -48,7 +48,6 @@ import {
  *     Asiento por factura: DEBE 454911/454912 obligación · HABER 121401/121402 facturas en descuento
  *     El capital liquidado se aplica a las cuotas del préstamo (que deben ser solo capital: el interés ya
  *     se descontó al desembolsar). Con todas las cuotas pagadas el préstamo pasa a PAGADO.
- *     Se anula por factura con anularLiquidacion.
  */
 
 const SUBMODULO_PAGO_CXC_RUTA = "pagoCuentaPorCobrar";
@@ -693,72 +692,13 @@ export async function liquidarPorCobro(datos) {
       return {
         prestamo: { id: prestamo.id, numeroPrestamo: prestamo.numeroPrestamo, estadoId: actualizado.estadoId, saldoCapital: num(actualizado.saldoCapital) },
         facturasLiquidadas: pagos.map((p) => ({ pagoId: p.id, numeroDocumento: nombreFactura(p.cuentaPorCobrar), monto: num(p.montoAplicadoDeuda) })),
-        asientos: asientos.map((a) => ({ id: a.id, numeroAsiento: a.numeroAsiento })),
+        asientos: asientos.map((a) => ({ id: a.id, numeroAsiento: a.numeroAsiento, glosa: a.glosa, totalDebe: Number(a.totalDebe), totalHaber: Number(a.totalHaber) })),
         total: deCentimos(totalCent),
       };
     }, { timeout: 60000 });
   } catch (err) {
     if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     if (err.code && String(err.code).startsWith("P")) throw new DatabaseError("Error al liquidar el factoring", err.message);
-    throw err;
-  }
-}
-
-/** Anula la liquidación de UNA factura: elimina su asiento y los pagos de cuota, y recalcula cuotas y préstamo. */
-export async function anularLiquidacion({ pagoId, usuarioId }) {
-  try {
-    return await prisma.$transaction(async (tx) => {
-      const pago = await tx.pagoCuentaPorCobrar.findUnique({
-        where: { id: BigInt(pagoId) },
-        include: { cuentaPorCobrar: { include: { preFactura: { select: { numeroDocumento: true, numeroDocumentoFinal: true } } } } },
-      });
-      if (!pago || !pago.prestamoBancarioId || pago.movimientoCajaId) throw new NotFoundError("La factura no está entregada a un préstamo de factoring.");
-      const prestamo = await tx.prestamoBancario.findUnique({ where: { id: pago.prestamoBancarioId }, select: { id: true, numeroPrestamo: true } });
-      const etiqueta = nombreFactura(pago.cuentaPorCobrar);
-
-      const submodulo = await tx.submoduloSistema.findFirst({ where: { ruta: SUBMODULO_PAGO_CXC_RUTA, activo: true } });
-      const asientos = submodulo
-        ? await tx.asientoContable.findMany({ where: { submoduloOrigenId: submodulo.id, procesoOrigenId: pago.id, esSaldoInicial: false }, select: { id: true, numeroAsiento: true, estadoId: true } })
-        : [];
-      if (asientos.length === 0) throw new ValidationError(`La factura ${etiqueta} no está liquidada: no hay nada que anular.`);
-      const noPendientes = asientos.filter((a) => Number(a.estadoId) !== Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE));
-      if (noPendientes.length > 0) {
-        throw new ValidationError(`No se puede anular: el asiento ${noPendientes.map((a) => a.numeroAsiento).join(", ")} ya no está pendiente (aprobado o anulado). Reviértalo desde Contabilidad.`);
-      }
-
-      const pagosCuota = await tx.pagoCuotaPrestamo.findMany({
-        where: { cuotaPrestamo: { prestamoBancarioId: prestamo.id }, observaciones: { contains: etiquetaLiquidacion(pago.id) } },
-        include: { cuotaPrestamo: true },
-      });
-      const aRestar = new Map();
-      for (const p of pagosCuota) aRestar.set(String(p.cuotaPrestamoId), (aRestar.get(String(p.cuotaPrestamoId)) || 0n) + aCentimos(p.montoTotal));
-      await tx.pagoCuotaPrestamo.deleteMany({ where: { id: { in: pagosCuota.map((p) => p.id) } } });
-      const hoy = new Date();
-      for (const p of pagosCuota) {
-        const resta = aRestar.get(String(p.cuotaPrestamoId));
-        if (resta === undefined) continue;
-        aRestar.delete(String(p.cuotaPrestamoId));
-        const cuota = await tx.cuotaPrestamo.findUnique({ where: { id: p.cuotaPrestamoId } });
-        const pagadoCent = aCentimos(cuota.montoPagado) - resta;
-        const pagado = pagadoCent > 0n ? deCentimos(pagadoCent) : 0;
-        await tx.cuotaPrestamo.update({
-          where: { id: cuota.id },
-          data: {
-            montoPagado: pagado,
-            fechaPago: pagado > 0 ? cuota.fechaPago : null,
-            estadoCuotaId: pagado > 0 ? ESTADO_CUOTA_PRESTAMO.PAGO_PARCIAL : new Date(cuota.fechaVencimiento) < hoy ? ESTADO_CUOTA_PRESTAMO.VENCIDO : ESTADO_CUOTA_PRESTAMO.PENDIENTE,
-          },
-        });
-      }
-      await tx.asientoContable.deleteMany({ where: { id: { in: asientos.map((a) => a.id) } } });
-      await cuotaPrestamoService.actualizarSaldosPrestamo(prestamo.id, tx);
-      await cuotaPrestamoService.recalcularEstadoPrestamo(prestamo.id, tx);
-
-      return { prestamo: prestamo.numeroPrestamo, factura: etiqueta, asientosEliminados: asientos.length, pagosCuotaEliminados: pagosCuota.length };
-    }, { timeout: 60000 });
-  } catch (err) {
-    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
-    if (err.code && String(err.code).startsWith("P")) throw new DatabaseError("Error al anular la liquidación", err.message);
     throw err;
   }
 }
@@ -770,5 +710,4 @@ export default {
   listarPrestamosFactoring,
   obtenerDetalleFactoring,
   liquidarPorCobro,
-  anularLiquidacion,
 };

@@ -82,12 +82,3 @@ export async function liquidarFactoring(req, res, next) {
     next(err);
   }
 }
-
-export async function anularLiquidacionFactoring(req, res, next) {
-  try {
-    const data = await factoringPrestamoService.anularLiquidacion({ pagoId: Number(req.params.pagoId), usuarioId: req.user?.id || null });
-    res.json(toJSONBigInt({ success: true, data }));
-  } catch (err) {
-    next(err);
-  }
-}
