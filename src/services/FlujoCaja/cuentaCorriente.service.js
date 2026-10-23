@@ -201,6 +201,27 @@ const listar = async () => {
   }
 };
 
+/**
+ * Valida los datos propios de una tarjeta de crédito (todos opcionales):
+ * límite de crédito positivo y días de cierre/pago entre 1 y 31.
+ * Los mensajes indican el campo y el valor recibido para que el usuario pueda corregirlo.
+ */
+const validarDatosTarjeta = (data) => {
+  if (data.limiteCredito !== undefined && data.limiteCredito !== null) {
+    const limite = Number(data.limiteCredito);
+    if (!Number.isFinite(limite) || limite <= 0) {
+      throw new ValidationError(`El límite de crédito debe ser un monto mayor a cero (se recibió ${data.limiteCredito})`);
+    }
+  }
+  for (const [campo, etiqueta] of [["diaCierre", "día de cierre"], ["diaPago", "día de pago"]]) {
+    if (data[campo] === undefined || data[campo] === null) continue;
+    const dia = Number(data[campo]);
+    if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
+      throw new ValidationError(`El ${etiqueta} debe ser un número entero entre 1 y 31 (se recibió ${data[campo]})`);
+    }
+  }
+};
+
 const crear = async (data) => {
   try {
     // Validar que los campos requeridos no sean null
@@ -231,6 +252,8 @@ const crear = async (data) => {
         throw new ValidationError("La fecha de cierre no puede ser anterior a la fecha de apertura");
       }
     }
+
+    validarDatosTarjeta(data);
 
     await validarReferencias(data);
     await validarDuplicado(data);
@@ -308,6 +331,8 @@ const actualizar = async (id, data) => {
         throw new ValidationError("La fecha de cierre no puede ser anterior a la fecha de apertura");
       }
     }
+
+    validarDatosTarjeta(data);
 
     // Luego valida referencias y duplicados
     await validarReferencias(data);

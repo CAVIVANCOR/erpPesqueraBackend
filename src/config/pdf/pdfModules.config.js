@@ -55,7 +55,7 @@ const PDF_MODULES_CONFIG = {
     maxFiles: 20,
     database: {
       table: "PrestamoBancario",
-      field: "urlDocumentoPrincipal",
+      field: "urlDocumentoPDF",
     },
   },
 
@@ -68,7 +68,7 @@ const PDF_MODULES_CONFIG = {
     maxFiles: 20,
     database: {
       table: "PrestamoBancario",
-      field: "urlDocumentoAdicional",
+      field: "urlDocAdicionalPDF",
     },
   },
 
