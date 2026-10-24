@@ -1052,7 +1052,8 @@ const procesarDesembolso = async (datos) => {
         // Un préstamo que ya tiene asientos (generados con el flujo anterior) duplicaría la contabilidad
         if (prestamo._count.asientosContables > 0) {
           throw new ValidationError(
-            `El préstamo ${prestamo.numeroPrestamo} ya tiene asientos contables: no se puede registrar el desembolso de nuevo`,
+            `El préstamo ${prestamo.numeroPrestamo} ya tiene ${prestamo._count.asientosContables} asiento(s) contable(s) del flujo anterior: desembolsar ahora duplicaría la contabilidad. ` +
+              "Revise el asiento en Tesorería Pendientes (Desembolsos Préstamos) y elimínelo antes de registrar el desembolso.",
           );
         }
         if (Number(prestamo.estadoId) !== ESTADOS_PRESTAMO.APROBADO) {
@@ -1325,8 +1326,51 @@ const sincronizarAdjuntosOperacion = async (pagoId) => {
   }
 };
 
+/**
+ * Elimina un asiento del flujo anterior de un préstamo aprobado que aún no se desembolsó, para que el desembolso
+ * actual (caja + asiento) no duplique la contabilidad. Solo se elimina si el asiento sigue PENDIENTE y el préstamo
+ * no tiene movimiento de caja de desembolso; la decisión es siempre del usuario.
+ */
+const eliminarAsientoPrevioDesembolso = async ({ prestamoId, asientoId, usuarioId }) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const prestamo = await tx.prestamoBancario.findUnique({
+        where: { id: Number(prestamoId) },
+        select: { id: true, numeroPrestamo: true, estadoId: true, movimientoCajaDesembolsoId: true },
+      });
+      if (!prestamo) throw new NotFoundError("El préstamo indicado no existe.");
+      if (prestamo.movimientoCajaDesembolsoId) {
+        throw new ValidationError(`El préstamo ${prestamo.numeroPrestamo} ya tiene su desembolso registrado en caja: su asiento no se puede eliminar desde aquí.`);
+      }
+      if (Number(prestamo.estadoId) !== ESTADOS_PRESTAMO.APROBADO) {
+        throw new ValidationError(`El préstamo ${prestamo.numeroPrestamo} no está en estado APROBADO: solo se eliminan asientos previos de préstamos pendientes de desembolso.`);
+      }
+
+      const asiento = await tx.asientoContable.findFirst({
+        where: { id: Number(asientoId), prestamos: { some: { id: Number(prestamo.id) } } },
+        select: { id: true, numeroAsiento: true, estadoId: true, glosa: true, totalDebe: true },
+      });
+      if (!asiento) throw new NotFoundError(`El asiento indicado no pertenece al préstamo ${prestamo.numeroPrestamo}.`);
+      if (Number(asiento.estadoId) !== ESTADO_ASIENTO_CONTABLE.PENDIENTE) {
+        throw new ValidationError(`El asiento ${asiento.numeroAsiento} ya no está PENDIENTE (fue aprobado o anulado): anúlelo o revíselo en Contabilidad antes de desembolsar.`);
+      }
+
+      await tx.asientoContable.deleteMany({ where: { id: asiento.id } });
+      console.log(`[ASIENTO_PREVIO_ELIMINADO] ${JSON.stringify({ prestamoId: Number(prestamo.id), asiento: asiento.numeroAsiento, monto: Number(asiento.totalDebe), usuarioId: usuarioId || null })}`);
+      return { prestamoId: prestamo.id, numeroPrestamo: prestamo.numeroPrestamo, asientoEliminado: asiento.numeroAsiento };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
+    if (err.code && String(err.code).startsWith("P")) {
+      throw new DatabaseError("No se pudo eliminar el asiento previo del préstamo", err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
   procesarPagoCuotas,
   procesarDesembolso,
   sincronizarAdjuntosOperacion,
+  eliminarAsientoPrevioDesembolso,
 };

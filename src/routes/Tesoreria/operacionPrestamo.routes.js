@@ -11,6 +11,7 @@ router.put('/pagos/:pagoId/sincronizar-adjuntos', operacionPrestamoController.si
 
 // Desembolso del préstamo (ingreso + ITF + comisión)
 router.post('/desembolsar', operacionPrestamoController.desembolsar);
+router.delete('/prestamos/:prestamoId/asientos-previos/:asientoId', operacionPrestamoController.eliminarAsientoPrevio);
 
 // Factoring: facturas entregadas en descuento y liquidación por cobro de la factura (sin caja)
 router.get('/factoring/facturas-disponibles', operacionPrestamoController.facturasFactoringDisponibles);

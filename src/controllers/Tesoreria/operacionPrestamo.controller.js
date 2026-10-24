@@ -30,6 +30,20 @@ export async function sincronizarAdjuntos(req, res, next) {
 }
 
 /** Desembolso del préstamo: ingreso del dinero a la cuenta de la empresa. */
+/** Elimina un asiento del flujo anterior de un préstamo aprobado, antes de su desembolso (decisión del usuario) */
+export async function eliminarAsientoPrevio(req, res, next) {
+  try {
+    const data = await operacionPrestamoService.eliminarAsientoPrevioDesembolso({
+      prestamoId: req.params.prestamoId,
+      asientoId: req.params.asientoId,
+      usuarioId: req.user?.id || null,
+    });
+    res.json(toJSONBigInt({ success: true, data }));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function desembolsar(req, res, next) {
   try {
     const data = { ...req.body, usuarioId: req.user?.id || null };

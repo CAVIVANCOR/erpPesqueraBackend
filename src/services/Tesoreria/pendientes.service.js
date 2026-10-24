@@ -1007,8 +1007,9 @@ const listarPendientes = async (filtros = {}) => {
     // ========================================
     // PRÉSTAMOS: DESEMBOLSOS PENDIENTES (si tipoDeuda es 'PRESTAMOS_DESEMBOLSOS') → ingreso
     // ========================================
-    // Préstamos nuevos (no saldo inicial) cuyo dinero aún no se registró en caja. Se excluyen los
-    // que ya tienen asientos (flujo anterior) para no duplicar la contabilidad.
+    // Préstamos nuevos (no saldo inicial) cuyo dinero aún no se registró en caja. Los que ya tienen un
+    // asiento del flujo anterior también se listan, marcados con ese asiento (asientosPrevios): el usuario
+    // debe eliminarlo antes de desembolsar, porque de lo contrario la contabilidad quedaría duplicada.
     let desembolsosPrestamo = [];
     if (tipoDeuda === TIPO_DEUDA_TESORERIA.PRESTAMOS_DESEMBOLSOS) {
       const whereDesembolsos = {
@@ -1017,7 +1018,6 @@ const listarPendientes = async (filtros = {}) => {
         estadoId: filtros.estadoIds?.length > 0
           ? { in: filtros.estadoIds }
           : ESTADO_PRESTAMO_APROBADO,
-        asientosContables: { none: {} },
       };
       if (empresaId) whereDesembolsos.empresaId = Number(empresaId);
       if (monedaId) whereDesembolsos.monedaId = Number(monedaId);
@@ -1037,6 +1037,18 @@ const listarPendientes = async (filtros = {}) => {
           moneda: { select: { id: true, simbolo: true, codigoSunat: true } },
           estado: { select: { id: true, descripcion: true, severityColor: true } },
           tipoPrestamo: { select: { id: true, descripcion: true, esFactoring: true } },
+          asientosContables: {
+            select: {
+              id: true,
+              numeroAsiento: true,
+              glosa: true,
+              fechaAsiento: true,
+              totalDebe: true,
+              totalHaber: true,
+              estado: { select: { id: true, descripcion: true } },
+            },
+            orderBy: { id: 'asc' },
+          },
         },
         orderBy: { fechaDesembolso: 'asc' },
       });
@@ -1429,6 +1441,16 @@ const listarPendientes = async (filtros = {}) => {
       ultimoPago: null,
       movimientoCajaId: null,
       esDesembolsoPrestamo: true,
+      // Asientos del flujo anterior: mientras existan no se puede desembolsar (duplicaría la contabilidad)
+      asientosPrevios: (prestamo.asientosContables || []).map((a) => ({
+        id: a.id,
+        numeroAsiento: a.numeroAsiento,
+        glosa: a.glosa,
+        fechaAsiento: a.fechaAsiento,
+        totalDebe: a.totalDebe,
+        totalHaber: a.totalHaber,
+        estado: a.estado?.descripcion || null,
+      })),
       esGerencial: false,
       esSaldoInicial: false,
       // Datos para el formulario de desembolso (cuenta propuesta y comisión inicial sugerida)
@@ -1585,7 +1607,6 @@ const obtenerResumen = async (empresaId = null) => {
         esSaldoInicial: false,
         movimientoCajaDesembolsoId: null,
         estadoId: ESTADO_PRESTAMO_APROBADO,
-        asientosContables: { none: {} },
       },
       _sum: { montoDesembolsado: true },
       _count: { id: true },
