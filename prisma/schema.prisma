@@ -355,7 +355,8 @@ model Banco {
   prestamos             PrestamoBancario[]
   lineasCredito         LineaCredito[]
   inversiones           InversionFinanciera[]
-
+  ordenesCompraFactoring       OrdenCompra[]               @relation("OrdenCompraBancoFactoring")
+  
   @@index([enlaceEntidadComercialId])
 }
 
@@ -6428,6 +6429,7 @@ model FormaPago {
   // ⭐ NUEVOS CAMPOS PARA FACTURACIÓN ELECTRÓNICA
   // ========================================
   esCredito        Boolean            @default(false)    // ⭐ NUEVO: true si es crédito, false si es contado
+  esFactoringCompras  Boolean  @default(false)   // La compra con esta forma de pago fue cedida por el proveedor a una entidad financiera
   diasCredito      Int?                                  // ⭐ NUEVO: Días de crédito (30, 60, 90, etc)
 
   // ========================================
@@ -7370,6 +7372,13 @@ model OrdenCompra {
   fechaVencimiento            DateTime?   @default(now())
   urlDocumentoRef             String?     @db.VarChar(500)                 // URL del PDF de la Documento PreExistente Saldo Inicial
 
+  numeroPrestamoFactoring      String?          @db.VarChar(40)   // Nº del préstamo de factoring que entrega el proveedor
+  fechaPrestamoFactoring       DateTime?                          // Fecha del préstamo de factoring
+  fechaVencimientoFactoring    DateTime?                          // Vencimiento del factoring (fecha en que se paga la factura)
+  bancoFactoringId             BigInt?                            // Banco (entidad financiera) a la que se paga el factoring
+  factoringConIntereses        Boolean          @default(false)   // El proveedor emitirá una factura por los intereses del factoring
+  ordenCompraInteresFactoringId  BigInt?                            // Orden de compra (factura de intereses del proveedor) amarrada a este factoring; opcional
+
   // ========================================
   // ⭐ CAMPOS NUEVOS - TIPO DE FACTURACIÓN Y PARTICIÓN
   // ========================================
@@ -7467,6 +7476,9 @@ model OrdenCompra {
   retencion                 Retencion?          // ✅ AGREGAR - Retención asociada (1:1) - Cuando MEGUI retiene
   percepcion                Percepcion?         // ✅ AGREGAR - Percepción asociada (1:1) - Cuando a MEGUI le perciben
   activoAfecto              Activo?                @relation("OrdenesCompraActivo", fields: [activoAfectoId], references: [id])
+  bancoFactoring            Banco?                      @relation("OrdenCompraBancoFactoring", fields: [bancoFactoringId], references: [id])
+  ordenCompraInteresFactoring    OrdenCompra?   @relation("OrdenCompraInteresFactoring", fields: [ordenCompraInteresFactoringId], references: [id])
+  ordenesCompraFactoringDeInteres OrdenCompra[] @relation("OrdenCompraInteresFactoring")
 
   // ========================================
   // ÍNDICES EXISTENTES
@@ -7478,7 +7490,7 @@ model OrdenCompra {
   @@index([comprobanteRecibido])                                         // YA EXISTE
   @@index([tipoDocumentoFinalId])                                        // YA EXISTE
   @@index([submoduloOrigenId, procesoOrigenId])
-
+  @@index([ordenCompraInteresFactoringId])
   // ========================================
   // ⭐ ÍNDICES NUEVOS
   // ========================================
@@ -7489,7 +7501,7 @@ model OrdenCompra {
   @@index([unidadNegocioId])
   @@index([tipoOperacionSunatId])
   @@index([activoAfectoId])                                              // ⭐ NUEVO: Índice para activo afecto
-
+  @@index([bancoFactoringId])
 }
 
 
