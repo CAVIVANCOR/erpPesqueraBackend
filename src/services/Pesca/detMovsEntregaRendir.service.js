@@ -125,6 +125,19 @@ const resolverUnidadNegocioOrigen = async (detMov) => {
     const nombreModelo = moduloOrigen?.modeloDocumentoOrigen;
     if (!nombreModelo) return sinUnidad(`El módulo de origen (${moduloOrigen?.nombre || detMov.moduloOrigenId}) no tiene modelo de documento asociado`);
 
+    // Origen propio (gasto sin proceso, p. ej. gerencia): no hay documento con unidad de negocio; la unidad es la que
+    // tiene asociado el mismo centro de costo del movimiento (ej. ADMINISTRACION GENERAL ↔ su centro de costo)
+    if (nombreModelo === "DetMovsEntregaRendir") {
+      const unidadPropia = await prisma.unidadNegocio.findFirst({
+        where: { centroCostoId: detMov.centroCostoId, activo: true },
+        select: { id: true, nombre: true },
+      });
+      if (!unidadPropia) {
+        return sinUnidad("El centro de costo del movimiento no está asociado a ninguna unidad de negocio activa: asócielo en Unidades de Negocio");
+      }
+      return { unidadNegocioId: unidadPropia.id, nombre: unidadPropia.nombre, motivo: null };
+    }
+
     const delegado = prisma[nombreModelo.charAt(0).toLowerCase() + nombreModelo.slice(1)];
     if (!delegado?.findUnique) return sinUnidad(`El modelo ${nombreModelo} no existe`);
 
@@ -208,17 +221,19 @@ const crear = async (data, usuarioId = null) => {
     // Asignar defaults si no vienen
     data.empresaId = data.empresaId || 1; // MEGUI
     data.moduloOrigenId = data.moduloOrigenId || 2; // Pesca Industrial
-    // Gasto urgente: origen COMPRAS (modelo OrdenCompra) con documento 0 = pendiente de generar la Orden de Compra
+    // Origen pendiente (documento 0):
+    //  - COMPRAS (modelo OrdenCompra): gasto urgente, se completa con la Orden de Compra al generarla.
+    //  - TESORERÍA (modelo DetMovsEntregaRendir): asignación o gasto sin proceso (p. ej. gerencia); el origen es el propio
+    //    movimiento y se completa con su id apenas se crea. Al generar la compra pasa a COMPRAS + la OC.
     const moduloOrigenCreacion = await prisma.moduloSistema.findUnique({
       where: { id: BigInt(data.moduloOrigenId) },
       select: { modeloDocumentoOrigen: true },
     });
-    const origenPendienteOrdenCompra =
-      data.documentoOrigenId !== null &&
-      data.documentoOrigenId !== undefined &&
-      Number(data.documentoOrigenId) === 0 &&
-      moduloOrigenCreacion?.modeloDocumentoOrigen === "OrdenCompra";
-    if (!origenPendienteOrdenCompra) {
+    const documentoPendiente =
+      data.documentoOrigenId !== null && data.documentoOrigenId !== undefined && Number(data.documentoOrigenId) === 0;
+    const origenPropioPendiente = documentoPendiente && moduloOrigenCreacion?.modeloDocumentoOrigen === "DetMovsEntregaRendir";
+    const origenPendienteOrdenCompra = documentoPendiente && moduloOrigenCreacion?.modeloDocumentoOrigen === "OrdenCompra";
+    if (!origenPendienteOrdenCompra && !origenPropioPendiente) {
       data.documentoOrigenId = data.documentoOrigenId || 37; // Temporada actual
     }
 
@@ -289,7 +304,15 @@ const crear = async (data, usuarioId = null) => {
       data.activoAfectoId = BigInt(data.activoAfectoId);
     }
 
-    const movimientoCreado = await prisma.detMovsEntregaRendir.create({ data });
+    let movimientoCreado = await prisma.detMovsEntregaRendir.create({ data });
+
+    // Origen propio: el documento de origen es el id del propio movimiento, que solo existe después de crearlo
+    if (origenPropioPendiente) {
+      movimientoCreado = await prisma.detMovsEntregaRendir.update({
+        where: { id: movimientoCreado.id },
+        data: { documentoOrigenId: movimientoCreado.id },
+      });
+    }
 
     // Recalcular saldos automáticamente si forma parte del cálculo
     if (data.formaParteCalculoEntregaARendir === true && data.responsableId) {
@@ -1404,9 +1427,16 @@ const asignarActivoMasivo = async (activoId, movimientosIds) => {
  */
 async function vincularOrigenConOrdenCompra(db, detMov, ordenCompraId, ordenCompraReemplazadaId = null) {
   const documentoActual = Number(detMov.documentoOrigenId);
+  const modulo = await db.moduloSistema.findUnique({ where: { id: detMov.moduloOrigenId }, select: { modeloDocumentoOrigen: true } });
+  // Origen propio (TESORERÍA, el movimiento apunta a sí mismo): al existir la compra el origen pasa a COMPRAS + la OC
+  if (modulo?.modeloDocumentoOrigen === "DetMovsEntregaRendir" && documentoActual === Number(detMov.id)) {
+    const moduloCompras = await db.moduloSistema.findFirst({ where: { modeloDocumentoOrigen: "OrdenCompra", activo: true }, select: { id: true } });
+    if (!moduloCompras) return;
+    await db.detMovsEntregaRendir.update({ where: { id: detMov.id }, data: { moduloOrigenId: moduloCompras.id, documentoOrigenId: BigInt(ordenCompraId) } });
+    return;
+  }
   // Pendiente (0) o apuntando a la OC que se regeneró (acción C): en ambos casos pasa a la OC vigente
   if (documentoActual !== 0 && !(ordenCompraReemplazadaId && documentoActual === Number(ordenCompraReemplazadaId))) return;
-  const modulo = await db.moduloSistema.findUnique({ where: { id: detMov.moduloOrigenId }, select: { modeloDocumentoOrigen: true } });
   if (modulo?.modeloDocumentoOrigen !== "OrdenCompra") return;
   await db.detMovsEntregaRendir.update({ where: { id: detMov.id }, data: { documentoOrigenId: BigInt(ordenCompraId) } });
 }
