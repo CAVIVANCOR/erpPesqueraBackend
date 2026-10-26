@@ -9592,6 +9592,7 @@ model UnidadNegocio {
   fechaCreacion     DateTime  @default(now())
   fechaModificacion DateTime  @updatedAt
   centroCostoId     BigInt?   // 🆕 NUEVO: Centro de costo asociado a esta unidad de negocio
+  esGastosGenerales   Boolean   @default(false)   // Unidad de los movimientos sin proceso (origen TESORERÍA)
 
   
    // 🆕 AGREGAR ESTAS 8 RELACIONES INVERSAS:
