@@ -19,6 +19,16 @@ async function validarUnidadNegocio(data, excluirId = null) {
     const existe = await prisma.unidadNegocio.findFirst({ where });
     if (existe) throw new ConflictError('Ya existe una unidad de negocio con ese nombre.');
   }
+  // Solo una unidad puede ser la de gastos generales (origen TESORERÍA): evita ambigüedad al asignar la unidad de los movimientos sin proceso
+  if (data.esGastosGenerales === true) {
+    const marcada = await prisma.unidadNegocio.findFirst({
+      where: excluirId ? { esGastosGenerales: true, id: { not: excluirId } } : { esGastosGenerales: true },
+      select: { nombre: true },
+    });
+    if (marcada) {
+      throw new ConflictError(`La unidad "${marcada.nombre}" ya es la unidad de gastos generales. Desmárquela antes de marcar esta.`);
+    }
+  }
 }
 
 /**

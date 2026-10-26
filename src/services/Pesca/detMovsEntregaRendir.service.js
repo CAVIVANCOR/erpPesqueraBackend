@@ -125,15 +125,15 @@ const resolverUnidadNegocioOrigen = async (detMov) => {
     const nombreModelo = moduloOrigen?.modeloDocumentoOrigen;
     if (!nombreModelo) return sinUnidad(`El módulo de origen (${moduloOrigen?.nombre || detMov.moduloOrigenId}) no tiene modelo de documento asociado`);
 
-    // Origen propio (gasto sin proceso, p. ej. gerencia): no hay documento con unidad de negocio; la unidad es la que
-    // tiene asociado el mismo centro de costo del movimiento (ej. ADMINISTRACION GENERAL ↔ su centro de costo)
+    // Origen propio (gasto sin proceso, p. ej. gerencia): no hay documento con unidad de negocio; la unidad es siempre
+    // la marcada como "de gastos generales" (ej. ADMINISTRACION GENERAL), sin importar el centro de costo elegido
     if (nombreModelo === "DetMovsEntregaRendir") {
       const unidadPropia = await prisma.unidadNegocio.findFirst({
-        where: { centroCostoId: detMov.centroCostoId, activo: true },
+        where: { esGastosGenerales: true, activo: true },
         select: { id: true, nombre: true },
       });
       if (!unidadPropia) {
-        return sinUnidad("El centro de costo del movimiento no está asociado a ninguna unidad de negocio activa: asócielo en Unidades de Negocio");
+        return sinUnidad("No hay una unidad de negocio activa marcada como de gastos generales: márquela en Unidades de Negocio");
       }
       return { unidadNegocioId: unidadPropia.id, nombre: unidadPropia.nombre, motivo: null };
     }
