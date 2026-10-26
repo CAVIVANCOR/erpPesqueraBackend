@@ -1459,6 +1459,9 @@ const listarPendientes = async (filtros = {}) => {
         numeroPrestamo: prestamo.numeroPrestamo,
         cuentaCorrienteId: prestamo.cuentaCorrienteId,
         comisionInicial: prestamo.comisionInicial,
+        // Monto aprobado (financiado) y monto a desembolsar (neto): su diferencia es el interés descontado por adelantado
+        montoAprobado: prestamo.montoAprobado,
+        montoDesembolsado: prestamo.montoDesembolsado,
         esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
         interesDescontado: Boolean(prestamo.interesDescontado),
         tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
