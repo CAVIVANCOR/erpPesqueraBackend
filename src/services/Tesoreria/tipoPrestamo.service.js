@@ -113,6 +113,7 @@ const crear = async (data) => {
         esComercioExterior: data.esComercioExterior ?? false,
         esLeasing: data.esLeasing ?? false,
         esFactoring: data.esFactoring ?? false,
+        esFactoringCompras: data.esFactoringCompras ?? false,
         esTarjetaCredito: data.esTarjetaCredito ?? false,
         permiteRefinanciar: data.permiteRefinanciar ?? true,
         severityColor: data.severityColor || null,
@@ -153,6 +154,7 @@ const actualizar = async (id, data) => {
         esComercioExterior: data.esComercioExterior,
         esLeasing: data.esLeasing,
         esFactoring: data.esFactoring,
+        esFactoringCompras: data.esFactoringCompras,
         esTarjetaCredito: data.esTarjetaCredito,
         permiteRefinanciar: data.permiteRefinanciar,
         severityColor: data.severityColor,
@@ -269,6 +271,7 @@ const obtenerEstadisticas = async () => {
       esComercioExterior: tipo.esComercioExterior,
       esLeasing: tipo.esLeasing,
       esFactoring: tipo.esFactoring,
+      esFactoringCompras: tipo.esFactoringCompras,
       esTarjetaCredito: tipo.esTarjetaCredito
     }));
   } catch (err) {

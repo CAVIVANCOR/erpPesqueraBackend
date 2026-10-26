@@ -117,6 +117,13 @@ router.get(
 );
 
 router.get(
+  "/facturas-cuotas",
+  autenticarJWT,
+  checkPermission("prestamoBancario", "ver"),
+  prestamoBancarioController.listarFacturasParaCuotas,
+);
+
+router.get(
   "/vigentes",
   autenticarJWT,
   checkPermission("prestamoBancario", "ver"),

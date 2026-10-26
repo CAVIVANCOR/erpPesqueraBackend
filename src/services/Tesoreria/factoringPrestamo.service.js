@@ -71,7 +71,14 @@ const nombreFactura = (c) =>
 
 /** Valida facturas y montos ANTES de crear movimientos. Lanza el dato concreto que hay que corregir. */
 export async function prepararDesembolsoFactoring(tx, { prestamo, ctx, datos }) {
-  const ids = [...new Set((datos.facturasFactoringIds || []).map((id) => BigInt(id)))];
+  // Las facturas del desembolso son las de las cuotas del préstamo (una cuota por factura). Un préstamo sin cuotas amarradas
+  // (registrado antes de este esquema) conserva la selección manual enviada en el desembolso.
+  const cuotasConFactura = await tx.cuotaPrestamo.findMany({
+    where: { prestamoBancarioId: prestamo.id, cuentaPorCobrarId: { not: null } },
+    select: { cuentaPorCobrarId: true },
+  });
+  const idsOrigen = cuotasConFactura.length > 0 ? cuotasConFactura.map((c) => c.cuentaPorCobrarId) : datos.facturasFactoringIds || [];
+  const ids = [...new Set(idsOrigen.map((id) => BigInt(id)))];
   if (ids.length === 0) {
     throw new ValidationError(
       "Un préstamo de factoring se desembolsa contra facturas: seleccione las facturas (cuentas por cobrar) que se entregan en descuento.",
@@ -318,6 +325,27 @@ export async function recomprarFacturasPorPagoCuota(tx, { prestamo, ctx, egreso,
     .filter((p) => !liquidadas.has(String(p.id)) && !recompradas.has(String(p.id)))
     .sort((a, b) => new Date(a.cuentaPorCobrar.fechaVencimiento) - new Date(b.cuentaPorCobrar.fechaVencimiento) || Number(a.id) - Number(b.id));
 
+  // Cuotas amarradas a su factura: vuelve a cartera la factura de cada cuota cuyo capital pagó la empresa en efectivo
+  // (no se reparte el efectivo por orden de vencimiento). Sin cuotas amarradas rige el reparto anterior.
+  const cuotasFactura = await tx.cuotaPrestamo.findMany({
+    where: { prestamoBancarioId: prestamo.id, cuentaPorCobrarId: { not: null } },
+    select: { id: true, cuentaPorCobrarId: true, montoCapital: true },
+  });
+  const porCuota = cuotasFactura.length > 0;
+  const capitalEnEfectivo = new Map();
+  if (porCuota) {
+    const grupos = await tx.pagoCuotaPrestamo.groupBy({
+      by: ["cuotaPrestamoId"],
+      where: { cuotaPrestamoId: { in: cuotasFactura.map((c) => c.id) }, movimientoCajaId: { not: null } },
+      _sum: { montoCapital: true },
+    });
+    grupos.forEach((g) => capitalEnEfectivo.set(String(g.cuotaPrestamoId), aCentimos(g._sum.montoCapital || 0)));
+  }
+  const cuotaCubierta = (pago) => {
+    const cuota = cuotasFactura.find((c) => String(c.cuentaPorCobrarId) === String(pago.cuentaPorCobrarId));
+    return Boolean(cuota) && (capitalEnEfectivo.get(String(cuota.id)) || 0n) >= aCentimos(cuota.montoCapital);
+  };
+
   const clave = etiquetaMoneda(prestamo.monedaId);
   const extranjera = Number(prestamo.monedaId) !== 1;
   const aSoles = (monto) => (extranjera ? r2(monto * ctx.tc) : r2(monto));
@@ -327,8 +355,12 @@ export async function recomprarFacturasPorPagoCuota(tx, { prestamo, ctx, egreso,
 
   for (const pago of candidatas) {
     const monto = aCentimos(pago.montoAplicadoDeuda);
-    if (disponible < monto) break;
-    disponible -= monto;
+    if (porCuota) {
+      if (!cuotaCubierta(pago)) continue;
+    } else {
+      if (disponible < monto) break;
+      disponible -= monto;
+    }
     if (!cuenta) cuenta = await obtenerCuentas(tx, [CUENTAS.descuento[clave], CUENTAS.cartera[clave]]);
     const factura = pago.cuentaPorCobrar;
     const importe = num(pago.montoAplicadoDeuda);
@@ -581,7 +613,8 @@ export async function liquidarPorCobro(datos) {
       if (cuotas.length === 0) {
         throw new ValidationError(`El préstamo ${prestamo.numeroPrestamo} no tiene cuotas por pagar: genere su cronograma en Préstamo Bancario.`);
       }
-      for (const c of cuotas) {
+      // Las cuotas amarradas a una factura admiten interés: el cliente paga el capital al banco y el interés lo paga la empresa aparte
+      for (const c of cuotas.filter((x) => !x.cuentaPorCobrarId)) {
         if (num(c.montoInteres) > 0 || num(c.montoSeguro) > 0 || num(c.montoComision) > 0) {
           throw new ValidationError(
             prestamo.interesDescontado
@@ -605,6 +638,26 @@ export async function liquidarPorCobro(datos) {
       for (const item of restoCuotas) {
         const etiqueta = nombreFactura(item.pago.cuentaPorCobrar);
         let porAplicar = item.cent;
+
+        // Cuota amarrada a esta factura: el cobro del cliente cancela el capital de SU cuota (no la primera por vencimiento)
+        const cuotaPropia = cuotas.find((c) => c.cuentaPorCobrarId && String(c.cuentaPorCobrarId) === String(item.pago.cuentaPorCobrarId));
+        if (cuotaPropia) {
+          const pagadoPropio = cuotasAfectadas.get(String(cuotaPropia.id))?.pagadoCent ?? aCentimos(cuotaPropia.montoPagado);
+          await tx.pagoCuotaPrestamo.create({
+            data: {
+              cuotaPrestamoId: cuotaPropia.id,
+              movimientoCajaId: null,
+              refOperacionEspecializadaMovCaja: null,
+              fechaPago: fecha,
+              montoCapital: deCentimos(porAplicar),
+              montoTotal: deCentimos(porAplicar),
+              observaciones: `LIQUIDACIÓN POR COBRO DE LA FACTURA ${etiqueta} ${etiquetaLiquidacion(item.pago.id)}`,
+              creadoPor: usuarioId ? BigInt(usuarioId) : null,
+            },
+          });
+          cuotasAfectadas.set(String(cuotaPropia.id), { cuota: cuotaPropia, pagadoCent: pagadoPropio + porAplicar });
+          porAplicar = 0n;
+        }
         while (porAplicar > 0n && indiceCuota < cuotas.length) {
           const cuota = cuotas[indiceCuota];
           const pagadoActual = cuotasAfectadas.get(String(cuota.id))?.pagadoCent ?? aCentimos(cuota.montoPagado);

@@ -1,5 +1,6 @@
 import prestamoBancarioService from '../../services/Tesoreria/prestamoBancario.service.js';
 import cuotaPrestamoService from '../../services/Tesoreria/cuotaPrestamo.service.js';
+import facturasCuotaPrestamoService from '../../services/Tesoreria/facturasCuotaPrestamo.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 /**
  * Controlador para PrestamoBancario
@@ -59,6 +60,17 @@ export async function listarPorEmpresa(req, res, next) {
     const empresaId = Number(req.params.empresaId);
     const prestamos = await prestamoBancarioService.listarPorEmpresa(empresaId);
     res.json(toJSONBigInt(prestamos));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Facturas (CxC en ventas, CxP en compras) que pueden amarrarse a las cuotas de un factoring */
+export async function listarFacturasParaCuotas(req, res, next) {
+  try {
+    const { tipo, empresaId, monedaId, prestamoId } = req.query;
+    const facturas = await facturasCuotaPrestamoService.listarFacturasDisponibles({ tipo, empresaId, monedaId, prestamoId });
+    res.json(toJSONBigInt(facturas));
   } catch (err) {
     next(err);
   }

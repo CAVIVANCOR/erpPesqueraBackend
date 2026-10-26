@@ -7,6 +7,7 @@ import {
 } from "../../utils/errors.js";
 import lineaCreditoService from "./lineaCredito.service.js";
 import cuotaPrestamoService from "./cuotaPrestamo.service.js";
+import { tipoFactoringDe, construirCuotasDeFacturas } from "./facturasCuotaPrestamo.service.js";
 import { ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
 const { obtenerTipoCambio } = lineaCreditoService;
 /**
@@ -422,8 +423,12 @@ const crear = async (data) => {
     await validarPrestamoBancario(data);
 
     // Solo un factoring puede tener el interés descontado por adelantado
-    const tipoPrestamoDef = await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId }, select: { esFactoring: true } });
+    const tipoPrestamoDef = await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId }, select: { esFactoring: true, esFactoringCompras: true } });
     const interesDescontado = Boolean(data.interesDescontado) && Boolean(tipoPrestamoDef?.esFactoring);
+    // Factoring (ventas o compras): las cuotas salen de sus facturas (una cuota por factura), no de un cronograma calculado
+    const tipoFactoring = tipoFactoringDe(tipoPrestamoDef);
+    const cuotasFactura = data.cuotasFactura;
+    delete data.cuotasFactura;
 
     // Calcular tipo de cambio si no viene en data
     let tipoCambioAplicado = data.tipoCambioAplicado;
@@ -448,8 +453,17 @@ const crear = async (data) => {
       ? parseFloat(data.interesPagado)
       : 0;
 
-    // Generar cronograma de cuotas
-    const cuotas = calcularCronogramaCuotas({ ...data, interesDescontado });
+    // Generar cuotas: una por factura en factoring; cronograma calculado en los demás préstamos
+    const usaFacturas = Boolean(tipoFactoring) && !data.esSaldoInicial;
+    const cuotas = usaFacturas
+      ? (
+          await construirCuotasDeFacturas(prisma, {
+            prestamo: { empresaId: data.empresaId, monedaId: data.monedaId, interesDescontado },
+            items: cuotasFactura,
+            tipo: tipoFactoring,
+          })
+        ).cuotas
+      : calcularCronogramaCuotas({ ...data, interesDescontado });
 
     // Normalizar datos: convertir strings vacíos en null para campos enum y opcionales
     const datosNormalizados = {
@@ -499,6 +513,8 @@ const crear = async (data) => {
         data: {
           ...datosNormalizados,
           interesDescontado,
+          // Factoring: el número de cuotas y el vencimiento del préstamo salen de las facturas
+          ...(usaFacturas ? { numeroCuotas: cuotas.length, fechaVencimiento: cuotas[cuotas.length - 1].fechaVencimiento } : {}),
           tipoCambioAplicado,
           saldoCapital,
           saldoInteres,
@@ -587,14 +603,41 @@ const actualizar = async (id, data) => {
     await validarPrestamoBancario({ ...data, id });
 
     // Modalidad del interés del factoring (descontado por adelantado / diferido en las cuotas)
-    const tipoPrestamoDef = await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId }, select: { esFactoring: true } });
+    const tipoPrestamoDef = await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId }, select: { esFactoring: true, esFactoringCompras: true } });
+    const tipoFactoring = tipoFactoringDe(tipoPrestamoDef);
+    const cuotasFactura = data.cuotasFactura;
+    delete data.cuotasFactura;
     const interesDescontado =
       data.interesDescontado === undefined
         ? Boolean(existente.interesDescontado)
         : Boolean(data.interesDescontado) && Boolean(tipoPrestamoDef?.esFactoring);
     const cambioModalidad = interesDescontado !== Boolean(existente.interesDescontado);
     // Cambiar la modalidad regenera el cronograma: solo se permite sin desembolso ni pagos (los saldos iniciales no regeneran)
-    const regenerarCuotas = cambioModalidad && !existente.esSaldoInicial;
+    const regenerarCuotas = cambioModalidad && !existente.esSaldoInicial && !tipoFactoring;
+    // Factoring: las cuotas (facturas y vencimientos) solo se editan antes del desembolso y sin pagos
+    const reemplazarCuotasFactura = Boolean(tipoFactoring) && !existente.esSaldoInicial && Array.isArray(cuotasFactura);
+    let cuotasFacturaNuevas = null;
+    if (reemplazarCuotasFactura) {
+      if (existente.movimientoCajaDesembolsoId) {
+        throw new ValidationError(
+          `El préstamo ${existente.numeroPrestamo} ya tiene su desembolso registrado: no se pueden cambiar las facturas ni los vencimientos de sus cuotas.`,
+        );
+      }
+      const pagosCuotasFactura = await prisma.pagoCuotaPrestamo.count({ where: { cuotaPrestamo: { prestamoBancarioId: id } } });
+      if (pagosCuotasFactura > 0) {
+        throw new ValidationError(
+          `El préstamo ${existente.numeroPrestamo} ya tiene ${pagosCuotasFactura} pago(s) de cuotas: no se pueden cambiar sus cuotas. Revierta primero esos pagos.`,
+        );
+      }
+      cuotasFacturaNuevas = (
+        await construirCuotasDeFacturas(prisma, {
+          prestamo: { empresaId: data.empresaId, monedaId: data.monedaId, interesDescontado },
+          items: cuotasFactura,
+          tipo: tipoFactoring,
+          prestamoIdActual: id,
+        })
+      ).cuotas;
+    }
     if (regenerarCuotas) {
       if (existente.movimientoCajaDesembolsoId) {
         throw new ValidationError(
@@ -683,6 +726,9 @@ const actualizar = async (id, data) => {
       data: {
         ...datosNormalizados,
         interesDescontado,
+        ...(cuotasFacturaNuevas
+          ? { numeroCuotas: cuotasFacturaNuevas.length, fechaVencimiento: cuotasFacturaNuevas[cuotasFacturaNuevas.length - 1].fechaVencimiento }
+          : {}),
         tipoCambioAplicado: tipoCambioAplicado,
         fechaContable: data.fechaContable ? new Date(data.fechaContable) : undefined,
         esSaldoInicial: data.esSaldoInicial !== undefined ? data.esSaldoInicial : undefined,
@@ -700,6 +746,14 @@ const actualizar = async (id, data) => {
         },
       },
     });
+
+    // Factoring: se reemplazan las cuotas por las nuevas facturas y vencimientos
+    if (cuotasFacturaNuevas) {
+      await prisma.$transaction([
+        prisma.cuotaPrestamo.deleteMany({ where: { prestamoBancarioId: id } }),
+        prisma.cuotaPrestamo.createMany({ data: cuotasFacturaNuevas.map((cuota) => ({ ...cuota, prestamoBancarioId: id })) }),
+      ]);
+    }
 
     // Cambio de modalidad del interés: el cronograma se regenera (cuotas solo de capital o con interés)
     if (regenerarCuotas) {
