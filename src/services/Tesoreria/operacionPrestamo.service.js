@@ -11,6 +11,8 @@ import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { ESTADO_ASIENTO_CONTABLE, ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
 import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
 import { entidadDeBanco } from "../../utils/entidadBanco.js";
+import { CUENTAS_WARRANT, esPrestamoWarrant } from "../../utils/warrant.constants.js";
+import { armarAsientoInteresesNoDevengados, armarAsientoDevengoIntereses } from "./warrantPrestamo.service.js";
 import { prepararDesembolsoFactoring, registrarDesembolsoFactoring, recomprarFacturasPorPagoCuota } from "./factoringPrestamo.service.js";
 
 /**
@@ -39,9 +41,9 @@ import { prepararDesembolsoFactoring, registrarDesembolsoFactoring, recomprarFac
  * ────────────────────────────────────────────────────────────────────────────
  * MAPA DE BIFURCACIONES (buscar el código de caso, p. ej. "[CASO B]", para seguir el rastro)
  * ────────────────────────────────────────────────────────────────────────────
- * Cada préstamo cae en UNO de dos casos según TipoPrestamo.esFactoring (referencias contables
- * PRÉSTAMOS y FACTORING). Leasing y demás tipos siguen el [CASO A]: la referencia no define
- * un caso propio para ellos.
+ * Cada préstamo cae en UNO de estos casos, según su TipoPrestamo (el orden de evaluación está en
+ * obtenerCuentaCapital: Warrant → Factoring → Factoring compras → Tarjeta → Estándar).
+ * Leasing y demás tipos siguen el [CASO A]: la referencia no define un caso propio para ellos.
  *
  *   [CASO A] PRÉSTAMO ESTÁNDAR   TipoPrestamo.esFactoring = false
  *            Desembolso: DEBE banco · HABER 451101 / 451102
@@ -52,6 +54,19 @@ import { prepararDesembolsoFactoring, registrarDesembolsoFactoring, recomprarFac
  *            La referencia usa cuentas distintas en el ingreso (166, activo) y en el pago
  *            (454, pasivo); se sigue tal cual. Si contabilidad la unifica, basta cambiar
  *            CUENTAS_CAPITAL.
+ *   [CASO C] TARJETA DE CRÉDITO  TipoPrestamo.esTarjetaCredito = true (no se desembolsa en caja)
+ *            Pago cuota: capital a 454611 / 454612.
+ *   [CASO D] FACTORING INDIRECTO TipoPrestamo.esFactoringCompras = true (desembolso en factoringIndirectoPrestamo.service.js)
+ *            Pago cuota: capital a 421203 / 421204.
+ *   [CASO E] WARRANT             TipoPrestamo con id 15 (ver utils/warrant.constants.js; no hay campo esWarrant)
+ *            Desembolso: DEBE banco / HABER 454915 / 454916 (capital)
+ *                        DEBE 373101 / HABER 454915 / 454916 (intereses totales del cronograma, SIN caja)
+ *                        => el pasivo queda por el bruto (capital + interés).
+ *            Pago cuota: DEBE 454915 / 454916 (capital + interés de la cuota) · HABER banco
+ *                        DEBE 673111 / HABER 373101 (devengo del interés pagado, SIN caja)
+ *            Los asientos sin caja cuelgan del mismo movimiento de caja, por eso la reversión
+ *            de la operación los elimina junto con los demás (no necesita lógica propia).
+ *            El traslado de mercadería al AGD (281101 / 201111) es de Almacén y no se hace aquí.
  *
  * Los conceptos de la cuota que NO son capital van igual en ambos casos (siempre al DEBE):
  *   interés 673111 · prima del seguro 679101 · mora 679403 · comisión de mantenimiento 679401
@@ -99,6 +114,7 @@ const CUENTAS_CAPITAL = {
   // [CASO B] factoring: ingreso → FACTORING CLIENTE (166) · pago → FACTORING (454)
   FACTORING_INGRESO: { soles: "166111", dolares: "166112" },
   FACTORING_PAGO: { soles: "454911", dolares: "454912" },
+  // [CASO E] Warrant: las cuentas viven en CUENTAS_WARRANT (utils/warrant.constants.js) junto con 373101 y 673111
   // [CASO C] compra en cuotas con tarjeta de crédito: TARJETAS DE CREDITO M.N. / M.E.
   TARJETA: { soles: "454611", dolares: "454612" },
   // [CASO D] factoring indirecto (compras): la deuda sigue siendo de facturas por pagar, en su cuenta de factoring (421203 / 421204)
@@ -407,7 +423,10 @@ const prepararContexto = async ({
 const obtenerCuentaCapital = async (tx, prestamo, operacion, esMonedaNacional) => {
   const monedaClave = esMonedaNacional ? "soles" : "dolares";
   let codigos;
-  if (prestamo.tipoPrestamo?.esFactoring) {
+  if (esPrestamoWarrant(prestamo)) {
+    // [CASO E] WARRANT: desembolso y pago van a 454915 / 454916 (ver warrant.constants.js)
+    codigos = CUENTAS_WARRANT.prestamo;
+  } else if (prestamo.tipoPrestamo?.esFactoring) {
     // [CASO B] FACTORING
     codigos = operacion === "DESEMBOLSO" ? CUENTAS_CAPITAL.FACTORING_INGRESO : CUENTAS_CAPITAL.FACTORING_PAGO;
   } else if (prestamo.tipoPrestamo?.esFactoringCompras) {
@@ -706,6 +725,7 @@ const procesarPagoCuotas = async (datos) => {
           tipoCambio: datos.tipoCambio,
         });
         const esFactoring = Boolean(prestamo.tipoPrestamo?.esFactoring);
+        const esWarrant = esPrestamoWarrant(prestamo);
 
         // Imputación de lo pagado en ESTA operación a cada componente (nuevo acumulado - ya imputado)
         const imputaciones = cuotas.map((c, i) => {
@@ -723,7 +743,13 @@ const procesarPagoCuotas = async (datos) => {
         const usa = (clave) => imputaciones.some((imp) => imp[clave] > 0n);
         const [cuentaCapital, cuentaInteres, cuentaSeguro, cuentaMora, cuentaComisionCuota] = await Promise.all([
           usa("capital") ? obtenerCuentaCapital(tx, prestamo, "PAGO_CUOTA", ctx.esMonedaNacional) : null,
-          usa("interes") ? obtenerCuentaPorCodigo(tx, CODIGOS_CUENTAS_CONTABLES.INTERESES) : null,
+          // [CASO E] WARRANT: el interés se paga contra el pasivo 454915 (que ya lo incluye desde el desembolso),
+          // no contra el gasto 673111; el gasto se reconoce con el asiento de devengo más abajo
+          usa("interes")
+            ? esWarrant
+              ? obtenerCuentaCapital(tx, prestamo, "PAGO_CUOTA", ctx.esMonedaNacional)
+              : obtenerCuentaPorCodigo(tx, CODIGOS_CUENTAS_CONTABLES.INTERESES)
+            : null,
           usa("seguro") ? obtenerCuentaPorCodigo(tx, CODIGOS_CUENTAS_CONTABLES.PRIMA_SEGURO) : null,
           morasCent.some((m) => m > 0n) ? obtenerCuentaPorCodigo(tx, CODIGOS_CUENTAS_CONTABLES.INTERESES_MORATORIOS) : null,
           usa("comision") ? obtenerCuentaPorCodigo(tx, CODIGOS_CUENTAS_CONTABLES.COMISIONES_BANCARIAS) : null,
@@ -737,6 +763,9 @@ const procesarPagoCuotas = async (datos) => {
         if (esFactoring) {
           // [CASO B] FACTORING (referencia PAGO_FACTORING)
           glosaPorDefecto = `PAGO DE FACTORING ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo} CUOTA(S) ${numerosCuota}`;
+        } else if (esWarrant) {
+          // [CASO E] WARRANT
+          glosaPorDefecto = `POR EL PAGO DEL WARRANT ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo} CUOTA(S) ${numerosCuota}`;
         } else if (prestamo.tipoPrestamo?.esFactoringCompras) {
           // [CASO D] FACTORING INDIRECTO (COMPRAS)
           glosaPorDefecto = `PAGO DE FACTORING INDIRECTO ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo} CUOTA(S) ${numerosCuota}`;
@@ -921,6 +950,24 @@ const procesarPagoCuotas = async (datos) => {
           }),
         ];
 
+        // [CASO E] WARRANT: devengo del interés pagado (DEBE 673111 / HABER 373101).
+        // Al desembolsar, los intereses totales entraron a 373101 (activo diferido) y al pasivo 454915.
+        // Aquí, por el interés que ESTE pago cubre, se reconoce el gasto y se descarga 373101.
+        // No mueve caja: el asiento se liga al mismo egreso, así la reversión lo elimina con la operación.
+        // Un pago que solo cubre comisión/seguro (interés = 0) no genera devengo.
+        if (esWarrant) {
+          const interesDevengado = deCentimos(imputaciones.reduce((suma, imp) => suma + imp.interes, 0n));
+          const asientoDevengo = await armarAsientoDevengoIntereses(tx, {
+            prestamo,
+            ctx,
+            egreso,
+            montoInteres: interesDevengado,
+            numerosCuota,
+            obtenerCuentaPorCodigo,
+          });
+          if (asientoDevengo) asientos.push(await crearAsiento({ ...paramsAsiento, ...asientoDevengo }));
+        }
+
         // ITF y comisión bancaria (iguales en ambos casos)
         const cargos = await registrarCargosBancarios({
           tx,
@@ -968,7 +1015,7 @@ const procesarPagoCuotas = async (datos) => {
           message: `Pago de ${distribucion.length} cuota(s) registrado exitosamente`,
           data: {
             operacion: "PAGO_CUOTAS",
-            caso: esFactoring ? "FACTORING" : "PRESTAMO_ESTANDAR",
+            caso: esFactoring ? "FACTORING" : esWarrant ? "WARRANT" : "PRESTAMO_ESTANDAR",
             correlativo: Number(ctx.correlativo),
             prestamo: {
               id: prestamo.id,
@@ -1110,6 +1157,9 @@ const procesarDesembolso = async (datos) => {
         if (esFactoring) {
           // [CASO B] FACTORING (referencia INGRESO_FACTORING)
           glosaPorDefecto = `POR INGRESO DE FACTORING ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo}`;
+        } else if (esPrestamoWarrant(prestamo)) {
+          // [CASO E] WARRANT
+          glosaPorDefecto = `POR EL DESEMBOLSO DEL WARRANT ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo}`;
         } else {
           // [CASO A] PRÉSTAMO ESTÁNDAR (referencia INGRESO_PRESTAMO)
           glosaPorDefecto = `POR EL PRESTAMO RECIBIDO DEL ${prestamo.banco.nombre}, SEGÚN CONTRATO - PRESTAMO ${prestamo.numeroPrestamo}`;
@@ -1191,6 +1241,22 @@ const procesarDesembolso = async (datos) => {
               }),
             ];
 
+        // [CASO E] WARRANT: intereses totales del cronograma al pasivo (DEBE 373101 / HABER 454915).
+        // El banco cobra el interés en las cuotas, pero la deuda con el banco es capital + interés:
+        // por eso el pasivo 454915 se lleva por el bruto y la contrapartida es 373101 (intereses no devengados).
+        // No mueve caja: el asiento se liga al mismo ingreso, así la reversión lo elimina con la operación.
+        // El gasto (673111) NO se reconoce aquí: se devenga al pagar cada cuota.
+        if (esPrestamoWarrant(prestamo)) {
+          const asientoIntereses = await armarAsientoInteresesNoDevengados(tx, {
+            prestamo,
+            ctx,
+            ingreso,
+            cuentaPasivo: cuentaCapital,
+            obtenerCuentaPorCodigo,
+          });
+          asientos.push(await crearAsiento({ ...paramsAsiento, ...asientoIntereses }));
+        }
+
         // ITF y comisión del banco (iguales en ambos casos)
         const cargos = await registrarCargosBancarios({
           tx,
@@ -1241,7 +1307,7 @@ const procesarDesembolso = async (datos) => {
           message: `Desembolso del préstamo ${prestamo.numeroPrestamo} registrado exitosamente`,
           data: {
             operacion: "DESEMBOLSO",
-            caso: esFactoring ? "FACTORING" : "PRESTAMO_ESTANDAR",
+            caso: esFactoring ? "FACTORING" : esPrestamoWarrant(prestamo) ? "WARRANT" : "PRESTAMO_ESTANDAR",
             correlativo: Number(ctx.correlativo),
             prestamo: {
               id: prestamo.id,

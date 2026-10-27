@@ -33,6 +33,12 @@
   PAGO de cuota: flujo normal de pago de cuotas, capital a 421203/421204 a nombre del banco (parcial permitido). REVERSIÓN: por operación en `/api/tesoreria/operaciones`; el motor reconoce las operaciones sin caja por los
   pagos de canje (`reversionOperacionCaja.service.js`) y bloquea si hay cuotas pagadas (revertir primero esos pagos).
   INTERESES: el banco los cobra al proveedor y el proveedor emite una factura (compra "INTERES FINANCIEROS") que se paga al proveedor como cualquier CxP y se enlaza con la cuota (`CuotaPrestamo.cuentaPorPagarInteresId`).
+- Warrant (préstamo con garantía de mercadería en un AGD): NO tiene campo en `TipoPrestamo`; se reconoce por el id 15 del tipo "WARRANT" (`TIPO_PRESTAMO_WARRANT_ID` en `utils/warrant.constants.js`,
+  `esPrestamoWarrant(prestamo)`; los pendientes devuelven `esWarrant`). Pasivo 454915 (soles) / 454916 (dólares), siempre por el BRUTO (capital + interés). Es el CASO E de `operacionPrestamo.service.js`.
+  DESEMBOLSO: caja normal (DEBE banco / HABER 454915 por el capital) + asiento SIN caja con los intereses totales del cronograma (DEBE 373101 / HABER 454915); se rechaza si el cronograma no tiene intereses.
+  PAGO DE CUOTA: capital e interés al DEBE de 454915 / HABER banco + asiento SIN caja de devengo del interés imputado en ese pago (DEBE 673111 / HABER 373101). Seguro, comisión y mora como en un préstamo estándar.
+  Los asientos sin caja se ligan al movimiento de caja de la operación, por eso la reversión por operación los elimina sin lógica propia. Servicio: `warrantPrestamo.service.js` (solo arma los asientos; `crearAsiento` los crea).
+  Pendiente (otro módulo): traslado de mercadería al AGD y reingreso en Almacén (DEBE 281101 / HABER 201111 y viceversa).
 - Movimientos de rendición sin proceso (p. ej. gerencia): origen TESORERÍA (módulo con modelo `DetMovsEntregaRendir`) y el propio id; al generar la compra pasa a COMPRAS + id de la OC.
   Su unidad de negocio es la marcada `UnidadNegocio.esGastosGenerales`.
 

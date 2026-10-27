@@ -13,6 +13,7 @@ import {
   ESTADO_CUOTA_PRESTAMO,
   ESTADOS_CUOTA_PRESTAMO_ABIERTAS,
 } from "../../utils/estados.constants.js";
+import { esPrestamoWarrant } from "../../utils/warrant.constants.js";
 /**
  * Servicio para consulta de documentos pendientes de cobro y pago
  * Para vista de Tesorería - Pendientes
@@ -1394,6 +1395,7 @@ const listarPendientes = async (filtros = {}) => {
           cuentaCorrienteId: prestamo.cuentaCorrienteId,
           esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
         esFactoringCompras: Boolean(prestamo.tipoPrestamo?.esFactoringCompras),
+          esWarrant: esPrestamoWarrant(prestamo),
           interesDescontado: Boolean(prestamo.interesDescontado),
           tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
           // Ids para armar y aplicar el filtro especializado (banco, tipo de préstamo y préstamo)
@@ -1465,6 +1467,7 @@ const listarPendientes = async (filtros = {}) => {
         montoDesembolsado: prestamo.montoDesembolsado,
         esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
         esFactoringCompras: Boolean(prestamo.tipoPrestamo?.esFactoringCompras),
+        esWarrant: esPrestamoWarrant(prestamo),
         interesDescontado: Boolean(prestamo.interesDescontado),
         tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
         bancoId: prestamo.bancoId,
