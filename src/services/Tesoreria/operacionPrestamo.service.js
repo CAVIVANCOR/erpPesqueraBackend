@@ -101,6 +101,8 @@ const CUENTAS_CAPITAL = {
   FACTORING_PAGO: { soles: "454911", dolares: "454912" },
   // [CASO C] compra en cuotas con tarjeta de crédito: TARJETAS DE CREDITO M.N. / M.E.
   TARJETA: { soles: "454611", dolares: "454612" },
+  // [CASO D] factoring indirecto (compras): la deuda sigue siendo de facturas por pagar, en su cuenta de factoring (421203 / 421204)
+  FACTORING_COMPRAS: { soles: "421203", dolares: "421204" },
 };
 
 // Cuentas de gasto de la cuota, comunes a ambos casos
@@ -408,6 +410,9 @@ const obtenerCuentaCapital = async (tx, prestamo, operacion, esMonedaNacional) =
   if (prestamo.tipoPrestamo?.esFactoring) {
     // [CASO B] FACTORING
     codigos = operacion === "DESEMBOLSO" ? CUENTAS_CAPITAL.FACTORING_INGRESO : CUENTAS_CAPITAL.FACTORING_PAGO;
+  } else if (prestamo.tipoPrestamo?.esFactoringCompras) {
+    // [CASO D] FACTORING INDIRECTO (COMPRAS): se paga el capital de la deuda de factoring (421203), no un préstamo
+    codigos = CUENTAS_CAPITAL.FACTORING_COMPRAS;
   } else if (prestamo.tipoPrestamo?.esTarjetaCredito) {
     // [CASO C] TARJETA DE CRÉDITO: la deuda de las cuotas va a 4546, no a 4511
     codigos = CUENTAS_CAPITAL.TARJETA;
@@ -644,7 +649,7 @@ const procesarPagoCuotas = async (datos) => {
             prestamo: {
               include: {
                 banco: { select: { id: true, nombre: true, enlaceEntidadComercialId: true } },
-                tipoPrestamo: { select: { id: true, esFactoring: true } },
+                tipoPrestamo: { select: { id: true, esFactoring: true, esFactoringCompras: true } },
               },
             },
           },
@@ -732,6 +737,9 @@ const procesarPagoCuotas = async (datos) => {
         if (esFactoring) {
           // [CASO B] FACTORING (referencia PAGO_FACTORING)
           glosaPorDefecto = `PAGO DE FACTORING ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo} CUOTA(S) ${numerosCuota}`;
+        } else if (prestamo.tipoPrestamo?.esFactoringCompras) {
+          // [CASO D] FACTORING INDIRECTO (COMPRAS)
+          glosaPorDefecto = `PAGO DE FACTORING INDIRECTO ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo} CUOTA(S) ${numerosCuota}`;
         } else {
           // [CASO A] PRÉSTAMO ESTÁNDAR (referencia PAGO_CUOTA_PRESTAMO)
           glosaPorDefecto = `POR EL PAGO DE LA CUOTA DEL PRESTAMO OTORGADO POR ${prestamo.banco.nombre} - PRESTAMO ${prestamo.numeroPrestamo} CUOTA(S) ${numerosCuota}`;
@@ -1038,7 +1046,7 @@ const procesarDesembolso = async (datos) => {
           where: { id: BigInt(prestamoBancarioId) },
           include: {
             banco: { select: { id: true, nombre: true, enlaceEntidadComercialId: true } },
-            tipoPrestamo: { select: { id: true, esFactoring: true } },
+            tipoPrestamo: { select: { id: true, esFactoring: true, esFactoringCompras: true } },
             _count: { select: { asientosContables: true } },
           },
         });

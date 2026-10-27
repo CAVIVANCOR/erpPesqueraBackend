@@ -19,4 +19,9 @@ router.get('/factoring/prestamos', operacionPrestamoController.prestamosFactorin
 router.get('/factoring/prestamos/:id', operacionPrestamoController.detalleFactoring);
 router.post('/factoring/liquidar', operacionPrestamoController.liquidarFactoring);
 
+// Factoring indirecto (compras): desembolso sin caja (su reversión es por operación, en /api/tesoreria/operaciones)
+router.post('/factoring-indirecto/desembolsar', operacionPrestamoController.desembolsarFactoringIndirecto);
+router.get('/factoring-indirecto/:prestamoId/intereses', operacionPrestamoController.interesesFactoringIndirecto);
+router.put('/factoring-indirecto/cuotas/:cuotaId/factura-intereses', operacionPrestamoController.enlazarInteresCuotaFactoringIndirecto);
+
 export default router;

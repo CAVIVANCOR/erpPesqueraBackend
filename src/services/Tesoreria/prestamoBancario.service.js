@@ -8,7 +8,7 @@ import {
 import lineaCreditoService from "./lineaCredito.service.js";
 import cuotaPrestamoService from "./cuotaPrestamo.service.js";
 import { tipoFactoringDe, construirCuotasDeFacturas } from "./facturasCuotaPrestamo.service.js";
-import { ESTADO_CUOTA_PRESTAMO } from "../../utils/estados.constants.js";
+import { ESTADO_CUOTA_PRESTAMO, ESTADO_PRESTAMO_BANCARIO } from "../../utils/estados.constants.js";
 const { obtenerTipoCambio } = lineaCreditoService;
 /**
  * Servicio CRUD para PrestamoBancario
@@ -395,6 +395,9 @@ const obtenerPorId = async (id) => {
 const crear = async (data) => {
   try {
     // Validar campos obligatorios con mensajes específicos
+    const tipoDefValidacion = data.tipoPrestamoId
+      ? await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId }, select: { esFactoringCompras: true } })
+      : null;
     const camposFaltantes = [];
 
     if (!data.empresaId) camposFaltantes.push("Empresa");
@@ -406,7 +409,10 @@ const crear = async (data) => {
     if (!data.montoAprobado) camposFaltantes.push("Monto Aprobado");
     if (!data.montoDesembolsado) camposFaltantes.push("Monto Desembolsado");
     if (!data.monedaId) camposFaltantes.push("Moneda");
-    if (!data.tasaInteresAnual) camposFaltantes.push("Tasa de Interés Anual");
+    const tasaSinDato = tipoDefValidacion?.esFactoringCompras
+      ? [undefined, null, ""].includes(data.tasaInteresAnual)
+      : !data.tasaInteresAnual;
+    if (tasaSinDato) camposFaltantes.push("Tasa de Interés Anual");
     if (!data.plazoMeses) camposFaltantes.push("Plazo en Meses");
     if (!data.numeroCuotas) camposFaltantes.push("Número de Cuotas");
     if (!data.frecuenciaPago) camposFaltantes.push("Frecuencia de Pago");
@@ -575,6 +581,9 @@ const actualizar = async (id, data) => {
     if (!existente) throw new NotFoundError("Préstamo bancario no encontrado");
 
     // Validar campos obligatorios con mensajes específicos
+    const tipoDefValidacion = data.tipoPrestamoId
+      ? await prisma.tipoPrestamo.findUnique({ where: { id: data.tipoPrestamoId }, select: { esFactoringCompras: true } })
+      : null;
     const camposFaltantes = [];
 
     if (!data.empresaId) camposFaltantes.push("Empresa");
@@ -586,7 +595,10 @@ const actualizar = async (id, data) => {
     if (!data.montoAprobado) camposFaltantes.push("Monto Aprobado");
     if (!data.montoDesembolsado) camposFaltantes.push("Monto Desembolsado");
     if (!data.monedaId) camposFaltantes.push("Moneda");
-    if (!data.tasaInteresAnual) camposFaltantes.push("Tasa de Interés Anual");
+    const tasaSinDato = tipoDefValidacion?.esFactoringCompras
+      ? [undefined, null, ""].includes(data.tasaInteresAnual)
+      : !data.tasaInteresAnual;
+    if (tasaSinDato) camposFaltantes.push("Tasa de Interés Anual");
     if (!data.plazoMeses) camposFaltantes.push("Plazo en Meses");
     if (!data.numeroCuotas) camposFaltantes.push("Número de Cuotas");
     if (!data.frecuenciaPago) camposFaltantes.push("Frecuencia de Pago");
@@ -618,7 +630,7 @@ const actualizar = async (id, data) => {
     const reemplazarCuotasFactura = Boolean(tipoFactoring) && !existente.esSaldoInicial && Array.isArray(cuotasFactura);
     let cuotasFacturaNuevas = null;
     if (reemplazarCuotasFactura) {
-      if (existente.movimientoCajaDesembolsoId) {
+      if (existente.movimientoCajaDesembolsoId || Number(existente.estadoId) !== ESTADO_PRESTAMO_BANCARIO.APROBADO) {
         throw new ValidationError(
           `El préstamo ${existente.numeroPrestamo} ya tiene su desembolso registrado: no se pueden cambiar las facturas ni los vencimientos de sus cuotas.`,
         );

@@ -1,5 +1,6 @@
 import operacionPrestamoService from "../../services/Tesoreria/operacionPrestamo.service.js";
 import factoringPrestamoService from "../../services/Tesoreria/factoringPrestamo.service.js";
+import factoringIndirectoService from "../../services/Tesoreria/factoringIndirectoPrestamo.service.js";
 import toJSONBigInt from "../../utils/toJSONBigInt.js";
 
 /**
@@ -49,6 +50,38 @@ export async function desembolsar(req, res, next) {
     const data = { ...req.body, usuarioId: req.user?.id || null };
     const resultado = await operacionPrestamoService.procesarDesembolso(data);
     res.status(201).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// FACTORING INDIRECTO (COMPRAS): desembolso sin caja y su reversión
+// ════════════════════════════════════════════════════════════
+
+/** Canjea las facturas de compra de las cuotas del préstamo (sin caja). Body: prestamoBancarioId, fechaDesembolso, tipoCambio */
+export async function desembolsarFactoringIndirecto(req, res, next) {
+  try {
+    const resultado = await factoringIndirectoService.desembolsarFactoringIndirecto({ ...req.body, usuarioId: req.user?.id || null });
+    res.status(201).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Cuotas del factoring con su factura de intereses y las facturas del proveedor que se pueden enlazar */
+export async function interesesFactoringIndirecto(req, res, next) {
+  try {
+    res.json(toJSONBigInt(await factoringIndirectoService.listarInteresesCuotas(req.params.prestamoId)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Enlaza (o suelta) la factura de intereses del proveedor con una cuota. Body: cuentaPorPagarInteresId (null para soltar) */
+export async function enlazarInteresCuotaFactoringIndirecto(req, res, next) {
+  try {
+    res.json(toJSONBigInt(await factoringIndirectoService.enlazarInteresCuota({ cuotaId: req.params.cuotaId, cuentaPorPagarInteresId: req.body.cuentaPorPagarInteresId })));
   } catch (err) {
     next(err);
   }

@@ -39,6 +39,9 @@ import { recalcularLetra } from "./pagoLetraCambioEspecializado.service.js";
  *   - Entrega a rendir (DetMovsEntregaRendir): solo se limpian los campos de validación de Tesorería.
  *     El monto NO se toca, por eso no hay saldos del responsable que recalcular.
  *   - Asientos contables de los movimientos.
+ *   - Operaciones SIN CAJA: el desembolso de un factoring indirecto (compras) no tiene movimiento de caja; se identifica por el
+ *     número de operación de sus pagos de canje (PagoCuentaPorPagar con medio FACTORING ligados a un préstamo, sin movimiento).
+ *     Se revierte completo: elimina los asientos y los pagos de canje, reabre cada factura y devuelve el préstamo a APROBADO.
  *   - Filas de saldo de cuenta corriente y recálculo en cascada de las filas posteriores.
  *   - Movimientos de caja.
  *
@@ -183,9 +186,17 @@ async function cargarOperacion(db, parametros) {
     include: incluirMovimiento,
     orderBy: { id: "asc" },
   });
-  if (movimientos.length === 0) {
+  // Operación sin caja: el desembolso de un factoring indirecto solo tiene pagos de canje (medio FACTORING) y sus asientos
+  const hayPagosCanjeSinCaja =
+    movimientos.length === 0
+      ? (await db.pagoCuentaPorPagar.count({
+          where: { refOperacionEspecializadaMovCaja: correlativo, empresaId, movimientoCajaId: null, prestamoBancarioId: { not: null } },
+        })) > 0
+      : false;
+  if (movimientos.length === 0 && !hayPagosCanjeSinCaja) {
     throw new NotFoundError(`No existe la operación #${correlativo} en la empresa indicada.`);
   }
+  const empresaOperacion = movimientos.length === 0 ? await db.empresa.findUnique({ where: { id: empresaId }, select: { id: true, razonSocial: true } }) : null;
 
   // Transferencia entre empresas: los movimientos de la otra empresa comparten el número de operación.
   // El número se repite entre empresas, así que solo se incluyen los creados en la misma transacción.
@@ -320,6 +331,24 @@ async function cargarOperacion(db, parametros) {
     db.movimientoCaja.count({ where: { movimientoRevertidoId: enMovimientos } }),
   ]);
 
+  // Canje de factoring indirecto (compras): pagos sin caja ligados a un préstamo, sus asientos y el préstamo que se desembolsó
+  const pagosCanjeCompras = pagosCxP.filter((p) => !p.movimientoCajaId && p.prestamoBancarioId);
+  let prestamosCanje = [];
+  if (pagosCanjeCompras.length > 0) {
+    const submoduloPagoCxP = await db.submoduloSistema.findFirst({ where: { nombreModeloOrigen: "PagoCuentaPorPagar", activo: true }, select: { id: true } });
+    if (submoduloPagoCxP) {
+      const asientosCanje = await db.asientoContable.findMany({
+        where: { submoduloOrigenId: submoduloPagoCxP.id, procesoOrigenId: { in: pagosCanjeCompras.map((p) => p.id) }, esSaldoInicial: false },
+        include: { periodoContable: { select: { id: true, estadoId: true, nombrePeriodo: true } } },
+        orderBy: { id: "asc" },
+      });
+      asientos.push(...asientosCanje);
+    }
+    prestamosCanje = await db.prestamoBancario.findMany({
+      where: { id: { in: unicos(pagosCanjeCompras.map((p) => p.prestamoBancarioId)) }, tipoPrestamo: { esFactoringCompras: true } },
+    });
+  }
+
   // Factoring: facturas que volvieron a cartera con esta operación (líneas de sus asientos que apuntan al pago de canje)
   const submoduloPagoCxC = await db.submoduloSistema.findFirst({ where: { ruta: "pagoCuentaPorCobrar", activo: true }, select: { id: true } });
   const lineasRecompra =
@@ -360,6 +389,8 @@ async function cargarOperacion(db, parametros) {
     inversiones,
     movimientosInversion,
     reversionesPrevias,
+    prestamosCanje,
+    empresaOperacion,
     avisosLocalizacion,
   };
 }
@@ -381,11 +412,11 @@ function agruparPorDeuda(pagos, campoDeudaId, campoDeuda, campoMonto) {
 }
 
 /** Calcula cómo quedaría cada deuda (sin escribir nada). */
-function proyectarDeuda({ tipo, deuda, aplicado, estados, maximoSaldo, pagadoAnterior = 0, revierteCanje = false }) {
+function proyectarDeuda({ tipo, deuda, aplicado, estados, maximoSaldo, pagadoAnterior = 0, revierteCanje = false, estadoCanje = ESTADO_CUENTA_POR_COBRAR.CANJEADO }) {
   const pagadoDespues = r2(Math.max(0, num(deuda.montoPagado) - aplicado));
   const saldoDespues = r2(Math.min(maximoSaldo, num(deuda.saldoPendiente) + aplicado));
   // Si lo que se revierte es el canje que dejó la factura en CANJEADA (factoring), vuelve a calcularse como pendiente
-  const estadoActual = revierteCanje && Number(deuda.estadoId) === Number(ESTADO_CUENTA_POR_COBRAR.CANJEADO) ? estados.PENDIENTE : deuda.estadoId;
+  const estadoActual = revierteCanje && Number(deuda.estadoId) === Number(estadoCanje) ? estados.PENDIENTE : deuda.estadoId;
   const estadoDespues = estadoDeuda(estados, estadoActual, saldoDespues, pagadoDespues + pagadoAnterior, deuda.fechaVencimiento);
   return {
     tipo,
@@ -437,7 +468,7 @@ async function analizar(db, ctx) {
     });
     extra.forEach((p) => periodos.set(clave(p.id), p));
   }
-  if (periodos.size === 0) {
+  if (periodos.size === 0 && movimientos.length > 0) {
     try {
       const fecha = movimientos[0].fechaOperacionMovCaja;
       const periodo = fecha ? await periodoContableService.obtenerPeriodoPorFecha(Number(ctx.clave.empresaId), fecha) : null;
@@ -524,7 +555,11 @@ async function analizar(db, ctx) {
     deudas.push(proyectarDeuda({ tipo: "Cuenta por cobrar", deuda: g.deuda, aplicado: g.aplicado, estados: ESTADOS_CXC, maximoSaldo: num(g.deuda.montoTotal), revierteCanje }));
   }
   for (const g of agruparPorDeuda(ctx.pagosCxP, "cuentaPorPagarId", "cuentaPorPagar", "montoAplicadoDeuda").values()) {
-    deudas.push(proyectarDeuda({ tipo: "Cuenta por pagar", deuda: g.deuda, aplicado: g.aplicado, estados: ESTADOS_CXP, maximoSaldo: num(g.deuda.montoTotal) }));
+    // Un pago sin caja ligado a un préstamo de factoring indirecto es el canje de la factura (la dejó CANJEADA)
+    const revierteCanje = g.pagos.some((p) => p.prestamoBancarioId && !p.movimientoCajaId);
+    deudas.push(
+      proyectarDeuda({ tipo: "Cuenta por pagar", deuda: g.deuda, aplicado: g.aplicado, estados: ESTADOS_CXP, maximoSaldo: num(g.deuda.montoTotal), revierteCanje, estadoCanje: ESTADO_CUENTA_POR_PAGAR.CANJEADO }),
+    );
   }
   for (const g of agruparPorDeuda(ctx.pagosPersonal, "deudaConPersonalId", "deudaConPersonal", "montoPago").values()) {
     deudas.push(
@@ -653,6 +688,19 @@ async function analizar(db, ctx) {
     });
   }
 
+  // ── Factoring indirecto (compras): el desembolso sin caja se revierte completo y solo si no hay pagos de cuotas ──
+  for (const prestamo of ctx.prestamosCanje) {
+    const pagos = await db.pagoCuotaPrestamo.count({ where: { cuotaPrestamo: { prestamoBancarioId: prestamo.id } } });
+    if (pagos > 0) {
+      bloqueos.push(`El préstamo ${prestamo.numeroPrestamo} ya tiene cuotas pagadas: primero revierta esos pagos.`);
+    }
+    prestamos.push({
+      id: prestamo.id,
+      numeroPrestamo: prestamo.numeroPrestamo,
+      accion: "El desembolso del factoring indirecto se anula: las facturas de compra vuelven a estar por pagar al proveedor y el préstamo vuelve a APROBADO",
+    });
+  }
+
   // ── Factoring: facturas que vuelven a estar canjeadas (el pago de la cuota las había devuelto a cartera) ──
   for (const pago of ctx.pagosRecompra) {
     const factura = pago.cuentaPorCobrar;
@@ -760,8 +808,8 @@ async function analizar(db, ctx) {
     operacion: {
       empresaId: Number(ctx.clave.empresaId),
       correlativo: Number(ctx.clave.correlativo),
-      empresa: movimientos[0].empresa?.razonSocial || "",
-      fecha: movimientos[0].fechaOperacionMovCaja,
+      empresa: movimientos[0]?.empresa?.razonSocial || ctx.empresaOperacion?.razonSocial || "",
+      fecha: movimientos[0]?.fechaOperacionMovCaja || ctx.pagosCxP[0]?.fechaPago || null,
     },
     movimientos: movimientos.map((m) => ({
       id: Number(m.id),
@@ -956,6 +1004,12 @@ export async function ejecutarReversion(tx, { motivo, usuarioId, ...parametros }
     });
   }
 
+  // 5a. Factoring indirecto (compras): el préstamo desembolsado sin caja vuelve a APROBADO y sus saldos se recalculan
+  for (const prestamo of ctx.prestamosCanje) {
+    await tx.prestamoBancario.update({ where: { id: prestamo.id }, data: { estadoId: ESTADO_PRESTAMO_BANCARIO.APROBADO } });
+    await cuotaPrestamoService.actualizarSaldosPrestamo(prestamo.id, tx);
+  }
+
   // 5b. Préstamos entre relacionadas: se eliminan las devoluciones y los desembolsos de la operación
   //     y el saldo y estado de los préstamos con devoluciones se recalcula desde los pagos que quedan
   if (ctx.pagosPrestamoRel.length > 0) {
@@ -1078,6 +1132,52 @@ export async function revertirOperacion({ motivo, usuarioId, ...parametros }) {
 // ════════════════════════════════════════════════════════════
 // LISTADO DE OPERACIONES REALIZADAS
 // ════════════════════════════════════════════════════════════
+/** Operaciones sin movimiento de caja: desembolsos de factoring indirecto (pagos de canje con medio FACTORING). */
+async function operacionesSinCaja({ empresaId, rango, texto }) {
+  const where = {
+    movimientoCajaId: null,
+    prestamoBancarioId: { not: null },
+    refOperacionEspecializadaMovCaja: { not: null },
+    medioPago: { nombre: "FACTORING" },
+    prestamoBancario: { tipoPrestamo: { esFactoringCompras: true } },
+  };
+  if (empresaId) where.empresaId = BigInt(empresaId);
+  if (Object.keys(rango).length > 0) where.fechaPago = rango;
+  if (texto) {
+    if (/^\d+$/.test(texto)) where.refOperacionEspecializadaMovCaja = BigInt(texto);
+    else where.observaciones = { contains: texto, mode: "insensitive" };
+  }
+  const pagos = await prisma.pagoCuentaPorPagar.findMany({
+    where,
+    include: {
+      empresa: { select: { razonSocial: true } },
+      prestamoBancario: { select: { numeroPrestamo: true, banco: { select: { nombre: true } }, moneda: { select: { simbolo: true } } } },
+    },
+    orderBy: { id: "desc" },
+    take: 2000,
+  });
+  const grupos = new Map();
+  for (const p of pagos) {
+    const llave = `${p.empresaId}:${p.refOperacionEspecializadaMovCaja}`;
+    if (!grupos.has(llave)) grupos.set(llave, { p, monto: 0, facturas: 0, fecha: p.fechaPago });
+    const g = grupos.get(llave);
+    g.monto = r2(g.monto + num(p.montoAplicadoDeuda));
+    g.facturas += 1;
+    if (p.fechaPago > g.fecha) g.fecha = p.fechaPago;
+  }
+  return [...grupos.values()].map(({ p, monto, facturas, fecha }) => ({
+    empresaId: Number(p.empresaId),
+    empresa: p.empresa?.razonSocial || "",
+    correlativo: Number(p.refOperacionEspecializadaMovCaja),
+    fecha,
+    tipo: "Desembolso de factoring indirecto (sin caja)",
+    detalle: `${p.prestamoBancario?.banco?.nombre || ""} - préstamo ${p.prestamoBancario?.numeroPrestamo || ""} (${facturas} factura(s))`,
+    monto,
+    simbolo: p.prestamoBancario?.moneda?.simbolo || "",
+    movimientos: 0,
+  }));
+}
+
 export async function listarOperaciones({ empresaId, desde, hasta, busqueda, limite = 100 } = {}) {
   try {
     const where = { refOperacionEspecializadaMovCaja: { not: null } };
@@ -1208,7 +1308,8 @@ export async function listarOperaciones({ empresaId, desde, hasta, busqueda, lim
       };
     });
 
-    return filas
+    const sinCaja = await operacionesSinCaja({ empresaId, rango, texto });
+    return [...filas, ...sinCaja]
       .sort((a, b) => b.fecha - a.fecha || b.correlativo - a.correlativo)
       .slice(0, Math.min(Number(limite) || 100, 500));
   } catch (err) {

@@ -996,7 +996,7 @@ const listarPendientes = async (filtros = {}) => {
               empresa: { select: { id: true, razonSocial: true, ruc: true } },
               banco: { select: { id: true, nombre: true } },
               moneda: { select: { id: true, simbolo: true, codigoSunat: true } },
-              tipoPrestamo: { select: { id: true, descripcion: true, esFactoring: true } },
+              tipoPrestamo: { select: { id: true, descripcion: true, esFactoring: true, esFactoringCompras: true } },
             },
           },
         },
@@ -1036,7 +1036,7 @@ const listarPendientes = async (filtros = {}) => {
           banco: { select: { id: true, nombre: true } },
           moneda: { select: { id: true, simbolo: true, codigoSunat: true } },
           estado: { select: { id: true, descripcion: true, severityColor: true } },
-          tipoPrestamo: { select: { id: true, descripcion: true, esFactoring: true } },
+          tipoPrestamo: { select: { id: true, descripcion: true, esFactoring: true, esFactoringCompras: true } },
           asientosContables: {
             select: {
               id: true,
@@ -1393,6 +1393,7 @@ const listarPendientes = async (filtros = {}) => {
           tasaMoratoria: prestamo.tasaMoratoria,
           cuentaCorrienteId: prestamo.cuentaCorrienteId,
           esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
+        esFactoringCompras: Boolean(prestamo.tipoPrestamo?.esFactoringCompras),
           interesDescontado: Boolean(prestamo.interesDescontado),
           tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
           // Ids para armar y aplicar el filtro especializado (banco, tipo de préstamo y préstamo)
@@ -1463,6 +1464,7 @@ const listarPendientes = async (filtros = {}) => {
         montoAprobado: prestamo.montoAprobado,
         montoDesembolsado: prestamo.montoDesembolsado,
         esFactoring: Boolean(prestamo.tipoPrestamo?.esFactoring),
+        esFactoringCompras: Boolean(prestamo.tipoPrestamo?.esFactoringCompras),
         interesDescontado: Boolean(prestamo.interesDescontado),
         tipoPrestamo: prestamo.tipoPrestamo?.descripcion || null,
         bancoId: prestamo.bancoId,
