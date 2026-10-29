@@ -95,33 +95,36 @@ async function validarLineaCredito(data) {
  * @param {BigInt} lineaCreditoId - ID de la línea de crédito
  */
 async function actualizarSaldosLinea(lineaCreditoId) {
-  // Obtener préstamos vigentes vinculados a esta línea
-  const prestamos = await prisma.prestamoBancario.findMany({
-    where: {
-      lineaCreditoId,
-      estadoId: { in: [80n, 81n] }, // 80=DESEMBOLSADO, 81=VIGENTE
-    },
-  });
-
-  // Sumar el saldo de capital de todos los préstamos vigentes
-  const montoUtilizado = prestamos.reduce(
-    (sum, p) => sum + parseFloat(p.saldoCapital),
-    0,
-  );
-
   const linea = await prisma.lineaCredito.findUnique({
     where: { id: lineaCreditoId },
-  });
-
-  const montoDisponible = parseFloat(linea.montoAprobado) - montoUtilizado;
-
-  await prisma.lineaCredito.update({
-    where: { id: lineaCreditoId },
-    data: {
-      montoUtilizado,
-      montoDisponible,
+    include: {
+      moneda: true,
+      prestamos: {
+        where: { estadoId: { in: ESTADOS_PRESTAMO_QUE_CONSUMEN_LINEA } },
+        select: { saldoCapital: true, estadoId: true, moneda: { select: { id: true, codigoSunat: true } } },
+      },
+      sublineas: {
+        include: {
+          sobregiros: { where: { activo: true } },
+          prestamos: { select: { saldoCapital: true, estadoId: true, moneda: { select: { id: true, codigoSunat: true } } } },
+        },
+      },
     },
   });
+  if (!linea) return;
+
+  // Mismo cálculo que la lista (saldo de capital convertido a la moneda de la línea, estados que consumen línea).
+  // El valor guardado es un resumen: si el cálculo falla no debe impedir guardar el préstamo; la lista lo recalcula siempre.
+  try {
+    const { convertir } = crearConversorMoneda();
+    const { montoUtilizado, montoDisponible } = await calcularUtilizacionLinea(linea, convertir);
+    await prisma.lineaCredito.update({
+      where: { id: lineaCreditoId },
+      data: { montoUtilizado, montoDisponible },
+    });
+  } catch (err) {
+    console.error(`[LINEA_CREDITO] No se pudo actualizar el resumen guardado de la línea ${lineaCreditoId}: ${err.message}`);
+  }
 }
 
 /**
@@ -139,6 +142,7 @@ async function obtenerTipoCambio(fecha) {
         compra: 3.75,
         venta: 3.75,
         fecha: formatearFechaISO(fecha),
+        referencial: true,
       };
     }
 
@@ -190,11 +194,11 @@ async function obtenerTipoCambio(fecha) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      return { compra: 3.75, venta: 3.75, fecha: fechaConsulta };
+      return { compra: 3.75, venta: 3.75, fecha: fechaConsulta, referencial: true };
     }
     const dataArray = await response.json();
     if (!Array.isArray(dataArray) || dataArray.length === 0) {
-      return { compra: 3.75, venta: 3.75, fecha: fechaConsulta };
+      return { compra: 3.75, venta: 3.75, fecha: fechaConsulta, referencial: true };
     }
 
     // Filtrar solo fechas <= a la fecha de consulta
@@ -230,8 +234,99 @@ async function obtenerTipoCambio(fecha) {
       compra: 3.75,
       venta: 3.75,
       fecha: formatearFechaISO(fecha),
+      referencial: true,
     };
   }
+}
+
+// ============================================================================
+// UTILIZACIÓN DE LÍNEAS DE CRÉDITO (cálculo único: lista, formulario y sublíneas)
+// ============================================================================
+// Criterio contable-financiero de la línea REVOLVENTE:
+//   - Utilizado   = capital que aún se debe (saldoCapital), no lo desembolsado: al pagar capital se libera línea.
+//   - Estados que consumen línea: DESEMBOLSADO (80), VIGENTE (81) y VENCIDO (83: aún se debe). No consumen
+//     APROBADO (no hay dinero), PAGADO, REFINANCIADO ni ANULADO.
+//   - Moneda: cada saldo se convierte a la moneda de la línea con el TC VENTA vigente (la deuda en moneda
+//     extranjera se mide al tipo de cambio actual, no al de la fecha de desembolso). Si SUNAT no responde se
+//     usa un TC referencial y la línea se marca (tipoCambioReferencial) para que la pantalla lo avise.
+//   - Disponible  = asignado (o aprobado) + sobregiros autorizados - utilizado.
+export const ESTADOS_PRESTAMO_QUE_CONSUMEN_LINEA = [80n, 81n, 83n];
+
+const redondear2 = (valor) => Math.round(Number(valor) * 100) / 100;
+
+const consumeLinea = (prestamo) =>
+  prestamo.estadoId !== null &&
+  prestamo.estadoId !== undefined &&
+  ESTADOS_PRESTAMO_QUE_CONSUMEN_LINEA.includes(BigInt(prestamo.estadoId));
+
+/**
+ * Crea un conversor de moneda que consulta el TC una sola vez por cálculo y solo si hace falta.
+ * `estado.tipoCambioReferencial` indica si alguna conversión usó el TC referencial (reiniciarlo por línea).
+ */
+export function crearConversorMoneda() {
+  let tipoCambio = null;
+  const estado = { tipoCambioReferencial: false };
+
+  const convertir = async (monto, monedaOrigen, monedaDestino) => {
+    const valor = parseFloat(monto || 0);
+    if (!monedaOrigen || !monedaDestino || String(monedaOrigen.id) === String(monedaDestino.id)) return valor;
+
+    const origen = monedaOrigen.codigoSunat;
+    const destino = monedaDestino.codigoSunat;
+    if (!tipoCambio) tipoCambio = await obtenerTipoCambio(new Date());
+    if (tipoCambio.referencial) estado.tipoCambioReferencial = true;
+
+    if (origen === "PEN" && destino === "USD") return valor / tipoCambio.venta;
+    if (origen === "USD" && destino === "PEN") return valor * tipoCambio.venta;
+    throw new ValidationError(
+      `No hay conversión definida de ${origen} a ${destino}: un préstamo en ${origen} consume una línea en ${destino}. Corrija la moneda del préstamo o de la línea.`,
+    );
+  };
+
+  return { convertir, estado };
+}
+
+/**
+ * Totales de una sublínea: sobregiros autorizados, utilizado (en moneda de la línea) y disponible.
+ * @param {Object} sublinea Con `sobregiros` y `prestamos` (saldoCapital, estadoId, moneda)
+ */
+export async function calcularTotalesSublinea(sublinea, monedaLinea, convertir) {
+  const totalSobregiros = redondear2(
+    (sublinea.sobregiros || []).reduce((suma, sobregiro) => suma + parseFloat(sobregiro.montoAutorizado || 0), 0),
+  );
+
+  let montoUtilizado = 0;
+  for (const prestamo of sublinea.prestamos || []) {
+    if (!consumeLinea(prestamo)) continue;
+    montoUtilizado += await convertir(prestamo.saldoCapital, prestamo.moneda, monedaLinea);
+  }
+  montoUtilizado = redondear2(montoUtilizado);
+
+  const montoDisponible = redondear2(parseFloat(sublinea.montoAsignado || 0) + totalSobregiros - montoUtilizado);
+  return { totalSobregiros, montoUtilizado, montoDisponible };
+}
+
+/**
+ * Utilización de una línea con sus sublíneas. El utilizado de la línea sale de TODOS sus préstamos
+ * (incluidos los que no pertenecen a ninguna sublínea), no de la suma de sublíneas.
+ * @param {Object} linea Con `moneda`, `prestamos` y `sublineas` (cada una con `sobregiros` y `prestamos`)
+ */
+export async function calcularUtilizacionLinea(linea, convertir) {
+  let montoUtilizado = 0;
+  for (const prestamo of linea.prestamos || []) {
+    if (!consumeLinea(prestamo)) continue;
+    montoUtilizado += await convertir(prestamo.saldoCapital, prestamo.moneda, linea.moneda);
+  }
+  montoUtilizado = redondear2(montoUtilizado);
+
+  const sublineas = [];
+  for (const sublinea of linea.sublineas || []) {
+    sublineas.push({ ...sublinea, ...(await calcularTotalesSublinea(sublinea, linea.moneda, convertir)) });
+  }
+
+  const totalSobregiros = redondear2(sublineas.reduce((suma, sublinea) => suma + sublinea.totalSobregiros, 0));
+  const montoDisponible = redondear2(parseFloat(linea.montoAprobado || 0) + totalSobregiros - montoUtilizado);
+  return { ...linea, montoUtilizado, montoDisponible, totalSobregiros, sublineas };
 }
 
 /**
@@ -246,11 +341,13 @@ const listar = async () => {
         moneda: true,
         estado: true,
         prestamos: {
-          where: { estadoId: { in: [80n, 81n] } }, // DESEMBOLSADO o VIGENTE
+          where: { estadoId: { in: ESTADOS_PRESTAMO_QUE_CONSUMEN_LINEA } },
           orderBy: { fechaDesembolso: "desc" },
           select: {
             id: true,
             numeroPrestamo: true,
+            estadoId: true,
+            sublineaCreditoId: true,
             montoDesembolsado: true,
             saldoCapital: true,
             fechaDesembolso: true,
@@ -285,86 +382,14 @@ const listar = async () => {
       orderBy: { fechaAprobacion: "desc" },
     });
 
-    // ✅ CALCULAR montoUtilizado y montoDisponible CON CONVERSIÓN DE MONEDA
-    const lineasConSaldos = await Promise.all(
-      lineas.map(async (linea) => {
-        const monedaLinea = linea.moneda; // Moneda de la línea de crédito
-        // Sumar el MONTO DESEMBOLSADO de todos los préstamos vigentes CON CONVERSIÓN
-        let montoUtilizado = 0;
-
-        for (const prestamo of linea.prestamos) {
-          const montoDesembolsado = parseFloat(prestamo.montoDesembolsado || 0);
-          const monedaPrestamo = prestamo.moneda;
-
-          let montoEnMonedaLinea = montoDesembolsado;
-
-          // ✅ CONVERTIR SI LAS MONEDAS SON DIFERENTES
-          if (
-            monedaPrestamo &&
-            monedaLinea &&
-            monedaPrestamo.id !== monedaLinea.id
-          ) {
-            // Obtener tipo de cambio de la fecha del contrato
-            const fechaTC = prestamo.fechaDesembolso;
-            const tipoCambio = await obtenerTipoCambio(fechaTC);
-
-            // Si la línea es USD y el préstamo es PEN: dividir por TC venta
-            // Si la línea es PEN y el préstamo es USD: multiplicar por TC compra
-            if (
-              monedaLinea.codigoSunat === "USD" &&
-              monedaPrestamo.codigoSunat === "PEN"
-            ) {
-              // Convertir PEN a USD: dividir por tipo de cambio venta
-              montoEnMonedaLinea = montoDesembolsado / tipoCambio.venta;
-            } else if (
-              monedaLinea.codigoSunat === "PEN" &&
-              monedaPrestamo.codigoSunat === "USD"
-            ) {
-              // Convertir USD a PEN: multiplicar por TC Venta (estándar del sistema: siempre sell_price)
-              montoEnMonedaLinea = montoDesembolsado * tipoCambio.venta;
-            } else {
-            }
-          } else {
-          }
-
-          montoUtilizado += montoEnMonedaLinea;
-        }
-        const montoAprobado = parseFloat(linea.montoAprobado || 0);
-
-        // Calcular total de sobregiros de todas las sublíneas
-        let totalSobregiros = 0;
-        if (linea.sublineas) {
-          linea.sublineas.forEach((sublinea) => {
-            if (sublinea.sobregiros) {
-              sublinea.sobregiros.forEach((sobregiro) => {
-                totalSobregiros += parseFloat(sobregiro.montoAutorizado || 0);
-              });
-            }
-          });
-        }
-
-        // ✅ CALCULAR totalSobregiros PARA CADA SUBLÍNEA
-        const sublineasConTotales = linea.sublineas.map((sublinea) => {
-          const totalSobregiros = sublinea.sobregiros.reduce((sum, sobregiro) => {
-            return sum + parseFloat(sobregiro.montoAutorizado || 0);
-          }, 0);
-
-          return {
-            ...sublinea,
-            totalSobregiros,
-          };
-        });
-
-        const montoDisponible = montoAprobado - montoUtilizado;
-        return {
-          ...linea,
-          montoUtilizado,
-          montoDisponible,
-          totalSobregiros,
-          sublineas: sublineasConTotales, // ✅ Reemplazar sublíneas con totales calculados
-        };
-      }),
-    );
+    // Utilizado, sobregiros y disponible de cada línea y sublínea con UN solo criterio (ver UTILIZACIÓN DE LÍNEAS DE CRÉDITO)
+    const { convertir, estado } = crearConversorMoneda();
+    const lineasConSaldos = [];
+    for (const linea of lineas) {
+      estado.tipoCambioReferencial = false;
+      const calculada = await calcularUtilizacionLinea(linea, convertir);
+      lineasConSaldos.push({ ...calculada, tipoCambioReferencial: estado.tipoCambioReferencial });
+    }
 
     return lineasConSaldos;
   } catch (err) {
@@ -537,7 +562,7 @@ const listarPorEmpresa = async (empresaId) => {
         moneda: true,
         estado: true,
         prestamos: {
-          where: { estadoId: { in: [80n, 81n] } },
+          where: { estadoId: { in: ESTADOS_PRESTAMO_QUE_CONSUMEN_LINEA } },
         },
       },
       orderBy: { fechaAprobacion: "desc" },
@@ -619,7 +644,7 @@ const obtenerReporteLineasDisponibles = async (empresaId) => {
         estado: true,
         prestamos: {
           where: {
-            estadoId: { in: [80n, 81n] }, // DESEMBOLSADO o VIGENTE
+            estadoId: { in: ESTADOS_PRESTAMO_QUE_CONSUMEN_LINEA },
           },
           include: {
             tipoPrestamo: true,

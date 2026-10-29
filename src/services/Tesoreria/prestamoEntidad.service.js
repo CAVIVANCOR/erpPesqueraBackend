@@ -55,7 +55,7 @@ const envolverErrores = (err, mensaje) => {
 const incluirBase = {
   empresa: { select: { id: true, razonSocial: true } },
   entidadComercial: { select: { id: true, razonSocial: true, numeroDocumento: true } },
-  moneda: { select: { id: true, simbolo: true, codigoSunat: true } },
+  moneda: { select: { id: true, simbolo: true, codigoSunat: true, colorFondo: true } },
   estado: true,
 };
 
@@ -126,7 +126,7 @@ const obtenerPorId = async (id) => {
         medioPago: true,
         pagos: {
           orderBy: [{ fechaPago: "asc" }, { id: "asc" }],
-          include: { medioPago: true, moneda: { select: { id: true, simbolo: true, codigoSunat: true } } },
+          include: { medioPago: true, moneda: { select: { id: true, simbolo: true, codigoSunat: true, colorFondo: true } } },
         },
       },
     });

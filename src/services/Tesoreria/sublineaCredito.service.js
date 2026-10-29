@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { crearConversorMoneda, calcularTotalesSublinea } from './lineaCredito.service.js';
 
 /**
  * Servicio CRUD para SublineaCredito
@@ -102,6 +103,13 @@ const listar = async () => {
 
 const listarPorLinea = async (lineaCreditoId) => {
   try {
+    // La moneda de la línea es la moneda de todos los montos de sus sublíneas
+    const linea = await prisma.lineaCredito.findUnique({
+      where: { id: lineaCreditoId },
+      select: { moneda: { select: { id: true, codigoSunat: true } } },
+    });
+    if (!linea) throw new NotFoundError('Línea de crédito no encontrada');
+
     const sublineas = await prisma.sublineaCredito.findMany({
       where: { lineaCreditoId: lineaCreditoId },
       include: {
@@ -112,46 +120,30 @@ const listarPorLinea = async (lineaCreditoId) => {
           },
         },
         prestamos: {
-          where: {
-            estado: {
-              descripcion: 'VIGENTE'
-            }
-          },
           select: {
             id: true,
             saldoCapital: true,
+            estadoId: true,
+            moneda: { select: { id: true, codigoSunat: true } },
           }
         }
       },
       orderBy: { creadoEn: 'desc' },
     });
 
-    // Calcular montos para cada sublínea
-    const sublineasConCalculos = sublineas.map(sublinea => {
-      // Calcular total de sobregiros activos (con o sin aprobación)
-      const totalSobregiros = sublinea.sobregiros.reduce((sum, sobregiro) => {
-        return sum + parseFloat(sobregiro.montoAutorizado || 0);
-      }, 0);
-
-      // Calcular monto utilizado (suma de saldos de capital de préstamos vigentes)
-      const montoUtilizado = sublinea.prestamos.reduce((sum, prestamo) => {
-        return sum + parseFloat(prestamo.saldoCapital || 0);
-      }, 0);
-
-      // Calcular monto disponible (asignado + sobregiros - utilizado)
-      const montoAsignado = parseFloat(sublinea.montoAsignado || 0);
-      const montoDisponible = montoAsignado + totalSobregiros - montoUtilizado;
-
-      return {
+    // Mismo cálculo que la lista de líneas (estados que consumen línea, conversión a la moneda de la línea)
+    const { convertir } = crearConversorMoneda();
+    const sublineasConCalculos = [];
+    for (const sublinea of sublineas) {
+      sublineasConCalculos.push({
         ...sublinea,
-        totalSobregiros,
-        montoUtilizado,
-        montoDisponible,
-      };
-    });
+        ...(await calcularTotalesSublinea(sublinea, linea.moneda, convertir)),
+      });
+    }
 
     return sublineasConCalculos;
   } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ValidationError) throw error;
     throw new DatabaseError('Error al listar sublíneas por línea: ' + error.message);
   }
 };

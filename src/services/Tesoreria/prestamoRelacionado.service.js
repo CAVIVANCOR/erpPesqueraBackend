@@ -232,7 +232,7 @@ export async function listarVigentes({ empresaPrestamistaId, empresaPrestatariaI
       estadoId: ESTADO_PRESTAMO_RELACIONADO.VIGENTE,
       saldoCapital: { gt: 0 },
     },
-    include: { moneda: { select: { id: true, simbolo: true, codigoSunat: true } } },
+    include: { moneda: { select: { id: true, simbolo: true, codigoSunat: true, colorFondo: true } } },
     orderBy: [{ fechaDesembolso: "asc" }, { id: "asc" }],
   });
   return prestamos.map((p) => ({
@@ -257,7 +257,7 @@ export async function listarVigentes({ empresaPrestamistaId, empresaPrestatariaI
 const incluirEmpresasYMoneda = {
   empresaPrestamista: { select: { id: true, razonSocial: true } },
   empresaPrestataria: { select: { id: true, razonSocial: true } },
-  moneda: { select: { id: true, simbolo: true, codigoSunat: true } },
+  moneda: { select: { id: true, simbolo: true, codigoSunat: true, colorFondo: true } },
   estado: true,
 };
 
@@ -286,7 +286,7 @@ const listar = async () => {
 
 const incluirMovimientoCaja = {
   tipoMovimiento: { select: { id: true, nombre: true, esIngreso: true } },
-  moneda: { select: { id: true, simbolo: true, codigoSunat: true } },
+  moneda: { select: { id: true, simbolo: true, codigoSunat: true, colorFondo: true } },
   empresa: { select: { id: true, razonSocial: true } },
   medioPago: true,
   cuentaCorrienteOrigen: { include: { banco: true } },
