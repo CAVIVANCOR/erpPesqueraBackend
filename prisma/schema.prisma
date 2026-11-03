@@ -2544,11 +2544,11 @@ model Empresa {
   cantDivisoriaCalcComisionMotorista  Decimal? @default(0.00) @db.Decimal(7,2)
   porcentajeCalcComisionPanguero      Decimal? @default(0.00) @db.Decimal(7,2)
   monedaCalculosLiqId                 BigInt? @default(1)
-  // ========================================
-  // ⭐ CAMPOS NUBEFACT - FACTURACIÓN ELECTRÓNICA
-  // ========================================
-  nubefactUrl                         String?     // URL del API de Nubefact
-  nubefactToken                       String?     // Token de autenticación de Nubefact
+  
+  // ⭐ FACTURACIÓN ELECTRÓNICA - Credenciales del proveedor OSE/PSE de la empresa
+  facturacionElectronicaUrl           String?     // URL base del API del proveedor
+  facturacionElectronicaToken         String?     // Token de autenticación (Bearer) de la empresa
+
   ultimoCorrelativoOperacionCaja      BigInt?     @default(0)
   porcentajePercepcion                Decimal?    @db.Decimal(5, 2)  // 🆕 AGREGAR ESTA LÍNEA
   porcentajeImpuestoRenta             Decimal?    @default(8.00) @db.Decimal(5, 2)  // % Impuesto a la Renta para Recibos por Honorarios
@@ -6504,7 +6504,7 @@ model AccesosUsuario {
 // ============================================
 // ComprobanteElectronico
 // Comprobantes electrónicos SUNAT (Factura, Boleta, NC, ND)
-// Integrado con Nubefact OSE
+// Integrado con el proveedor de facturación electrónica (OSE/PSE)
 // ============================================
 
 model ComprobanteElectronico {
@@ -6541,6 +6541,16 @@ model ComprobanteElectronico {
   monedaId                  BigInt                                       // Moneda: PEN, USD, EUR
   tipoCambio                Decimal                 @db.Decimal(10, 4)   // Tipo de cambio del día
   
+  // Totales del comprobante (en la moneda del comprobante)
+  totalGravado              Decimal                 @default(0) @db.Decimal(18, 2)   // Operaciones gravadas (base imponible)
+  totalExonerado            Decimal                 @default(0) @db.Decimal(18, 2)   // Operaciones exoneradas
+  totalInafecto             Decimal                 @default(0) @db.Decimal(18, 2)   // Operaciones inafectas
+  totalGratuito             Decimal                 @default(0) @db.Decimal(18, 2)   // Transferencias gratuitas
+  totalDescuentos           Decimal                 @default(0) @db.Decimal(18, 2)   // Descuentos totales
+  totalIsc                  Decimal                 @default(0) @db.Decimal(18, 2)   // ISC
+  totalIgv                  Decimal                 @default(0) @db.Decimal(18, 2)   // IGV
+  totalComprobante          Decimal                 @default(0) @db.Decimal(18, 2)   // Importe total a pagar
+  
   // Condiciones de pago
   formaPagoId               BigInt                                       // Forma de pago: Contado, Crédito
   montoPendientePago        Decimal?                @db.Decimal(18, 2)   // Monto pendiente de pago
@@ -6571,23 +6581,17 @@ model ComprobanteElectronico {
   motivoNotaCreditoDebitoId BigInt?                                      // ⭐ NUEVO: Motivo de NC/ND (reemplaza motivoNotaId)
   comprobanteModificaId     BigInt?                                      // FK al comprobante que modifica (solo para NC/ND)
   
-  // Nubefact - Credenciales
-  nubefactRuta              String?                 @db.VarChar(100)     // Ruta de Nubefact (demo/producción)
-  nubefactToken             String?                 @db.VarChar(200)     // Token de autenticación Nubefact
-  
-  // Nubefact - Respuesta
-  nubefactAceptadoPorSunat  Boolean?                                     // true = SUNAT aceptó el comprobante
-  nubefactSunatTransaction  Int?                    @default(1)          // Transacción SUNAT
-  nubefactEnlacePDF         String?                 @db.VarChar(500)     // URL del PDF en Nubefact
-  nubefactEnlaceXML         String?                 @db.VarChar(500)     // URL del XML en Nubefact
-  nubefactEnlaceCDR         String?                 @db.VarChar(500)     // URL del CDR en Nubefact
-  nubefactSunatDescription  String?                 @db.Text             // Descripción de respuesta SUNAT
-  nubefactSunatNote         String?                 @db.Text             // Nota de respuesta SUNAT
-  nubefactSunatResponsecode String?                 @db.VarChar(10)      // Código de respuesta SUNAT
-  nubefactSunatSoapError    String?                 @db.Text             // Error SOAP si hubo
-  nubefactCadenaParaQr      String?                 @db.Text             // Cadena para generar QR
-  nubefactHashCpe           String?                 @db.VarChar(100)     // Hash del CPE
-  nubefactQr                String?                 @db.Text             // Código QR en base64
+  // Respuesta del proveedor de facturación electrónica
+  aceptadoPorSunat          Boolean?                                     // true = SUNAT aceptó el comprobante
+  codigoEstadoProveedor     String?                 @db.VarChar(10)      // Código de estado del proveedor (ej: "01"=REGISTRADO, "05"=ACEPTADO)
+  descripcionEstadoProveedor String?                @db.Text             // Descripción del estado (ej: "ACEPTADO")
+  enlacePDF                 String?                 @db.VarChar(500)     // URL del PDF
+  enlaceXML                 String?                 @db.VarChar(500)     // URL del XML firmado
+  enlaceCDR                 String?                 @db.VarChar(500)     // URL del CDR de SUNAT
+  hashCpe                   String?                 @db.VarChar(100)     // Hash del comprobante
+  qrBase64                  String?                 @db.Text             // Código QR en base64
+  eventosProveedor          String?                 @db.Text             // Eventos/bitácora del proveedor (JSON)
+  errorEnvio                String?                 @db.Text             // Mensaje de error del proveedor si el envío falló
   
   // Archivos locales
   rutaLocalPDF              String?                 @db.VarChar(500)     // Ruta local del PDF
@@ -6735,12 +6739,13 @@ model CuotaPagoComprobante {
 
 // ============================================
 // EnvioOSE
-// Control de Envíos a Nubefact (Auditoría)
+// Control de Envíos al proveedor de facturación electrónica (Auditoría)
 // ============================================
 
 model EnvioOSE {
   id                        BigInt                  @id @default(autoincrement())
   comprobanteElectronicoId  BigInt
+  tipoAccion                String                  @default("EMISION") @db.VarChar(20) // "EMISION", "CONSULTA", "ANULACION"
   numeroIntento             Int                     @default(1)
   fechaEnvio                DateTime                @default(now())
   payloadJSON               Json
@@ -6759,6 +6764,7 @@ model EnvioOSE {
   @@index([fechaEnvio])
   @@index([estadoEnvio])
   @@index([aceptadoPorSunat])
+  @@index([tipoAccion])
 }
 
 
