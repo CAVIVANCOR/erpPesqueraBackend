@@ -2029,7 +2029,7 @@ const procesarPagoEspecializado = async (data) => {
             ingresos: 0,
             egresos: data.montoDetraccionIngresado,
             monedaMovimientoId: 1, // Autodetracción siempre en soles
-            tipoCambio: 1,
+            tipoCambio: Number(data.tipoCambio), // TC de la operación (el saldo convierte solo si la cuenta no está en soles)
             movimientoCajaId: movimientoAutodetraccionEgreso.id
           });
         }
@@ -2071,7 +2071,7 @@ const procesarPagoEspecializado = async (data) => {
             ingresos: data.montoDetraccionIngresado,
             egresos: 0,
             monedaMovimientoId: 1, // Autodetracción siempre en soles
-            tipoCambio: 1,
+            tipoCambio: Number(data.tipoCambio), // TC de la operación (el saldo convierte solo si la cuenta no está en soles)
             movimientoCajaId: movimientoAutodetraccionEgreso.id
           });
         }

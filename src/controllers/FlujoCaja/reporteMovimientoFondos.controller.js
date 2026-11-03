@@ -10,4 +10,16 @@ const obtenerDatos = async (req, res, next) => {
   }
 };
 
-export default { obtenerDatos };
+const obtenerCuentasSaldos = async (req, res, next) => {
+  try {
+    const cuentas = await reporteMovimientoFondosService.obtenerCuentasParaSaldos({
+      desde: req.body?.desde,
+      hasta: req.body?.hasta,
+    });
+    res.json(toJSONBigInt(cuentas));
+  } catch (err) {
+    next(err);
+  }
+};
+
+export default { obtenerDatos, obtenerCuentasSaldos };

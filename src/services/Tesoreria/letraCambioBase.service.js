@@ -227,7 +227,7 @@ export async function crearAsientoLetra(tx, {
       diferencia: 0,
       estaCuadrado: true,
       monedaId: BigInt(monedaId),
-      tipoCambio: extranjera ? tipoCambio : 1,
+      tipoCambio: Number(tipoCambio) > 0 ? tipoCambio : 1, // en soles es el TC del día, solo informativo (los importes ya vienen en soles)
       creadoPor: auditoria,
       detalles: {
         create: lineas.map((l, i) => ({
@@ -237,7 +237,7 @@ export async function crearAsientoLetra(tx, {
           debe: r2(l.debe),
           haber: r2(l.haber),
           monedaId: MONEDA_SOLES_ID,
-          tipoCambio: extranjera ? tipoCambio : 1,
+          tipoCambio: Number(tipoCambio) > 0 ? tipoCambio : 1, // en soles es el TC del día, solo informativo (los importes ya vienen en soles)
           debeMonedaExtranjera: l.debeME ?? null,
           haberMonedaExtranjera: l.haberME ?? null,
           entidadComercialId: l.entidadComercialId ? BigInt(l.entidadComercialId) : null,

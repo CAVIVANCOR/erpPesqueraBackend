@@ -402,12 +402,13 @@ const procesarPagoMultiple = async (datos) => {
       const empresaId = Number(base.empresaId);
       const esGerencial = Boolean(base.esGerencial);
       const esMonedaNacional = Number(base.monedaId) === MONEDA_NACIONAL_ID;
-      const tc = esMonedaNacional ? 1 : Number(datos.tipoCambio);
-      if (!esMonedaNacional && !(tc > 0)) {
-        throw new ValidationError(
-          "Debe proporcionar el tipo de cambio para deudas en moneda extranjera",
-        );
+      // El TC de la operación (el del día o el que editó el usuario) es obligatorio en cualquier moneda y se graba en los
+      // movimientos de caja (tcMovimiento); los asientos en soles siguen convirtiendo con 1 (tc).
+      const tcMovimiento = Number(datos.tipoCambio);
+      if (!(tcMovimiento > 0)) {
+        throw new ValidationError("Ingrese el tipo de cambio (venta) de la fecha de la operación.");
       }
+      const tc = esMonedaNacional ? 1 : tcMovimiento;
 
       // ════════════════════════════════════════════════════════════
       // 2. MONTO Y REPARTO PROPORCIONAL
@@ -551,7 +552,7 @@ const procesarPagoMultiple = async (datos) => {
         fechaOperacionMovCaja: fechaContable,
         estadoId: ESTADO_MOVIMIENTO_CAJA_VALIDADO,
         esGerencial,
-        tipoCambio: tc,
+        tipoCambio: tcMovimiento,
         usuarioId: usuarioId ? Number(usuarioId) : null,
         // Un pago múltiple no tiene un único registro origen (hay N deudas/pagos):
         // por eso no se informa origenMotivoOperacionId; el vínculo es el correlativo.
@@ -690,7 +691,7 @@ const procesarPagoMultiple = async (datos) => {
         estadoPendiente: estadoAsientoPendiente,
         cuentaHaberId: cuenta.cuentaContableId,
         esGerencial,
-        tipoCambio: tc,
+        tipoCambio: tcMovimiento,
         esMonedaNacional,
         creadoPor: usuarioId,
       };

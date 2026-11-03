@@ -115,8 +115,17 @@ export async function actualizar(req, res, next) {
 export async function eliminar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    await faenaPescaConsumoService.eliminar(id);
+    await faenaPescaConsumoService.eliminar(id, { eliminarHijos: req.query.eliminarHijos === "true" });
     res.status(200).json(toJSONBigInt({ eliminado: true, id }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function obtenerDependencias(req, res, next) {
+  try {
+    const resultado = await faenaPescaConsumoService.obtenerDependencias(Number(req.params.id));
+    res.json(toJSONBigInt(resultado));
   } catch (err) {
     next(err);
   }

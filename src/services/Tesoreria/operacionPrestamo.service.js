@@ -358,10 +358,13 @@ const prepararContexto = async ({
   const empresaId = Number(prestamo.empresaId);
   const esMonedaNacional = Number(prestamo.monedaId) === MONEDA_NACIONAL_ID;
   // Siempre TC de venta, editable por el usuario: se respeta el valor recibido
-  const tc = esMonedaNacional ? 1 : Number(tipoCambio);
-  if (!esMonedaNacional && !(tc > 0)) {
-    throw new ValidationError("Debe proporcionar el tipo de cambio para préstamos en moneda extranjera");
+  // El tipo de cambio de la operación (el del día, o el que editó el usuario) es obligatorio en cualquier moneda y se graba
+  // en todos los movimientos de caja generados (tcMovimiento). Los asientos en soles siguen convirtiendo con 1 (tc).
+  const tcMovimiento = Number(tipoCambio);
+  if (!(tcMovimiento > 0)) {
+    throw new ValidationError("Ingrese el tipo de cambio (venta) de la fecha de la operación.");
   }
+  const tc = esMonedaNacional ? 1 : tcMovimiento;
 
   const cuenta = await tx.cuentaCorriente.findUnique({ where: { id: Number(cuentaId) } });
   if (!cuenta) throw new NotFoundError("Cuenta corriente no encontrada.");
@@ -401,6 +404,7 @@ const prepararContexto = async ({
     empresaId,
     esMonedaNacional,
     tc,
+    tcMovimiento,
     cuenta,
     // Tercero de toda la operación (movimientos y líneas de obligación/gasto): el banco prestamista
     entidadPrestamista: entidadDeBanco(prestamo.banco),
@@ -789,7 +793,7 @@ const procesarPagoCuotas = async (datos) => {
           fechaOperacionMovCaja: ctx.fechaContable,
           estadoId: ESTADO_MOVIMIENTO_CAJA_VALIDADO,
           esGerencial: false,
-          tipoCambio: ctx.tc,
+          tipoCambio: ctx.tcMovimiento,
           usuarioId: usuarioId ? Number(usuarioId) : null,
           // Un pago de varias cuotas no tiene un único registro origen: el vínculo es el correlativo
           moduloOrigenMotivoOperacionId: SUBMODULO_ORIGEN_PRESTAMO_ID,
@@ -934,7 +938,7 @@ const procesarPagoCuotas = async (datos) => {
           periodoContable: ctx.periodoContable,
           submodulo: ctx.submoduloMovCaja,
           estadoPendiente: ctx.estadoAsientoPendiente,
-          tipoCambio: ctx.tc,
+          tipoCambio: ctx.tcMovimiento,
           esMonedaNacional: ctx.esMonedaNacional,
           creadoPor: usuarioId,
         };
@@ -1179,7 +1183,7 @@ const procesarDesembolso = async (datos) => {
           fechaOperacionMovCaja: ctx.fechaContable,
           estadoId: ESTADO_MOVIMIENTO_CAJA_VALIDADO,
           esGerencial: false,
-          tipoCambio: ctx.tc,
+          tipoCambio: ctx.tcMovimiento,
           usuarioId: usuarioId ? Number(usuarioId) : null,
           moduloOrigenMotivoOperacionId: SUBMODULO_ORIGEN_PRESTAMO_ID,
           origenMotivoOperacionId: prestamo.id,
@@ -1210,7 +1214,7 @@ const procesarDesembolso = async (datos) => {
           periodoContable: ctx.periodoContable,
           submodulo: ctx.submoduloMovCaja,
           estadoPendiente: ctx.estadoAsientoPendiente,
-          tipoCambio: ctx.tc,
+          tipoCambio: ctx.tcMovimiento,
           esMonedaNacional: ctx.esMonedaNacional,
           creadoPor: usuarioId,
         };

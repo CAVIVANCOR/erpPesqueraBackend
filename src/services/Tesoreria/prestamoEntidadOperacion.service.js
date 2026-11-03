@@ -143,8 +143,11 @@ async function procesar(datos, operacion) {
 
       // ── 3. Moneda y tipo de cambio ──
       const extranjera = monedaId !== MONEDA_SOLES_ID;
-      const tc = extranjera ? num(datos.tipoCambio) : 1;
-      if (extranjera && !(tc > 0)) throw new ValidationError("Ingrese el tipo de cambio de la fecha para convertir la operación a soles.");
+      // El TC de la operación (el del día o el que editó el usuario) es obligatorio en cualquier moneda y se graba en los
+      // movimientos de caja (tcMovimiento); los asientos en soles siguen convirtiendo con 1 (tc).
+      const tcMovimiento = num(datos.tipoCambio);
+      if (!(tcMovimiento > 0)) throw new ValidationError("Ingrese el tipo de cambio (venta) de la fecha de la operación.");
+      const tc = extranjera ? tcMovimiento : 1;
       const aSoles = (importe) => (extranjera ? r2(importe * tc) : r2(importe));
 
       // ── 4. Datos contables ──
@@ -237,7 +240,7 @@ async function procesar(datos, operacion) {
         fechaOperacionMovCaja: fechaContable,
         estadoId: ESTADO_MOVIMIENTO_CAJA_VALIDADO,
         esGerencial,
-        tipoCambio: tc,
+        tipoCambio: tcMovimiento,
         usuarioId: usuarioId ? Number(usuarioId) : null,
         moduloOrigenMotivoOperacionId: submoduloPrestamo?.id || null,
         fechaMotivoOperacion: new Date(),
@@ -333,7 +336,7 @@ async function procesar(datos, operacion) {
         haberME: loanEnDebe && extranjera ? monto : null,
         entidadComercialId: null,
       };
-      const paramsAsiento = { empresaId, periodo, fecha: fechaContable, tipoLibroId: TIPO_LIBRO.CAJA_BANCOS, submodulo: submoduloMovCaja, tipoCambio: tc, usuarioId, esGerencial };
+      const paramsAsiento = { empresaId, periodo, fecha: fechaContable, tipoLibroId: TIPO_LIBRO.CAJA_BANCOS, submodulo: submoduloMovCaja, tipoCambio: tcMovimiento, usuarioId, esGerencial };
       const asientos = [
         await crearAsientoLetra(tx, {
           ...paramsAsiento,

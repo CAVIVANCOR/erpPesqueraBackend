@@ -13,4 +13,12 @@ router.post(
   reporteMovimientoFondosController.obtenerDatos
 );
 
+// Saldos de todas las cuentas bancarias / cajas activas de todas las empresas (reporte Saldos por Cuentas Bancarias)
+router.post(
+  "/cuentas-saldos",
+  autenticarJWT,
+  checkPermission("movimientoCaja", "ver"),
+  reporteMovimientoFondosController.obtenerCuentasSaldos
+);
+
 export default router;

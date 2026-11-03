@@ -63,6 +63,8 @@ const incluirRelaciones = {
       id: true,
       simbolo: true,
       codigoSunat: true,
+      nombreLargo: true,
+      colorFondo: true,
     },
   },
   tipoMovimiento: {
@@ -361,7 +363,7 @@ async function actualizarSaldosCuentasCorrientes(movimiento) {
   }
 }
 
-async function validarReferenciasMovimientoCaja(data) {
+async function validarReferenciasMovimientoCaja(data, { omitirReglasDeCuentas = false } = {}) {
   const {
     cuentaCorrienteOrigenId,
     cuentaCorrienteDestinoId,
@@ -384,7 +386,10 @@ async function validarReferenciasMovimientoCaja(data) {
   });
   if (!tipoMov) throw new ValidationError("Tipo de movimiento no existente");
 
-  if (tipoMov.esTransferencia) {
+  if (omitirReglasDeCuentas) {
+    // El tipo y las cuentas no cambian: se respeta cómo registró el movimiento su operación de origen. Las operaciones
+    // especializadas registran, por ejemplo, un egreso solo con cuenta destino (pago a una tarjeta o a Banco de la Nación).
+  } else if (tipoMov.esTransferencia) {
     if (!cuentaCorrienteOrigenId || !cuentaCorrienteDestinoId) {
       throw new ValidationError(
         "Las transferencias requieren cuenta origen Y cuenta destino",
@@ -643,7 +648,11 @@ const actualizar = async (id, data) => {
         data.urlDocumentoMovCaja !== undefined);
 
     if (!soloActualizacionPDF) {
-      await validarReferenciasMovimientoCaja(data);
+      // Las reglas de cuenta origen/destino por tipo de movimiento solo se exigen si se cambia el tipo o las cuentas
+      const igual = (clave) => String(data[clave] ?? "") === String(existente[clave] ?? "");
+      const sinCambiosDeTipoNiCuentas =
+        igual("tipoMovimientoId") && igual("cuentaCorrienteOrigenId") && igual("cuentaCorrienteDestinoId");
+      await validarReferenciasMovimientoCaja(data, { omitirReglasDeCuentas: sinCambiosDeTipoNiCuentas });
     }
 
     const actualizado = await prisma.movimientoCaja.update({

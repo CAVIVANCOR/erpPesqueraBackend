@@ -289,12 +289,67 @@ const actualizar = async (id, data) => {
   }
 };
 
-const eliminar = async (id) => {
+/**
+ * Tablas hijas de una faena con la cantidad de registros que tiene cada una.
+ * Solo se devuelven las que tienen registros, para mostrárselas al usuario antes de eliminar.
+ */
+const obtenerDependencias = async (id) => {
+  const faena = await prisma.faenaPescaConsumo.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      _count: {
+        select: {
+          detallesDocEmbarcacion: true,
+          tripulantes: true,
+          detalleDocsTripulantes: true,
+          accionesPrevias: true,
+          calas: true,
+        },
+      },
+      descargaFaenaConsumo: { select: { id: true, movIngresoAlmacenId: true, movSalidaAlmacenId: true } },
+    },
+  });
+  if (!faena) throw new NotFoundError("FaenaPescaConsumo no encontrada");
+
+  const especiesDeCalas = await prisma.detCalaPescaConsumo.count({
+    where: { calaFaenaConsumo: { faenaPescaConsumoId: id } },
+  });
+
+  const dependencias = [
+    { tabla: "DetCalaPescaConsumo", etiqueta: "Especies pescadas por cala", cantidad: especiesDeCalas },
+    { tabla: "CalaFaenaConsumo", etiqueta: "Calas", cantidad: faena._count.calas },
+    { tabla: "DescargaFaenaConsumo", etiqueta: "Descarga de la faena", cantidad: faena.descargaFaenaConsumo ? 1 : 0 },
+    { tabla: "DetDocEmbarcacionPescaConsumo", etiqueta: "Documentos de la embarcación", cantidad: faena._count.detallesDocEmbarcacion },
+    { tabla: "DetDocTripulantesFaenaConsumo", etiqueta: "Documentos de los tripulantes", cantidad: faena._count.detalleDocsTripulantes },
+    { tabla: "TripulanteFaenaConsumo", etiqueta: "Tripulantes", cantidad: faena._count.tripulantes },
+    { tabla: "DetAccionesPreviasFaenaConsumo", etiqueta: "Acciones previas", cantidad: faena._count.accionesPrevias },
+  ].filter((d) => d.cantidad > 0);
+
+  const descarga = faena.descargaFaenaConsumo;
+  return {
+    dependencias,
+    // Una descarga que ya generó movimientos de almacén no se borra en cascada: primero hay que anular esos movimientos
+    bloqueo:
+      descarga?.movIngresoAlmacenId || descarga?.movSalidaAlmacenId
+        ? "La descarga de esta faena ya generó movimientos de almacén. Anule esos movimientos antes de eliminar la faena."
+        : null,
+  };
+};
+
+/**
+ * Elimina la faena. Si tiene registros hijos solo se elimina con `eliminarHijos = true`,
+ * y entonces se borran todos en una única transacción (si algo falla no se borra nada).
+ */
+const eliminar = async (id, { eliminarHijos = false } = {}) => {
   try {
-    if (await tieneDependencias(id)) {
-      throw new ConflictError(
-        "No se puede eliminar porque tiene detalles asociados.",
-      );
+    const { dependencias, bloqueo } = await obtenerDependencias(id);
+    if (dependencias.length > 0) {
+      if (bloqueo) throw new ConflictError(bloqueo);
+      if (!eliminarHijos) {
+        const detalle = dependencias.map((d) => `${d.etiqueta}: ${d.cantidad}`).join("; ");
+        throw new ConflictError(`No se puede eliminar la faena porque tiene registros asociados (${detalle}). Confirme la eliminación de la faena junto con sus registros.`);
+      }
     }
     const novedadId = (
       await prisma.faenaPescaConsumo.findUnique({
@@ -303,7 +358,17 @@ const eliminar = async (id) => {
       })
     )?.novedadPescaConsumoId;
 
-    await prisma.faenaPescaConsumo.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      const porFaena = { faenaPescaConsumoId: id };
+      await tx.detCalaPescaConsumo.deleteMany({ where: { calaFaenaConsumo: porFaena } });
+      await tx.calaFaenaConsumo.deleteMany({ where: porFaena });
+      await tx.descargaFaenaConsumo.deleteMany({ where: porFaena });
+      await tx.detDocEmbarcacionPescaConsumo.deleteMany({ where: porFaena });
+      await tx.detDocTripulantesFaenaConsumo.deleteMany({ where: porFaena });
+      await tx.tripulanteFaenaConsumo.deleteMany({ where: porFaena });
+      await tx.detAccionesPreviasFaenaConsumo.deleteMany({ where: porFaena });
+      await tx.faenaPescaConsumo.delete({ where: { id } });
+    });
 
     if (novedadId) {
       await novedadPescaConsumoService.actualizarToneladasNovedad(novedadId);
@@ -319,6 +384,7 @@ const eliminar = async (id) => {
 };
 
 export default {
+  obtenerDependencias,
   listar,
   obtenerPorId,
   crear,

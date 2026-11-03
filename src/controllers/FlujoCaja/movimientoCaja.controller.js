@@ -1,6 +1,8 @@
 // c:\Proyectos\megui\erp\erp-pesquera-backend\src\controllers\FlujoCaja\movimientoCaja.controller.js
+import prisma from '../../config/prismaClient.js';
 import movimientoCajaService from '../../services/FlujoCaja/movimientoCaja.service.js';
 import { generarVoucherContableMovimientoCaja } from '../../services/FlujoCaja/voucherContableMovimientoCaja.service.js';
+import origenMovimientoCajaService from '../../services/FlujoCaja/origenMovimientoCaja.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import multer from 'multer';
 import path from 'path';
@@ -429,7 +431,21 @@ export const obtenerPorCorrelativo = async (req, res, next) => {
       orderBy: { id: 'asc' }
     });
 
-    res.json(movimientos);
+    // Los ids son BigInt: sin esta conversión la respuesta no se puede serializar
+    res.json(toJSONBigInt(movimientos));
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Origen (módulo y documento) de un movimiento de caja
+ * GET /api/movimientos-caja/:id/origen-operacion
+ */
+export const obtenerOrigenOperacion = async (req, res, next) => {
+  try {
+    const origen = await origenMovimientoCajaService.obtenerOrigenOperacion(req.params.id);
+    res.json(toJSONBigInt(origen));
   } catch (error) {
     next(error);
   }
@@ -505,4 +521,5 @@ export default {
   servirArchivoDocumento,
   listarConFiltrosAvanzados,
   obtenerPorCorrelativo,
+  obtenerOrigenOperacion,
 };

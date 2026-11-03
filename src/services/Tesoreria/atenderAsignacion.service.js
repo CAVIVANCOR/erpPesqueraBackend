@@ -353,12 +353,13 @@ const atenderAsignacion = async (datos) => {
       // (el formulario solo advierte). El saldo en cascada admite valores negativos.
 
       const esMonedaNacional = Number(detMov.monedaId) === MONEDA_NACIONAL_ID;
-      const tc = esMonedaNacional ? 1 : Number(tipoCambio);
-      if (!esMonedaNacional && !(tc > 0)) {
-        throw new ValidationError(
-          "Debe proporcionar el tipo de cambio para asignaciones en moneda extranjera",
-        );
+      // El TC de la operación (el del día o el que editó el usuario) es obligatorio en cualquier moneda y se graba en los
+      // movimientos de caja (tcMovimiento); los asientos en soles siguen convirtiendo con 1 (tc).
+      const tcMovimiento = Number(tipoCambio);
+      if (!(tcMovimiento > 0)) {
+        throw new ValidationError("Ingrese el tipo de cambio (venta) de la fecha de la operación.");
       }
+      const tc = esMonedaNacional ? 1 : tcMovimiento;
 
       // ════════════════════════════════════════════════════════════
       // 3. RECLAMAR LA ASIGNACIÓN (anti doble entrega)
@@ -443,7 +444,7 @@ const atenderAsignacion = async (datos) => {
         medioPagoId: Number(medioPagoId),
         fechaOperacionMovCaja: fechaContable,
         estadoId: ESTADO_MOVIMIENTO_CAJA_VALIDADO,
-        tipoCambio: tc,
+        tipoCambio: tcMovimiento,
         usuarioId: usuarioId ? Number(usuarioId) : null,
         moduloOrigenMotivoOperacionId: submoduloMotivo.id,
         origenMotivoOperacionId: detMov.id,
@@ -509,7 +510,7 @@ const atenderAsignacion = async (datos) => {
         estadoPendiente: estadoAsientoPendiente,
         cuentaHaberId: cuenta.cuentaContableId,
         esGerencial,
-        tipoCambio: tc,
+        tipoCambio: tcMovimiento,
         esMonedaNacional,
         creadoPor: usuarioId,
       };

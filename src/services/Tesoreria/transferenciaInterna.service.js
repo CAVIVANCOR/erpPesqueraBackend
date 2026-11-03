@@ -335,6 +335,12 @@ async function validarDatosTransferenciaInterna(data, tx = null) {
     throw new ValidationError('La cuenta de origen y destino no pueden ser la misma.');
   }
 
+  // El tipo de cambio de la operación (el del día o el que editó el usuario) es obligatorio en cualquier moneda y se graba
+  // en todos los movimientos de caja generados.
+  if (!data.tipoCambio || Number(data.tipoCambio) <= 0) {
+    throw new ValidationError('Ingrese el tipo de cambio (venta) de la fecha de la operación.');
+  }
+
   // ========================================
   // VALIDAR TIPO DE CAMBIO (si hay conversión)
   // ========================================
@@ -1248,7 +1254,7 @@ export async function procesarTransferenciaInterna(data) {
             numeroOperacionPagoBanco: data.numeroOperacion || null,
             fechaOperacionPagoBanco: new Date(data.fechaTransferencia),
             estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
-            tipoCambio: Number(data.tipoCambio || 1),
+            tipoCambio: Number(data.tipoCambio),
             usuarioId: Number(data.usuarioId),
             moduloOrigenMotivoOperacionId: SUBMODULOS.TRANSFERENCIAS_INTERNAS,
             origenMotivoOperacionId: null
@@ -1264,7 +1270,7 @@ export async function procesarTransferenciaInterna(data) {
           ingresos: 0,
           egresos: data.monto,
           monedaMovimientoId: cuentaOrigen.monedaId,
-          tipoCambio: data.tipoCambio || 1,
+          tipoCambio: Number(data.tipoCambio),
           movimientoCajaId: movimientoEgreso.id
         });
         saldoDespuesEgreso = registroSaldo.saldoActual;
@@ -1294,7 +1300,7 @@ export async function procesarTransferenciaInterna(data) {
             fechaOperacionMovCaja: new Date(data.fechaTransferencia),
             descripcion: `ITF - ${descripcion}`,
             estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
-            tipoCambio: Number(data.tipoCambio || 1),
+            tipoCambio: Number(data.tipoCambio),
             usuarioId: Number(data.usuarioId),
             moduloOrigenMotivoOperacionId: SUBMODULOS.TRANSFERENCIAS_INTERNAS,
             origenMotivoOperacionId: null
@@ -1310,7 +1316,7 @@ export async function procesarTransferenciaInterna(data) {
           ingresos: 0,
           egresos: data.itfOrigen,
           monedaMovimientoId: cuentaOrigen.monedaId,
-          tipoCambio: data.tipoCambio || 1,
+          tipoCambio: Number(data.tipoCambio),
           movimientoCajaId: movimientoITFOrigen.id,
           saldoAnteriorManual: saldoDespuesEgreso
         });
@@ -1341,7 +1347,7 @@ export async function procesarTransferenciaInterna(data) {
             fechaOperacionMovCaja: new Date(data.fechaTransferencia),
             descripcion: `Comisión - ${descripcion}`,
             estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
-            tipoCambio: Number(data.tipoCambio || 1),
+            tipoCambio: Number(data.tipoCambio),
             usuarioId: Number(data.usuarioId),
             moduloOrigenMotivoOperacionId: SUBMODULOS.TRANSFERENCIAS_INTERNAS,
             origenMotivoOperacionId: null
@@ -1357,7 +1363,7 @@ export async function procesarTransferenciaInterna(data) {
           ingresos: 0,
           egresos: data.comisionOrigen,
           monedaMovimientoId: cuentaOrigen.monedaId,
-          tipoCambio: data.tipoCambio || 1,
+          tipoCambio: Number(data.tipoCambio),
           movimientoCajaId: movimientoComisionOrigen.id,
           saldoAnteriorManual: saldoDespuesITFOrigen || saldoDespuesEgreso
         });
@@ -1394,7 +1400,7 @@ export async function procesarTransferenciaInterna(data) {
             numeroOperacionPagoBanco: data.numeroOperacion || null,
             fechaOperacionPagoBanco: new Date(data.fechaTransferencia),
             estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
-            tipoCambio: Number(data.tipoCambio || 1),
+            tipoCambio: Number(data.tipoCambio),
             usuarioId: Number(data.usuarioId),
             moduloOrigenMotivoOperacionId: SUBMODULOS.TRANSFERENCIAS_INTERNAS,
             origenMotivoOperacionId: null
@@ -1410,7 +1416,7 @@ export async function procesarTransferenciaInterna(data) {
           ingresos: montoDestino,
           egresos: 0,
           monedaMovimientoId: cuentaDestino.monedaId,
-          tipoCambio: data.tipoCambio || 1,
+          tipoCambio: Number(data.tipoCambio),
           movimientoCajaId: movimientoIngreso.id
         });
         saldoDespuesIngreso = registroSaldo.saldoActual;
@@ -1440,7 +1446,7 @@ export async function procesarTransferenciaInterna(data) {
             fechaOperacionMovCaja: new Date(data.fechaTransferencia),
             descripcion: `ITF - ${descripcion}`,
             estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
-            tipoCambio: Number(data.tipoCambio || 1),
+            tipoCambio: Number(data.tipoCambio),
             usuarioId: Number(data.usuarioId),
             moduloOrigenMotivoOperacionId: SUBMODULOS.TRANSFERENCIAS_INTERNAS,
             origenMotivoOperacionId: null
@@ -1456,7 +1462,7 @@ export async function procesarTransferenciaInterna(data) {
           ingresos: 0,
           egresos: data.itfDestino,
           monedaMovimientoId: cuentaDestino.monedaId,
-          tipoCambio: data.tipoCambio || 1,
+          tipoCambio: Number(data.tipoCambio),
           movimientoCajaId: movimientoITFDestino.id,
           saldoAnteriorManual: saldoDespuesIngreso
         });
@@ -1485,7 +1491,7 @@ export async function procesarTransferenciaInterna(data) {
             fechaOperacionMovCaja: new Date(data.fechaTransferencia),
             descripcion: `Comisión - ${descripcion}`,
             estadoId: ESTADOS_MOVIMIENTO_CAJA.VALIDADO,
-            tipoCambio: Number(data.tipoCambio || 1),
+            tipoCambio: Number(data.tipoCambio),
             usuarioId: Number(data.usuarioId),
             moduloOrigenMotivoOperacionId: SUBMODULOS.TRANSFERENCIAS_INTERNAS,
             origenMotivoOperacionId: null
@@ -1501,7 +1507,7 @@ export async function procesarTransferenciaInterna(data) {
           ingresos: 0,
           egresos: data.comisionDestino,
           monedaMovimientoId: cuentaDestino.monedaId,
-          tipoCambio: data.tipoCambio || 1,
+          tipoCambio: Number(data.tipoCambio),
           movimientoCajaId: movimientoComisionDestino.id,
           saldoAnteriorManual: saldoDespuesITFDestino || saldoDespuesIngreso
         });

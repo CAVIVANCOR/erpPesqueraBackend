@@ -73,6 +73,14 @@ router.get(
   movimientoCajaController.obtenerPorCorrelativo
 );
 
+// Origen (módulo y documento) del movimiento - DEBE IR ANTES DE /:id
+router.get(
+  "/:id/origen-operacion",
+  autenticarJWT,
+  checkPermission("movimientoCaja", "ver"),
+  movimientoCajaController.obtenerOrigenOperacion
+);
+
 // Generar voucher contable (comprobante de diario) - DEBE IR ANTES DE /:id
 router.get(
   "/:id/generar-voucher-contable",

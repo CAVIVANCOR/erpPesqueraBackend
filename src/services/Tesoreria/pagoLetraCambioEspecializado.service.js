@@ -182,10 +182,13 @@ export async function procesarPago(datos) {
       const monedaLetraId = Number(letra.monedaId);
       const monedaCuentaId = Number(cuenta.monedaId);
       const hayExtranjera = monedaLetraId !== MONEDA_SOLES_ID || monedaCuentaId !== MONEDA_SOLES_ID;
-      const tc = hayExtranjera ? num(datos.tipoCambio) : 1;
-      if (hayExtranjera && !(tc > 0)) {
-        throw new ValidationError("Ingrese el tipo de cambio de la fecha de pago para convertir la operación a soles.");
+      // El TC de la operación (el del día o el que editó el usuario) es obligatorio en cualquier moneda y se graba en los
+      // movimientos de caja (tcMovimiento); los asientos en soles siguen convirtiendo con 1 (tc).
+      const tcMovimiento = num(datos.tipoCambio);
+      if (!(tcMovimiento > 0)) {
+        throw new ValidationError("Ingrese el tipo de cambio (venta) de la fecha de la operación.");
       }
+      const tc = hayExtranjera ? tcMovimiento : 1;
       const totalLetra = r2(montoCapital + montoInteres + montoMora);
       const montoMovimiento = r2(convertir(totalLetra, monedaLetraId, monedaCuentaId, tc));
       if (!(montoMovimiento > 0)) throw new ValidationError("El monto del movimiento resulta cero: revise los importes y el tipo de cambio.");
@@ -254,7 +257,7 @@ export async function procesarPago(datos) {
         fechaOperacionMovCaja: fechaContable,
         estadoId: ESTADO_MOVIMIENTO_CAJA_VALIDADO,
         esGerencial: false,
-        tipoCambio: tc,
+        tipoCambio: tcMovimiento,
         usuarioId: usuarioId ? Number(usuarioId) : null,
         moduloOrigenMotivoOperacionId: submoduloPagoLetra?.id || null,
         fechaMotivoOperacion: new Date(),
@@ -390,7 +393,7 @@ export async function procesarPago(datos) {
         lineasConcepto.push(lineaConcepto(c, montoMora, pagar, { centroCostoId: exigirCentroCosto(c) }));
       }
 
-      const paramsAsiento = { empresaId, periodo, fecha: fechaContable, tipoLibroId: TIPO_LIBRO.CAJA_BANCOS, submodulo: submoduloMovCaja, tipoCambio: tc, usuarioId };
+      const paramsAsiento = { empresaId, periodo, fecha: fechaContable, tipoLibroId: TIPO_LIBRO.CAJA_BANCOS, submodulo: submoduloMovCaja, tipoCambio: tcMovimiento, usuarioId };
       const asientos = [];
       asientos.push(
         await crearAsientoLetra(tx, {

@@ -7,6 +7,7 @@ const router = Router();
 // Rutas CRUD para FaenaPescaConsumo
 router.get('/', faenaPescaConsumoController.listar);
 router.get('/:id', faenaPescaConsumoController.obtenerPorId);
+router.get('/:id/dependencias', faenaPescaConsumoController.obtenerDependencias);
 router.post('/', faenaPescaConsumoController.crear);
 router.put('/:id', faenaPescaConsumoController.actualizar);
 router.delete('/:id', faenaPescaConsumoController.eliminar);
