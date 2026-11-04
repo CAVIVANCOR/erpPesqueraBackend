@@ -1145,9 +1145,7 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
       // PASO 2: ELIMINAR COMPROBANTES ELECTRÓNICOS
       // ========================================
 
-      const comprobantesResult = await tx.comprobanteElectronico.deleteMany({
-        where: { preFacturaId: id },
-      });
+      const comprobantesResult = await eliminarComprobantesDePreFactura(tx, id);
       resultados.comprobantesElectronicos = Number(comprobantesResult.count);
 
       // ========================================
@@ -1255,433 +1253,6 @@ const eliminar = async (id, usuarioId, transaccion = null) => {
     throw new DatabaseError(
       "Error al eliminar PreFactura: " + error.message
     );
-  }
-};
-
-/**
- * ========================================
- * FUNCIONES DE GENERACIÓN DE COMPROBANTES
- * ========================================
- */
-
-/**
- * Genera una Factura Electrónica desde una PreFactura
- */
-const generarFacturaDesdePreFactura = async (
-  preFacturaId,
-  datosFactura = {},
-) => {
-  try {
-    // 1. Obtener PreFactura con detalles
-    const preFactura = await prisma.preFactura.findUnique({
-      where: { id: preFacturaId },
-      include: {
-        empresa: true,
-        cliente: true,
-        moneda: true,
-        formaPago: true,
-        detalles: {
-          include: {
-            producto: {
-              include: {
-                unidadMedida: true,
-                unidadMedidaComercial: true,
-              },
-            },
-          },
-          orderBy: { id: "asc" },
-        },
-      },
-    });
-
-    if (!preFactura) {
-      throw new NotFoundError("PreFactura no encontrada");
-    }
-
-    if (preFactura.facturado) {
-      throw new ConflictError("Esta PreFactura ya fue facturada");
-    }
-
-    if (!preFactura.detalles || preFactura.detalles.length === 0) {
-      throw new ValidationError(
-        "La PreFactura debe tener detalles para generar factura",
-      );
-    }
-
-    // 2. Obtener tipo documento Factura (código 01)
-    const tipoFactura = await prisma.tipoDocumento.findFirst({
-      where: { codigo: "01" },
-    });
-
-    if (!tipoFactura) {
-      throw new ValidationError(
-        "No se encontró el tipo de documento Factura (código 01)",
-      );
-    }
-
-    // 3. Obtener serie para facturas
-    const serieFactura = datosFactura.serieDocId
-      ? await prisma.serieDoc.findUnique({
-        where: { id: Number(datosFactura.serieDocId) },
-      })
-      : await prisma.serieDoc.findFirst({
-        where: {
-          empresaId: preFactura.empresaId,
-          tipoDocumentoId: tipoFactura.id,
-          activo: true,
-        },
-      });
-
-    if (!serieFactura) {
-      throw new ValidationError(
-        "No se encontró una serie activa para Facturas",
-      );
-    }
-
-    // 4. Obtener sede (usar la primera activa)
-    const sede = await prisma.sedesEmpresa.findFirst({
-      where: {
-        empresaId: preFactura.empresaId,
-        activo: true,
-      },
-    });
-
-    if (!sede) {
-      throw new ValidationError(
-        "No se encontró una sede activa para la empresa",
-      );
-    }
-
-    // 5. Obtener estados
-    const estadoOSE = await prisma.estadoMultiFuncion.findFirst({
-      where: { codigo: "OSE_PENDIENTE", modulo: "COMPROBANTES_ELECTRONICOS" },
-    });
-
-    const estadoSUNAT = await prisma.estadoMultiFuncion.findFirst({
-      where: { codigo: "SUNAT_ACTIVO", modulo: "COMPROBANTES_ELECTRONICOS" },
-    });
-
-    if (!estadoOSE || !estadoSUNAT) {
-      throw new ValidationError(
-        "No se encontraron los estados necesarios para comprobantes",
-      );
-    }
-
-    // 6. Crear comprobante en transacción
-    return await prisma.$transaction(async (tx) => {
-      // 6.1. Calcular correlativo
-      const nuevoCorrelativo = Number(serieFactura.correlativo) + 1;
-      const numSerie = String(serieFactura.serie).padStart(
-        serieFactura.numCerosIzqSerie,
-        "0",
-      );
-      const numCorre = String(nuevoCorrelativo).padStart(
-        serieFactura.numCerosIzqCorre,
-        "0",
-      );
-      const numeroCompleto = `${numSerie}-${numCorre}`;
-
-      // 6.2. Actualizar correlativo
-      await tx.serieDoc.update({
-        where: { id: serieFactura.id },
-        data: { correlativo: Number(nuevoCorrelativo) },
-      });
-
-      // 6.3. Crear comprobante electrónico
-      const comprobante = await tx.comprobanteElectronico.create({
-        data: {
-          preFacturaId: preFactura.id,
-          empresaId: preFactura.empresaId,
-          sedeId: sede.id,
-          tipoComprobanteId: tipoFactura.id,
-          serieDocId: serieFactura.id,
-          numeroSerie: numSerie,
-          numeroCorrelativo: nuevoCorrelativo,
-          numeroCompleto: numeroCompleto,
-          fechaEmision: datosFactura.fechaEmision
-            ? new Date(datosFactura.fechaEmision)
-            : new Date(),
-          horaEmision: new Date().toTimeString().split(" ")[0],
-          fechaVencimiento: preFactura.fechaVencimiento || new Date(),
-          entidadComercialId: preFactura.clienteId,
-          tipoDocumentoClienteId: preFactura.cliente.tipoDocumentoId,
-          numeroDocumentoCliente: preFactura.cliente.numeroDocumento,
-          razonSocialCliente: preFactura.cliente.razonSocial,
-          direccionCliente: preFactura.cliente.direccion || "",
-          emailCliente: preFactura.cliente.email,
-          monedaId: preFactura.monedaId,
-          tipoCambio: preFactura.tipoCambio,
-          formaPagoId: preFactura.formaPagoId,
-          estadoOSEId: estadoOSE.id,
-          estadoSUNATId: estadoSUNAT.id,
-          observaciones: datosFactura.observaciones || preFactura.observaciones,
-          creadoPor: datosFactura.creadoPor,
-        },
-      });
-
-      // 6.4. Crear detalles del comprobante
-      for (const detalle of preFactura.detalles) {
-        await tx.detalleComprobante.create({
-          data: {
-            comprobanteElectronicoId: comprobante.id,
-            productoId: detalle.productoId,
-            descripcion: detalle.producto?.nombre || "",
-            cantidad: detalle.cantidad,
-            unidadMedida: detalle.producto?.unidadMedida?.codigo || "NIU",
-            precioUnitario: detalle.precioUnitario || 0,
-            valorVenta:
-              Number(detalle.cantidad) * Number(detalle.precioUnitario || 0),
-          },
-        });
-      }
-
-      // 6.5. Actualizar PreFactura
-      await tx.preFactura.update({
-        where: { id: preFactura.id },
-        data: {
-          tipoDocumentoFinalId: tipoFactura.id,
-          serieDocFinalId: serieFactura.id,
-          numeroDocumentoFinal: numeroCompleto,
-          numSerieDocFinal: numSerie,
-          numCorreDocFinal: numCorre,
-          facturado: true,
-        },
-      });
-
-      // 6.6. Retornar comprobante creado
-      return await tx.comprobanteElectronico.findUnique({
-        where: { id: comprobante.id },
-        include: {
-          preFactura: true,
-          empresa: true,
-          entidadComercial: true,
-          moneda: true,
-          detalles: {
-            include: {
-              producto: true,
-            },
-          },
-        },
-      });
-    });
-  } catch (err) {
-    if (
-      err instanceof NotFoundError ||
-      err instanceof ValidationError ||
-      err instanceof ConflictError
-    )
-      throw err;
-    if (err.code && err.code.startsWith("P"))
-      throw new DatabaseError("Error de base de datos", err.message);
-    throw err;
-  }
-};
-
-/**
- * Genera una Boleta Electrónica desde una PreFactura
- */
-const generarBoletaDesdePreFactura = async (preFacturaId, datosBoleta = {}) => {
-  try {
-    // 1. Obtener PreFactura con detalles
-    const preFactura = await prisma.preFactura.findUnique({
-      where: { id: preFacturaId },
-      include: {
-        empresa: true,
-        cliente: true,
-        moneda: true,
-        formaPago: true,
-        detalles: {
-          include: {
-            producto: {
-              include: {
-                unidadMedida: true,
-                unidadMedidaComercial: true,
-              },
-            },
-          },
-          orderBy: { id: "asc" },
-        },
-      },
-    });
-
-    if (!preFactura) {
-      throw new NotFoundError("PreFactura no encontrada");
-    }
-
-    if (preFactura.facturado) {
-      throw new ConflictError("Esta PreFactura ya fue facturada");
-    }
-
-    if (!preFactura.detalles || preFactura.detalles.length === 0) {
-      throw new ValidationError(
-        "La PreFactura debe tener detalles para generar boleta",
-      );
-    }
-
-    // 2. Obtener tipo documento Boleta (código 03)
-    const tipoBoleta = await prisma.tipoDocumento.findFirst({
-      where: { codigo: "03" },
-    });
-
-    if (!tipoBoleta) {
-      throw new ValidationError(
-        "No se encontró el tipo de documento Boleta (código 03)",
-      );
-    }
-
-    // 3. Obtener serie para boletas
-    const serieBoleta = datosBoleta.serieDocId
-      ? await prisma.serieDoc.findUnique({
-        where: { id: Number(datosBoleta.serieDocId) },
-      })
-      : await prisma.serieDoc.findFirst({
-        where: {
-          empresaId: preFactura.empresaId,
-          tipoDocumentoId: tipoBoleta.id,
-          activo: true,
-        },
-      });
-
-    if (!serieBoleta) {
-      throw new ValidationError("No se encontró una serie activa para Boletas");
-    }
-
-    // 4. Obtener sede
-    const sede = await prisma.sedesEmpresa.findFirst({
-      where: {
-        empresaId: preFactura.empresaId,
-        activo: true,
-      },
-    });
-
-    if (!sede) {
-      throw new ValidationError(
-        "No se encontró una sede activa para la empresa",
-      );
-    }
-
-    // 5. Obtener estados
-    const estadoOSE = await prisma.estadoMultiFuncion.findFirst({
-      where: { codigo: "OSE_PENDIENTE", modulo: "COMPROBANTES_ELECTRONICOS" },
-    });
-
-    const estadoSUNAT = await prisma.estadoMultiFuncion.findFirst({
-      where: { codigo: "SUNAT_ACTIVO", modulo: "COMPROBANTES_ELECTRONICOS" },
-    });
-
-    if (!estadoOSE || !estadoSUNAT) {
-      throw new ValidationError(
-        "No se encontraron los estados necesarios para comprobantes",
-      );
-    }
-
-    // 6. Crear comprobante en transacción
-    return await prisma.$transaction(async (tx) => {
-      // 6.1. Calcular correlativo
-      const nuevoCorrelativo = Number(serieBoleta.correlativo) + 1;
-      const numSerie = String(serieBoleta.serie).padStart(
-        serieBoleta.numCerosIzqSerie,
-        "0",
-      );
-      const numCorre = String(nuevoCorrelativo).padStart(
-        serieBoleta.numCerosIzqCorre,
-        "0",
-      );
-      const numeroCompleto = `${numSerie}-${numCorre}`;
-
-      // 6.2. Actualizar correlativo
-      await tx.serieDoc.update({
-        where: { id: serieBoleta.id },
-        data: { correlativo: Number(nuevoCorrelativo) },
-      });
-
-      // 6.3. Crear comprobante electrónico
-      const comprobante = await tx.comprobanteElectronico.create({
-        data: {
-          preFacturaId: preFactura.id,
-          empresaId: preFactura.empresaId,
-          sedeId: sede.id,
-          tipoComprobanteId: tipoBoleta.id,
-          serieDocId: serieBoleta.id,
-          numeroSerie: numSerie,
-          numeroCorrelativo: nuevoCorrelativo,
-          numeroCompleto: numeroCompleto,
-          fechaEmision: datosBoleta.fechaEmision
-            ? new Date(datosBoleta.fechaEmision)
-            : new Date(),
-          horaEmision: new Date().toTimeString().split(" ")[0],
-          fechaVencimiento: preFactura.fechaVencimiento || new Date(),
-          entidadComercialId: preFactura.clienteId,
-          tipoDocumentoClienteId: preFactura.cliente.tipoDocumentoId,
-          numeroDocumentoCliente: preFactura.cliente.numeroDocumento,
-          razonSocialCliente: preFactura.cliente.razonSocial,
-          direccionCliente: preFactura.cliente.direccion || "",
-          emailCliente: preFactura.cliente.email,
-          monedaId: preFactura.monedaId,
-          tipoCambio: preFactura.tipoCambio,
-          formaPagoId: preFactura.formaPagoId,
-          estadoOSEId: estadoOSE.id,
-          estadoSUNATId: estadoSUNAT.id,
-          observaciones: datosBoleta.observaciones || preFactura.observaciones,
-          creadoPor: datosBoleta.creadoPor,
-        },
-      });
-
-      // 6.4. Crear detalles del comprobante
-      for (const detalle of preFactura.detalles) {
-        await tx.detalleComprobante.create({
-          data: {
-            comprobanteElectronicoId: comprobante.id,
-            productoId: detalle.productoId,
-            descripcion: detalle.producto?.nombre || "",
-            cantidad: detalle.cantidad,
-            unidadMedida: detalle.producto?.unidadMedida?.codigo || "NIU",
-            precioUnitario: detalle.precioUnitario || 0,
-            valorVenta:
-              Number(detalle.cantidad) * Number(detalle.precioUnitario || 0),
-          },
-        });
-      }
-
-      // 6.5. Actualizar PreFactura
-      await tx.preFactura.update({
-        where: { id: preFactura.id },
-        data: {
-          tipoDocumentoFinalId: tipoBoleta.id,
-          serieDocFinalId: serieBoleta.id,
-          numeroDocumentoFinal: numeroCompleto,
-          numSerieDocFinal: numSerie,
-          numCorreDocFinal: numCorre,
-          facturado: true,
-        },
-      });
-
-      // 6.6. Retornar comprobante creado
-      return await tx.comprobanteElectronico.findUnique({
-        where: { id: comprobante.id },
-        include: {
-          preFactura: true,
-          empresa: true,
-          entidadComercial: true,
-          moneda: true,
-          detalles: {
-            include: {
-              producto: true,
-            },
-          },
-        },
-      });
-    });
-  } catch (err) {
-    if (
-      err instanceof NotFoundError ||
-      err instanceof ValidationError ||
-      err instanceof ConflictError
-    )
-      throw err;
-    if (err.code && err.code.startsWith("P"))
-      throw new DatabaseError("Error de base de datos", err.message);
-    throw err;
   }
 };
 
@@ -2378,9 +1949,7 @@ const facturarPreFacturaBlanca = async (preFacturaId, userId) => {
         });
 
         // Eliminar ComprobanteElectronico existente
-        await tx.comprobanteElectronico.deleteMany({
-          where: { preFacturaId: preFacturaId },
-        });
+        await eliminarComprobantesDePreFactura(tx, preFacturaId);
       }
 
       // ⭐ NUEVO: Detectar si es Saldo Inicial (tipo SI-CXC)
@@ -2599,6 +2168,103 @@ const facturarPreFacturaBlanca = async (preFacturaId, userId) => {
 
 
 
+// Código SUNAT de unidad de medida según el símbolo de la unidad del ERP (UnidadMedida no guarda el código SUNAT).
+// Cualquier símbolo no listado se factura como NIU (unidad / producto).
+const UNIDAD_SUNAT_POR_SIMBOLO = { KG: "KGM", KGS: "KGM", TN: "TNE", TM: "TNE", TON: "TNE", L: "LTR", LT: "LTR", LTS: "LTR", M: "MTR", MT: "MTR" };
+
+/**
+ * Elimina los comprobantes electrónicos de una PreFactura junto con su bitácora de envíos (EnvioOSE).
+ * Un comprobante ya emitido en SUNAT no se puede borrar del ERP: primero debe darse de baja.
+ */
+const eliminarComprobantesDePreFactura = async (tx, preFacturaId) => {
+  const emitidos = await tx.comprobanteElectronico.findMany({
+    where: { preFacturaId, OR: [{ aceptadoPorSunat: true }, { enlacePDF: { not: null } }] },
+    select: { numeroCompleto: true },
+  });
+  if (emitidos.length > 0) {
+    throw new ValidationError(
+      `El comprobante ${emitidos.map((c) => c.numeroCompleto).join(", ")} ya fue emitido en SUNAT y no se puede eliminar desde el ERP. Anule primero el comprobante (baja) desde Comprobantes Electrónicos.`,
+    );
+  }
+  await tx.envioOSE.deleteMany({ where: { comprobanteElectronico: { preFacturaId } } });
+  return tx.comprobanteElectronico.deleteMany({ where: { preFacturaId } });
+};
+
+const redondear2 = (valor) => Math.round(valor * 100) / 100;
+
+/**
+ * Arma las líneas (DetalleComprobante) y los totales por tipo de afectación del comprobante
+ * desde el detalle de la PreFactura. El precio de la PreFactura no incluye IGV: el precio unitario
+ * del comprobante (con IGV) se deriva del porcentaje de IGV de la PreFactura.
+ */
+const construirLineasComprobante = async (tx, preFactura) => {
+  const detallesPreFactura = await tx.detallePreFactura.findMany({
+    where: { preFacturaId: preFactura.id },
+    include: { producto: { include: { unidadMedida: true } } },
+    orderBy: { id: "asc" },
+  });
+  if (detallesPreFactura.length === 0) {
+    throw new ValidationError(`La PreFactura ${preFactura.codigo} no tiene líneas de detalle para generar el comprobante.`);
+  }
+
+  const porcentajeIgvPreFactura = preFactura.exoneradoIgv ? 0 : Number(preFactura.porcentajeIgv ?? NaN);
+  if (Number.isNaN(porcentajeIgvPreFactura)) {
+    throw new ValidationError(`La PreFactura ${preFactura.codigo} no tiene porcentaje de IGV definido.`);
+  }
+
+  const idsAfectacion = [...new Set(detallesPreFactura.map((d) => d.tipoAfectacionIGVId || preFactura.tipoAfectacionIGVId).filter(Boolean))];
+  const afectaciones = await tx.tipoAfectacionIGV.findMany({ where: { id: { in: idsAfectacion } } });
+  const afectacionPorId = new Map(afectaciones.map((a) => [String(a.id), a]));
+
+  const totales = { totalGravado: 0, totalExonerado: 0, totalInafecto: 0, totalGratuito: 0, totalDescuentos: 0, totalIsc: 0, totalIgv: 0, totalComprobante: 0 };
+
+  const detalles = detallesPreFactura.map((detalle, indice) => {
+    const nombreLinea = detalle.producto?.descripcionBase || `línea ${indice + 1}`;
+    const afectacion = afectacionPorId.get(String(detalle.tipoAfectacionIGVId || preFactura.tipoAfectacionIGVId));
+    if (!afectacion) {
+      throw new ValidationError(`La línea ${indice + 1} (${nombreLinea}) de la PreFactura ${preFactura.codigo} no tiene tipo de afectación del IGV.`);
+    }
+
+    const cantidad = Number(detalle.cantidad);
+    const valorUnitario = Number(detalle.precioUnitario || 0);
+    const porcentajeIgv = afectacion.calculaIGV ? porcentajeIgvPreFactura : 0;
+    const subtotal = redondear2(cantidad * valorUnitario);
+    const igv = redondear2((subtotal * porcentajeIgv) / 100);
+
+    totales.totalIgv += igv;
+    totales.totalComprobante += subtotal + igv;
+    // Las exportaciones se acumulan como inafectas (la cabecera no tiene una columna aparte)
+    if (afectacion.categoria === "GRAVADO") totales.totalGravado += subtotal;
+    else if (afectacion.categoria === "EXONERADO") totales.totalExonerado += subtotal;
+    else if (afectacion.categoria === "GRATUITO") totales.totalGratuito += subtotal;
+    else totales.totalInafecto += subtotal;
+
+    const unidad = detalle.producto?.unidadMedida;
+    return {
+      numeroLinea: indice + 1,
+      productoId: detalle.productoId,
+      codigoProducto: detalle.producto?.codigo || null,
+      descripcion: nombreLinea,
+      unidadMedidaId: detalle.producto?.unidadMedidaId,
+      codigoUnidadSUNAT: UNIDAD_SUNAT_POR_SIMBOLO[String(unidad?.simbolo || "").toUpperCase()] || "NIU",
+      nombreUnidad: unidad?.nombre || null,
+      cantidad,
+      valorUnitario,
+      precioUnitario: valorUnitario * (1 + porcentajeIgv / 100),
+      subtotal,
+      tipoAfectacionIGVId: afectacion.id,
+      igv,
+      porcentajeIgv,
+      total: redondear2(subtotal + igv),
+    };
+  });
+
+  return {
+    detalles,
+    totales: Object.fromEntries(Object.entries(totales).map(([clave, valor]) => [clave, redondear2(valor)])),
+  };
+};
+
 /**
  * Generar Comprobante Electrónico desde PreFactura EMITIDA
  * 
@@ -2638,6 +2304,10 @@ const generarComprobanteElectronico = async (preFacturaId) => {
           tipoDocumentoFinal: true,  // ✅ AGREGAR ESTA LÍNEA
           cuentaPorCobrar: true,
           comprobantesElectronicos: true,
+          formaPago: true,
+          tipoDetraccion: true,
+          // Comprobante emitido al que afecta una nota de crédito/débito
+          dcmtoAfectoNCND: { include: { comprobantesElectronicos: true } },
         },
       });
 
@@ -2685,6 +2355,20 @@ const generarComprobanteElectronico = async (preFacturaId) => {
       const ahora = new Date();
       const horaEmision = ahora.toTimeString().split(" ")[0]; // HH:MM:SS
 
+      // Líneas del comprobante, totales por tipo de afectación y datos de notas/cuotas
+      const lineasComprobante = await construirLineasComprobante(tx, preFactura);
+
+      // Una nota de crédito/débito solo se puede emitir sobre un comprobante ya generado
+      let comprobanteModificaId = null;
+      if (preFactura.dcmtoAfectoNCNDId) {
+        comprobanteModificaId = preFactura.dcmtoAfectoNCND?.comprobantesElectronicos?.[0]?.id || null;
+        if (!comprobanteModificaId) {
+          throw new ValidationError(
+            `La nota afecta al documento ${preFactura.numeroDcmtoAfectoNCND || preFactura.dcmtoAfectoNCNDId}, que aún no tiene comprobante electrónico. Genere primero ese comprobante.`
+          );
+        }
+      }
+
       const comprobanteElectronico = await tx.comprobanteElectronico.create({
         data: {
           // Origen
@@ -2712,9 +2396,25 @@ const generarComprobanteElectronico = async (preFacturaId) => {
           // Moneda
           monedaId: preFactura.monedaId,
           tipoCambio: preFactura.tipoCambio || 1.0,
+          // Totales por tipo de afectación (calculados desde las líneas)
+          ...lineasComprobante.totales,
           // Condiciones de pago
           formaPagoId: preFactura.formaPagoId || Number(1),
           montoPendientePago: Number(preFactura.total),
+          // Detracción / retención / percepción
+          sujetoDetraccion: Boolean(preFactura.aplicaDetraccion),
+          codigoDetraccion: preFactura.aplicaDetraccion ? preFactura.tipoDetraccion?.codigo || null : null,
+          porcentajeDetraccion: preFactura.aplicaDetraccion ? preFactura.porcentajeDetraccion : null,
+          montoDetraccion: preFactura.aplicaDetraccion ? preFactura.montoDetraccion : null,
+          sujetoRetencion: Boolean(preFactura.aplicaRetencion),
+          porcentajeRetencion: preFactura.aplicaRetencion ? preFactura.porcentajeRetencion : null,
+          montoRetencion: preFactura.aplicaRetencion ? preFactura.montoRetencion : null,
+          sujetoPercepcion: Boolean(preFactura.aplicaPercepcion),
+          porcentajePercepcion: preFactura.aplicaPercepcion ? preFactura.porcentajePercepcion : null,
+          montoPercepcion: preFactura.aplicaPercepcion ? preFactura.montoPercepcion : null,
+          // NC/ND
+          motivoNotaCreditoDebitoId: preFactura.motivoNotaCreditoDebitoId,
+          comprobanteModificaId,
           // Estados
           estadoOSEId: Number(50), // PENDIENTE
           estadoSUNATId: Number(60), // ACTIVO
@@ -2722,6 +2422,32 @@ const generarComprobanteElectronico = async (preFacturaId) => {
           observaciones: `Comprobante generado desde PreFactura ${preFactura.codigo}`,
         },
       });
+
+      // Detalle (líneas) del comprobante: es lo que se envía al proveedor de facturación electrónica
+      for (const linea of lineasComprobante.detalles) {
+        await tx.detalleComprobante.create({
+          data: { ...linea, comprobanteElectronicoId: comprobanteElectronico.id },
+        });
+      }
+
+      // Una única cuota por el saldo a pagar (neto de detracción y retención) cuando la venta es al crédito
+      if (preFactura.formaPago?.esCredito) {
+        const fechaVencimientoCuota =
+          preFactura.fechaVencimiento ||
+          new Date(ahora.getTime() + Number(preFactura.formaPago.diasCredito || 0) * 86400000);
+        const montoCuota =
+          Number(preFactura.total) -
+          (preFactura.aplicaDetraccion ? Number(preFactura.montoDetraccion || 0) : 0) -
+          (preFactura.aplicaRetencion ? Number(preFactura.montoRetencion || 0) : 0);
+        await tx.cuotaPagoComprobante.create({
+          data: {
+            comprobanteElectronicoId: comprobanteElectronico.id,
+            numeroCuota: 1,
+            fechaVencimiento: fechaVencimientoCuota,
+            montoCuota: Math.round(montoCuota * 100) / 100,
+          },
+        });
+      }
 
       // ========================================
       // 4. VINCULAR CE CON CXC
@@ -3131,7 +2857,7 @@ const emitirNotaCreditoSinCxC = async (tx, preFactura, estadoDestino, eliminarCo
   }
 
   if (eliminarComprobante) {
-    await tx.comprobanteElectronico.deleteMany({ where: { preFacturaId: preFactura.id } });
+    await eliminarComprobantesDePreFactura(tx, preFactura.id);
   }
 
   const data = { facturado: true, estadoId: estadoDestino };
@@ -3781,9 +3507,7 @@ const reactivarDocumentoPreFactura = async (id, usuarioId) => {
       let comprobantesEliminados = 0;
       if (preFactura.comprobantesElectronicos && preFactura.comprobantesElectronicos.length > 0) {
         comprobantesEliminados = preFactura.comprobantesElectronicos.length;
-        await tx.comprobanteElectronico.deleteMany({
-          where: { preFacturaId: id },
-        });
+        await eliminarComprobantesDePreFactura(tx, id);
       }
 
       // ========================================
@@ -6066,8 +5790,6 @@ export default {
   crear,
   actualizar,
   eliminar,
-  generarFacturaDesdePreFactura,
-  generarBoletaDesdePreFactura,
   partirPreFactura,
   facturarPreFacturaNegra,
   facturarPreFacturaBlanca,

@@ -3,6 +3,7 @@ import movimientoCajaRoutes from './FlujoCaja/movimientoCaja.routes.js';
 import cuentaCorrienteRoutes from './FlujoCaja/cuentaCorriente.routes.js';
 import saldoCuentaCorrienteRoutes from './FlujoCaja/saldoCuentaCorriente.routes.js';
 import reporteMovimientoFondosRoutes from './FlujoCaja/reporteMovimientoFondos.routes.js';
+import estadoCuentaProveedoresMantenimientoRoutes from './Mantenimiento/estadoCuentaProveedoresMantenimiento.routes.js';
 import configuracionCuentaContableRoutes from './FlujoCaja/configuracionCuentaContable.routes.js';
 import asientoContableInterfazRoutes from './FlujoCaja/asientoContableInterfaz.routes.js';
 import bancoRoutes from './FlujoCaja/banco.routes.js';
@@ -685,6 +686,7 @@ router.use('/movimientos-caja', movimientoCajaRoutes);
 router.use('/cuentas-corrientes', cuentaCorrienteRoutes);
 router.use('/saldos-cuenta-corriente', saldoCuentaCorrienteRoutes);
 router.use('/reporte-movimiento-fondos', reporteMovimientoFondosRoutes);
+router.use('/reporte-estado-cuenta-proveedores-mantenimiento', estadoCuentaProveedoresMantenimientoRoutes);
 router.use('/configuraciones-cuenta-contable', configuracionCuentaContableRoutes);
 router.use('/asientos-contables-interfaz', asientoContableInterfazRoutes);
 // Rutas para TipoContrato (contratos laborales)

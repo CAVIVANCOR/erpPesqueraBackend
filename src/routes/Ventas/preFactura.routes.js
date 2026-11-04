@@ -49,20 +49,6 @@ router.post(
 // RUTAS DE GENERACIÓN DE COMPROBANTES
 // (Operaciones propias de PreFactura)
 // ========================================
-router.post(
-  '/:id/generar-factura',
-  autenticarJWT,
-  checkPermission('preFactura', 'crear'),
-  preFacturaController.generarFactura
-);
-
-router.post(
-  '/:id/generar-boleta',
-  autenticarJWT,
-  checkPermission('preFactura', 'crear'),
-  preFacturaController.generarBoleta
-);
-
 router.put(
   '/:id/partir',
   autenticarJWT,
