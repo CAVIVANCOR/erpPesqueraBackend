@@ -264,6 +264,13 @@ import registrarMovimientoPagoRoutes from './Tesoreria/registrarMovimientoPago.r
 // ========================================
 import tipoDeudaPersonalRoutes from './Tesoreria/tipoDeudaPersonal.routes.js';
 import categoriaTipoDeudaPersonalRoutes from './Tesoreria/categoriaTipoDeudaPersonal.routes.js';
+// ========================================
+// 🆕 IMPORTS - RECURSOS HUMANOS Y PLANILLAS (FASE 1)
+// ========================================
+import regimenLaboralRoutes from './RecursosHumanos/regimenLaboral.routes.js';
+import entidadPensionRoutes from './RecursosHumanos/entidadPension.routes.js';
+import tarifaEntidadPensionRoutes from './RecursosHumanos/tarifaEntidadPension.routes.js';
+import parametroLegalRoutes from './RecursosHumanos/parametroLegal.routes.js';
 import deudaConPersonalRoutes from './Tesoreria/deudaConPersonal.routes.js';
 import pagoDeudaPersonalRoutes from './Tesoreria/pagoDeudaPersonal.routes.js';
 import tipoDeudaTributariaRoutes from './Tesoreria/tipoDeudaTributaria.routes.js';
@@ -741,6 +748,13 @@ router.use('/tesoreria/tipos-deuda-personal', tipoDeudaPersonalRoutes);
 router.use('/tesoreria/deudas-con-personal', deudaConPersonalRoutes);
 router.use('/tesoreria/pagos-deuda-personal', pagoDeudaPersonalRoutes);
 router.use('/tesoreria/categorias-tipo-deuda-personal', categoriaTipoDeudaPersonalRoutes);
+// ========================================
+// 🆕 RUTAS - RECURSOS HUMANOS Y PLANILLAS (FASE 1)
+// ========================================
+router.use('/recursos-humanos/regimenes-laborales', regimenLaboralRoutes);
+router.use('/recursos-humanos/entidades-pension', entidadPensionRoutes);
+router.use('/recursos-humanos/tarifas-entidad-pension', tarifaEntidadPensionRoutes);
+router.use('/recursos-humanos/parametros-legales', parametroLegalRoutes);
 router.use('/tesoreria/tipo-detraccion', tipoDetraccionRoutes);
 
 // ========================================
