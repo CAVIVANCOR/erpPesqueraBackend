@@ -350,7 +350,8 @@ model Banco {
   pagosPagar            PagoCuentaPorPagar[]
   pagosLetra            PagoLetraCambio[]
   preFacturas           PreFactura[]
-
+  personal              Personal[]                                    // ⭐ RRHH FASE 1: Personal que cobra su remuneración en este banco
+  
   // Nuevas relaciones con Tesorería Avanzada
   prestamos             PrestamoBancario[]
   lineasCredito         LineaCredito[]
@@ -2560,6 +2561,19 @@ model Empresa {
   sunatUsuarioSol    String?     // Usuario SOL de la empresa (ej: USUARIO1)
   sunatClaveSol      String?     // Clave SOL de la empresa
 
+  // ========================================
+  // ⭐ RRHH FASE 1 — CONFIGURACIÓN DE PLANILLA
+  // ========================================
+  procesaPlanilla     Boolean   @default(false)   // false = la empresa no procesa planilla (ej. personas naturales con RUC 10)
+  regimenLaboralId    BigInt?                     // Régimen laboral que rige a la empresa; vacío si no procesa planilla
+  inscritoRemype      Boolean   @default(false)   // Si no está inscrita en el REMYPE, rige el régimen general aunque sea micro o pequeña
+  numeroRemype        String?   @db.VarChar(30)   // Número de inscripción en el REMYPE
+  usaSis              Boolean   @default(false)   // Microempresa: true = SIS semicontributivo, false = EsSalud
+  tieneEps            Boolean   @default(false)   // true = bonificación extraordinaria reducida (6.75 %)
+  relojcontrolApiKey  String?                     // ApiKey de Relojcontrol de la empresa
+  relojcontrolActivo  Boolean   @default(false)   // true = se importan las marcaciones de esta empresa
+
+
   sedes                         SedesEmpresa[]
   centrosCosto                  EmpresaCentroCosto[]
   movimientosAlmacen            MovimientoAlmacen[]
@@ -2614,7 +2628,12 @@ model Empresa {
   prestamosRelacionadosRecibidos   PrestamoRelacionado[]  @relation("PrestamoRelacionadoPrestataria")
   prestamosEntidad         PrestamoEntidad[]
 
+  // ⭐ RRHH FASE 1
+  regimenLaboral      RegimenLaboral?     @relation(fields: [regimenLaboralId], references: [id])  // Régimen laboral de la empresa
+  contratosPersonal   ContratoPersonal[]                                                            // Contratos de personal de la empresa
+
   @@index([monedaCalculosLiqId])
+  @@index([regimenLaboralId])
 
 }
 
@@ -2773,7 +2792,8 @@ model EntidadComercial {
   temporadasPescaComisionista     TemporadaPesca[] @relation("EntidadComercialComisionistaAlquilerTemporadaPesca")
   personalEnlazado                Personal[] @relation("PersonalEnlaceEntidad")
   bancosEnlazados                 Banco[]    @relation("BancoEnlaceEntidad")   // 🆕 Bancos que representa esta entidad
-
+  entidadesPension                EntidadPension[] @relation("EntidadPensionEnlaceEntidad")   // ⭐ RRHH FASE 1: AFP/ONP representadas por esta entidad
+  
   comisionesFidelizacion          ComisionFidelizacion[]
   detallesComisionFidelizacion    DetComisionFidelizacionEntidad[] @relation("DetalleComisionFidelizacionEntidad")
   plataformasRecepcionPesca       DetPlataformaRecepcionPesca[]
@@ -4115,6 +4135,22 @@ model Personal {
   urlFirma                  String?
   centroCostoId             BigInt?                // ⭐ NUEVO - Centro de costo del trabajador
 
+  // ⭐ RRHH FASE 1 — Campo nuevo
+  esObrero                  Boolean                 @default(false)   // true = obrero, false = empleado. Define la categoría de planilla (junto con paraTemporadaPesca) y las cuentas contables que se usan. NO define el horario (eso lo indica esAdministrativo).
+  // ========================================
+  // ⭐ RRHH FASE 1 — DATOS LABORALES Y DE PLANILLA
+  // ========================================
+  categoriaPlanillaId      BigInt?                                    // Vacío = la categoría se deduce de esObrero y paraTemporadaPesca; con valor = corrección manual
+  entidadPensionId         BigInt?                                    // AFP u ONP del trabajador
+  cuspp                    String?                 @db.VarChar(20)    // Código único de afiliado al sistema privado de pensiones
+  comisionMixta            Boolean                 @default(false)    // true = comisión mixta; false = comisión sobre flujo
+  tieneAsignacionFamiliar  Boolean                 @default(false)    // Si le corresponde asignación familiar (hijos)
+  aplicaSctr               Boolean                 @default(false)    // Seguro complementario de trabajo de riesgo
+  acuerdoCompensacionHoras Boolean                 @default(false)    // Acuerdo para compensar horas con descanso
+  bancoId                  BigInt?                                    // Banco donde se le paga
+  numeroCuenta             String?                 @db.VarChar(30)    // Número de cuenta
+  cci                      String?                 @db.VarChar(25)    // Código de cuenta interbancario
+
   documentaciones           DocumentacionPersonal[]
   cargo                     CargosPersonal?    @relation(fields: [cargoId], references: [id])
   ubigeo                    Ubigeo?            @relation(fields: [ubigeoId], references: [id])
@@ -4223,8 +4259,323 @@ model Personal {
   detMovsEntregaRendirResponsable  DetMovsEntregaRendir[] @relation("ResponsableMovimiento")
   detMovsEntregaRendirCreados      DetMovsEntregaRendir[] @relation("CreadoPorDetMovsEntregaRendir")
   detMovsEntregaRendirActualizados DetMovsEntregaRendir[] @relation("ActualizadoPorDetMovsEntregaRendir")
-  @@index([centroCostoId])         // ⭐ NUEVO
 
+  // ⭐ RRHH FASE 1 — Relaciones nuevas
+  contratosPersonal         ContratoPersonal[]                        // Contratos de planilla o de locación de la persona
+  categoriaPlanilla         CategoriaPlanilla?      @relation(fields: [categoriaPlanillaId], references: [id])  // Categoría de planilla (corrección manual)
+  entidadPension            EntidadPension?         @relation(fields: [entidadPensionId], references: [id])     // AFP u ONP
+  banco                     Banco?                  @relation(fields: [bancoId], references: [id])              // Banco de pago de remuneraciones
+  
+  @@index([centroCostoId])         // ⭐ NUEVO
+  @@index([entidadPensionId])
+
+}
+
+
+// ════════════════════════════════════════════════════════════
+// RRHH — CATÁLOGO: RÉGIMEN LABORAL
+// General (01), Microempresa (16), Pequeña empresa (17).
+// Es solo la identificación; las reglas de cada régimen viven en ParametroLegal.
+// ════════════════════════════════════════════════════════════
+model RegimenLaboral {
+  id               BigInt   @id @default(autoincrement())
+  codigoSunat      String   @unique @db.VarChar(5)   // Código del régimen en PLAME ("01", "16", "17")
+  descripcion      String   @db.VarChar(100)         // "Régimen general", "Microempresa", "Pequeña empresa"
+  requiereRemype   Boolean  @default(false)          // true = solo aplica si la empresa está inscrita en el REMYPE
+  activo           Boolean  @default(true)
+
+  // Auditoría
+  creadoEn         DateTime @default(now())
+  creadoPor        BigInt?
+  actualizadoEn    DateTime @updatedAt
+  actualizadoPor   BigInt?
+
+  // Relaciones inversas
+  empresas         Empresa[]
+  parametros       ParametroLegal[]
+}
+
+// ════════════════════════════════════════════════════════════
+// RRHH — PARÁMETROS LEGALES Y REGLAS POR RÉGIMEN (con vigencia)
+// Una sola tabla para ambos: UIT, RMV, % EsSalud, días de vacaciones, tope de CTS...
+// regimenLaboralId vacío = aplica a todos los regímenes.
+// Los cambios agregan una fila con vigencia; nunca se sobrescribe.
+// ════════════════════════════════════════════════════════════
+model ParametroLegal {
+  id                  BigInt    @id @default(autoincrement())
+  regimenLaboralId    BigInt?                          // Vacío = parámetro general (UIT, RMV...)
+  clave               String    @db.VarChar(80)        // Identificador que usan las fórmulas: "UIT", "RMV", "VACACIONES_DIAS"
+  descripcion         String    @db.VarChar(150)       // Descripción legible del parámetro
+  valor               Decimal   @db.Decimal(18, 6)     // Valor numérico (los sí/no se guardan como 1 y 0)
+  vigenteDesde        DateTime                         // Desde cuándo rige
+  vigenteHasta        DateTime?                        // Vacío = vigente sin fecha de término
+  validadoPorContador Boolean   @default(false)        // Marca informativa: si falta, solo avisa; no bloquea
+  activo              Boolean   @default(false)        // false = borrador (se prueba en simulación); true = activado por la jefa de personal
+
+  // Auditoría
+  creadoEn            DateTime  @default(now())
+  creadoPor           BigInt?
+  actualizadoEn       DateTime  @updatedAt
+  actualizadoPor      BigInt?
+
+  // Relaciones
+  regimenLaboral      RegimenLaboral? @relation(fields: [regimenLaboralId], references: [id])
+
+  @@unique([regimenLaboralId, clave, vigenteDesde])    // Con régimen vacío la unicidad la valida el servicio
+  @@index([clave, vigenteDesde])
+}
+
+// ════════════════════════════════════════════════════════════
+// RRHH — CATÁLOGO: CATEGORÍA DE PLANILLA
+// Empleado, Obrero, Pescador. Define qué cuentas contables usa cada concepto.
+// Se deduce de Personal (paraTemporadaPesca, esObrero) y se puede corregir en Personal.categoriaPlanillaId.
+// ════════════════════════════════════════════════════════════
+model CategoriaPlanilla {
+  id                BigInt   @id @default(autoincrement())
+  descripcion       String   @db.VarChar(100)          // "Empleado", "Obrero", "Pescador"
+  activo            Boolean  @default(true)
+
+  // Auditoría
+  creadoEn          DateTime @default(now())
+  creadoPor         BigInt?
+  actualizadoEn     DateTime @updatedAt
+  actualizadoPor    BigInt?
+
+  // Relaciones inversas
+  personal          Personal[]
+  cuentasConcepto   ConceptoPlanillaCuenta[]
+}
+
+// ════════════════════════════════════════════════════════════
+// RRHH — ENTIDAD DE PENSIÓN (AFP u ONP)
+// La ONP es una entidad más, con esOnp = true y su 13 % como tarifa.
+// ════════════════════════════════════════════════════════════
+model EntidadPension {
+  id                     BigInt   @id @default(autoincrement())
+  descripcion            String   @db.VarChar(100)      // "AFP Integra", "ONP"
+  codigoAfpnet           String?  @db.VarChar(10)       // Código de la entidad en el archivo de AFPnet
+  esOnp                  Boolean  @default(false)       // true = Sistema Nacional de Pensiones
+  entidadComercialId     BigInt?                        // Entidad a la que se le paga (cuentas por pagar y tesorería)
+  cuentaPasivoEmpleadoId BigInt?                        // Cuenta por pagar de esta entidad para empleados (ej. 417103)
+  cuentaPasivoObreroId   BigInt?                        // Cuenta por pagar de esta entidad para obreros (ej. 417107)
+  activo                 Boolean  @default(true)
+
+  // Auditoría
+  creadoEn               DateTime @default(now())
+  creadoPor              BigInt?
+  actualizadoEn          DateTime @updatedAt
+  actualizadoPor         BigInt?
+
+  // Relaciones
+  entidadComercial       EntidadComercial?    @relation("EntidadPensionEnlaceEntidad", fields: [entidadComercialId], references: [id])
+  cuentaPasivoEmpleado   PlanCuentasContable? @relation("EntidadPensionCuentaEmpleado", fields: [cuentaPasivoEmpleadoId], references: [id])
+  cuentaPasivoObrero     PlanCuentasContable? @relation("EntidadPensionCuentaObrero", fields: [cuentaPasivoObreroId], references: [id])
+
+  // Relaciones inversas
+  tarifas                TarifaEntidadPension[]
+  personal               Personal[]
+
+  @@index([activo])
+}
+
+// ════════════════════════════════════════════════════════════
+// RRHH — TARIFAS DE LA ENTIDAD DE PENSIÓN (con vigencia)
+// Cambian mensualmente en las AFP; cada cambio agrega una fila.
+// ════════════════════════════════════════════════════════════
+model TarifaEntidadPension {
+  id                           BigInt    @id @default(autoincrement())
+  entidadPensionId             BigInt
+  vigenteDesde                 DateTime
+  vigenteHasta                 DateTime?
+  porcentajeAporte             Decimal   @db.Decimal(7, 4)                 // Aporte obligatorio al fondo (10 % en AFP; 13 % en ONP)
+  porcentajeSeguro             Decimal   @default(0) @db.Decimal(7, 4)     // Prima de seguro de invalidez y sobrevivencia
+  porcentajeComisionFlujo      Decimal   @default(0) @db.Decimal(7, 4)     // Comisión sobre la remuneración
+  porcentajeComisionMixta      Decimal   @default(0) @db.Decimal(7, 4)     // Comisión de la modalidad mixta
+  remuneracionMaximaAsegurable Decimal?  @db.Decimal(18, 2)                // Tope sobre el que se calcula la prima de seguro
+
+  // Auditoría
+  creadoEn                     DateTime  @default(now())
+  creadoPor                    BigInt?
+  actualizadoEn                DateTime  @updatedAt
+  actualizadoPor               BigInt?
+
+  // Relaciones
+  entidadPension               EntidadPension @relation(fields: [entidadPensionId], references: [id])
+
+  @@unique([entidadPensionId, vigenteDesde])
+}
+
+// ════════════════════════════════════════════════════════════
+// RRHH — CONTRATO DE PERSONAL
+// La modalidad de pago la define el contrato. Una persona puede tener dos a la vez
+// (ej. motorista con sueldo en planilla y además contrato de locación por faena).
+// Un cambio de sueldo crea un contrato nuevo con su vigencia.
+// ════════════════════════════════════════════════════════════
+model ContratoPersonal {
+  id                        BigInt    @id @default(autoincrement())
+  empresaId                 BigInt
+  personalId                BigInt
+  esLocacionServicios       Boolean   @default(false)     // false = planilla; true = locación de servicios (honorarios)
+  fechaInicio               DateTime
+  fechaFin                  DateTime?                     // Vacío = vigente
+  remuneracionBasica        Decimal   @db.Decimal(18, 2)  // Sueldo mensual o jornal diario
+  esJornal                  Boolean   @default(false)     // true = remuneracionBasica es diaria
+  periodicidadDias          Int?                          // Cada cuántos días se paga: 7, 15 o 30
+  pagaPorTemporada          Boolean   @default(false)     // true = se paga por temporada o faena
+  liquidaBeneficiosEnBoleta Boolean   @default(false)     // true = gratificación, vacaciones y CTS en cada boleta (pescadores); false = se provisionan
+  activo                    Boolean   @default(true)
+
+  // Auditoría
+  creadoEn                  DateTime  @default(now())
+  creadoPor                 BigInt?
+  actualizadoEn             DateTime  @updatedAt
+  actualizadoPor            BigInt?
+
+  // Relaciones
+  empresa                   Empresa   @relation(fields: [empresaId], references: [id])
+  personal                  Personal  @relation(fields: [personalId], references: [id])
+
+  // Relaciones inversas
+  lineasPago                ContratoPersonalLineaPago[]
+
+  @@index([empresaId, personalId, activo])
+  @@index([personalId, fechaInicio])
+}
+
+// ════════════════════════════════════════════════════════════
+// RRHH — LÍNEAS DE PAGO DEL CONTRATO
+// Reparten lo que se paga entre planilla y honorarios.
+// Cada línea usa solo una forma: monto fijo, porcentaje, calculada o saldo.
+// El saldo es una sola línea y siempre la última.
+// ════════════════════════════════════════════════════════════
+model ContratoPersonalLineaPago {
+  id                 BigInt   @id @default(autoincrement())
+  contratoPersonalId BigInt
+  orden              Int                                  // Orden de aplicación
+  esPlanilla         Boolean  @default(true)              // true = va a planilla; false = honorarios
+  monto              Decimal? @db.Decimal(18, 2)          // Forma 1: importe fijo
+  porcentaje         Decimal? @db.Decimal(7, 4)           // Forma 2: porcentaje del total
+  esCalculada        Boolean  @default(false)             // Forma 3: la calcula la planilla con sus reglas
+  esSaldo            Boolean  @default(false)             // Forma 4: lo que queda
+
+  // Auditoría
+  creadoEn           DateTime @default(now())
+  actualizadoEn      DateTime @updatedAt
+
+  // Relaciones
+  contratoPersonal   ContratoPersonal @relation(fields: [contratoPersonalId], references: [id], onDelete: Cascade)
+
+  @@unique([contratoPersonalId, orden])
+}
+
+// ════════════════════════════════════════════════════════════
+// RRHH — CONCEPTO DE PLANILLA (el corazón del módulo)
+// Todo ingreso, descuento, aporte o provisión es una fila: básico, AFP, ONP, CTS, bonos propios...
+// Nada queda fijo en el programa. Los cambios agregan una fila con vigencia.
+// Naturaleza: ingreso = los tres indicadores en no.
+// ════════════════════════════════════════════════════════════
+model ConceptoPlanilla {
+  id                      BigInt    @id @default(autoincrement())
+  codigo                  String    @db.VarChar(30)        // "SUELDO", "AFP_APORTE", "BONO_PRODUCTIVIDAD"
+  descripcion             String    @db.VarChar(150)       // Nombre del concepto tal como se muestra en la boleta
+
+  // Naturaleza (los tres en no = ingreso)
+  esDescuento             Boolean   @default(false)        // Resta del neto del trabajador (AFP, 5ta, préstamo)
+  esAporteEmpleador       Boolean   @default(false)        // Costo de la empresa que no afecta el neto (EsSalud, SCTR)
+  esProvision             Boolean   @default(false)        // Provisión mensual (vacaciones, gratificación, CTS)
+
+  // Cálculo: se usa UNA sola forma
+  claveMotor              String?   @db.VarChar(60)        // Rutina del sistema con estructura legal propia (ej. "RENTA_5TA")
+  formula                 String?   @db.Text               // Fórmula del motor de fórmulas (ej. "MIN(basico * 0.05, 300)")
+  esManual                Boolean   @default(false)        // true = el valor lo escribe la jefa de personal en cada periodo
+  condicionAplica         String?   @db.Text               // Fórmula sí/no que decide si el concepto aplica (régimen, categoría, empresa); vacío = siempre
+
+  // Afectaciones
+  afectaAfpOnp            Boolean   @default(false)        // Forma parte de la base de AFP y ONP
+  afectaEssalud           Boolean   @default(false)        // Forma parte de la base de EsSalud
+  afectaQuintaCategoria   Boolean   @default(false)        // Forma parte de la base de renta de 5ta
+  afectaSctr              Boolean   @default(false)        // Forma parte de la base del SCTR
+  cuentaParaGratificacion Boolean   @default(false)        // Se incluye en la base de la gratificación
+  cuentaParaCts           Boolean   @default(false)        // Se incluye en la base de la CTS
+  cuentaParaVacaciones    Boolean   @default(false)        // Se incluye en la base de las vacaciones
+
+  // Aplicación y origen
+  esRecurrente            Boolean   @default(false)        // true = viene del contrato cada periodo; false = variable del periodo
+  origen                  String    @default("MANUAL") @db.VarChar(30)   // CONTRATO, PLANILLA, ASISTENCIA, PESCA, PRESTAMO o MANUAL
+
+  // PLAME y contabilidad
+  codigoPlame             String?   @db.VarChar(10)        // Código de la tabla 22 de SUNAT
+  tipoDeudaId             BigInt?                          // Tipo de deuda con personal que se genera (reusa TipoDeudaPersonal)
+  pasivoEsDelTrabajador   Boolean   @default(true)         // true = la deuda es con el trabajador; false = con una entidad (AFP, SUNAT, EsSalud)
+
+  // Presentación
+  visibleEnBoleta         Boolean   @default(true)
+  orden                   Int       @default(0)
+
+  // Vigencia y control
+  vigenteDesde            DateTime
+  vigenteHasta            DateTime?
+  esDelSistema            Boolean   @default(false)        // true = concepto base; no se puede borrar
+  activo                  Boolean   @default(false)        // false = borrador (se prueba en simulación); true = activado
+
+  // Auditoría
+  creadoEn                DateTime  @default(now())
+  creadoPor               BigInt?
+  actualizadoEn           DateTime  @updatedAt
+  actualizadoPor          BigInt?
+
+  // Relaciones
+  tipoDeuda               TipoDeudaPersonal? @relation(fields: [tipoDeudaId], references: [id])
+
+  // Relaciones inversas
+  cuentas                 ConceptoPlanillaCuenta[]
+
+  @@unique([codigo, vigenteDesde])
+  @@index([activo, vigenteDesde])
+  @@index([tipoDeudaId])
+}
+
+// ════════════════════════════════════════════════════════════
+// RRHH — CUENTAS CONTABLES DEL CONCEPTO POR CATEGORÍA DE PLANILLA
+// Ej. Sueldo: empleados 621101 / 411101, obreros 621102 / 411102.
+// ════════════════════════════════════════════════════════════
+model ConceptoPlanillaCuenta {
+  id                  BigInt   @id @default(autoincrement())
+  conceptoPlanillaId  BigInt
+  categoriaPlanillaId BigInt
+  cuentaGastoId       BigInt?                          // Cuenta de gasto (clase 62)
+  cuentaPasivoId      BigInt?                          // Cuenta por pagar (clase 41, 40 u otra)
+
+  // Relaciones
+  conceptoPlanilla    ConceptoPlanilla     @relation(fields: [conceptoPlanillaId], references: [id], onDelete: Cascade)
+  categoriaPlanilla   CategoriaPlanilla    @relation(fields: [categoriaPlanillaId], references: [id])
+  cuentaGasto         PlanCuentasContable? @relation("ConceptoCuentaGasto", fields: [cuentaGastoId], references: [id])
+  cuentaPasivo        PlanCuentasContable? @relation("ConceptoCuentaPasivo", fields: [cuentaPasivoId], references: [id])
+
+  @@unique([conceptoPlanillaId, categoriaPlanillaId])
+}
+
+// ════════════════════════════════════════════════════════════
+// RRHH — PLANTILLA DE FORMATO EXTERNO (PLAME, AFPnet)
+// Define el diseño de los archivos oficiales. Si SUNAT o AFPnet cambian el formato,
+// se agrega una plantilla nueva con vigencia, sin tocar el programa.
+// ════════════════════════════════════════════════════════════
+model PlantillaFormatoExterno {
+  id               BigInt    @id @default(autoincrement())
+  codigo           String    @db.VarChar(40)         // "PLAME_REM", "AFPNET_PLANILLA", "AFPNET_SEMANAS"
+  descripcion      String    @db.VarChar(150)        // Qué archivo genera esta plantilla
+  definicion       Json                              // Diseño: campos, orden, largo, relleno, separador
+  vigenteDesde     DateTime
+  vigenteHasta     DateTime?
+  activo           Boolean   @default(false)         // false = borrador; true = en uso
+
+  // Auditoría
+  creadoEn         DateTime  @default(now())
+  creadoPor        BigInt?
+  actualizadoEn    DateTime  @updatedAt
+  actualizadoPor   BigInt?
+
+  @@unique([codigo, vigenteDesde])
 }
 
 
@@ -4295,6 +4646,7 @@ model TipoDeudaPersonal {
   // RELACIONES INVERSAS
   // ========================================
   deudas                DeudaConPersonal[]                                    // Deudas asociadas a este tipo
+  conceptosPlanilla     ConceptoPlanilla[]                                    // ⭐ RRHH FASE 1: Conceptos de planilla que generan este tipo de deuda
   
   // ========================================
   // ÍNDICES
@@ -6095,6 +6447,15 @@ model PlanCuentasContable {
   tiposDeudaPersonalProvision     TipoDeudaPersonal[]       @relation("TipoDeudaPersonalToCuentaProvision")  // Tipos de deuda personal que provisionan contra esta cuenta de gasto
   tiposDeudaTributariaProvision   TipoDeudaTributaria[]     @relation("TipoDeudaTributariaToCuentaProvision")  // Tipos de deuda tributaria que provisionan contra esta cuenta de gasto
 
+
+  // ========================================
+  // ⭐ RRHH FASE 1 — PLANILLAS
+  // ========================================
+  entidadesPensionEmpleado   EntidadPension[]         @relation("EntidadPensionCuentaEmpleado")   // Cuenta por pagar de AFP/ONP para empleados
+  entidadesPensionObrero     EntidadPension[]         @relation("EntidadPensionCuentaObrero")     // Cuenta por pagar de AFP/ONP para obreros
+  conceptosPlanillaGasto     ConceptoPlanillaCuenta[] @relation("ConceptoCuentaGasto")            // Conceptos de planilla que cargan gasto a esta cuenta
+  conceptosPlanillaPasivo    ConceptoPlanillaCuenta[] @relation("ConceptoCuentaPasivo")           // Conceptos de planilla que acreditan esta cuenta por pagar
+  
   // ========================================
   // ÍNDICES
   // ========================================
