@@ -4109,6 +4109,8 @@ model Personal {
   empresaId                 BigInt
   nombres                   String
   apellidos                 String
+  apellidoPaterno           String?                 @db.VarChar(100)   // ⭐ RRHH: apellido paterno (AFPnet y PLAME lo piden separado)
+  apellidoMaterno           String?                 @db.VarChar(100)   // ⭐ RRHH: apellido materno
   tipoDocumentoId           BigInt?
   numeroDocumento           String
   fechaNacimiento           DateTime
@@ -4140,7 +4142,6 @@ model Personal {
   // ========================================
   // ⭐ RRHH FASE 1 — DATOS LABORALES Y DE PLANILLA
   // ========================================
-  categoriaPlanillaId      BigInt?                                    // Vacío = la categoría se deduce de esObrero y paraTemporadaPesca; con valor = corrección manual
   entidadPensionId         BigInt?                                    // AFP u ONP del trabajador
   cuspp                    String?                 @db.VarChar(20)    // Código único de afiliado al sistema privado de pensiones
   comisionMixta            Boolean                 @default(false)    // true = comisión mixta; false = comisión sobre flujo
@@ -4262,7 +4263,6 @@ model Personal {
 
   // ⭐ RRHH FASE 1 — Relaciones nuevas
   contratosPersonal         ContratoPersonal[]                        // Contratos de planilla o de locación de la persona
-  categoriaPlanilla         CategoriaPlanilla?      @relation(fields: [categoriaPlanillaId], references: [id])  // Categoría de planilla (corrección manual)
   entidadPension            EntidadPension?         @relation(fields: [entidadPensionId], references: [id])     // AFP u ONP
   banco                     Banco?                  @relation(fields: [bancoId], references: [id])              // Banco de pago de remuneraciones
   
@@ -4325,26 +4325,6 @@ model ParametroLegal {
   @@index([clave, vigenteDesde])
 }
 
-// ════════════════════════════════════════════════════════════
-// RRHH — CATÁLOGO: CATEGORÍA DE PLANILLA
-// Empleado, Obrero, Pescador. Define qué cuentas contables usa cada concepto.
-// Se deduce de Personal (paraTemporadaPesca, esObrero) y se puede corregir en Personal.categoriaPlanillaId.
-// ════════════════════════════════════════════════════════════
-model CategoriaPlanilla {
-  id                BigInt   @id @default(autoincrement())
-  descripcion       String   @db.VarChar(100)          // "Empleado", "Obrero", "Pescador"
-  activo            Boolean  @default(true)
-
-  // Auditoría
-  creadoEn          DateTime @default(now())
-  creadoPor         BigInt?
-  actualizadoEn     DateTime @updatedAt
-  actualizadoPor    BigInt?
-
-  // Relaciones inversas
-  personal          Personal[]
-  cuentasConcepto   ConceptoPlanillaCuenta[]
-}
 
 // ════════════════════════════════════════════════════════════
 // RRHH — ENTIDAD DE PENSIÓN (AFP u ONP)
@@ -4353,7 +4333,6 @@ model CategoriaPlanilla {
 model EntidadPension {
   id                     BigInt   @id @default(autoincrement())
   descripcion            String   @db.VarChar(100)      // "AFP Integra", "ONP"
-  codigoAfpnet           String?  @db.VarChar(10)       // Código de la entidad en el archivo de AFPnet
   esOnp                  Boolean  @default(false)       // true = Sistema Nacional de Pensiones
   entidadComercialId     BigInt?                        // Entidad a la que se le paga (cuentas por pagar y tesorería)
   cuentaPasivoEmpleadoId BigInt?                        // Cuenta por pagar de esta entidad para empleados (ej. 417103)
@@ -4536,23 +4515,24 @@ model ConceptoPlanilla {
 }
 
 // ════════════════════════════════════════════════════════════
-// RRHH — CUENTAS CONTABLES DEL CONCEPTO POR CATEGORÍA DE PLANILLA
-// Ej. Sueldo: empleados 621101 / 411101, obreros 621102 / 411102.
+// RRHH — CUENTAS CONTABLES DEL CONCEPTO POR CATEGORÍA DEL TRABAJADOR
+// La categoría se deduce de Personal: pescador (cargo patrón, motorista, panguero o tripulante), obrero (esObrero) o empleado.
+// Ej. Sueldo: empleado 621101 / 411101, obrero 621102 / 411102. Máximo 3 filas por concepto.
 // ════════════════════════════════════════════════════════════
 model ConceptoPlanillaCuenta {
   id                  BigInt   @id @default(autoincrement())
   conceptoPlanillaId  BigInt
-  categoriaPlanillaId BigInt
-  cuentaGastoId       BigInt?                          // Cuenta de gasto (clase 62)
-  cuentaPasivoId      BigInt?                          // Cuenta por pagar (clase 41, 40 u otra)
+  esObrero            Boolean  @default(false)   // true = categoría obrero; false = empleado
+  esPescador          Boolean  @default(false)   // true = categoría pescador (cargo patrón, motorista, panguero o tripulante; prevalece sobre esObrero, que queda en false)  
+  cuentaGastoId       BigInt?                    // Cuenta de gasto (clase 62)
+  cuentaPasivoId      BigInt?                    // Cuenta por pagar (clase 41, 40 u otra)
 
   // Relaciones
   conceptoPlanilla    ConceptoPlanilla     @relation(fields: [conceptoPlanillaId], references: [id], onDelete: Cascade)
-  categoriaPlanilla   CategoriaPlanilla    @relation(fields: [categoriaPlanillaId], references: [id])
   cuentaGasto         PlanCuentasContable? @relation("ConceptoCuentaGasto", fields: [cuentaGastoId], references: [id])
   cuentaPasivo        PlanCuentasContable? @relation("ConceptoCuentaPasivo", fields: [cuentaPasivoId], references: [id])
 
-  @@unique([conceptoPlanillaId, categoriaPlanillaId])
+  @@unique([conceptoPlanillaId, esObrero, esPescador])
 }
 
 // ════════════════════════════════════════════════════════════
