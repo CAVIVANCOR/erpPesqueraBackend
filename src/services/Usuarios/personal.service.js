@@ -68,6 +68,8 @@ async function validarPersonal(data, excluirId = null) {
     { campo: "areaFisicaId", modelo: "areaFisicaSede" },
     { campo: "sedeEmpresaId", modelo: "sedesEmpresa" },
     { campo: "enlaceEntidadComercialId", modelo: "entidadComercial" },
+    { campo: "entidadPensionId", modelo: "entidadPension" },  // ⭐ RRHH FASE 1
+    { campo: "bancoId", modelo: "banco" },                    // ⭐ RRHH FASE 1
   ];
   for (const ref of referencias) {
     if (data[ref.campo] !== undefined && data[ref.campo] !== null) {

@@ -122,6 +122,23 @@ async function validarEmpresa(data) {
       throw new ValidationError('El token de facturación electrónica no puede exceder 500 caracteres');
     }
   }
+
+  // ⭐ RRHH FASE 1: configuración de planilla de la empresa
+  if (data.regimenLaboralId !== undefined && data.regimenLaboralId !== null) {
+    const regimen = await prisma.regimenLaboral.findUnique({ where: { id: data.regimenLaboralId } });
+    if (!regimen) {
+      throw new ValidationError('El régimen laboral indicado no existe');
+    }
+  }
+  if (data.procesaPlanilla === true && (data.regimenLaboralId === undefined || data.regimenLaboralId === null)) {
+    throw new ValidationError('Seleccione el régimen laboral de la empresa: está marcada como "Procesa planilla"');
+  }
+  if (data.numeroRemype !== undefined && data.numeroRemype !== null && String(data.numeroRemype).trim().length > 30) {
+    throw new ValidationError('El número de REMYPE no puede exceder 30 caracteres');
+  }
+  if (data.relojcontrolActivo === true && !(data.relojcontrolApiKey && String(data.relojcontrolApiKey).trim())) {
+    throw new ValidationError('Ingrese la ApiKey de Relojcontrol: la empresa está marcada para importar marcaciones');
+  }
 }
 
 /**

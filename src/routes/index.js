@@ -271,6 +271,9 @@ import regimenLaboralRoutes from './RecursosHumanos/regimenLaboral.routes.js';
 import entidadPensionRoutes from './RecursosHumanos/entidadPension.routes.js';
 import tarifaEntidadPensionRoutes from './RecursosHumanos/tarifaEntidadPension.routes.js';
 import parametroLegalRoutes from './RecursosHumanos/parametroLegal.routes.js';
+import contratoPersonalRoutes from './RecursosHumanos/contratoPersonal.routes.js';
+import conceptoPlanillaRoutes from './RecursosHumanos/conceptoPlanilla.routes.js';
+import plantillaFormatoExternoRoutes from './RecursosHumanos/plantillaFormatoExterno.routes.js';
 import deudaConPersonalRoutes from './Tesoreria/deudaConPersonal.routes.js';
 import pagoDeudaPersonalRoutes from './Tesoreria/pagoDeudaPersonal.routes.js';
 import tipoDeudaTributariaRoutes from './Tesoreria/tipoDeudaTributaria.routes.js';
@@ -755,6 +758,9 @@ router.use('/recursos-humanos/regimenes-laborales', regimenLaboralRoutes);
 router.use('/recursos-humanos/entidades-pension', entidadPensionRoutes);
 router.use('/recursos-humanos/tarifas-entidad-pension', tarifaEntidadPensionRoutes);
 router.use('/recursos-humanos/parametros-legales', parametroLegalRoutes);
+router.use('/recursos-humanos/contratos-personal', contratoPersonalRoutes);
+router.use('/recursos-humanos/conceptos-planilla', conceptoPlanillaRoutes);
+router.use('/recursos-humanos/plantillas-formato-externo', plantillaFormatoExternoRoutes);
 router.use('/tesoreria/tipo-detraccion', tipoDetraccionRoutes);
 
 // ========================================

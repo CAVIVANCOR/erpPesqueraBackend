@@ -41,15 +41,6 @@ export async function actualizar(req, res, next) {
   }
 }
 
-export async function activar(req, res, next) {
-  try {
-    const usuarioId = req.body?.actualizadoPor ? Number(req.body.actualizadoPor) : null;
-    res.json(toJSONBigInt(await parametroLegalService.activar(Number(req.params.id), usuarioId)));
-  } catch (err) {
-    next(err);
-  }
-}
-
 export async function eliminar(req, res, next) {
   try {
     const id = Number(req.params.id);

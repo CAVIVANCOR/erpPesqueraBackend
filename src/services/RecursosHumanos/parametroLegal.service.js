@@ -5,12 +5,10 @@ import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '..
  * Servicio de ParametroLegal: parámetros legales (UIT, RMV, % EsSalud...) y reglas por régimen
  * (días de vacaciones, tope de CTS...) con vigencia.
  *
- * Reglas del flujo (decisión del propietario):
- *  - Todo parámetro nace como BORRADOR (activo = false) y puede probarse en la simulación.
- *  - La jefa de personal lo ACTIVA; al activarlo, el parámetro activo anterior de la misma clave y régimen
- *    se cierra el día previo, así el histórico nunca se sobrescribe.
- *  - Un parámetro activo no se edita ni se elimina: se agrega uno nuevo con otra vigencia.
- *  - La validación del contador es solo informativa: si falta, se avisa pero no se bloquea.
+ * Reglas (decisión del propietario): los datos se ingresan válidos y quedan activos desde el primer momento.
+ * Al crear un parámetro nuevo, el anterior de la misma clave y régimen se cierra el día previo a la nueva vigencia.
+ * La planilla guarda los montos ya calculados, por eso editar o eliminar un parámetro no altera boletas pasadas.
+ * La validación del contador es solo informativa.
  */
 
 const MS_DIA = 24 * 60 * 60 * 1000;
@@ -151,10 +149,28 @@ const crear = async (data) => {
     if (campos.valor === undefined) throw new ValidationError('El valor del parámetro es obligatorio.');
     if (!campos.vigenteDesde) throw new ValidationError('La fecha de inicio de vigencia es obligatoria.');
     await validar(campos);
-    // Siempre nace como borrador: se activa con activar()
-    return await prisma.parametroLegal.create({
-      data: { ...campos, activo: false, creadoPor: data.creadoPor || null },
-      include: incluirRelaciones,
+    return await prisma.$transaction(async (tx) => {
+      // Cierra el parámetro anterior de la misma clave y régimen el día previo a la nueva vigencia
+      const anterior = await tx.parametroLegal.findFirst({
+        where: {
+          clave: campos.clave,
+          regimenLaboralId: campos.regimenLaboralId ?? null,
+          activo: true,
+          vigenteDesde: { lt: campos.vigenteDesde },
+          OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: campos.vigenteDesde } }],
+        },
+        orderBy: { vigenteDesde: 'desc' },
+      });
+      if (anterior) {
+        await tx.parametroLegal.update({
+          where: { id: anterior.id },
+          data: { vigenteHasta: new Date(campos.vigenteDesde.getTime() - MS_DIA), actualizadoPor: data.creadoPor || null },
+        });
+      }
+      return await tx.parametroLegal.create({
+        data: { ...campos, activo: true, creadoPor: data.creadoPor || null },
+        include: incluirRelaciones,
+      });
     });
   } catch (err) {
     manejarError(err, 'crear el parámetro legal');
@@ -165,16 +181,7 @@ const actualizar = async (id, data) => {
   try {
     const existente = await prisma.parametroLegal.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Parámetro legal no encontrado');
-    let campos = camposEditables(data);
-    if (existente.activo) {
-      // Activo = histórico: solo se admite marcar la validación del contador y cerrar la vigencia.
-      // El resto de campos se ignora; para cambiar un valor se crea un parámetro nuevo con otra vigencia.
-      const { validadoPorContador, vigenteHasta } = campos;
-      campos = {
-        ...(validadoPorContador !== undefined && { validadoPorContador }),
-        ...(vigenteHasta !== undefined && { vigenteHasta }),
-      };
-    }
+    const campos = camposEditables(data);
     await validar(campos, id, existente);
     return await prisma.parametroLegal.update({
       where: { id },
@@ -186,60 +193,10 @@ const actualizar = async (id, data) => {
   }
 };
 
-/**
- * Activa un borrador. Cierra el parámetro activo anterior de la misma clave y régimen el día previo a la nueva vigencia.
- * Devuelve advertencias (no bloqueos), por ejemplo si el contador aún no lo validó.
- */
-const activar = async (id, usuarioId = null) => {
-  try {
-    const parametro = await prisma.parametroLegal.findUnique({ where: { id } });
-    if (!parametro) throw new NotFoundError('Parámetro legal no encontrado');
-    if (parametro.activo) throw new ConflictError(`El parámetro ${parametro.clave} ya está activo.`);
-
-    const advertencias = [];
-    if (!parametro.validadoPorContador) {
-      advertencias.push(`El parámetro ${parametro.clave} aún no fue validado por el contador.`);
-    }
-
-    const activado = await prisma.$transaction(async (tx) => {
-      const anterior = await tx.parametroLegal.findFirst({
-        where: {
-          clave: parametro.clave,
-          regimenLaboralId: parametro.regimenLaboralId,
-          activo: true,
-          id: { not: id },
-          vigenteDesde: { lt: parametro.vigenteDesde },
-          OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: parametro.vigenteDesde } }],
-        },
-        orderBy: { vigenteDesde: 'desc' },
-      });
-      if (anterior) {
-        await tx.parametroLegal.update({
-          where: { id: anterior.id },
-          data: { vigenteHasta: new Date(parametro.vigenteDesde.getTime() - MS_DIA), actualizadoPor: usuarioId },
-        });
-      }
-      return await tx.parametroLegal.update({
-        where: { id },
-        data: { activo: true, actualizadoPor: usuarioId },
-        include: incluirRelaciones,
-      });
-    });
-    return { parametro: activado, advertencias };
-  } catch (err) {
-    manejarError(err, 'activar el parámetro legal');
-  }
-};
-
 const eliminar = async (id) => {
   try {
     const existente = await prisma.parametroLegal.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Parámetro legal no encontrado');
-    if (existente.activo) {
-      throw new ConflictError(
-        `El parámetro ${existente.clave} está activo y forma parte del histórico: no se elimina. Cree uno nuevo con otra vigencia.`,
-      );
-    }
     await prisma.parametroLegal.delete({ where: { id } });
     return true;
   } catch (err) {
@@ -247,4 +204,4 @@ const eliminar = async (id) => {
   }
 };
 
-export default { listar, obtenerVigentes, obtenerPorId, crear, actualizar, activar, eliminar };
+export default { listar, obtenerVigentes, obtenerPorId, crear, actualizar, eliminar };
