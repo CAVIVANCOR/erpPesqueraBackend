@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { normalizarTexto } from '../../utils/texto.util.js';
 
 /**
  * Servicio de ConceptoPlanilla (el corazón del módulo): todo ingreso, descuento, aporte o provisión es una fila.
@@ -51,7 +52,7 @@ const aFecha = (valor, etiqueta) => {
 const camposEditables = (data) => {
   const campos = {};
   if (data.codigo !== undefined) campos.codigo = String(data.codigo).trim().toUpperCase();
-  if (data.descripcion !== undefined) campos.descripcion = String(data.descripcion).trim();
+  if (data.descripcion !== undefined) campos.descripcion = normalizarTexto(data.descripcion);
   for (const campo of BOOLEANOS) {
     if (data[campo] !== undefined) campos[campo] = Boolean(data[campo]);
   }

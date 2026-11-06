@@ -4088,9 +4088,102 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     let numeroLinea = 1;
 
     // ========================================
+    // CASO 0: RECIBO POR HONORARIOS (sin IGV, con retención de renta de 4ta si aplica)
+    // El gasto va por su bruto; la deuda con el prestador va a 424101/424102 (Honorarios por pagar) por el neto,
+    // y la retención se acredita a 401721 (Renta de 4ta por pagar) en el mismo registro. El pago al prestador
+    // (DEBE 424101 / HABER banco) ya espera esta cuenta, por eso el registro no puede usar 421201.
+    // ========================================
+    const esHonorarios =
+      Number(ordenCompra.tipoDocumentoFinalId) === Number(TIPO_DOC_ID.RECIBO_HONORARIOS) && !esSaldoInicial && !esNotaCredito;
+
+    if (esHonorarios) {
+      const esSoles = Number(ordenCompra.monedaId) === 1;
+      const [cuentaHonorarios, cuentaRenta4ta] = await Promise.all([
+        prisma.planCuentasContable.findFirst({ where: { codigoCuenta: esSoles ? "424101" : "424102", activo: true } }),
+        prisma.planCuentasContable.findFirst({ where: { codigoCuenta: "401721", activo: true } }),
+      ]);
+      if (!cuentaHonorarios) {
+        throw new ValidationError(`No se encontró la cuenta ${esSoles ? "424101" : "424102"} (Honorarios por pagar). Verifique el plan de cuentas.`);
+      }
+
+      // Retención de 4ta: el monto guardado en la orden, que es el mismo que ya se restó del total de la CxP
+      // (recalcularlo aquí podría dejar el asiento distinto de la deuda)
+      const aplicaRetencion4ta = Boolean(ordenCompra.aplicaImpuestoRenta);
+      const montoRetencionOriginal = aplicaRetencion4ta ? Number(ordenCompra.montoImpuestoRenta || 0) : 0;
+      if (aplicaRetencion4ta && montoRetencionOriginal > 0 && !cuentaRenta4ta) {
+        throw new ValidationError("No se encontró la cuenta 401721 (Renta de 4ta categoría) para registrar la retención del recibo por honorarios.");
+      }
+
+      for (const detalle of ordenCompra.detalles) {
+        const { cuenta, usaFallback, mensaje } = await buscarCuentaCompras(detalle.producto);
+        if (usaFallback && mensaje) warnings.push(mensaje);
+
+        const subtotalDetalle = Number(detalle.subtotal);
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuenta.id,
+          glosa: `Honorarios ${detalle.producto.descripcionBase} - ${referenciaDoc}`,
+          debe: convertirMontoASoles(subtotalDetalle, ordenCompra),
+          haber: 0,
+          monedaId: 1,
+          tipoCambio: ordenCompra.tipoCambio,
+          debeMonedaExtranjera: subtotalDetalle,
+          haberMonedaExtranjera: 0,
+          centroCostoId: detalle.centroCostoId || ordenCompra.centroCostoId,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+        });
+      }
+
+      // Retención en soles; el neto es lo que falta para cuadrar el Debe (evita descuadres por redondeo)
+      const totalDebeGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
+      const retencionSoles = Math.min(convertirMontoASoles(montoRetencionOriginal, ordenCompra), totalDebeGenerado);
+      const netoSoles = Math.round((totalDebeGenerado - retencionSoles) * 100) / 100;
+      const subtotalOriginalTotal = ordenCompra.detalles.reduce((sum, d) => sum + Number(d.subtotal), 0);
+
+      borrador.detalles.push({
+        numeroLinea: numeroLinea++,
+        planCuentaId: cuentaHonorarios.id,
+        glosa: `Honorarios por pagar según ${referenciaDoc}`,
+        debe: 0,
+        haber: netoSoles,
+        monedaId: 1,
+        tipoCambio: ordenCompra.tipoCambio,
+        debeMonedaExtranjera: 0,
+        haberMonedaExtranjera: Math.round((subtotalOriginalTotal - montoRetencionOriginal) * 100) / 100,
+        entidadComercialId: ordenCompra.proveedorId,
+        tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+        numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+        fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+      });
+
+      if (retencionSoles > 0) {
+        borrador.detalles.push({
+          numeroLinea: numeroLinea++,
+          planCuentaId: cuentaRenta4ta.id,
+          glosa: `Retención renta 4ta categoría (${Number(ordenCompra.porcentajeImpuestoRenta || 0)}%) según ${referenciaDoc}`,
+          debe: 0,
+          haber: retencionSoles,
+          monedaId: 1,
+          tipoCambio: ordenCompra.tipoCambio,
+          debeMonedaExtranjera: 0,
+          haberMonedaExtranjera: montoRetencionOriginal,
+          entidadComercialId: ordenCompra.proveedorId,
+          tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+          numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+          fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+        });
+      }
+
+      // En moneda original el Haber suma deuda neta + retención, igual que el Debe
+      borrador.totalHaber = borrador.totalDebe;
+    }
+    // ========================================
     // CASO 1: GERENCIAL (sin IGV)
     // ========================================
-    if (ordenCompra.esGerencial) {
+    else if (ordenCompra.esGerencial) {
       if (esSaldoInicial && cuentaDebe) {
         // SALDO INICIAL: DEBE 591101, HABER 421201/421202
         const montoConvertido = convertirMontoASoles(total, ordenCompra);

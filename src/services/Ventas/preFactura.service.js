@@ -923,7 +923,10 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma, descuentoNot
     const totalIGV = esExonerado ? 0 : subtotal * (porcentajeIGV / 100);
 
     // PASO 3: CALCULAR IMPUESTO A LA RENTA
-    const aplicaImpuestoRenta = preFactura.aplicaImpuestoRenta || false;
+    // Ninguna empresa del grupo emite recibos por honorarios (solo personas naturales con RUC 10), así que en
+    // ventas no existe retención de renta de 4ta: si llegara activada, el total quedaría menor que las ventas
+    // y el asiento descuadrado. Por eso nunca se aplica.
+    const aplicaImpuestoRenta = false;
     const porcentajeImpuestoRenta = Number(preFactura.porcentajeImpuestoRenta || 0);
     const montoImpuestoRenta = aplicaImpuestoRenta
       ? subtotal * (porcentajeImpuestoRenta / 100)

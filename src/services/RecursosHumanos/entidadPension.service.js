@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { normalizarTexto } from '../../utils/texto.util.js';
 
 /**
  * Servicio CRUD de EntidadPension (AFP u ONP).
@@ -25,7 +26,7 @@ const aIdOpcional = (valor) => (valor === null || valor === '' || valor === unde
 
 const camposEditables = (data) => {
   const campos = {};
-  if (data.descripcion !== undefined) campos.descripcion = String(data.descripcion).trim();
+  if (data.descripcion !== undefined) campos.descripcion = normalizarTexto(data.descripcion);
   if (data.esOnp !== undefined) campos.esOnp = Boolean(data.esOnp);
   if (data.entidadComercialId !== undefined) campos.entidadComercialId = aIdOpcional(data.entidadComercialId);
   if (data.cuentaPasivoEmpleadoId !== undefined) campos.cuentaPasivoEmpleadoId = aIdOpcional(data.cuentaPasivoEmpleadoId);

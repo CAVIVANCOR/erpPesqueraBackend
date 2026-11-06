@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { normalizarTexto } from '../../utils/texto.util.js';
 
 /**
  * Servicio CRUD de RegimenLaboral (General 01, Microempresa 16, Pequeña empresa 17).
@@ -18,7 +19,7 @@ const manejarError = (err, contexto) => {
 const camposEditables = (data) => {
   const campos = {};
   if (data.codigoSunat !== undefined) campos.codigoSunat = String(data.codigoSunat).trim();
-  if (data.descripcion !== undefined) campos.descripcion = String(data.descripcion).trim();
+  if (data.descripcion !== undefined) campos.descripcion = normalizarTexto(data.descripcion);
   if (data.requiereRemype !== undefined) campos.requiereRemype = Boolean(data.requiereRemype);
   if (data.activo !== undefined) campos.activo = Boolean(data.activo);
   return campos;

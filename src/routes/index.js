@@ -273,7 +273,8 @@ import tarifaEntidadPensionRoutes from './RecursosHumanos/tarifaEntidadPension.r
 import parametroLegalRoutes from './RecursosHumanos/parametroLegal.routes.js';
 import contratoPersonalRoutes from './RecursosHumanos/contratoPersonal.routes.js';
 import conceptoPlanillaRoutes from './RecursosHumanos/conceptoPlanilla.routes.js';
-import plantillaFormatoExternoRoutes from './RecursosHumanos/plantillaFormatoExterno.routes.js';
+import planillaRoutes from './RecursosHumanos/planilla.routes.js';
+import plame4taRoutes from './RecursosHumanos/plame4ta.routes.js';
 import deudaConPersonalRoutes from './Tesoreria/deudaConPersonal.routes.js';
 import pagoDeudaPersonalRoutes from './Tesoreria/pagoDeudaPersonal.routes.js';
 import tipoDeudaTributariaRoutes from './Tesoreria/tipoDeudaTributaria.routes.js';
@@ -760,7 +761,8 @@ router.use('/recursos-humanos/tarifas-entidad-pension', tarifaEntidadPensionRout
 router.use('/recursos-humanos/parametros-legales', parametroLegalRoutes);
 router.use('/recursos-humanos/contratos-personal', contratoPersonalRoutes);
 router.use('/recursos-humanos/conceptos-planilla', conceptoPlanillaRoutes);
-router.use('/recursos-humanos/plantillas-formato-externo', plantillaFormatoExternoRoutes);
+router.use('/recursos-humanos/planillas', planillaRoutes);
+router.use('/recursos-humanos/plame-4ta', plame4taRoutes);
 router.use('/tesoreria/tipo-detraccion', tipoDetraccionRoutes);
 
 // ========================================

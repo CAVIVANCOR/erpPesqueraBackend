@@ -11,6 +11,7 @@ import {
 } from "../../utils/errors.js";
 import { puedeEditarRegistroCerrado } from "../../utils/checkSuperUsuario.js";
 import { validarTipoCambio } from '../../utils/tipoCambio.util.js';
+import { TIPO_DOC_ID } from '../../utils/tiposDocumento.constants.js';
 
 /**
  * Servicio CRUD para DetMovsEntregaRendir
@@ -1640,7 +1641,6 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
     where: { id: detMov.empresaId },
     select: {
       porcentajeIgv: true,
-      porcentajeImpuestoRenta: true,
     },
   });
 
@@ -1649,10 +1649,9 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
   }
 
   const porcentajeIGV = Number(empresa.porcentajeIgv || 18);
-  const porcentajeRenta = Number(empresa.porcentajeImpuestoRenta || 8);
 
-  // Determinar si es Recibo por Honorarios (ajustar ID según tu BD)
-  const esReciboHonorarios = Number(detMov.tipoDocumentoId) === 12;
+  // Recibo por Honorarios: id 3 del catálogo (el 12 es Comprobante de Retención)
+  const esReciboHonorarios = Number(detMov.tipoDocumentoId) === Number(TIPO_DOC_ID.RECIBO_HONORARIOS);
 
   // El monto del gasto YA INCLUYE impuestos, debemos desagregar
   const montoTotal = Number(detMov.monto);
@@ -1668,8 +1667,9 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
     total = montoTotal;
     porcentajeIGVAplicado = 0;
   } else if (esReciboHonorarios) {
-    // Recibo por Honorarios: desagregar retención de renta, sin IGV
-    subtotal = montoTotal / (1 + porcentajeRenta / 100);
+    // Recibo por Honorarios: el usuario escribe el total del recibo y no se desagrega nada.
+    // Los montos de rendición no superan el mínimo de retención de 4ta, por eso aquí no se retiene.
+    subtotal = montoTotal;
     igv = 0; // Honorarios no tienen IGV
     total = montoTotal;
     porcentajeIGVAplicado = 0;

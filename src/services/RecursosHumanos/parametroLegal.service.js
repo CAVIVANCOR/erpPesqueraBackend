@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { normalizarTexto } from '../../utils/texto.util.js';
 
 /**
  * Servicio de ParametroLegal: parámetros legales (UIT, RMV, % EsSalud...) y reglas por régimen
@@ -37,7 +38,7 @@ const camposEditables = (data) => {
   const campos = {};
   if (data.regimenLaboralId !== undefined) campos.regimenLaboralId = aIdOpcional(data.regimenLaboralId);
   if (data.clave !== undefined) campos.clave = String(data.clave).trim().toUpperCase();
-  if (data.descripcion !== undefined) campos.descripcion = String(data.descripcion).trim();
+  if (data.descripcion !== undefined) campos.descripcion = normalizarTexto(data.descripcion);
   if (data.valor !== undefined && data.valor !== null && data.valor !== '') campos.valor = Number(data.valor);
   if (data.vigenteDesde !== undefined) campos.vigenteDesde = aFecha(data.vigenteDesde, 'La fecha de inicio de vigencia');
   if (data.vigenteHasta !== undefined) {
