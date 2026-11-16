@@ -47,13 +47,6 @@ router.post(
   entidadComercialController.crear
 );
 
-router.post(
-  '/clonar-a-empresas',
-  autenticarJWT,
-  checkPermission('entidadComercial', 'crear'),
-  entidadComercialController.clonarAEmpresasSeleccionadas
-);
-
 router.put(
   '/:id',
   autenticarJWT,

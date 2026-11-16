@@ -1,8 +1,10 @@
 import comprobanteElectronicoService from '../../services/FacturacionElectronica/comprobanteElectronico.service.js';
 import factproService from '../../services/FacturacionElectronica/factpro.service.js';
+import preFacturaService from '../../services/Ventas/preFactura.service.js';
 import { NotFoundError, ConflictError, ValidationError } from '../../utils/errors.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
 import prisma from '../../config/prismaClient.js';
+import { ESTADO_PREFACTURA } from '../../utils/estados.constants.js';
 
 export async function listar(req, res, next) {
   try {
@@ -65,6 +67,30 @@ export async function listarPorCliente(req, res, next) {
 
 /**
  * ========================================
+ * BIFURCACIÓN DE COMPROBANTES ELECTRÓNICOS DE VENTA (leer antes de tocar este flujo)
+ * ========================================
+ * El ERP convive con dos orígenes de comprobantes. Se distinguen por un solo hecho: si la venta tiene o no una fila en
+ * ComprobanteElectronico (no hay un campo "origen").
+ *
+ * FLUJO A — HISTÓRICOS: comprobantes ya emitidos por el portal de SUNAT con Clave SOL (todo lo facturado antes de Factpro).
+ *   - La venta guarda a mano tipo, serie y correlativo del documento final (PreFactura.numSerieDocFinal / numCorreDocFinal).
+ *   - NO tiene ComprobanteElectronico y el ERP NO emite nada: solo conserva el PDF, subido a mano o descargado de SUNAT (json.pe).
+ *   - No se debe generar comprobante en Factpro para ellos: crearía un segundo documento ante SUNAT. Si el usuario lo intenta
+ *     (venta con correlativo propio), la pantalla se lo advierte y deja que decida.
+ *
+ * FLUJO B — NUEVOS: comprobantes emitidos por Factpro desde que se adoptó.
+ *   1. generarComprobanteElectronico (preFactura.service): crea el ComprobanteElectronico con el tipo y la serie deducidos del
+ *      tipo de documento final y SIN correlativo (provisional); la venta pasa a COMPROBANTE GENERADO (97).
+ *   2. enviarASunat (aquí): emite en Factpro con numero "#"; Factpro asigna el correlativo, que se graba en el comprobante y en
+ *      el documento final de la venta (serie, correlativo, número completo).
+ *   3. Cuando SUNAT acepta, la venta pasa a VALIDADO SUNAT (98) y el PDF de Factpro se copia al ERP (urlPreFacturaPdf).
+ *   XML y CDR no se guardan: se descargan a demanda por GET /pre-facturas/factpro-archivo/:id/:tipo.
+ *
+ * Ambos flujos muestran el PDF con el mismo componente (PdfComprobanteVentaCard, módulo "pre-factura"); lo que cambia es
+ * de dónde sale el PDF y si hay comprobante en el ERP.
+ */
+/**
+ * ========================================
  * CONTROLADORES DE INTEGRACIÓN CON EL PROVEEDOR DE FACTURACIÓN ELECTRÓNICA (Factpro)
  * ========================================
  */
@@ -115,6 +141,25 @@ const registrarEnvio = async ({ comprobanteId, tipoAccion, payload, crudo, resul
   });
 };
 
+// Solo avanza ventas que están en COMPROBANTE ELECTRÓNICO GENERADO; no pisa ningún otro estado
+const marcarVentaValidadaSunat = (preFacturaId) =>
+  prisma.preFactura.updateMany({
+    where: { id: preFacturaId, estadoId: ESTADO_PREFACTURA.COMPROBANTE_ELECTRONICO_GENERADO },
+    data: { estadoId: ESTADO_PREFACTURA.VALIDADO_SUNAT },
+  });
+
+// FLUJO B: al aceptarse el comprobante se copia su PDF al ERP. Un fallo aquí NO revierte nada (la emisión ya es válida ante
+// SUNAT): se devuelve una advertencia para que el usuario reintente con "Obtener de Factpro".
+const copiarPdfFactproALaVenta = async (preFacturaId, resultado) => {
+  if (!resultado.aceptadoPorSunat || !resultado.enlacePDF) return null;
+  try {
+    await preFacturaService.guardarPdfFactproEnVenta(preFacturaId, resultado.enlacePDF);
+    return null;
+  } catch (error) {
+    console.error('No se pudo guardar la copia del PDF de Factpro:', error.message);
+    return `El comprobante fue aceptado, pero no se pudo guardar la copia del PDF en el ERP: ${error.message} Use "Obtener de Factpro" para reintentarlo.`;
+  }
+};
 // Campos del comprobante que se actualizan con la respuesta del proveedor
 const camposDeRespuesta = (resultado) => ({
   aceptadoPorSunat: resultado.aceptadoPorSunat,
@@ -159,13 +204,45 @@ export async function enviarASunat(req, res, next) {
     }
 
     await registrarEnvio({ comprobanteId: id, tipoAccion: 'EMISION', payload: documento, crudo: emision.crudo, resultado: emision.resultado });
-    const actualizado = await prisma.comprobanteElectronico.update({
-      where: { id },
-      data: { ...camposDeRespuesta(emision.resultado), fechaEnvioOSE: new Date() },
-    });
+
+    // Factpro asigna el correlativo cuando el comprobante se envía sin número: se guarda en el comprobante y en el documento final de la venta
+    const { serieEmitida, correlativoEmitido } = emision.resultado;
+    const numeroPendiente = !(Number(comprobante.numeroCorrelativo) > 0);
+    const datosNumeracion = serieEmitida && correlativoEmitido
+      ? {
+          numeroSerie: serieEmitida,
+          numeroCorrelativo: correlativoEmitido,
+          numeroCompleto: `${serieEmitida}-${String(correlativoEmitido).padStart(8, '0')}`,
+        }
+      : {};
+    const [actualizado] = await prisma.$transaction([
+      prisma.comprobanteElectronico.update({
+        where: { id },
+        data: { ...datosNumeracion, ...camposDeRespuesta(emision.resultado), fechaEnvioOSE: new Date() },
+      }),
+      ...(datosNumeracion.numeroCompleto
+        ? [prisma.preFactura.update({
+            where: { id: comprobante.preFacturaId },
+            data: {
+              numSerieDocFinal: datosNumeracion.numeroSerie,
+              numCorreDocFinal: String(datosNumeracion.numeroCorrelativo).padStart(8, '0'),
+              numeroDocumentoFinal: datosNumeracion.numeroCompleto,
+              facturado: true,
+            },
+          })]
+        : []),
+      // SUNAT aceptó el comprobante: la venta pasa de COMPROBANTE ELECTRÓNICO GENERADO (97) a VALIDADO SUNAT (98)
+      ...(emision.resultado.aceptadoPorSunat ? [marcarVentaValidadaSunat(comprobante.preFacturaId)] : []),
+    ]);
+    if (numeroPendiente && !datosNumeracion.numeroCompleto) {
+      throw new ConflictError('Factpro registró el comprobante pero no devolvió su número (serie y correlativo). Consulte el estado del comprobante para completar el documento final de la venta.');
+    }
+
+    const advertencia = await copiarPdfFactproALaVenta(comprobante.preFacturaId, emision.resultado);
 
     res.json(toJSONBigInt({
       success: true,
+      advertencia,
       mensaje: emision.resultado.aceptadoPorSunat
         ? 'Comprobante aceptado por SUNAT'
         : `Comprobante registrado y enviado. Estado: ${emision.resultado.descripcionEstado || 'pendiente de respuesta'}. Consulte el estado en unos momentos.`,
@@ -197,10 +274,13 @@ export async function consultarEnSunat(req, res, next) {
 
     await registrarEnvio({ comprobanteId: id, tipoAccion: 'CONSULTA', payload, crudo: consulta.crudo, resultado: consulta.resultado });
     const actualizado = await prisma.comprobanteElectronico.update({ where: { id }, data: camposDeRespuesta(consulta.resultado) });
+    if (consulta.resultado.aceptadoPorSunat) await marcarVentaValidadaSunat(comprobante.preFacturaId);
+    const advertencia = await copiarPdfFactproALaVenta(comprobante.preFacturaId, consulta.resultado);
 
     res.json(toJSONBigInt({
       success: true,
       comprobante: actualizado,
+      advertencia,
       estadoSunat: consulta.resultado,
     }));
   } catch (err) {

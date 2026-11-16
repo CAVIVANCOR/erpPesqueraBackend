@@ -86,81 +86,156 @@ async function validarForaneas(data) {
   }
 }
 
-const listar = async () => {
+// Forma completa de una orden de compra (histórica). Es la que reciben los reportes y la lista sin filtros.
+const INCLUDE_ORDEN_COMPLETO = {
+  empresa: true,
+  centroCosto: {
+    include: {
+      categoria: true
+    }
+  },
+  tipoDocumento: true,
+  serieDoc: true,
+  requerimientoCompra: true,
+  proveedor: {
+    include: {
+      tipoDocumento: true
+    }
+  },
+  formaPago: true,
+  moneda: true,
+  estado: true,
+  periodoContable: true,
+  tipoDocumentoFinal: true,
+  ordenCompraOrigen: true,
+  unidadNegocio: true,
+  submoduloOrigen: true,
+  motivoNotaCreditoDebito: true,
+  tipoOperacionSunat: true,
+  tipoDetraccion: true,
+  dcmtoAfectoNCND: {
+    include: {
+      tipoDocumentoFinal: true
+    }
+  },
+  // ⭐ AGREGADO: Incluir activo afecto con tipo para trazabilidad de gastos
+  // Permite identificar a qué activo pertenece el gasto de esta orden de compra
+  activoAfecto: {
+    include: {
+      tipo: true
+    }
+  },
+  detalles: {
+    include: {
+      producto: {
+        include: {
+          unidadMedida: true
+        }
+      },
+      tipoAfectacionIGV: true,
+      tipoDetraccion: true
+    },
+  },
+};
+
+// Forma liviana de la lista de compras: todas las columnas propias de la OrdenCompra, pero de cada relación solo lo
+// que la pantalla muestra o usa en sus filtros. El resto se carga por id al abrir un documento o al exportar.
+const INCLUDE_ORDEN_LISTA = {
+  empresa: { select: { id: true, razonSocial: true } },
+  centroCosto: {
+    select: {
+      id: true,
+      Codigo: true,
+      Nombre: true,
+      Descripcion: true,
+      ParentCentroID: true,
+      categoria: { select: { id: true, nombre: true } },
+    },
+  },
+  tipoDocumento: { select: { id: true, codigo: true, descripcion: true } },
+  requerimientoCompra: { select: { id: true, numeroDocumento: true } },
+  proveedor: { select: { id: true, razonSocial: true, numeroDocumento: true } },
+  moneda: { select: { id: true, codigoSunat: true, simbolo: true, colorFondo: true } },
+  estado: { select: { id: true, descripcion: true } },
+  tipoDocumentoFinal: { select: { id: true, codigo: true, codigoSunat: true, descripcion: true } },
+  submoduloOrigen: { select: { id: true, nombre: true, nombreModeloOrigen: true } },
+  activoAfecto: { select: { id: true, nombre: true, tipo: { select: { id: true, nombre: true } } } },
+  detalles: {
+    select: {
+      id: true,
+      tipoAfectacionIGVId: true,
+      tipoAfectacionIGV: { select: { id: true, codigo: true, nombre: true } },
+      producto: { select: { id: true, descripcionArmada: true } },
+    },
+  },
+};
+
+// Agrega montos en PEN para reportes SUNAT.
+// El TC aplicado sigue la regla centralizada en obtenerTipoCambioEfectivo():
+// NC/ND usan el TC del documento afectado; FAC/BV el propio. Se expone
+// `tipoCambioAplicado` para que Excel/PDF muestren el mismo TC con el que se convirtió.
+const agregarMontosPEN = (ordenes) =>
+  ordenes.map((oc) => {
+    const { tc } = obtenerTipoCambioEfectivo(oc);
+    return {
+      ...oc,
+      tipoCambioAplicado: tc,
+      subtotalPEN: Number(oc.subtotal || 0) * tc,
+      totalIGVPEN: Number(oc.totalIGV || 0) * tc,
+      totalPEN: Number(oc.total || 0) * tc,
+      totalDescuentosPEN: Number(oc.totalDescuentos || 0) * tc,
+      montoDetraccionPEN: Number(oc.montoDetraccion || 0) * tc,
+      montoImpuestoRentaPEN: Number(oc.montoImpuestoRenta || 0) * tc
+    };
+  });
+
+const parsearFechaFiltro = (valor, etiqueta) => {
+  const fecha = new Date(valor);
+  if (Number.isNaN(fecha.getTime())) throw new ValidationError(`${etiqueta} no es una fecha válida.`);
+  return fecha;
+};
+
+// Filtro de tipo de libro (mismo criterio que la pantalla): fiscal = esGerencial false; los saldos iniciales se
+// reconocen por el código "SI*" o la descripción "SALDO INICIAL" del tipo de documento interno.
+const filtroTipoLibroLista = (tipoLibro) => {
+  const esSaldoInicial = {
+    OR: [
+      { codigo: { startsWith: "SI" } },
+      { codigo: { contains: "SI-" } },
+      { descripcion: { contains: "SALDO INICIAL", mode: "insensitive" } },
+    ],
+  };
+  if (tipoLibro === "FISCAL_SSI") return { esGerencial: false, NOT: { tipoDocumento: esSaldoInicial } };
+  if (tipoLibro === "FISCAL_CSI") return { esGerencial: false };
+  if (tipoLibro === "GERENCIAL") return { esGerencial: true };
+  return {};
+};
+
+/**
+ * Lista de órdenes de compra. Sin filtros devuelve la forma histórica completa (compatibilidad). Con filtros (empresa,
+ * rango de fechaDocumento y/o tipo de libro) filtra en la base de datos y devuelve la forma liviana, sin tope de rango.
+ */
+const listar = async (filtros = {}) => {
   try {
+    const { empresaId, desde, hasta, tipoLibro } = filtros;
+    const filtrada = Boolean(empresaId || desde || hasta || tipoLibro);
+
+    const where = { ...(filtrada ? filtroTipoLibroLista(tipoLibro) : {}) };
+    if (empresaId) where.empresaId = Number(empresaId);
+    if (desde || hasta) {
+      where.fechaDocumento = {
+        ...(desde ? { gte: parsearFechaFiltro(desde, "La fecha desde") } : {}),
+        ...(hasta ? { lte: parsearFechaFiltro(hasta, "La fecha hasta") } : {}),
+      };
+    }
+
     const ordenes = await prisma.ordenCompra.findMany({
-      include: {
-        empresa: true,
-        centroCosto: {
-          include: {
-            categoria: true
-          }
-        },
-        tipoDocumento: true,
-        serieDoc: true,
-        requerimientoCompra: true,
-        proveedor: {
-          include: {
-            tipoDocumento: true
-          }
-        },
-        formaPago: true,
-        moneda: true,
-        estado: true,
-        periodoContable: true,
-        tipoDocumentoFinal: true,
-        ordenCompraOrigen: true,
-        unidadNegocio: true,
-        submoduloOrigen: true,
-        motivoNotaCreditoDebito: true,
-        tipoOperacionSunat: true,
-        tipoDetraccion: true,
-        dcmtoAfectoNCND: {
-          include: {
-            tipoDocumentoFinal: true
-          }
-        },
-        // ⭐ AGREGADO: Incluir activo afecto con tipo para trazabilidad de gastos
-        // Permite identificar a qué activo pertenece el gasto de esta orden de compra
-        activoAfecto: {
-          include: {
-            tipo: true
-          }
-        },
-        detalles: {
-          include: {
-            producto: {
-              include: {
-                unidadMedida: true
-              }
-            },
-            tipoAfectacionIGV: true,
-            tipoDetraccion: true
-          },
-        },
-      },
-      orderBy: {
-        fechaDocumento: "desc",
-      },
+      where,
+      include: filtrada ? INCLUDE_ORDEN_LISTA : INCLUDE_ORDEN_COMPLETO,
+      orderBy: { fechaDocumento: "desc" },
     });
 
-    // Agregar montos en PEN para reportes SUNAT.
-    // El TC aplicado sigue la regla centralizada en obtenerTipoCambioEfectivo():
-    // NC/ND usan el TC del documento afectado; FAC/BV el propio. Se expone
-    // `tipoCambioAplicado` para que Excel/PDF muestren el mismo TC con el que se convirtió.
-    return ordenes.map(oc => {
-      const { tc } = obtenerTipoCambioEfectivo(oc);
-      return {
-        ...oc,
-        tipoCambioAplicado: tc,
-        subtotalPEN: Number(oc.subtotal || 0) * tc,
-        totalIGVPEN: Number(oc.totalIGV || 0) * tc,
-        totalPEN: Number(oc.total || 0) * tc,
-        totalDescuentosPEN: Number(oc.totalDescuentos || 0) * tc,
-        montoDetraccionPEN: Number(oc.montoDetraccion || 0) * tc,
-        montoImpuestoRentaPEN: Number(oc.montoImpuestoRenta || 0) * tc
-      };
-    });
+    return filtrada ? ordenes : agregarMontosPEN(ordenes);
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -168,6 +243,26 @@ const listar = async () => {
   }
 };
 
+/**
+ * Detalle completo (forma histórica con montos en PEN) de las órdenes indicadas. Lo usan los reportes de la
+ * pantalla: la lista es liviana y el detalle viaja solo para los documentos que se exportan.
+ */
+const listarDetalleExportacion = async (ids) => {
+  try {
+    const lista = [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter(Boolean))];
+    if (lista.length === 0) throw new ValidationError("Indique los documentos a exportar.");
+    const ordenes = await prisma.ordenCompra.findMany({
+      where: { id: { in: lista } },
+      include: INCLUDE_ORDEN_COMPLETO,
+      orderBy: { fechaDocumento: "desc" },
+    });
+    return agregarMontosPEN(ordenes);
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
 /**
  * Obtener todas las órdenes de compra con filtros personalizados
  * @param {Object} where - Condiciones de filtrado Prisma
@@ -5811,6 +5906,7 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
 
 export default {
   listar,
+  listarDetalleExportacion,
   obtenerPorId,
   crear,
   actualizar,

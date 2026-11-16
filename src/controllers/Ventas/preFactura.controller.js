@@ -9,7 +9,21 @@ import { ValidationError } from '../../utils/errors.js';
  */
 export async function listar(req, res, next) {
   try {
-    const pfs = await preFacturaService.listar();
+    const { empresaId, desde, hasta, tipoLibro } = req.query;
+    const pfs = await preFacturaService.listar({ empresaId, desde, hasta, tipoLibro });
+    res.json(toJSONBigInt(pfs));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Detalle completo de las ventas indicadas, para exportar a Excel/PDF.
+ * POST /api/pre-facturas/detalle-exportacion  { ids: [...] }
+ */
+export async function listarDetalleExportacion(req, res, next) {
+  try {
+    const pfs = await preFacturaService.listarDetalleExportacion(req.body?.ids);
     res.json(toJSONBigInt(pfs));
   } catch (err) {
     next(err);
@@ -115,6 +129,30 @@ export async function reactivarDocumento(req, res, next) {
 }
 
 /**
+ * Obtener desde Factpro el PDF del documento final de la venta
+ */
+export async function obtenerPdfDesdeFactpro(req, res, next) {
+  try {
+    const resultado = await preFacturaService.obtenerPdfDesdeFactpro(Number(req.params.id));
+    res.status(200).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Entrega el PDF, XML o CDR de Factpro a través del servidor (el navegador no accede directo a Factpro)
+ */
+export async function descargarArchivoFactpro(req, res, next) {
+  try {
+    const { buffer, contentType } = await preFacturaService.obtenerArchivoFactpro(Number(req.params.id), req.params.tipo);
+    res.setHeader('Content-Type', contentType);
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+}
+/**
  * Generar Comprobante Electrónico desde PreFactura EMITIDA
  */
 export async function generarComprobanteElectronico(req, res, next) {
@@ -122,10 +160,10 @@ export async function generarComprobanteElectronico(req, res, next) {
     const { id } = req.params;
     const comprobanteElectronico = await preFacturaService.generarComprobanteElectronico(Number(id));
 
-    res.status(200).json({
+    res.status(200).json(toJSONBigInt({
       message: 'Comprobante Electrónico generado exitosamente',
       data: comprobanteElectronico,
-    });
+    }));
   } catch (err) {
     next(err);
   }

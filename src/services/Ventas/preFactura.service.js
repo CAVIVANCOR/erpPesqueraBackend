@@ -1,4 +1,6 @@
 import prisma from "../../config/prismaClient.js";
+import factproService from "../FacturacionElectronica/factpro.service.js";
+import pdfService from "../pdf/pdfService.js";
 import {
   NotFoundError,
   DatabaseError,
@@ -184,10 +186,8 @@ const adjuntarMovimientosSalida = async (preFacturas) => {
   }
 };
 
-const listar = async () => {
-  try {
-    const preFacturas = await prisma.preFactura.findMany({
-      include: {
+// Forma histórica (completa): todas las relaciones. La usan los reportes que necesitan cada campo.
+const INCLUDE_PREFACTURA_COMPLETO = {
         empresa: true,
         tipoDocumento: true,
         serieDoc: true,
@@ -236,29 +236,88 @@ const listar = async () => {
             tipoDetraccion: true
           },
         },
-      },
+};
+
+// Forma liviana de la lista de ventas: todas las columnas propias de la PreFactura, pero de cada relación solo lo
+// que la pantalla muestra o usa en sus filtros. El resto se carga por id al abrir un documento o al exportar.
+const INCLUDE_PREFACTURA_LISTA = {
+  empresa: { select: { id: true, razonSocial: true, entidadComercialId: true } },
+  cliente: { select: { id: true, razonSocial: true, numeroDocumento: true } },
+  moneda: { select: { id: true, codigoSunat: true, simbolo: true, colorFondo: true } },
+  tipoDocumentoFinal: { select: { id: true, codigo: true, codigoSunat: true, descripcion: true } },
+  tipoOperacionSunat: { select: { id: true, codigo: true, descripcion: true } },
+  tipoAfectacionIGV: { select: { id: true, codigo: true, nombre: true } },
+  detalles: { select: { id: true, producto: { select: { id: true, descripcionArmada: true } } } },
+};
+
+// Agrega montos en PEN para reportes SUNAT.
+// El TC aplicado sigue la regla centralizada en obtenerTipoCambioEfectivo():
+// NC/ND usan el TC del documento afectado; FAC/BV el propio. Se expone
+// `tipoCambioAplicado` para que Excel/PDF muestren el mismo TC con el que se convirtió.
+const agregarMontosPEN = (preFacturas) =>
+  preFacturas.map((pf) => {
+    const { tc } = obtenerTipoCambioEfectivo(pf);
+    return {
+      ...pf,
+      tipoCambioAplicado: tc,
+      subtotalPEN: Number(pf.subtotal || 0) * tc,
+      totalIGVPEN: Number(pf.totalIGV || 0) * tc,
+      totalPEN: Number(pf.total || 0) * tc,
+      totalDescuentosPEN: Number(pf.totalDescuentos || 0) * tc,
+      montoDetraccionPEN: Number(pf.montoDetraccion || 0) * tc,
+      montoImpuestoRentaPEN: Number(pf.montoImpuestoRenta || 0) * tc,
+    };
+  });
+
+const parsearFechaFiltro = (valor, etiqueta) => {
+  const fecha = new Date(valor);
+  if (Number.isNaN(fecha.getTime())) throw new ValidationError(`${etiqueta} no es una fecha válida.`);
+  return fecha;
+};
+
+// Filtro de tipo de libro (mismo criterio que la pantalla): fiscal = esGerencial false; los saldos iniciales se
+// reconocen por el código "SI*" o la descripción "SALDO INICIAL" del tipo de documento interno.
+const filtroTipoLibroLista = (tipoLibro) => {
+  const esSaldoInicial = {
+    OR: [
+      { codigo: { startsWith: "SI" } },
+      { codigo: { contains: "SI-" } },
+      { descripcion: { contains: "SALDO INICIAL", mode: "insensitive" } },
+    ],
+  };
+  if (tipoLibro === "FISCAL_SSI") return { esGerencial: false, NOT: { tipoDocumento: esSaldoInicial } };
+  if (tipoLibro === "FISCAL_CSI") return { esGerencial: false };
+  if (tipoLibro === "GERENCIAL") return { esGerencial: true };
+  return {};
+};
+
+/**
+ * Lista de ventas. Sin filtros devuelve la forma histórica completa (compatibilidad). Con filtros (empresa, rango de
+ * fechaDocumento y/o tipo de libro) filtra en la base de datos y devuelve la forma liviana, sin tope de rango.
+ */
+const listar = async (filtros = {}) => {
+  try {
+    const { empresaId, desde, hasta, tipoLibro } = filtros;
+    const filtrada = Boolean(empresaId || desde || hasta || tipoLibro);
+
+    const where = { ...(filtrada ? filtroTipoLibroLista(tipoLibro) : {}) };
+    if (empresaId) where.empresaId = Number(empresaId);
+    if (desde || hasta) {
+      where.fechaDocumento = {
+        ...(desde ? { gte: parsearFechaFiltro(desde, "La fecha desde") } : {}),
+        ...(hasta ? { lte: parsearFechaFiltro(hasta, "La fecha hasta") } : {}),
+      };
+    }
+
+    const preFacturas = await prisma.preFactura.findMany({
+      where,
+      include: filtrada ? INCLUDE_PREFACTURA_LISTA : INCLUDE_PREFACTURA_COMPLETO,
       orderBy: { fechaDocumento: "desc" },
     });
 
     await adjuntarMovimientosSalida(preFacturas);
 
-    // Agregar montos en PEN para reportes SUNAT.
-    // El TC aplicado sigue la regla centralizada en obtenerTipoCambioEfectivo():
-    // NC/ND usan el TC del documento afectado; FAC/BV el propio. Se expone
-    // `tipoCambioAplicado` para que Excel/PDF muestren el mismo TC con el que se convirtió.
-    return preFacturas.map(pf => {
-      const { tc } = obtenerTipoCambioEfectivo(pf);
-      return {
-        ...pf,
-        tipoCambioAplicado: tc,
-        subtotalPEN: Number(pf.subtotal || 0) * tc,
-        totalIGVPEN: Number(pf.totalIGV || 0) * tc,
-        totalPEN: Number(pf.total || 0) * tc,
-        totalDescuentosPEN: Number(pf.totalDescuentos || 0) * tc,
-        montoDetraccionPEN: Number(pf.montoDetraccion || 0) * tc,
-        montoImpuestoRentaPEN: Number(pf.montoImpuestoRenta || 0) * tc
-      };
-    });
+    return filtrada ? preFacturas : agregarMontosPEN(preFacturas);
   } catch (err) {
     if (err.code && err.code.startsWith("P"))
       throw new DatabaseError("Error de base de datos", err.message);
@@ -266,6 +325,27 @@ const listar = async () => {
   }
 };
 
+/**
+ * Detalle completo (forma histórica con montos en PEN) de las ventas indicadas. Lo usan los reportes de la
+ * pantalla: la lista es liviana y el detalle viaja solo para los documentos que se exportan.
+ */
+const listarDetalleExportacion = async (ids) => {
+  try {
+    const lista = [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter(Boolean))];
+    if (lista.length === 0) throw new ValidationError("Indique los documentos a exportar.");
+    const preFacturas = await prisma.preFactura.findMany({
+      where: { id: { in: lista } },
+      include: INCLUDE_PREFACTURA_COMPLETO,
+      orderBy: { fechaDocumento: "desc" },
+    });
+    await adjuntarMovimientosSalida(preFacturas);
+    return agregarMontosPEN(preFacturas);
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
 const obtenerPorId = async (id) => {
   try {
     const pf = await prisma.preFactura.findUnique({
@@ -1897,9 +1977,12 @@ const facturarPreFacturaBlanca = async (preFacturaId, userId) => {
 
       // Validar que esté APROBADA (estado 46) o EMITIDA (estado 96) para regenerar
       const estadoActual = Number(preFactura.estadoId);
-      if (estadoActual !== ESTADO_PREFACTURA.APROBADA && estadoActual !== ESTADO_PREFACTURA.EMITIDA) {
+      // Se puede regenerar también con el comprobante generado (97) mientras no se haya emitido en SUNAT:
+      // eliminarComprobantesDePreFactura rechaza los emitidos y pide darlos de baja primero
+      const regenerando = estadoActual === ESTADO_PREFACTURA.EMITIDA || estadoActual === ESTADO_PREFACTURA.COMPROBANTE_ELECTRONICO_GENERADO;
+      if (estadoActual !== ESTADO_PREFACTURA.APROBADA && !regenerando) {
         throw new ValidationError(
-          "Solo se pueden facturar PreFacturas APROBADAS o EMITIDAS",
+          "Solo se pueden facturar PreFacturas APROBADAS, EMITIDAS o con comprobante electrónico generado que aún no se emitió en SUNAT",
         );
       }
 
@@ -1940,12 +2023,12 @@ const facturarPreFacturaBlanca = async (preFacturaId, userId) => {
           tx,
           preFactura,
           ESTADO_PREFACTURA.EMITIDA,
-          estadoActual === ESTADO_PREFACTURA.EMITIDA,
+          regenerando,
         );
       }
 
       // ⭐ REGENERACIÓN: Eliminar CXC y ComprobanteElectronico existentes si ya fueron generados
-      if (estadoActual === ESTADO_PREFACTURA.EMITIDA) {
+      if (regenerando) {
         // Eliminar CuentaPorCobrar existente
         await tx.cuentaPorCobrar.deleteMany({
           where: { preFacturaId: preFacturaId },
@@ -2215,15 +2298,22 @@ const construirLineasComprobante = async (tx, preFactura) => {
     throw new ValidationError(`La PreFactura ${preFactura.codigo} no tiene porcentaje de IGV definido.`);
   }
 
+  // Afectación de la línea; si no se guardó, la de la venta y, en último caso, la que corresponde al IGV con que se calculó la venta
+  // (exonerada = 20, con IGV = 10). Nunca la del producto: la venta pudo calcularse distinto y el comprobante debe coincidir con ella.
+  const codigoAfectacionPorDefecto = preFactura.exoneradoIgv ? "20" : porcentajeIgvPreFactura > 0 ? "10" : null;
   const idsAfectacion = [...new Set(detallesPreFactura.map((d) => d.tipoAfectacionIGVId || preFactura.tipoAfectacionIGVId).filter(Boolean))];
-  const afectaciones = await tx.tipoAfectacionIGV.findMany({ where: { id: { in: idsAfectacion } } });
+  const afectaciones = await tx.tipoAfectacionIGV.findMany({
+    where: { OR: [{ id: { in: idsAfectacion } }, ...(codigoAfectacionPorDefecto ? [{ codigo: codigoAfectacionPorDefecto }] : [])] },
+  });
   const afectacionPorId = new Map(afectaciones.map((a) => [String(a.id), a]));
+  const afectacionPorDefecto = afectaciones.find((a) => a.codigo === codigoAfectacionPorDefecto);
+  const afectacionDeLinea = (d) => afectacionPorId.get(String(d.tipoAfectacionIGVId || preFactura.tipoAfectacionIGVId)) || afectacionPorDefecto;
 
   const totales = { totalGravado: 0, totalExonerado: 0, totalInafecto: 0, totalGratuito: 0, totalDescuentos: 0, totalIsc: 0, totalIgv: 0, totalComprobante: 0 };
 
   const detalles = detallesPreFactura.map((detalle, indice) => {
     const nombreLinea = detalle.producto?.descripcionBase || `línea ${indice + 1}`;
-    const afectacion = afectacionPorId.get(String(detalle.tipoAfectacionIGVId || preFactura.tipoAfectacionIGVId));
+    const afectacion = afectacionDeLinea(detalle);
     if (!afectacion) {
       throw new ValidationError(`La línea ${indice + 1} (${nombreLinea}) de la PreFactura ${preFactura.codigo} no tiene tipo de afectación del IGV.`);
     }
@@ -2261,6 +2351,15 @@ const construirLineasComprobante = async (tx, preFactura) => {
       total: redondear2(subtotal + igv),
     };
   });
+
+  // El comprobante es el documento que se declara a SUNAT: su total debe ser el de la venta
+  const totalComprobante = redondear2(totales.totalComprobante);
+  const totalVenta = redondear2(Number(preFactura.total));
+  if (Math.abs(totalComprobante - totalVenta) > 0.1) {
+    throw new ValidationError(
+      `El total del comprobante (${totalComprobante.toFixed(2)}) no coincide con el total de la venta ${preFactura.codigo} (${totalVenta.toFixed(2)}). Revise el tipo de afectación del IGV de las líneas y el IGV de la venta antes de generar el comprobante.`
+    );
+  }
 
   return {
     detalles,
@@ -2352,6 +2451,58 @@ const generarComprobanteElectronico = async (preFacturaId) => {
         );
       }
 
+      // El usuario solo elige el tipo de documento final: la serie se deduce del tipo y el correlativo lo asigna Factpro al emitir
+      if (!preFactura.tipoDocumentoFinalId) {
+        throw new ValidationError(
+          "Seleccione el tipo de documento final (factura, boleta, nota de crédito o nota de débito) en la sección de facturación de Datos Generales antes de generar el comprobante electrónico."
+        );
+      }
+      const codigoTipoFinal = preFactura.tipoDocumentoFinal?.codigoSunat;
+      if (!["01", "03", "07", "08"].includes(codigoTipoFinal)) {
+        throw new ValidationError(
+          `El tipo de documento final "${preFactura.tipoDocumentoFinal?.descripcion || preFactura.tipoDocumentoFinalId}" no se emite por Factpro: solo factura, boleta, nota de crédito y nota de débito.`
+        );
+      }
+      // Factpro usa prefijo F para facturas y B para boletas; las notas toman el prefijo del documento que afectan
+      let prefijoSerie = codigoTipoFinal === "01" ? "F" : codigoTipoFinal === "03" ? "B" : null;
+      if (!prefijoSerie) {
+        const serieAfectado =
+          preFactura.dcmtoAfectoNCND?.comprobantesElectronicos?.[0]?.numeroSerie ||
+          preFactura.dcmtoAfectoNCND?.numSerieDocFinal ||
+          "";
+        prefijoSerie = String(serieAfectado).trim().toUpperCase().charAt(0);
+        if (!["F", "B"].includes(prefijoSerie)) {
+          throw new ValidationError(
+            `La ${codigoTipoFinal === "07" ? "nota de crédito" : "nota de débito"} debe indicar el documento que afecta (factura o boleta) para saber qué serie de Factpro usar.`
+          );
+        }
+      }
+      // Serie configurada en el ERP (SerieDoc del tipo, con letra inicial) o, si no hay, la serie estándar de Factpro
+      const SERIES_FACTPRO_ESTANDAR = {
+        "01": { F: "F001" },
+        "03": { B: "B001" },
+        "07": { F: "FC01", B: "BC01" },
+        "08": { F: "FD01", B: "BD01" },
+      };
+      const serieConfigurada = await tx.serieDoc.findFirst({
+        where: {
+          empresaId: preFactura.empresaId,
+          tipoDocumentoId: preFactura.tipoDocumentoFinalId,
+          activo: true,
+          serie: { startsWith: prefijoSerie },
+        },
+        orderBy: { id: "asc" },
+      });
+      const serieDocumentoFinal =
+        serieConfigurada && /^[A-Z][A-Z0-9]{3}$/.test(String(serieConfigurada.serie).toUpperCase())
+          ? String(serieConfigurada.serie).toUpperCase()
+          : SERIES_FACTPRO_ESTANDAR[codigoTipoFinal]?.[prefijoSerie];
+      if (!serieDocumentoFinal) {
+        throw new ValidationError(
+          `No hay una serie de Factpro para el tipo de documento final "${preFactura.tipoDocumentoFinal?.descripcion}" con prefijo ${prefijoSerie}.`
+        );
+      }
+
       // ========================================
       // 3. CREAR COMPROBANTE ELECTRÓNICO
       // ========================================
@@ -2380,11 +2531,11 @@ const generarComprobanteElectronico = async (preFacturaId) => {
           empresaId: preFactura.empresaId,
           sedeId: preFactura.empresa.sedeId || Number(1),
           // Tipo y serie SUNAT
-          tipoComprobanteId: preFactura.tipoDocumentoId,
-          serieDocId: preFactura.serieDocId,
-          numeroSerie: preFactura.numSerieDoc || preFactura.serieDoc?.serie || "001",
-          numeroCorrelativo: Number(preFactura.numCorreDoc) || 1,
-          numeroCompleto: preFactura.numeroDocumento,
+          tipoComprobanteId: preFactura.tipoDocumentoFinalId,
+          serieDocId: serieConfigurada?.id || preFactura.serieDocFinalId || preFactura.serieDocId,
+          numeroSerie: serieDocumentoFinal,
+          numeroCorrelativo: 0, // provisional: Factpro asigna el correlativo al emitir
+          numeroCompleto: `${serieDocumentoFinal}-PENDIENTE`,
           // Fechas
           fechaEmision: ahora,
           horaEmision: horaEmision,
@@ -2470,7 +2621,7 @@ const generarComprobanteElectronico = async (preFacturaId) => {
       await tx.preFactura.update({
         where: { id: preFactura.id },
         data: {
-          estadoId: ESTADO_PREFACTURA.COMPROBANTE_GENERADO,
+          estadoId: ESTADO_PREFACTURA.COMPROBANTE_ELECTRONICO_GENERADO,
         },
       });
 
@@ -4591,7 +4742,7 @@ const generarKardex = async (id, datosKardex, usuarioId, esRegeneracion = false)
         ESTADO_PREFACTURA.PARTICIONADA,
         ESTADO_PREFACTURA.FACTURADA,
         ESTADO_PREFACTURA.EMITIDA,
-        ESTADO_PREFACTURA.COMPROBANTE_GENERADO,
+        ESTADO_PREFACTURA.COMPROBANTE_ELECTRONICO_GENERADO,
         ESTADO_PREFACTURA.VALIDADO_SUNAT,
         ESTADO_PREFACTURA.NO_VALIDADO_SUNAT,
       ];
@@ -5283,7 +5434,7 @@ const regenerarKardex = async (id, usuarioId) => {
         ESTADO_PREFACTURA.PARTICIONADA,
         ESTADO_PREFACTURA.FACTURADA,
         ESTADO_PREFACTURA.EMITIDA,
-        ESTADO_PREFACTURA.COMPROBANTE_GENERADO,
+        ESTADO_PREFACTURA.COMPROBANTE_ELECTRONICO_GENERADO,
         ESTADO_PREFACTURA.VALIDADO_SUNAT,
         ESTADO_PREFACTURA.NO_VALIDADO_SUNAT,
       ];
@@ -5784,8 +5935,95 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluir
   }
 }
 
+/**
+ * Obtiene desde Factpro el PDF del documento final de la venta (consulta por serie y correlativo)
+ * y guarda su enlace en la venta. Solo existe en Factpro si el documento se emitió a través de Factpro.
+ */
+const obtenerPdfDesdeFactpro = async (preFacturaId) => {
+  const preFactura = await prisma.preFactura.findUnique({
+    where: { id: preFacturaId },
+    select: { id: true, esGerencial: true, numSerieDocFinal: true, numCorreDocFinal: true, empresa: true },
+  });
+  if (!preFactura) throw new NotFoundError("PreFactura no encontrada");
+  if (preFactura.esGerencial) {
+    throw new ValidationError("Los documentos gerenciales no se emiten en Factpro: genere la Nota de Venta.");
+  }
+  const serie = String(preFactura.numSerieDocFinal || "").trim().toUpperCase();
+  const correlativo = Number(preFactura.numCorreDocFinal);
+  if (!serie || !(correlativo > 0)) {
+    throw new ValidationError("Registre la serie y el correlativo del documento final para consultarlo en Factpro.");
+  }
+
+  let consulta;
+  try {
+    consulta = await factproService.consultarDocumento(preFactura.empresa, serie, correlativo);
+  } catch (error) {
+    throw new ConflictError(`No se pudo obtener el documento ${serie}-${correlativo} desde Factpro: ${error.message}`);
+  }
+  const enlacePDF = consulta.resultado.enlacePDF;
+  if (!enlacePDF) {
+    throw new ConflictError(`Factpro respondió, pero el documento ${serie}-${correlativo} no tiene PDF disponible.`);
+  }
+
+  // FLUJO B: se trae el PDF de Factpro y se guarda en el ERP (reintento manual del guardado automático al aceptarse el comprobante)
+  const pdfUrl = await guardarPdfFactproEnVenta(preFacturaId, enlacePDF);
+  return { success: true, pdfUrl, documento: `${serie}-${correlativo}`, estado: consulta.resultado.descripcionEstado };
+};
+/**
+ * FLUJO B (comprobantes nuevos emitidos con Factpro): guarda en el ERP una copia del PDF que entrega Factpro.
+ * Se guarda con el servicio de PDF del módulo "pre-factura" (uploads/pdf-system/pre-facturas/PRE-FACTURA-<id>.pdf) y ese mismo
+ * servicio deja la URL en PreFactura.urlPreFacturaPdf. Así la venta conserva su PDF aunque Factpro no esté disponible, y la
+ * pantalla lo muestra con el mismo componente que el FLUJO A. El PDF de Factpro reemplaza al anterior: es el comprobante legal.
+ * Ver la bifurcación completa en el encabezado de comprobanteElectronico.controller.js.
+ */
+const guardarPdfFactproEnVenta = async (preFacturaId, enlacePDF) => {
+  const { buffer } = await factproService.descargarArchivo(enlacePDF);
+  if (buffer.subarray(0, 4).toString("latin1") !== "%PDF") {
+    throw new ConflictError("El archivo que entregó Factpro no es un PDF válido.");
+  }
+  const guardado = await pdfService.uploadSingle(
+    { buffer, size: buffer.length, mimetype: "application/pdf" },
+    "pre-factura",
+    { entityId: preFacturaId },
+  );
+  return guardado.url;
+};
+const CAMPO_ARCHIVO_FACTPRO = { pdf: "enlacePDF", xml: "enlaceXML", cdr: "enlaceCDR" };
+
+/**
+ * Entrega el PDF, XML o CDR del documento final de la venta tal como lo guarda Factpro (consulta por serie y correlativo).
+ */
+const obtenerArchivoFactpro = async (preFacturaId, tipo) => {
+  const campo = CAMPO_ARCHIVO_FACTPRO[tipo];
+  if (!campo) throw new ValidationError(`Tipo de archivo "${tipo}" no válido: use pdf, xml o cdr.`);
+  const preFactura = await prisma.preFactura.findUnique({
+    where: { id: preFacturaId },
+    select: { numSerieDocFinal: true, numCorreDocFinal: true, empresa: true },
+  });
+  if (!preFactura) throw new NotFoundError("PreFactura no encontrada");
+  const serie = String(preFactura.numSerieDocFinal || "").trim().toUpperCase();
+  const correlativo = Number(preFactura.numCorreDocFinal);
+  if (!serie || !(correlativo > 0)) {
+    throw new ValidationError("Registre la serie y el correlativo del documento final para consultarlo en Factpro.");
+  }
+  let consulta;
+  try {
+    consulta = await factproService.consultarDocumento(preFactura.empresa, serie, correlativo);
+  } catch (error) {
+    throw new ConflictError(`No se pudo obtener el documento ${serie}-${correlativo} desde Factpro: ${error.message}`);
+  }
+  const enlace = consulta.resultado[campo];
+  if (!enlace) {
+    throw new ConflictError(`Factpro aún no tiene el ${tipo.toUpperCase()} del documento ${serie}-${correlativo}${tipo === "cdr" ? " (SUNAT todavía no respondió)" : ""}.`);
+  }
+  return factproService.descargarArchivo(enlace);
+};
 export default {
+  guardarPdfFactproEnVenta,
+  obtenerPdfDesdeFactpro,
+  obtenerArchivoFactpro,
   listar,
+  listarDetalleExportacion,
   obtenerPorId,
   obtenerTodos,
   obtenerPorCliente,

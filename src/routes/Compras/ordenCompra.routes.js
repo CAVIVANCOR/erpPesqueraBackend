@@ -40,6 +40,14 @@ router.get(
   ordenCompraController.exportarRegistroComprasSUNAT
 );
 
+// Detalle completo por ids para Excel/PDF de la pantalla (DEBE IR ANTES DE /:id)
+router.post(
+  '/detalle-exportacion',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.listarDetalleExportacion
+);
+
 // Compras elegibles para el Registro de Compras (DEBE IR ANTES DE /:id)
 router.get(
   '/registro-compras/elegibles',

@@ -12,6 +12,9 @@ import {
  * Documentado en español.
  */
 
+// EntidadComercial es un maestro único del grupo: todas pertenecen a MEGUI (id 1). El campo empresaId se conserva por compatibilidad.
+const ENTIDAD_COMERCIAL_EMPRESA_ID = 1;
+
 /**
  * Valida unicidad de numeroDocumento+empresaId y existencia de claves foráneas.
  * Lanza ConflictError o ValidationError según corresponda.
@@ -227,6 +230,8 @@ const obtenerPorId = async (id) => {
  */
 const crear = async (data) => {
   try {
+    // Maestro único: EntidadComercial.empresaId está depreciado y siempre vale 1 (MEGUI); no se confía en el valor enviado
+    data = { ...data, empresaId: ENTIDAD_COMERCIAL_EMPRESA_ID };
     await validarEntidadComercial(data);
 
     // Preparar datos con campos de auditoría
@@ -283,6 +288,8 @@ const actualizar = async (id, data) => {
       where: { id },
     });
     if (!existente) throw new NotFoundError("Entidad comercial no encontrada");
+    // Maestro único: la empresa depreciada no se puede cambiar desde la pantalla
+    data = { ...data, empresaId: ENTIDAD_COMERCIAL_EMPRESA_ID };
     await validarEntidadComercial(data, id);
 
     // Preparar datos con campos de auditoría
@@ -972,259 +979,6 @@ const obtenerProveedoresGps = async () => {
   }
 };
 
-/**
- * Clona una EntidadComercial y sus tablas relacionadas a empresas seleccionadas específicamente
- * @param {BigInt} entidadId - ID de la entidad comercial a clonar
- * @param {Array<BigInt>} empresasDestinoIds - Array de IDs de empresas destino
- * @returns {Object} Resumen de operaciones realizadas
- */
-const clonarAEmpresasSeleccionadas = async (entidadId, empresasDestinoIds) => {
-  try {
-    // Obtener entidad origen con todas sus relaciones
-    const entidadOrigen = await prisma.entidadComercial.findUnique({
-      where: { id: entidadId },
-      include: {
-        direcciones: { include: { ubigeo: true } },
-        contactos: true,
-        ctaCteEntidad: { include: { banco: true, moneda: true } },
-      },
-    });
-
-    if (!entidadOrigen) {
-      throw new NotFoundError("Entidad comercial no encontrada");
-    }
-
-    // Obtener solo las empresas seleccionadas (excluyendo la empresa origen)
-    const empresasDestino = await prisma.empresa.findMany({
-      where: {
-        id: {
-          in: empresasDestinoIds,
-          not: entidadOrigen.empresaId,
-        },
-        cesado: false, // Solo empresas activas
-      },
-    });
-
-    if (empresasDestino.length === 0) {
-      throw new ValidationError(
-        "No se encontraron empresas válidas para clonar",
-      );
-    }
-
-    const resumen = {
-      empresasProcesadas: 0,
-      entidadesCreadas: 0,
-      entidadesActualizadas: 0,
-      direccionesCreadas: 0,
-      direccionesActualizadas: 0,
-      contactosCreados: 0,
-      contactosActualizados: 0,
-      ctaCteCreadas: 0,
-      ctaCteActualizadas: 0,
-      errores: [],
-      resultados: [],
-    };
-
-    // Procesar cada empresa seleccionada
-    for (const empresaDestino of empresasDestino) {
-      try {
-        resumen.empresasProcesadas++;
-
-        // Verificar si ya existe la entidad en esta empresa
-        const entidadDestino = await prisma.entidadComercial.findFirst({
-          where: {
-            empresaId: empresaDestino.id,
-            numeroDocumento: entidadOrigen.numeroDocumento,
-          },
-          include: {
-            direcciones: true,
-            contactos: true,
-            ctaCteEntidad: true,
-          },
-        });
-
-        let entidadDestinoId;
-
-        if (!entidadDestino) {
-          // CREAR nueva entidad
-          const {
-            id,
-            empresaId,
-            creadoEn,
-            actualizadoEn,
-            creadoPor,
-            actualizadoPor,
-            direcciones,
-            contactos,
-            ctaCteEntidad,
-            tipoDocumento,
-            tipoEntidad,
-            formaPago,
-            agrupacionEntidad,
-            ...datosEntidad
-          } = entidadOrigen;
-
-          const nuevaEntidad = await prisma.entidadComercial.create({
-            data: {
-              ...datosEntidad,
-              empresaId: empresaDestino.id,
-              creadoEn: new Date(),
-              actualizadoEn: new Date(),
-            },
-          });
-
-          entidadDestinoId = nuevaEntidad.id;
-          resumen.entidadesCreadas++;
-        } else {
-          // ACTUALIZAR entidad existente
-          const camposTexto = [
-            "nombreComercial",
-            "observaciones",
-            "codigoErpFinanciero",
-          ];
-          const dataActualizar = {};
-
-          for (const campo of camposTexto) {
-            if (entidadOrigen[campo] !== undefined) {
-              dataActualizar[campo] = mergeInteligente(
-                entidadOrigen[campo],
-                entidadDestino[campo],
-              );
-            }
-          }
-
-          const camposBooleanos = [
-            "esCliente",
-            "esProveedor",
-            "esCorporativo",
-            "custodiaStock",
-            "controlLote",
-            "controlFechaVenc",
-            "controlFechaProd",
-            "controlFechaIngreso",
-            "controlSerie",
-            "controlEnvase",
-            "sujetoRetencion",
-            "sujetoPercepcion",
-            "esAgenteRetencion",
-            "condicionHabidoSUNAT",
-            "estadoActivoSUNAT",
-          ];
-
-          for (const campo of camposBooleanos) {
-            if (!entidadDestino[campo] && entidadOrigen[campo]) {
-              dataActualizar[campo] = entidadOrigen[campo];
-            }
-          }
-
-          if (Object.keys(dataActualizar).length > 0) {
-            await prisma.entidadComercial.update({
-              where: { id: entidadDestino.id },
-              data: {
-                ...dataActualizar,
-                actualizadoEn: new Date(),
-              },
-            });
-          }
-
-          entidadDestinoId = entidadDestino.id;
-          resumen.entidadesActualizadas++;
-        }
-
-        // Clonar direcciones
-        for (const direccion of entidadOrigen.direcciones) {
-          const direccionExistente = entidadDestino?.direcciones.find(
-            (d) => d.tipoDireccion === direccion.tipoDireccion,
-          );
-
-          if (!direccionExistente) {
-            const { id, entidadComercialId, ubigeo, ...datosDireccion } =
-              direccion;
-            await prisma.direccionEntidad.create({
-              data: {
-                ...datosDireccion,
-                entidadComercialId: entidadDestinoId,
-              },
-            });
-            resumen.direccionesCreadas++;
-          } else {
-            resumen.direccionesActualizadas++;
-          }
-        }
-
-        // Clonar contactos
-        for (const contacto of entidadOrigen.contactos) {
-          const contactoExistente = entidadDestino?.contactos.find(
-            (c) =>
-              c.email === contacto.email || c.telefono === contacto.telefono,
-          );
-
-          if (!contactoExistente) {
-            const { id, entidadComercialId, ...datosContacto } = contacto;
-            await prisma.contactoEntidad.create({
-              data: {
-                ...datosContacto,
-                entidadComercialId: entidadDestinoId,
-              },
-            });
-            resumen.contactosCreados++;
-          } else {
-            resumen.contactosActualizados++;
-          }
-        }
-
-        // Clonar cuentas corrientes
-        for (const cuenta of entidadOrigen.ctaCteEntidad) {
-          const cuentaExistente = entidadDestino?.ctaCteEntidad.find(
-            (c) =>
-              c.numeroCuenta === cuenta.numeroCuenta &&
-              c.bancoId === cuenta.bancoId,
-          );
-
-          if (!cuentaExistente) {
-            const { id, entidadComercialId, banco, moneda, ...datosCuenta } =
-              cuenta;
-            await prisma.ctaCteEntidad.create({
-              data: {
-                ...datosCuenta,
-                entidadComercialId: entidadDestinoId,
-              },
-            });
-            resumen.ctaCteCreadas++;
-          } else {
-            resumen.ctaCteActualizadas++;
-          }
-        }
-
-        // Agregar resultado exitoso
-        resumen.resultados.push({
-          empresaId: empresaDestino.id,
-          razonSocial: empresaDestino.razonSocial,
-          exito: true,
-        });
-      } catch (error) {
-        // console.error(`Error al clonar en empresa ${empresaDestino.razonSocial}:`, error);
-        resumen.errores.push({
-          empresaId: empresaDestino.id,
-          empresaNombre: empresaDestino.razonSocial,
-          error: error.message,
-        });
-        resumen.resultados.push({
-          empresaId: empresaDestino.id,
-          razonSocial: empresaDestino.razonSocial,
-          exito: false,
-          error: error.message,
-        });
-      }
-    }
-
-    return resumen;
-  } catch (error) {
-    // console.error("Error en clonarAEmpresasSeleccionadas:", error);
-    throw new DatabaseError(`Error al clonar entidad: ${error.message}`);
-  }
-};
-
 export default {
   listar,
   obtenerPorId,
@@ -1233,5 +987,4 @@ export default {
   eliminar,
   obtenerAgenciasEnvio,
   obtenerProveedoresGps,
-  clonarAEmpresasSeleccionadas,
 };

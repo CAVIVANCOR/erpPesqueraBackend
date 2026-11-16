@@ -30,6 +30,13 @@ router.get(
   preFacturaController.exportarRegistroVentasSUNAT
 );
 
+router.post(
+  '/detalle-exportacion',
+  autenticarJWT,
+  checkPermission('preFactura', 'ver'),
+  preFacturaController.listarDetalleExportacion
+);
+
 router.get(
   '/por-cliente',
   autenticarJWT,
@@ -89,6 +96,20 @@ router.get(
   autenticarJWT,
   checkPermission('preFactura', 'ver'),
   preFacturaController.obtenerEstadoNotaCredito
+);
+
+router.post(
+  '/:id/obtener-pdf-factpro',
+  autenticarJWT,
+  checkPermission('preFactura', 'editar'),
+  preFacturaController.obtenerPdfDesdeFactpro
+);
+
+router.get(
+  '/factpro-archivo/:id/:tipo',
+  autenticarJWT,
+  checkPermission('preFactura', 'ver'),
+  preFacturaController.descargarArchivoFactpro
 );
 
 router.put(

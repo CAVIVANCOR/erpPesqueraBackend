@@ -126,7 +126,7 @@ const eliminar = async (id) => {
       // Las líneas y cuotas se eliminan en cascada
       await tx.comprobanteElectronico.delete({ where: { id } });
       await tx.preFactura.updateMany({
-        where: { id: existente.preFacturaId, estadoId: ESTADO_PREFACTURA.COMPROBANTE_GENERADO },
+        where: { id: existente.preFacturaId, estadoId: ESTADO_PREFACTURA.COMPROBANTE_ELECTRONICO_GENERADO },
         data: { estadoId: ESTADO_PREFACTURA.EMITIDA },
       });
     });

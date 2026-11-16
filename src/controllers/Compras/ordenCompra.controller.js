@@ -6,9 +6,21 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  * Documentado en español.
  */
 
+// Sin parámetros devuelve la lista histórica completa; con empresaId, desde, hasta y/o tipoLibro filtra en el servidor
 export async function listar(req, res, next) {
   try {
-    const ordenes = await ordenCompraService.listar();
+    const { empresaId, desde, hasta, tipoLibro } = req.query;
+    const ordenes = await ordenCompraService.listar({ empresaId, desde, hasta, tipoLibro });
+    res.json(toJSONBigInt(ordenes));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Detalle completo de las órdenes indicadas (ids) para Excel/PDF: la lista de la pantalla es liviana
+export async function listarDetalleExportacion(req, res, next) {
+  try {
+    const ordenes = await ordenCompraService.listarDetalleExportacion(req.body?.ids);
     res.json(toJSONBigInt(ordenes));
   } catch (err) {
     next(err);

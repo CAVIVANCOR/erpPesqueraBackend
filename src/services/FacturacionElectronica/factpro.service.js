@@ -19,6 +19,13 @@ const ESTADO_FACTPRO_ACEPTADO = '05';
 // Catálogo 06 SUNAT -> código Factpro (tipo de documento de identidad del cliente)
 const DOC_IDENTIDAD_FACTPRO = { '0': '1', '1': '2', '4': '3', '6': '4', '7': '5' };
 
+// Catálogo 54 SUNAT (bienes y servicios sujetos a detracción) -> código Factpro (no coincide con el número SUNAT)
+const DETRACCION_FACTPRO = {
+  '001': '50', '003': '51', '004': '52', '005': '53', '007': '54', '008': '55', '009': '56', '010': '57',
+  '012': '59', '014': '61', '016': '63', '017': '64', '019': '65', '020': '66', '021': '67', '022': '68',
+  '023': '69', '024': '70', '025': '71', '026': '72', '027': '73', '028': '74', '030': '75', '031': '76',
+  '032': '77', '034': '78', '035': '79', '036': '80', '037': '81', '039': '82', '041': '83',
+};
 // Catálogo 07 SUNAT (afectación IGV) -> código Factpro "tipo_tax"
 const TIPO_TAX_FACTPRO = { '10': '1', '20': '20', '21': '21', '30': '30', '40': '40' };
 
@@ -84,17 +91,24 @@ const enviarPeticion = async (config, ruta, payload) => {
 /**
  * Convierte la respuesta de Factpro a los campos genéricos del ERP.
  */
-const normalizarRespuesta = (cuerpo) => ({
-  codigoEstado: cuerpo.data?.tipo_estado || null,
-  descripcionEstado: cuerpo.data?.descripcion_estado || null,
-  aceptadoPorSunat: cuerpo.data?.tipo_estado === ESTADO_FACTPRO_ACEPTADO,
-  hash: cuerpo.data?.hash || null,
-  qr: cuerpo.data?.qr || null,
-  enlacePDF: cuerpo.archivos?.pdf || null,
-  enlaceXML: cuerpo.archivos?.xml || null,
-  enlaceCDR: cuerpo.archivos?.cdr || null,
-  eventos: cuerpo.eventos || [],
-});
+const normalizarRespuesta = (cuerpo) => {
+  const archivos = cuerpo.archivos || cuerpo.links || {};
+  // Número que Factpro asignó (por ejemplo "B001-3"): serie y correlativo
+  const coincidencia = /^([A-Z0-9]{4})-(\d+)$/i.exec(String(cuerpo.data?.number || cuerpo.data?.numero || '').trim());
+  return {
+    codigoEstado: cuerpo.data?.tipo_estado || cuerpo.response?.code || null,
+    descripcionEstado: cuerpo.data?.descripcion_estado || cuerpo.response?.description || null,
+    aceptadoPorSunat: cuerpo.data?.tipo_estado === ESTADO_FACTPRO_ACEPTADO || String(cuerpo.response?.code) === '0',
+    hash: cuerpo.data?.hash || null,
+    qr: cuerpo.data?.qr || null,
+    enlacePDF: archivos.pdf || null,
+    enlaceXML: archivos.xml || null,
+    enlaceCDR: archivos.cdr || null,
+    eventos: cuerpo.eventos || [],
+    serieEmitida: coincidencia ? coincidencia[1].toUpperCase() : null,
+    correlativoEmitido: coincidencia ? Number(coincidencia[2]) : null,
+  };
+};
 
 /**
  * Código "tipo_tax" de Factpro a partir de la afectación IGV (catálogo 07 SUNAT) de la línea.
@@ -173,7 +187,10 @@ const construirDocumento = (comprobante) => {
     throw new ValidationError('La emisión de comprobantes con percepción aún no está soportada por la integración con Factpro.');
   }
 
-  const tipoDocumentoCliente = DOC_IDENTIDAD_FACTPRO[comprobante.tipoDocumentoCliente?.codSunat];
+  // El catálogo del ERP guarda el código con dos dígitos ("01", "06", "00") y la tabla de Factpro usa el
+  // código SUNAT sin ceros a la izquierda ("1", "6", "0"): se normaliza antes de buscar la equivalencia.
+  const codigoDocCliente = String(comprobante.tipoDocumentoCliente?.codSunat ?? '').trim();
+  const tipoDocumentoCliente = DOC_IDENTIDAD_FACTPRO[/^\d+$/.test(codigoDocCliente) ? String(Number(codigoDocCliente)) : codigoDocCliente];
   if (!tipoDocumentoCliente) {
     throw new ValidationError(`El tipo de documento del cliente (código SUNAT "${comprobante.tipoDocumentoCliente?.codSunat}") no tiene equivalente en Factpro.`);
   }
@@ -195,7 +212,7 @@ const construirDocumento = (comprobante) => {
 
   const documento = {
     serie: comprobante.numeroSerie,
-    numero: comprobante.numeroCorrelativo,
+    numero: Number(comprobante.numeroCorrelativo) > 0 ? comprobante.numeroCorrelativo : '#',
     fecha_de_emision: fechaISO(comprobante.fechaEmision),
     moneda: comprobante.moneda?.codigoSunat,
     tipo_operacion: comprobante.sujetoDetraccion ? '3' : esExportacion ? '2' : '1',
@@ -223,7 +240,12 @@ const construirDocumento = (comprobante) => {
     if (!comprobante.codigoDetraccion) {
       throw new ValidationError(`El comprobante ${comprobante.numeroCompleto} está sujeto a detracción pero no tiene el código de detracción.`);
     }
-    documento.detraccion = { codigo: comprobante.codigoDetraccion, forma_de_pago: '1' };
+    const codigoDetraccion = String(comprobante.codigoDetraccion).trim().padStart(3, '0');
+    const codigoDetraccionFactpro = DETRACCION_FACTPRO[codigoDetraccion];
+    if (!codigoDetraccionFactpro) {
+      throw new ValidationError(`El código de detracción SUNAT "${codigoDetraccion}" del comprobante ${comprobante.numeroCompleto} no tiene equivalente en Factpro.`);
+    }
+    documento.detraccion = { codigo: codigoDetraccionFactpro, forma_de_pago: '1' };
   }
 
   return documento;
@@ -266,9 +288,27 @@ const anularDocumento = async (empresa, serie, numero, motivo) => {
   };
 };
 
+/**
+ * Descarga un archivo (PDF, XML o CDR) de Factpro desde el servidor: el navegador no lo pide directo
+ * para no enviar el token del ERP a un tercero ni depender de CORS.
+ */
+const descargarArchivo = async (url) => {
+  let respuesta;
+  try {
+    respuesta = await fetch(url);
+  } catch (error) {
+    throw new ConflictError(`No se pudo descargar el archivo desde Factpro: ${error.message}`);
+  }
+  if (!respuesta.ok) throw new ConflictError(`Factpro no entregó el archivo (HTTP ${respuesta.status}).`);
+  return {
+    buffer: Buffer.from(await respuesta.arrayBuffer()),
+    contentType: respuesta.headers.get('content-type') || 'application/octet-stream',
+  };
+};
 export default {
   construirDocumento,
   emitirDocumento,
   consultarDocumento,
+  descargarArchivo,
   anularDocumento,
 };
