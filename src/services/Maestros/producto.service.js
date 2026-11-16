@@ -224,6 +224,13 @@ async function validarProducto(data, excluirId = null) {
     data.sujetoDetraccion = porcentaje > 0;
   }
 
+  // Validar que las banderas de destino (compras / ventas) sean booleanas
+  for (const campo of ['esParaCompras', 'esParaVentas']) {
+    if (data[campo] !== undefined && typeof data[campo] !== 'boolean') {
+      throw new ValidationError(`${campo} debe ser un valor booleano (verdadero o falso).`);
+    }
+  }
+
   // Validar que exoneradoRetencion sea booleano
   if (data.exoneradoRetencion !== undefined && typeof data.exoneradoRetencion !== 'boolean') {
     throw new ValidationError('exoneradoRetencion debe ser un valor booleano.');
@@ -232,7 +239,7 @@ async function validarProducto(data, excluirId = null) {
 
 /**
  * Lista todos los productos con sus relaciones completas.
- * @param {Object} filtros - Filtros opcionales { empresaId, clienteId }
+ * @param {Object} filtros - Filtros opcionales { empresaId, clienteId, esParaCompras, esParaVentas }
  */
 const listar = async (filtros = {}) => {
   try {
@@ -245,6 +252,15 @@ const listar = async (filtros = {}) => {
 
     if (filtros.clienteId) {
       where.clienteId = Number(filtros.clienteId);
+    }
+
+    // Destino del producto: se ofrece en Compras y/o en Ventas (banderas manuales del producto)
+    if (filtros.esParaCompras !== undefined) {
+      where.esParaCompras = filtros.esParaCompras;
+    }
+
+    if (filtros.esParaVentas !== undefined) {
+      where.esParaVentas = filtros.esParaVentas;
     }
 
     // Filtrar por cesado (por defecto mostrar solo activos)
@@ -507,6 +523,8 @@ const actualizarCampoMasa = async (ids, campo, valorId, usuarioId) => {
     'cuentaCostoVentasId',
     'cuentaVariacionId',
     'cuentaVentasId',
+    'esParaCompras',
+    'esParaVentas',
   ];
 
   if (!camposPermitidos.includes(campo)) {
@@ -518,8 +536,12 @@ const actualizarCampoMasa = async (ids, campo, valorId, usuarioId) => {
     throw new ValidationError('Los IDs proporcionados no son válidos.');
   }
 
+  // Las banderas de destino son sí/no; el resto de campos son ids (o null para limpiar)
+  const camposBooleanos = ['esParaCompras', 'esParaVentas'];
   const dataParaActualizar = {
-    [campo]: valorId ? Number(valorId) : null,
+    [campo]: camposBooleanos.includes(campo)
+      ? valorId === true || valorId === 'true' || valorId === 1
+      : valorId ? Number(valorId) : null,
     fechaActualizacion: new Date(),
   };
 

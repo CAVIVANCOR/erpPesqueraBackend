@@ -13,11 +13,14 @@ import toJSONBigInt from '../../utils/toJSONBigInt.js';
  */
 export async function listar(req, res, next) {
   try {
-    const { empresaId, clienteId } = req.query;
+    const { empresaId, clienteId, esParaCompras, esParaVentas } = req.query;
     const filtros = {};
     
     if (empresaId) filtros.empresaId = empresaId;
     if (clienteId) filtros.clienteId = clienteId;
+    // Destino del producto: ?esParaCompras=true / ?esParaVentas=true
+    if (esParaCompras !== undefined) filtros.esParaCompras = esParaCompras === 'true';
+    if (esParaVentas !== undefined) filtros.esParaVentas = esParaVentas === 'true';
     
     const productos = await productoService.listar(filtros);
     res.json(toJSONBigInt(productos));
