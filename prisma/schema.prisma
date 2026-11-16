@@ -5167,6 +5167,8 @@ model Producto {
 
   tipoDetraccionId                  BigInt?                             // 🆕 AGREGAR ESTE
   tipoAfectacionIGVId               BigInt?
+  esParaCompras                     Boolean @default(false)             // El producto se ofrece en Compras (requerimiento, cotización, orden de compra, rendiciones)
+  esParaVentas                      Boolean @default(false)             // El producto se ofrece en Ventas (cotización de ventas, venta, contratos de servicio)
 
   familia                               FamiliaProducto      @relation(fields: [familiaId], references: [id])
   subfamilia                            SubfamiliaProducto?  @relation(fields: [subfamiliaId], references: [id])
