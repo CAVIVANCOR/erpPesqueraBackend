@@ -205,9 +205,8 @@ const listarDocumentosCompra = async (presupuestoId) => {
 };
 
 /**
- * Productos equivalentes de cada ítem del presupuesto en la empresa destino:
- * Producto.empresaId = Empresa.id, Producto.clienteId = Empresa.entidadComercialId
- * y la misma descripcionArmada.
+ * Producto equivalente de cada ítem del presupuesto en la empresa destino. Producto es un maestro único del grupo
+ * (MEGUI): el equivalente es el mismo producto, siempre que no esté cesado.
  */
 const buscarProductosEquivalentes = async (presupuestoId, empresaId) => {
   try {
@@ -228,20 +227,11 @@ const buscarProductosEquivalentes = async (presupuestoId, empresaId) => {
     const resultado = [];
     for (const item of presupuesto.repuestos) {
       const producto = item.producto;
-      let equivalentes = [];
-      if (Number(producto.empresaId) === Number(empresaId)) {
-        equivalentes = [producto];
-      } else if (empresa.entidadComercialId) {
-        equivalentes = await prisma.producto.findMany({
-          where: {
-            empresaId: Number(empresaId),
-            clienteId: empresa.entidadComercialId,
-            descripcionArmada: producto.descripcionArmada,
-            cesado: false,
-          },
-          select: { id: true, codigo: true, descripcionArmada: true },
-        });
-      }
+      const vigente = await prisma.producto.findFirst({
+        where: { id: producto.id, cesado: false },
+        select: { id: true, codigo: true, descripcionArmada: true },
+      });
+      const equivalentes = vigente ? [vigente] : [];
       resultado.push({
         detRepuestoId: item.id,
         productoOrigen: { id: producto.id, descripcionArmada: producto.descripcionArmada },
@@ -303,7 +293,7 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
       proveedorId = proveedor.id;
     }
 
-    // Cada ítem debe ser un producto de la empresa destino
+    // Cada ítem debe ser un producto existente y activo (maestro único: no depende de la empresa destino)
     const productos = await prisma.producto.findMany({
       where: { id: { in: items.map((i) => Number(i.productoId)) } },
       include: { tipoAfectacionIGV: true },
@@ -311,12 +301,9 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
     for (const item of items) {
       const producto = productos.find((p) => Number(p.id) === Number(item.productoId));
       if (!producto) throw new ValidationError(`El producto ${item.productoId} no existe`);
-      if (
-        Number(producto.empresaId) !== empresaId ||
-        Number(producto.clienteId) !== Number(empresa.entidadComercialId)
-      ) {
+      if (producto.cesado) {
         throw new ValidationError(
-          `El producto "${producto.descripcionArmada}" no pertenece a la empresa seleccionada`,
+          `El producto "${producto.descripcionArmada}" está cesado: active el producto o elija otro.`,
         );
       }
       if (!(Number(item.cantidad) > 0) || Number(item.precioUnitario) < 0) {

@@ -26,14 +26,6 @@ router.get(
   productoController.obtenerPorEntidadYEmpresa
 );
 
-// ✅ RUTA ESPECIAL: Clonar productos a múltiples empresas
-router.post(
-  '/clonar-a-empresas',
-  autenticarJWT,
-  checkPermission('producto', 'crear'),
-  productoController.clonarAEmpresas
-);
-
 // ✅ RUTA ESPECIAL: Actualizar un campo en productos seleccionados
 router.post(
   '/actualizar-campo-masa',

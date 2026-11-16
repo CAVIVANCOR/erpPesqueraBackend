@@ -158,18 +158,19 @@ const finalizarDescargaConsumoConMovimientos = async (
       // PASO 3: BUSCAR PRODUCTO
       // ============================================
 
-      // El producto es de MEGUI (empresaId), no del cliente
+      // Producto es un maestro único (MEGUI): se toma el producto activo de la especie, con orden fijo (menor id)
+      // para que la elección sea siempre la misma.
       const producto = await tx.producto.findFirst({
         where: {
-          empresaId: novedad.empresaId,
           especieId: descarga.especieId,
           cesado: false,
         },
+        orderBy: { id: 'asc' },
       });
 
       if (!producto) {
         throw new ValidationError(
-          `No se encontró un producto activo para la empresa ${novedad.empresaId} y especie ${descarga.especieId}`,
+          `No se encontró un producto activo para la especie ${descarga.especieId}: cree o active un producto con esa especie en el maestro de Productos.`,
         );
       }
 

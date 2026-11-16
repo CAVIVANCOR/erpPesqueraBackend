@@ -276,13 +276,13 @@ export async function obtenerPrecioVigente(
   clienteId,
   fechaDescarga,
 ) {
-  // 1. Buscar producto de la especie
+  // 1. Buscar producto de la especie (maestro único de productos; orden fijo: menor id)
   const producto = await prisma.producto.findFirst({
     where: {
-      empresaId: empresaId,
       cesado: false,
       especieId: especieId,
     },
+    orderBy: { id: 'asc' },
   });
 
   if (!producto) {

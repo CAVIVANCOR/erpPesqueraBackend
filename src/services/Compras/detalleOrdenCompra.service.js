@@ -112,8 +112,11 @@ const obtenerPorId = async (id) => {
 
 const crear = async (data) => {
   try {
-    if (!data.ordenCompraId || !data.productoId) {
-      throw new ValidationError('ordenCompraId y productoId son obligatorios.');
+    if (!data.ordenCompraId) {
+      throw new ValidationError('Falta la orden de compra del detalle: guarde primero el encabezado de la orden y luego agregue el detalle.');
+    }
+    if (!data.productoId) {
+      throw new ValidationError('Falta el producto del detalle: seleccione un producto antes de guardar.');
     }
 
     // Validar que se proporcione cantidad en alguna de las dos formas

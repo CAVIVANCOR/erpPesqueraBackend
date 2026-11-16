@@ -2,6 +2,17 @@ import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 import { toUpperCaseSafe } from '../../utils/numberUtils.js';
 
+// Producto es un maestro único del grupo: pertenece a MEGUI. Producto.empresaId está depreciado y siempre vale 1;
+// Producto.clienteId (depreciado) siempre es la entidad comercial de esa empresa, leída de la base (no se escribe a mano).
+const EMPRESA_MAESTRO_ID = 1;
+const obtenerPropietarioMaestro = async () => {
+  const empresa = await prisma.empresa.findUnique({ where: { id: EMPRESA_MAESTRO_ID }, select: { entidadComercialId: true } });
+  if (!empresa?.entidadComercialId) {
+    throw new ValidationError('La empresa MEGUI (id 1) no tiene entidad comercial asignada: asígnela en Empresas antes de crear o editar productos.');
+  }
+  return { empresaId: EMPRESA_MAESTRO_ID, clienteId: empresa.entidadComercialId };
+};
+
 /**
  * Servicio CRUD para Producto
  * Aplica validaciones de unicidad, referencias y manejo de errores personalizado.
@@ -346,8 +357,8 @@ const obtenerPorEntidadYEmpresa = async (entidadComercialId, empresaId) => {
  */
 const crear = async (data) => {
   try {
-    // Normalizar campos de texto a mayúsculas
-    const dataNormalizada = normalizarDatosProducto(data);
+    // Normalizar campos de texto a mayúsculas. La empresa y el cliente no se toman de la pantalla: siempre son los de MEGUI
+    const dataNormalizada = normalizarDatosProducto({ ...data, ...(await obtenerPropietarioMaestro()) });
     // Si no hay código, generar uno automático basado en familia y timestamp
     if (!dataNormalizada.codigo) {
       const timestamp = Date.now().toString().slice(-6);
@@ -374,9 +385,9 @@ const crear = async (data) => {
     // Heredar márgenes de la Empresa si no se especificaron
     let dataConMargenes = { ...dataNormalizada };
 
-    if (data.empresaId && (data.margenMinimoPermitido === undefined || data.margenUtilidadObjetivo === undefined)) {
+    if (dataNormalizada.empresaId && (data.margenMinimoPermitido === undefined || data.margenUtilidadObjetivo === undefined)) {
       const empresa = await prisma.empresa.findUnique({
-        where: { id: data.empresaId },
+        where: { id: dataNormalizada.empresaId },
         select: {
           margenMinimoPermitido: true,
           margenUtilidadObjetivo: true
@@ -441,8 +452,8 @@ const actualizar = async (id, data) => {
     const existente = await prisma.producto.findUnique({ where: { id } });
     if (!existente) throw new NotFoundError('Producto no encontrado');
 
-    // Normalizar campos de texto a mayúsculas
-    const dataNormalizada = normalizarDatosProducto(data);
+    // Normalizar campos de texto a mayúsculas. La empresa y el cliente no se pueden cambiar: siempre son los de MEGUI
+    const dataNormalizada = normalizarDatosProducto({ ...data, ...(await obtenerPropietarioMaestro()) });
 
     // Convertir 0 a null para cuentas contables (0 significa "limpiar campo")
     const cuentasContables = [
