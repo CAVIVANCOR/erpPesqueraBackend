@@ -685,7 +685,17 @@ async function generarPDFIndividual(empresaId, periodo, car) {
 
     if (!xmlResponse.ok) {
       const errorText = await xmlResponse.text();
-      throw new ValidationError(`Error descargando XML: ${xmlResponse.statusText}`);
+      // Se informa el motivo real que devuelve json.pe (credenciales SOL, token, comprobante no encontrado, límite del plan...)
+      let detalle = errorText;
+      try {
+        const cuerpo = JSON.parse(errorText);
+        detalle = cuerpo.message || cuerpo.mensaje || cuerpo.error || errorText;
+      } catch {
+        // la respuesta no es JSON: se informa el texto tal cual
+      }
+      throw new ValidationError(
+        `Error descargando XML (json.pe, HTTP ${xmlResponse.status}) del comprobante ${serie}-${numero} del proveedor ${rucProveedor}: ${String(detalle).slice(0, 300)}`,
+      );
     }
 
     const xmlData = await xmlResponse.json();

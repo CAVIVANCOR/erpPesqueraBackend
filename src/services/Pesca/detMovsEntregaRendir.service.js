@@ -250,7 +250,8 @@ const crear = async (data, usuarioId = null) => {
       select: { categoriaId: true },
     });
 
-    const esAsignacion = tipoMovimiento?.categoriaId === 17; // GASTOS A RENDIR
+    // categoriaId llega como BigInt: se compara con Number() (17n === 17 es falso)
+    const esAsignacion = Number(tipoMovimiento?.categoriaId) === 17; // GASTOS A RENDIR
 
     // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
     if (esAsignacion) {
@@ -348,7 +349,7 @@ const actualizar = async (id, data, usuarioId = null) => {
     }
 
     // Determinar si el tipo de movimiento final es una asignación
-    let esAsignacion = existente.tipoMovimiento?.categoriaId === 17;
+    let esAsignacion = Number(existente.tipoMovimiento?.categoriaId) === 17;
 
     // Si se está cambiando el tipo de movimiento, verificar el nuevo tipo
     if (
@@ -359,7 +360,7 @@ const actualizar = async (id, data, usuarioId = null) => {
         where: { id: Number(data.tipoMovimientoId) },
         select: { categoriaId: true },
       });
-      esAsignacion = nuevoTipoMovimiento?.categoriaId === 17;
+      esAsignacion = Number(nuevoTipoMovimiento?.categoriaId) === 17;
     }
 
     // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
@@ -991,7 +992,7 @@ const recalcularSaldosResponsable = async (responsableId) => {
     const asignaciones = movimientos.filter(
       (mov) =>
         mov.asignacionOrigenId === null &&
-        mov.tipoMovimiento?.categoriaId === 17 // Categoría "GASTOS A RENDIR"
+        Number(mov.tipoMovimiento?.categoriaId) === 17 // Categoría "GASTOS A RENDIR"
     );
 
     // ========================================
