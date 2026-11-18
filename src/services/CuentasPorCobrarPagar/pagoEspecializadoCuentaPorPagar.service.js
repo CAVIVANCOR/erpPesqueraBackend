@@ -1,4 +1,5 @@
 import prisma from '../../config/prismaClient.js';
+import { obtenerIdTipoPorRol, obtenerIdTipoPorRolSinValidar } from '../Tesoreria/tipoMovimientoSistema.service.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
 import correlativoService from '../Tesoreria/correlativoOperacionCaja.service.js';
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
@@ -114,11 +115,20 @@ const ESTADOS_PERCEPCION = {
 // CONSTANTES DE NEGOCIO - TIPOS DE MOVIMIENTO
 // ════════════════════════════════════════════════════════════
 
-const TIPOS_MOVIMIENTO = {
-  ITF: 163,                    // ✅ ITF PORTES EMBARGOS MANTENIMIENTO DE CUENTAS COMISIONES
-  COMISION_BANCARIA: 163,      // ✅ ITF PORTES EMBARGOS MANTENIMIENTO DE CUENTAS COMISIONES (mismo que ITF)
-  DETRACCION_EGRESO: 165,     // ✅ SUNAT (para Detracción, Retención, Percepción - EGRESO)
-  DETRACCION_SALIDA: 165       // ✅ SUNAT (para Detracción, Retención, Percepción - SALIDA)
+// Los tipos se identifican por su ROL (codigoSistema), nunca por su id:
+//   ITF_COMISION: ITF y comisión bancaria comparten el mismo tipo.
+//   SUNAT: Detracción, retención y percepción comparten el mismo tipo.
+// `estricto` = true al registrar movimientos (el rol debe existir y estar activo); false al solo reconocer movimientos existentes.
+const cargarTiposMovimiento = async (tx = null, estricto = false) => {
+  const resolver = estricto ? obtenerIdTipoPorRol : obtenerIdTipoPorRolSinValidar;
+  const itf = await resolver('ITF_COMISION', tx);
+  const sunat = await resolver('SUNAT', tx);
+  return {
+    ITF: itf,
+    COMISION_BANCARIA: itf,
+    DETRACCION_EGRESO: sunat,
+    DETRACCION_SALIDA: sunat
+  };
 };
 
 // ════════════════════════════════════════════════════════════
@@ -152,7 +162,7 @@ const CODIGOS_CUENTAS_CONTABLES = {
   HONORARIOS_POR_PAGAR_SOLES: '424101',    // ✅ HONORARIOS POR PAGAR MN
   HONORARIOS_POR_PAGAR_DOLARES: '424102',  // ✅ HONORARIOS POR PAGAR ME
   GASTOS_SUMINISTROS: '656101',            // ✅ SUMINISTROS (cuenta por defecto para gastos sin factura)
-  ITF: '641101',                           // ✅ ITF
+  ITF: '641201',                           // ✅ ITF
   COMISIONES_BANCARIAS: '679401'           // ✅ COMISIONES BANCARIAS
 };
 
@@ -607,6 +617,7 @@ async function generarAsientoParaMovimiento({
   detallesOrdenCompra,
   tx
 }) {
+  const TIPOS_MOVIMIENTO = await cargarTiposMovimiento(tx);
 
   
   // Validación inicial
@@ -1503,6 +1514,7 @@ async function actualizarSaldoCuentaCorriente({
 const procesarPagoEspecializado = async (data) => {
   try {
     const resultado = await prisma.$transaction(async (tx) => {
+      const TIPOS_MOVIMIENTO = await cargarTiposMovimiento(tx, true);
       // Cancelación de solo la detracción (el neto es independiente): flujo propio, sin pago del neto
       if (esPagoSoloDetraccion(data)) {
         return await ejecutarPagoSoloDetraccion(tx, data);
@@ -2488,6 +2500,7 @@ const esPagoSoloDetraccion = (data) =>
  * actualización de la detracción, asientos y recálculo de la cuenta por pagar.
  */
 const ejecutarPagoSoloDetraccion = async (tx, data) => {
+  const TIPOS_MOVIMIENTO = await cargarTiposMovimiento(tx, true);
   const redondear2 = (valor) => Math.round(Number(valor) * 100) / 100;
   const det = data.detraccion || {};
 
@@ -3185,6 +3198,7 @@ const listarPagosEspecializados = async (empresaId, filtros = {}) => {
  */
 const obtenerResumenOperacion = async (empresaId, correlativo) => {
   try {
+    const TIPOS_MOVIMIENTO = await cargarTiposMovimiento();
     const operacion = await obtenerPagosPorCorrelativo(empresaId, correlativo);
 
     // Calcular totales

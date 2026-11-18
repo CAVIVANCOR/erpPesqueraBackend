@@ -1,4 +1,5 @@
 import prisma from "../../config/prismaClient.js";
+import { obtenerIdTipoPorRol } from "./tipoMovimientoSistema.service.js";
 import {
   NotFoundError,
   DatabaseError,
@@ -63,14 +64,12 @@ const ESTADOS_DEUDA = {
 };
 
 const ESTADO_MOVIMIENTO_CAJA_VALIDADO = 21;
-// ITF y comisión comparten el mismo tipo de movimiento
-const TIPO_MOVIMIENTO_ITF_COMISION = 163;
 const MONEDA_NACIONAL_ID = 1;
 // Submódulo origen del motivo de la operación: Deudas Tributarias
 const SUBMODULO_ORIGEN_DEUDAS_TRIBUTARIAS_ID = 137;
 
 const CODIGOS_CUENTAS_CONTABLES = {
-  ITF: "641101",
+  ITF: "641201",
   COMISIONES_BANCARIAS: "679401",
 };
 
@@ -383,6 +382,9 @@ const procesarPagoMultiple = async (datos) => {
     const comision = Number(datos.comision || 0);
     if (itf < 0) throw new ValidationError("El ITF no puede ser negativo.");
     if (comision < 0) throw new ValidationError("La comisión no puede ser negativa.");
+
+    // ITF y comisión comparten el mismo tipo de movimiento (rol ITF_COMISION)
+    const TIPO_MOVIMIENTO_ITF_COMISION = await obtenerIdTipoPorRol("ITF_COMISION");
 
     const resultado = await prisma.$transaction(async (tx) => {
       // ════════════════════════════════════════════════════════════

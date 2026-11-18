@@ -458,7 +458,8 @@ async function facturasDelPrestamo(db, prestamoId) {
       cuentaPorCobrar: {
         include: { cliente: { select: { razonSocial: true } }, preFactura: { select: { numeroDocumento: true, numeroDocumentoFinal: true } } },
       },
-      moneda: { select: { simbolo: true } },
+      // PagoCuentaPorCobrar no tiene la relación `moneda`: la moneda del pago es `monedaPago`
+      monedaPago: { select: { simbolo: true } },
     },
     orderBy: { id: "asc" },
   });
@@ -477,7 +478,7 @@ async function facturasDelPrestamo(db, prestamoId) {
       cuentaPorCobrarId: p.cuentaPorCobrarId,
       numeroDocumento: nombreFactura(p.cuentaPorCobrar),
       cliente: p.cuentaPorCobrar?.cliente?.razonSocial || "",
-      simbolo: p.moneda?.simbolo || "",
+      simbolo: p.monedaPago?.simbolo || "",
       monto: num(p.montoAplicadoDeuda),
       fechaVencimiento: p.cuentaPorCobrar?.fechaVencimiento,
       liquidada: Boolean(liquidacion),

@@ -4,6 +4,7 @@ import crearMovimientoAlmacenService from '../Almacen/crearMovimientoAlmacen.ser
 import buscarPrecioProductoService from '../Ventas/buscarPrecioProducto.service.js';
 import crearPreFacturaCompletaService from '../Ventas/crearPreFacturaCompleta.service.js';
 import { validarTipoCambio } from '../../utils/tipoCambio.util.js';
+import { calcularEgresosEntregaRendir } from './egresosEntregaRendir.service.js';
 
 /**
  * Servicio para finalizar una descarga individual y generar movimientos de almacén
@@ -467,59 +468,32 @@ const finalizarDescargaConMovimientos = async (descargaId, temporadaPescaId, usu
 /**
  * Calcula el costo unitario para TemporadaPesca
  * 
- * IMPORTANTE: Usa la CUOTA ASIGNADA como base de cálculo, NO las toneladas descargadas.
+ * IMPORTANTE: Usa la CUOTA de la temporada (propia + alquilada) como base de cálculo, NO las toneladas descargadas.
  * Esto es porque en pesca industrial los gastos se planifican para la cuota completa
  * autorizada por PRODUCE, independientemente de cuánto se pesque realmente.
  * 
- * Fórmula: Costo Unitario = Total Egresos ÷ Cuota Asignada
+ * Fórmula: Costo Unitario = Total Egresos (soles) ÷ (Cuota Propia + Cuota Alquilada)
+ *
+ * Los egresos salen de DetMovsEntregaRendir (ver egresosEntregaRendir.service.js). Los errores no se silencian:
+ * un costo en cero por una falla aquí valorizaría mal el almacén sin que nadie lo note.
  */
 async function calcularCostoUnitario(tx, temporadaPescaId, descargas) {
-  try {
-    // 1. Obtener la temporada con su cuota asignada
-    const temporada = await tx.temporadaPesca.findUnique({
-      where: { id: temporadaPescaId }
-    });
+  // 1. Obtener la temporada con su cuota (propia + alquilada)
+  const temporada = await tx.temporadaPesca.findUnique({
+    where: { id: temporadaPescaId }
+  });
 
-    if (!temporada || !temporada.cuotaAsignada) {
-      // console.warn('⚠️ No se encontró cuota asignada para la temporada');
-      return 0;
-    }
-
-    // 2. Obtener entregas a rendir (egresos)
-    const entregaRendir = await tx.entregaARendir.findFirst({
-      where: { temporadaPescaId: temporadaPescaId },
-      include: {
-        movimientos: {
-          where: {
-            tipoMovimientoId: BigInt(2) // Egreso
-          }
-        }
-      }
-    });
-
-    if (!entregaRendir || !entregaRendir.movimientos || entregaRendir.movimientos.length === 0) {
-      return 0;
-    }
-
-    // 3. Calcular total de egresos
-    const totalEgresos = entregaRendir.movimientos.reduce((sum, detalle) => {
-      return sum + Number(detalle.monto || 0);
-    }, 0);
-
-    // 4. BASE DE CÁLCULO: CUOTA ASIGNADA (no toneladas descargadas)
-    const cuotaAsignada = Number(temporada.cuotaAsignada);
-
-    if (cuotaAsignada === 0) {
-      // console.warn('⚠️ Cuota asignada es 0');
-      return 0;
-    }
-    // 5. Calcular costo unitario
-    const costoUnitario = totalEgresos / cuotaAsignada;
-    return costoUnitario;
-  } catch (error) {
-    // console.error('❌ Error calculando costo unitario:', error);
+  const cuotaTotal = Number(temporada?.cuotaPropiaTon || 0) + Number(temporada?.cuotaAlquiladaTon || 0);
+  if (!(cuotaTotal > 0)) {
+    // Sin cuota no hay base de cálculo: el costo unitario queda en cero (igual que antes)
     return 0;
   }
+
+  // 2. Total de egresos (gastos reales de la entrega a rendir de la temporada, en soles)
+  const totalEgresos = await calcularEgresosEntregaRendir(tx, 'TemporadaPesca', temporadaPescaId);
+
+  // 3. Costo unitario = egresos ÷ cuota total
+  return totalEgresos / cuotaTotal;
 }
 
 export default {

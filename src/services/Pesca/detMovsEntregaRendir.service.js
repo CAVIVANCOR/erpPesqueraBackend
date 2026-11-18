@@ -1,4 +1,5 @@
 import prisma from '../../config/prismaClient.js';
+import { obtenerIdTipoPorRolSinValidar, tipoTieneCategoriaConRol } from '../Tesoreria/tipoMovimientoSistema.service.js';
 import {
   ESTADO_ORDEN_COMPRA,
   ESTADO_CUENTA_POR_PAGAR,
@@ -247,11 +248,11 @@ const crear = async (data, usuarioId = null) => {
     // Obtener el tipo de movimiento para validar si es asignación
     const tipoMovimiento = await prisma.tipoMovEntregaRendir.findUnique({
       where: { id: Number(data.tipoMovimientoId) },
-      select: { categoriaId: true },
+      select: { categoria: { select: { codigoSistema: true } } },
     });
 
-    // categoriaId llega como BigInt: se compara con Number() (17n === 17 es falso)
-    const esAsignacion = Number(tipoMovimiento?.categoriaId) === 17; // GASTOS A RENDIR
+    // Es asignación si el tipo pertenece a la categoría con el rol GASTOS_A_RENDIR (no se usa el id de la categoría)
+    const esAsignacion = tipoTieneCategoriaConRol(tipoMovimiento, 'GASTOS_A_RENDIR');
 
     // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
     if (esAsignacion) {
@@ -336,7 +337,7 @@ const actualizar = async (id, data, usuarioId = null) => {
       where: { id },
       include: {
         tipoMovimiento: {
-          select: { categoriaId: true },
+          select: { categoria: { select: { codigoSistema: true } } },
         },
       },
     });
@@ -349,7 +350,7 @@ const actualizar = async (id, data, usuarioId = null) => {
     }
 
     // Determinar si el tipo de movimiento final es una asignación
-    let esAsignacion = Number(existente.tipoMovimiento?.categoriaId) === 17;
+    let esAsignacion = tipoTieneCategoriaConRol(existente.tipoMovimiento, 'GASTOS_A_RENDIR');
 
     // Si se está cambiando el tipo de movimiento, verificar el nuevo tipo
     if (
@@ -358,9 +359,9 @@ const actualizar = async (id, data, usuarioId = null) => {
     ) {
       const nuevoTipoMovimiento = await prisma.tipoMovEntregaRendir.findUnique({
         where: { id: Number(data.tipoMovimientoId) },
-        select: { categoriaId: true },
+        select: { categoria: { select: { codigoSistema: true } } },
       });
-      esAsignacion = Number(nuevoTipoMovimiento?.categoriaId) === 17;
+      esAsignacion = tipoTieneCategoriaConRol(nuevoTipoMovimiento, 'GASTOS_A_RENDIR');
     }
 
     // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
@@ -862,7 +863,7 @@ const obtenerSaldoInicialAsignacion = async (
           formaParteCalculoEntregaARendir: true,
           entregaARendirLiquidada: true,
           tipoMovimiento: {
-            categoriaId: 17,
+            categoria: { codigoSistema: 'GASTOS_A_RENDIR' },
           },
           fechaMovimiento: {
             lt: new Date(fechaMovimiento),
@@ -898,6 +899,8 @@ const obtenerSaldoInicialAsignacion = async (
  */
 const calcularSaldoFinalAsignacion = async (asignacionId) => {
   try {
+    // Tipo "Devolución a Rendir" por rol (no por id)
+    const tipoDevolucionId = await obtenerIdTipoPorRolSinValidar('DEVOLUCION_A_RENDIR');
     // Obtener la asignación con sus gastos asociados
     const asignacion = await prisma.detMovsEntregaRendir.findUnique({
       where: { id: Number(asignacionId) },
@@ -932,8 +935,8 @@ const calcularSaldoFinalAsignacion = async (asignacionId) => {
     asignacion.gastosAsociados.forEach((movimiento) => {
       const monto = Number(movimiento.monto);
 
-      // tipoMovimientoId = 28 es "Devolución a Rendir"
-      if (Number(movimiento.tipoMovimientoId) === 28) {
+      // El tipo con el rol DEVOLUCION_A_RENDIR es "Devolución a Rendir"
+      if (Number(movimiento.tipoMovimientoId) === tipoDevolucionId) {
         totalDevoluciones += monto;
       } else {
         totalGastos += monto;
@@ -965,6 +968,8 @@ const calcularSaldoFinalAsignacion = async (asignacionId) => {
  */
 const recalcularSaldosResponsable = async (responsableId) => {
   try {
+    // Tipo "Devolución a Rendir" por rol (no por id)
+    const tipoDevolucionId = await obtenerIdTipoPorRolSinValidar('DEVOLUCION_A_RENDIR');
     // ========================================
     // PASO 1: Obtener todos los movimientos del responsable
     // ========================================
@@ -976,7 +981,7 @@ const recalcularSaldosResponsable = async (responsableId) => {
       include: {
         tipoMovimiento: {
           select: {
-            categoriaId: true,
+            categoria: { select: { codigoSistema: true } },
           },
         },
       },
@@ -992,7 +997,7 @@ const recalcularSaldosResponsable = async (responsableId) => {
     const asignaciones = movimientos.filter(
       (mov) =>
         mov.asignacionOrigenId === null &&
-        Number(mov.tipoMovimiento?.categoriaId) === 17 // Categoría "GASTOS A RENDIR"
+        tipoTieneCategoriaConRol(mov.tipoMovimiento, 'GASTOS_A_RENDIR') // Categoría con rol GASTOS_A_RENDIR
     );
 
     // ========================================
@@ -1043,7 +1048,7 @@ const recalcularSaldosResponsable = async (responsableId) => {
       // ========================================
       for (const movimiento of movimientosAsignacion) {
         const movimientoId = Number(movimiento.id);
-        const esDevolucion = Number(movimiento.tipoMovimientoId) === 28;
+        const esDevolucion = Number(movimiento.tipoMovimientoId) === tipoDevolucionId;
 
         // Calcular saldos según tipo de movimiento
         if (esDevolucion) {
@@ -1083,6 +1088,8 @@ const recalcularSaldosResponsable = async (responsableId) => {
  */
 const recalcularSaldosAutomatico = async (responsableId) => {
   try {
+    // Tipo "Devolución a Rendir" por rol (no por id)
+    const tipoDevolucionId = await obtenerIdTipoPorRolSinValidar('DEVOLUCION_A_RENDIR');
     // Obtener todos los movimientos del responsable que forman parte del cálculo
     const movimientos = await prisma.detMovsEntregaRendir.findMany({
       where: {
@@ -1129,7 +1136,7 @@ const recalcularSaldosAutomatico = async (responsableId) => {
 
       // Procesar cada gasto/devolución
       for (const gasto of gastosAsignacion) {
-        const esDevolucion = Number(gasto.tipoMovimientoId) === 28;
+        const esDevolucion = Number(gasto.tipoMovimientoId) === tipoDevolucionId;
 
         if (esDevolucion) {
           SaldoFinal = SaldoInicial + Number(gasto.monto || 0);

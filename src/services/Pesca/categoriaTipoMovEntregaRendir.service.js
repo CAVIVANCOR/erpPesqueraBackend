@@ -1,11 +1,56 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
+import { ROLES_CATEGORIA_MOV, normalizarRolSistema } from '../../utils/tiposMovimientoSistema.constants.js';
 
 /**
  * Servicio CRUD para CategoriaTipoMovEntregaRendir
  * Previene borrado si tiene tipos de movimiento asociados.
  * Documentado en español.
  */
+
+/**
+ * Valida el rol del sistema (`codigoSistema`) de una categoría y devuelve el valor normalizado
+ * (`undefined` = no se envió, `null` = sin rol). Reglas: el rol debe existir en el catálogo, su sentido debe coincidir
+ * con el de la categoría (`tipo`: false = INGRESO, true = EGRESO), un rol solo puede estar en una categoría y una
+ * categoría con rol no puede cesarse (el sistema la necesita para operar).
+ */
+async function validarRolSistema(data, existente = null) {
+  const normalizado = normalizarRolSistema(data.codigoSistema);
+  const codigo = normalizado !== undefined ? normalizado : existente?.codigoSistema ?? null;
+  if (codigo) {
+    const rol = ROLES_CATEGORIA_MOV[codigo];
+    const nombre = data.nombre ?? existente?.nombre ?? '';
+    if (!rol) {
+      throw new ValidationError(`El rol "${codigo}" no es válido para una categoría. Roles permitidos: ${Object.keys(ROLES_CATEGORIA_MOV).join(', ')}.`);
+    }
+
+    const tipo = data.tipo !== undefined ? Boolean(data.tipo) : existente?.tipo;
+    if (typeof tipo === 'boolean' && tipo === rol.esIngreso) {
+      throw new ValidationError(
+        `El rol "${rol.etiqueta}" es de ${rol.esIngreso ? 'INGRESO' : 'EGRESO'}, pero la categoría "${nombre}" es de ${tipo ? 'EGRESO' : 'INGRESO'}.`
+      );
+    }
+
+    if (data.cesado !== undefined && Boolean(data.cesado)) {
+      throw new ValidationError(
+        `La categoría "${nombre}" cumple el rol "${rol.etiqueta}" que el sistema necesita: no se puede cesar. Quite o reasigne el rol antes.`
+      );
+    }
+
+    if (!existente || existente.codigoSistema !== codigo) {
+      const ocupada = await prisma.categoriaTipoMovEntregaRendir.findFirst({
+        where: { codigoSistema: codigo },
+        select: { id: true, nombre: true }
+      });
+      if (ocupada) {
+        throw new ConflictError(
+          `El rol "${rol.etiqueta}" ya está asignado a la categoría "${ocupada.nombre}" (id ${ocupada.id}). Quítelo de esa categoría antes de asignarlo a otra.`
+        );
+      }
+    }
+  }
+  return normalizado;
+}
 
 
 async function tieneDependencias(id) {
@@ -85,12 +130,15 @@ const crear = async (data, userId) => {
       throw new ValidationError('El campo nombre es obligatorio.');
     }
 
+    const codigoSistema = await validarRolSistema(data);
+
     const datosLimpios = {
       nombre: data.nombre.trim(),
       cesado: data.cesado !== undefined ? Boolean(data.cesado) : false,
       tipo: data.tipo !== undefined ? Boolean(data.tipo) : false,
       creadoPor: userId ? BigInt(userId) : null,
     };
+    if (codigoSistema !== undefined) datosLimpios.codigoSistema = codigoSistema;
 
     return await prisma.categoriaTipoMovEntregaRendir.create({
       data: datosLimpios,
@@ -137,6 +185,11 @@ const actualizar = async (id, data, userId) => {
     if (data.tipo !== undefined) {
       datosLimpios.tipo = Boolean(data.tipo);
     }
+
+    const codigoSistema = await validarRolSistema(data, existente);
+    if (codigoSistema !== undefined) {
+      datosLimpios.codigoSistema = codigoSistema;
+    }
     
     if (userId) {
       datosLimpios.actualizadoPor = BigInt(userId);
@@ -169,6 +222,12 @@ const actualizar = async (id, data, userId) => {
 
 const eliminar = async (id) => {
   try {
+    const conRol = await prisma.categoriaTipoMovEntregaRendir.findUnique({ where: { id }, select: { nombre: true, codigoSistema: true } });
+    if (conRol?.codigoSistema) {
+      throw new ConflictError(
+        `La categoría "${conRol.nombre}" cumple el rol "${ROLES_CATEGORIA_MOV[conRol.codigoSistema]?.etiqueta || conRol.codigoSistema}" que el sistema necesita: no se puede eliminar. Quite o reasigne el rol antes.`
+      );
+    }
     if (await tieneDependencias(id)) {
       throw new ConflictError('No se puede eliminar porque tiene tipos de movimiento asociados.');
     }

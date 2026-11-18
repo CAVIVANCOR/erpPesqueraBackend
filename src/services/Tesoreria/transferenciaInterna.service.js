@@ -4,6 +4,7 @@ import correlativoService from './correlativoOperacionCaja.service.js';
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import periodoContableService from '../Contabilidad/periodoContable.service.js';
 import prestamoRelacionadoService from './prestamoRelacionado.service.js';
+import { obtenerIdTipoPorRol, obtenerIdTipoPorRolSinValidar } from './tipoMovimientoSistema.service.js';
 import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
 import { ESTADO_ASIENTO_CONTABLE } from '../../utils/estados.constants.js';
 import { entidadDeBanco } from '../../utils/entidadBanco.js';
@@ -63,10 +64,13 @@ const ESTADOS_MOVIMIENTO_CAJA = {
 // CONSTANTES DE NEGOCIO - TIPOS DE MOVIMIENTO
 // ════════════════════════════════════════════════════════════
 
-const TIPOS_MOVIMIENTO = {
-  ITF: 163,                    // ✅ ITF PORTES EMBARGOS MANTENIMIENTO DE CUENTAS COMISIONES
-  COMISION_BANCARIA: 163,      // ✅ ITF PORTES EMBARGOS MANTENIMIENTO DE CUENTAS COMISIONES (mismo que ITF)
-};
+// Los tipos de movimiento se identifican por su ROL (codigoSistema), nunca por su id:
+//   ITF_COMISION: ITF y comisión bancaria comparten el mismo tipo.
+//   PRESTAMO_RELACIONADO_INGRESO / PRESTAMO_RELACIONADO_EGRESO: préstamos entre empresas relacionadas.
+const tiposPrestamoRelacionado = async (tx) => ({
+  INGRESO: await obtenerIdTipoPorRolSinValidar('PRESTAMO_RELACIONADO_INGRESO', tx),
+  EGRESO: await obtenerIdTipoPorRolSinValidar('PRESTAMO_RELACIONADO_EGRESO', tx)
+});
 
 // ════════════════════════════════════════════════════════════
 // CONSTANTES DE NEGOCIO - SUBMÓDULOS
@@ -84,21 +88,16 @@ const SUBMODULOS = {
 // data.operacionPrestamoRelacionado.
 //
 // Asientos (cada empresa registra los suyos, con su propia cuenta bancaria):
-//   DESEMBOLSO   origen:  DEBE 171111 Cuentas por cobrar a relacionadas / HABER banco
+//   DESEMBOLSO   origen:  DEBE 171201 Cuentas por cobrar a relacionadas / HABER banco
 //                destino: DEBE banco / HABER 471101 Cuentas por pagar a relacionadas
 //   DEVOLUCIÓN   origen:  DEBE 471101 Cuentas por pagar a relacionadas  / HABER banco
-//                destino: DEBE banco / HABER 171111 Cuentas por cobrar a relacionadas
-// En moneda extranjera: 171112 y 471112.
-const TIPOS_PRESTAMO_RELACIONADO = {
-  INGRESO: 187,
-  EGRESO: 188
-};
-
+//                destino: DEBE banco / HABER 171201 Cuentas por cobrar a relacionadas
+// En moneda extranjera: 171202 y 471112.
 const OPERACIONES_PRESTAMO_RELACIONADO = ['DESEMBOLSO', 'DEVOLUCION'];
 
 const CUENTAS_PRESTAMO_RELACIONADO = {
-  POR_COBRAR_MN: '171111',
-  POR_COBRAR_ME: '171112',
+  POR_COBRAR_MN: '171201',
+  POR_COBRAR_ME: '171202',
   POR_PAGAR_MN: '471101',
   POR_PAGAR_ME: '471112'
 };
@@ -108,7 +107,7 @@ const CUENTAS_PRESTAMO_RELACIONADO = {
 // ════════════════════════════════════════════════════════════
 
 const CODIGOS_CUENTAS_CONTABLES = {
-  ITF: '641101',                           // ✅ ITF
+  ITF: '641201',                           // ✅ ITF
   COMISIONES_BANCARIAS: '679401',          // ✅ COMISIONES BANCARIAS
   TRANSFERENCIAS_INTERNAS: '104901'        // ✅ TRANSFERENCIAS INTERNAS EN TRÁNSITO
 };
@@ -362,6 +361,7 @@ async function validarDatosTransferenciaInterna(data, tx = null) {
   // ========================================
   const tipoEgreso = Number(data.tipoMovimientoEgresoId || 0);
   const tipoIngreso = Number(data.tipoMovimientoIngresoId || 0);
+  const TIPOS_PRESTAMO_RELACIONADO = await tiposPrestamoRelacionado(tx);
   const usaTipoPrestamo =
     tipoEgreso === TIPOS_PRESTAMO_RELACIONADO.EGRESO || tipoIngreso === TIPOS_PRESTAMO_RELACIONADO.INGRESO;
   let esPrestamoRelacionado = false;
@@ -651,7 +651,7 @@ async function generarAsientosContablesTransferencia(
         );
 
         if (!asiento && prestamoRelacionado &&
-            [TIPOS_PRESTAMO_RELACIONADO.EGRESO, TIPOS_PRESTAMO_RELACIONADO.INGRESO].includes(Number(movimientoCompleto.tipoMovimientoId))) {
+            Object.values(await tiposPrestamoRelacionado(tx)).includes(Number(movimientoCompleto.tipoMovimientoId))) {
           throw new ValidationError(
             'No se pudo generar el asiento del préstamo entre relacionadas. Verifique que las cuentas bancarias de origen y destino tengan cuenta contable asociada.'
           );
@@ -720,8 +720,10 @@ async function crearAsientoSegunTipo(
   tx,
   prestamoRelacionado = null
 ) {
-  
-  
+  // Tipos de movimiento por rol (ITF/comisión y préstamos entre relacionadas)
+  const tipoItfComisionId = await obtenerIdTipoPorRolSinValidar('ITF_COMISION', tx);
+  const TIPOS_PRESTAMO_RELACIONADO = await tiposPrestamoRelacionado(tx);
+
   // Préstamo entre relacionadas: relacionada que se identifica en la línea de la cuenta por cobrar/pagar
   let entidadRelacionadaId = null;
   let cuentaConEntidadId = null;
@@ -742,7 +744,7 @@ async function crearAsientoSegunTipo(
     : (movimiento.descripcion || 'TRANSFERENCIA');
 
   // ✅ PROFESIONAL: Diferenciar ITF y Comisión por descripción (mismo tipoMovimientoId: 163)
-  const tipoMovimientoEsITFoComision = Number(movimiento.tipoMovimientoId) === TIPOS_MOVIMIENTO.ITF;
+  const tipoMovimientoEsITFoComision = Number(movimiento.tipoMovimientoId) === tipoItfComisionId;
   const descripcionUpper = movimiento.descripcion ? movimiento.descripcion.toUpperCase() : '';
   const esITF = tipoMovimientoEsITFoComision && descripcionUpper.startsWith('ITF');
   const esComision = tipoMovimientoEsITFoComision && 
@@ -765,18 +767,18 @@ async function crearAsientoSegunTipo(
   // ════════════════════════════════════════════════════════════
   if (esITF) {
     
-    // Buscar cuenta de gasto ITF (641101)
+    // Buscar cuenta de gasto ITF (641201)
     const cuentaGastoITF = await tx.planCuentasContable.findFirst({
-      where: { codigoCuenta: '641101' }
+      where: { codigoCuenta: '641201' }
     });
     
     if (!cuentaGastoITF) {
-      console.error(`   ❌ ERROR: No se encontró la cuenta 641101 (Gasto ITF)`);
+      console.error(`   ❌ ERROR: No se encontró la cuenta 641201 (Gasto ITF)`);
       return null;
     }
     
     if (!cuentaGastoITF.centroCostoId) {
-      console.error(`   ❌ ERROR: La cuenta 641101 no tiene centro de costo asignado`);
+      console.error(`   ❌ ERROR: La cuenta 641201 no tiene centro de costo asignado`);
       return null;
     }
     
@@ -830,8 +832,8 @@ async function crearAsientoSegunTipo(
   // ════════════════════════════════════════════════════════════
   //
   // Cada empresa registra su propio asiento con su cuenta bancaria y la cuenta de relacionadas:
-  //   DESEMBOLSO:  origen  DEBE 171111 / HABER banco      destino DEBE banco / HABER 471101
-  //   DEVOLUCIÓN:  origen  DEBE 471101 / HABER banco      destino DEBE banco / HABER 171111
+  //   DESEMBOLSO:  origen  DEBE 171201 / HABER banco      destino DEBE banco / HABER 471101
+  //   DEVOLUCIÓN:  origen  DEBE 471101 / HABER banco      destino DEBE banco / HABER 171201
   // La línea de la cuenta por cobrar/pagar lleva como entidad a la empresa relacionada.
   //
   else if (
@@ -840,7 +842,7 @@ async function crearAsientoSegunTipo(
     [TIPOS_PRESTAMO_RELACIONADO.EGRESO, TIPOS_PRESTAMO_RELACIONADO.INGRESO].includes(Number(movimiento.tipoMovimientoId))
   ) {
     // La cuenta de relacionadas sigue la moneda del PRÉSTAMO, no la del movimiento: un préstamo en dólares que la
-    // prestataria recibe en soles se registra igual en 171112/471112, con su monto en dólares en la línea.
+    // prestataria recibe en soles se registra igual en 171202/471112, con su monto en dólares en la línea.
     const esMonedaExtranjera = Number(prestamoRelacionado.monedaPrestamoId) !== 1;
     montoMonedaExtranjeraPrestamo = esMonedaExtranjera ? Number(prestamoRelacionado.montoPrestamo) : null;
     const cuentaPorCobrar = prestamoRelacionado.cuentas[esMonedaExtranjera ? CUENTAS_PRESTAMO_RELACIONADO.POR_COBRAR_ME : CUENTAS_PRESTAMO_RELACIONADO.POR_COBRAR_MN];
@@ -1168,6 +1170,9 @@ async function crearAsientoSegunTipo(
 export async function procesarTransferenciaInterna(data) {
   return await prisma.$transaction(async (tx) => {
     try {
+      // ITF y comisión comparten el mismo tipo de movimiento (rol ITF_COMISION)
+      const tipoItfComisionId = await obtenerIdTipoPorRol('ITF_COMISION', tx);
+
       // ════════════════════════════════════════════════════════════
       // PASO 1: VALIDAR DATOS
       // ════════════════════════════════════════════════════════════
@@ -1290,7 +1295,7 @@ export async function procesarTransferenciaInterna(data) {
         movimientoITFOrigen = await tx.movimientoCaja.create({
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
-            tipoMovimientoId: TIPOS_MOVIMIENTO.ITF,
+            tipoMovimientoId: tipoItfComisionId,
             empresaId: Number(cuentaOrigen.empresaId),  // ✅ EMPRESA DE LA CUENTA ORIGEN
             entidadComercialId: entidadDeBanco(cuentaOrigen.banco),  // Banco de la cuenta origen (null si no tiene enlace)
             monto: Number(data.itfOrigen),
@@ -1337,7 +1342,7 @@ export async function procesarTransferenciaInterna(data) {
         movimientoComisionOrigen = await tx.movimientoCaja.create({
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
-            tipoMovimientoId: TIPOS_MOVIMIENTO.COMISION_BANCARIA,
+            tipoMovimientoId: tipoItfComisionId,
             empresaId: Number(cuentaOrigen.empresaId),  // ✅ EMPRESA DE LA CUENTA ORIGEN
             entidadComercialId: entidadDeBanco(cuentaOrigen.banco),  // Banco de la cuenta origen (null si no tiene enlace)
             monto: Number(data.comisionOrigen),
@@ -1436,7 +1441,7 @@ export async function procesarTransferenciaInterna(data) {
         movimientoITFDestino = await tx.movimientoCaja.create({
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
-            tipoMovimientoId: TIPOS_MOVIMIENTO.ITF,
+            tipoMovimientoId: tipoItfComisionId,
             empresaId: Number(cuentaDestino.empresaId),  // ✅ EMPRESA DE LA CUENTA DESTINO
             entidadComercialId: entidadDeBanco(cuentaDestino.banco),  // Banco de la cuenta destino (null si no tiene enlace)
             monto: Number(data.itfDestino),
@@ -1481,7 +1486,7 @@ export async function procesarTransferenciaInterna(data) {
         movimientoComisionDestino = await tx.movimientoCaja.create({
           data: {
             refOperacionEspecializadaMovCaja: correlativo,
-            tipoMovimientoId: TIPOS_MOVIMIENTO.COMISION_BANCARIA,
+            tipoMovimientoId: tipoItfComisionId,
             empresaId: Number(cuentaDestino.empresaId),  // ✅ EMPRESA DE LA CUENTA DESTINO
             entidadComercialId: entidadDeBanco(cuentaDestino.banco),  // Banco de la cuenta destino (null si no tiene enlace)
             monto: Number(data.comisionDestino),

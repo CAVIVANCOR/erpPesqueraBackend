@@ -1,4 +1,5 @@
 import prisma from "../../config/prismaClient.js";
+import { obtenerIdTipoPorRol } from "./tipoMovimientoSistema.service.js";
 import {
   NotFoundError,
   DatabaseError,
@@ -102,8 +103,6 @@ const ESTADOS_PRESTAMO = {
 const ESTADOS_PRESTAMO_OPERABLES = [ESTADOS_PRESTAMO.DESEMBOLSADO, ESTADOS_PRESTAMO.VIGENTE, ESTADOS_PRESTAMO.VENCIDO];
 
 const ESTADO_MOVIMIENTO_CAJA_VALIDADO = 21;
-// ITF y comisión comparten el mismo tipo de movimiento
-const TIPO_MOVIMIENTO_ITF_COMISION = 163;
 const MONEDA_NACIONAL_ID = 1;
 const SUBMODULO_ORIGEN_PRESTAMO_ID = SUBMODULO_ORIGEN.PRESTAMO_BANCARIO;
 
@@ -127,7 +126,7 @@ const CODIGOS_CUENTAS_CONTABLES = {
   PRIMA_SEGURO: "679101",
   INTERESES_MORATORIOS: "679403",
   COMISIONES_BANCARIAS: "679401", // comisión de mantenimiento, comisión inicial y comisión bancaria
-  ITF: "641101",
+  ITF: "641201",
 };
 
 // Orden de imputación de un pago a los componentes de la cuota
@@ -461,6 +460,8 @@ const registrarCargosBancarios = async ({
   comision,
   paramsAsiento,
 }) => {
+  // ITF y comisión comparten el mismo tipo de movimiento (rol ITF_COMISION)
+  const TIPO_MOVIMIENTO_ITF_COMISION = await obtenerIdTipoPorRol("ITF_COMISION", tx);
   const asientos = [];
 
   const itfRegistro =

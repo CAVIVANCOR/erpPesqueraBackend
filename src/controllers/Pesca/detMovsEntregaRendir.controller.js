@@ -1,5 +1,6 @@
 import detMovsEntregaRendirService from "../../services/Pesca/detMovsEntregaRendir.service.js";
 import toJSONBigInt from "../../utils/toJSONBigInt.js";
+import { obtenerIdTipoPorRolSinValidar } from "../../services/Tesoreria/tipoMovimientoSistema.service.js";
 
 /**
  * Controlador para DetMovsEntregaRendir
@@ -129,11 +130,13 @@ export async function liquidarAsignacion(req, res, next) {
     // Calcular totales para el response
     let totalGastos = 0;
     let totalDevoluciones = 0;
+    // Tipo "Devolución a Rendir" por rol (no por id)
+    const tipoDevolucionId = await obtenerIdTipoPorRolSinValidar('DEVOLUCION_A_RENDIR');
 
     if (asignacionConDetalles.gastosAsociados) {
       asignacionConDetalles.gastosAsociados.forEach((movimiento) => {
         const monto = Number(movimiento.monto);
-        if (Number(movimiento.tipoMovimientoId) === 28) {
+        if (Number(movimiento.tipoMovimientoId) === tipoDevolucionId) {
           totalDevoluciones += monto;
         } else {
           totalGastos += monto;

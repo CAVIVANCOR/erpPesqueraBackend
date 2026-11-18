@@ -1,4 +1,5 @@
 import prisma from "../../config/prismaClient.js";
+import { obtenerIdTipoPorRol } from "./tipoMovimientoSistema.service.js";
 import {
   NotFoundError,
   DatabaseError,
@@ -26,7 +27,7 @@ import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
  *
  * Una sola transacción atómica:
  *   1. Egreso principal  → asiento DEBE 141301/141302  HABER cuenta bancaria
- *   2. ITF (si > 0)      → asiento DEBE 641101         HABER cuenta bancaria
+ *   2. ITF (si > 0)      → asiento DEBE 641201         HABER cuenta bancaria
  *   3. Comisión (si > 0) → asiento DEBE 679401         HABER cuenta bancaria
  *   4. Actualiza la asignación (DetMovsEntregaRendir)
  *
@@ -43,13 +44,10 @@ import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 // ════════════════════════════════════════════════════════════
 const ESTADO_MOVIMIENTO_CAJA_VALIDADO = 21;
 
-// ITF y comisión comparten el mismo tipo de movimiento
-const TIPO_MOVIMIENTO_ITF_COMISION = 163;
-
 const MONEDA_NACIONAL_ID = 1;
 
 const CODIGOS_CUENTAS_CONTABLES = {
-  ITF: "641101",
+  ITF: "641201",
   COMISIONES_BANCARIAS: "679401",
   // Entregas a rendir cuenta de personal (patrón de detMovsEntregaRendir.service.js)
   ENTREGAS_RENDIR_MN: "141301",
@@ -290,6 +288,9 @@ const atenderAsignacion = async (datos) => {
     }
 
     let responsableIdRecalculo = null;
+
+    // ITF y comisión comparten el mismo tipo de movimiento (rol ITF_COMISION)
+    const TIPO_MOVIMIENTO_ITF_COMISION = await obtenerIdTipoPorRol("ITF_COMISION");
 
     const resultado = await prisma.$transaction(async (tx) => {
       // ════════════════════════════════════════════════════════════

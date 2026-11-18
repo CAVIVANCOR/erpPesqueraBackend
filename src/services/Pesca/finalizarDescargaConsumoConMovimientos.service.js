@@ -4,6 +4,7 @@ import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.ser
 import buscarPrecioProductoService from "../Ventas/buscarPrecioProducto.service.js";
 import crearPreFacturaCompletaService from "../Ventas/crearPreFacturaCompleta.service.js";
 import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
+import { calcularEgresosEntregaRendir } from "./egresosEntregaRendir.service.js";
 
 /**
  * Servicio para finalizar una descarga de consumo y generar movimientos de almacén
@@ -507,7 +508,10 @@ const finalizarDescargaConsumoConMovimientos = async (
  * Esto es porque en pesca de consumo humano directo NO hay límite de cuota asignada
  * por PRODUCE. Los gastos se distribuyen solo sobre lo que realmente se capturó.
  * 
- * Fórmula: Costo Unitario = Total Egresos ÷ Total Toneladas Descargadas
+ * Fórmula: Costo Unitario = Total Egresos (soles) ÷ Total Toneladas Descargadas
+ * 
+ * Los egresos salen de DetMovsEntregaRendir (ver egresosEntregaRendir.service.js). Los errores no se silencian:
+ * un costo en cero por una falla aquí valorizaría mal el almacén sin que nadie lo note.
  * 
  * DIFERENCIA CON TEMPORADA PESCA:
  * - TemporadaPesca: Usa cuota asignada (fija, establecida por PRODUCE)
@@ -518,49 +522,20 @@ async function calcularCostoUnitarioConsumo(
   novedadPescaConsumoId,
   descargas,
 ) {
-  try {
-    // 1. Obtener entregas a rendir (egresos)
-    const entregaRendir = await tx.entregaARendirPescaConsumo.findFirst({
-      where: { novedadPescaConsumoId: novedadPescaConsumoId },
-      include: {
-        movimientos: {
-          where: {
-            tipoMovimientoId: BigInt(2), // Egresos
-          },
-        },
-      },
-    });
+  // 1. BASE DE CÁLCULO: TONELADAS DESCARGADAS (no hay cuota asignada)
+  const totalToneladas = descargas.reduce((sum, descarga) => {
+    return sum + Number(descarga.toneladas || 0);
+  }, 0);
 
-    if (
-      !entregaRendir ||
-      !entregaRendir.movimientos ||
-      entregaRendir.movimientos.length === 0
-    ) {
-      return 0;
-    }
-
-    // 2. Calcular total de egresos
-    const totalEgresos = entregaRendir.movimientos.reduce((sum, detalle) => {
-      return sum + Number(detalle.monto || 0);
-    }, 0);
-
-    // 3. BASE DE CÁLCULO: TONELADAS DESCARGADAS (no hay cuota asignada)
-    const totalToneladas = descargas.reduce((sum, descarga) => {
-      return sum + Number(descarga.toneladas || 0);
-    }, 0);
-
-    if (totalToneladas === 0) {
-      return 0;
-    }
-
-    // 4. Calcular costo unitario
-    const costoUnitario = totalEgresos / totalToneladas;
-
-    return costoUnitario;
-  } catch (error) {
-    // console.error("❌ Error calculando costo unitario consumo:", error);
+  if (totalToneladas === 0) {
     return 0;
   }
+
+  // 2. Total de egresos (gastos reales de la entrega a rendir de la novedad, en soles)
+  const totalEgresos = await calcularEgresosEntregaRendir(tx, "NovedadPescaConsumo", novedadPescaConsumoId);
+
+  // 3. Costo unitario = egresos ÷ toneladas descargadas
+  return totalEgresos / totalToneladas;
 }
 
 export default {

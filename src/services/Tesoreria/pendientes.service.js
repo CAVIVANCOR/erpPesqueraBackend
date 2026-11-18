@@ -1,4 +1,5 @@
 import prisma from "../../config/prismaClient.js";
+import { obtenerIdCategoriaPorRol } from "./tipoMovimientoSistema.service.js";
 import {
   NotFoundError,
   DatabaseError,
@@ -34,9 +35,6 @@ import { esPrestamoWarrant } from "../../utils/warrant.constants.js";
  * CONSTANTES - CATEGORÍAS DE MOVIMIENTOS
  * ========================================
  */
-
-// 🔵 CATEGORÍA DE GASTOS A RENDIR
-const CATEGORIA_GASTOS_A_RENDIR = 17; // Categoría "Gastos a Rendir" en TipoMovEntregaRendir
 
 // Estados del préstamo (EstadoMultiFuncion) que admiten pago de cuotas: DESEMBOLSADO, VIGENTE y VENCIDO.
 // Debe coincidir con operacionPrestamo.service.js
@@ -339,6 +337,8 @@ const aplicarFiltrosDeudas = (where, filtros, esPersonal = false) => {
 };
 
 const listarPendientes = async (filtros = {}) => {
+  // Categoría "Gastos a Rendir" (rol GASTOS_A_RENDIR): sus tipos son asignaciones; el resto, gastos directos
+  const CATEGORIA_GASTOS_A_RENDIR = await obtenerIdCategoriaPorRol("GASTOS_A_RENDIR");
   try {
     const {
       empresaId,
@@ -1507,6 +1507,8 @@ const listarPendientes = async (filtros = {}) => {
  * @returns {Object} Resumen con totales
  */
 const obtenerResumen = async (empresaId = null) => {
+  // Categoría "Gastos a Rendir" (rol GASTOS_A_RENDIR): sus tipos son asignaciones; el resto, gastos directos
+  const CATEGORIA_GASTOS_A_RENDIR = await obtenerIdCategoriaPorRol("GASTOS_A_RENDIR");
   try {
     const where = empresaId ? { empresaId: Number(empresaId) } : {};
 

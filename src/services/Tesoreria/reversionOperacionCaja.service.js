@@ -16,6 +16,7 @@ import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import prestamoRelacionadoService from "./prestamoRelacionado.service.js";
 import prestamoEntidadService from "./prestamoEntidad.service.js";
 import { recalcularLetra } from "./pagoLetraCambioEspecializado.service.js";
+import { obtenerIdTipoPorRolSinValidar } from "./tipoMovimientoSistema.service.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -59,8 +60,6 @@ import { recalcularLetra } from "./pagoLetraCambioEspecializado.service.js";
 // ════════════════════════════════════════════════════════════
 const SUBMODULO_MOVIMIENTOS_CAJA_DEFECTO = SUBMODULO_ORIGEN.MOVIMIENTOS_CAJA; // 54
 const SUBMODULO_TRANSFERENCIAS = SUBMODULO_ORIGEN.TESORERIA_PENDIENTES; // 135 (TRANSFERENCIAS_INTERNAS)
-const TIPO_MOVIMIENTO_SUNAT = 165; // Detracción / retención / percepción
-const TIPO_MOVIMIENTO_ITF_COMISION = 163;
 const VENTANA_CONTRAPARTE_MS = 120000; // movimientos de la otra empresa creados en la misma transacción
 const CLAVE_BLOQUEO_BASE = 710100000000n;
 
@@ -135,11 +134,11 @@ const nombreCuenta = (cuenta) =>
   cuenta ? `${cuenta.banco?.nombre || "Banco"} ${cuenta.numeroCuenta || `#${cuenta.id}`}` : "-";
 
 /** Delta que una operación sumó al importe pagado de una detracción/retención/percepción. */
-const deltaImpuesto = (movimientos, campo, id) => {
+const deltaImpuesto = (movimientos, campo, id, { tipoSunatId, tipoItfComisionId }) => {
   const etiquetados = movimientos.filter((m) => m[campo] && clave(m[campo]) === clave(id));
   if (etiquetados.length === 0) return 0;
-  const sunat = etiquetados.filter((m) => Number(m.tipoMovimientoId) === TIPO_MOVIMIENTO_SUNAT);
-  const base = sunat.length > 0 ? sunat : etiquetados.filter((m) => Number(m.tipoMovimientoId) !== TIPO_MOVIMIENTO_ITF_COMISION);
+  const sunat = etiquetados.filter((m) => Number(m.tipoMovimientoId) === tipoSunatId);
+  const base = sunat.length > 0 ? sunat : etiquetados.filter((m) => Number(m.tipoMovimientoId) !== tipoItfComisionId);
   const montos = (base.length > 0 ? base : etiquetados).map((m) => num(m.monto));
   return r2(Math.max(...montos));
 };
@@ -436,6 +435,11 @@ async function analizar(db, ctx) {
   const bloqueos = [];
   const avisos = [...ctx.avisosLocalizacion];
   const { movimientos, movIds } = ctx;
+  // Tipos de movimiento que identifican a SUNAT y a ITF/comisión (por rol, no por id)
+  const tiposRol = {
+    tipoSunatId: await obtenerIdTipoPorRolSinValidar("SUNAT", db),
+    tipoItfComisionId: await obtenerIdTipoPorRolSinValidar("ITF_COMISION", db),
+  };
 
   // ── Bloqueos estructurales ──────────────────────────────────────────────
   if (movimientos.some((m) => m.esReversion)) {
@@ -596,7 +600,7 @@ async function analizar(db, ctx) {
     if (!config.porPagos) {
       for (const id of unicos(movimientos.map((m) => m[config.campoMovimiento]).filter(Boolean))) {
         const documento = await db[config.delegado].findUnique({ where: { id } });
-        if (documento) candidatos.push({ documento, delta: deltaImpuesto(movimientos, config.campoMovimiento, id) });
+        if (documento) candidatos.push({ documento, delta: deltaImpuesto(movimientos, config.campoMovimiento, id, tiposRol) });
       }
     } else {
       const acumulados = new Map();
@@ -1180,6 +1184,7 @@ async function operacionesSinCaja({ empresaId, rango, texto }) {
 
 export async function listarOperaciones({ empresaId, desde, hasta, busqueda, limite = 100 } = {}) {
   try {
+    const tipoItfComisionId = await obtenerIdTipoPorRolSinValidar("ITF_COMISION");
     const where = { refOperacionEspecializadaMovCaja: { not: null } };
     if (empresaId) where.empresaId = BigInt(empresaId);
 
@@ -1289,10 +1294,10 @@ export async function listarOperaciones({ empresaId, desde, hasta, busqueda, lim
       else if (contiene(idsAsignaciones)) tipo = "Entrega de fondos";
       else if (contiene(idsDesembolsosEnt)) tipo = desembolsosEnt.some((d) => ids.includes(clave(d.movimientoCajaDesembolsoId)) && d.sentido === "OTORGADO") ? "Desembolso de préstamo (Prestamista)" : "Desembolso de préstamo (Deudor)";
       else if (contiene(idsPagosEnt)) tipo = pagosEnt.some((p) => ids.includes(clave(p.movimientoCajaId)) && p.prestamoEntidad?.sentido === "OTORGADO") ? "Devolución de préstamo (Prestamista)" : "Devolución de préstamo (Deudor)";
-      else if (op.movimientos.every((m) => Number(m.tipoMovimientoId) === TIPO_MOVIMIENTO_ITF_COMISION)) tipo = "Gastos bancarios";
+      else if (op.movimientos.every((m) => Number(m.tipoMovimientoId) === tipoItfComisionId)) tipo = "Gastos bancarios";
       else if (contiene(idsLetras)) tipo = letras.some((l) => ids.includes(clave(l.movimientoCajaId)) && l.letraCambio?.tipoLetra === "COBRAR") ? "Cobranza de letra de cambio" : "Pago de letra de cambio";
 
-      const principales = op.movimientos.filter((m) => Number(m.tipoMovimientoId) !== TIPO_MOVIMIENTO_ITF_COMISION);
+      const principales = op.movimientos.filter((m) => Number(m.tipoMovimientoId) !== tipoItfComisionId);
       const principal = (principales.length > 0 ? principales : op.movimientos).reduce((a, b) => (num(b.monto) > num(a.monto) ? b : a));
       const fechas = op.movimientos.map((m) => m.fechaOperacionMovCaja?.getTime() || 0);
       return {

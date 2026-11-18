@@ -48,12 +48,11 @@ export const CUENTAS_LETRA = {
   COBRAR: {
     documento: { 1: "121201", 2: "121202" },
     letra: { 1: "123201", 2: "123202" },
-    interes: "772101",
+    interes: "779201",
     mora: "7791",
   },
 };
 
-// ITF y comisión comparten tipo de movimiento y cuentas con el resto de pagos de Tesorería
-export const TIPO_MOVIMIENTO_ITF_COMISION = 163;
-export const CODIGOS_CUENTAS_ITF_COMISION = { ITF: "641101", COMISIONES_BANCARIAS: "679401" };
+// ITF y comisión comparten cuentas con el resto de pagos de Tesorería (su tipo de movimiento se resuelve por el rol ITF_COMISION)
+export const CODIGOS_CUENTAS_ITF_COMISION = { ITF: "641201", COMISIONES_BANCARIAS: "679401" };
 export const ESTADO_MOVIMIENTO_CAJA_VALIDADO = 21;

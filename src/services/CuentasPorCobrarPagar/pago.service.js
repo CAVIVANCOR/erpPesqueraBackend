@@ -479,13 +479,16 @@ async function validarPagoCuentaPorCobrar(data) {
 
 const crearPagoCobrar = async (data) => {
   await validarPagoCuentaPorCobrar(data);
+  if (!data.tipoMovimientoId) {
+    throw new ValidationError("Seleccione el tipo de movimiento de caja del cobro (es obligatorio).");
+  }
 
   try {
     return await prisma.$transaction(async (tx) => {
       // 1. Crear MovimientoCaja
       const movimientoCaja = await movimientoCajaService.crearMovimientoCajaDesdeTesoreria(tx, {
         origen: 'PAGO_CXC',
-        tipoMovimientoId: data.tipoMovimientoId || Number(100), // Ajustar según catálogo
+        tipoMovimientoId: data.tipoMovimientoId,
         empresaId: data.empresaId,
         entidadComercialId: data.clienteId,
         monto: data.montoPagado,
@@ -849,13 +852,16 @@ async function validarPagoCuentaPorPagar(data) {
 
 const crearPagoPagar = async (data) => {
   await validarPagoCuentaPorPagar(data);
+  if (!data.tipoMovimientoId) {
+    throw new ValidationError("Seleccione el tipo de movimiento de caja del pago (es obligatorio).");
+  }
 
   try {
     return await prisma.$transaction(async (tx) => {
       // 1. Crear MovimientoCaja
       const movimientoCaja = await movimientoCajaService.crearMovimientoCajaDesdeTesoreria(tx, {
         origen: 'PAGO_CXP',
-        tipoMovimientoId: data.tipoMovimientoId || Number(101), // Ajustar según catálogo
+        tipoMovimientoId: data.tipoMovimientoId,
         empresaId: data.empresaId,
         entidadComercialId: data.proveedorId,
         monto: data.montoPagado,

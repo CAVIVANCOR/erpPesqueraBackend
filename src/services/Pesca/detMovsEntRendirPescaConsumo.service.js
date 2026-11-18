@@ -4,6 +4,7 @@ import {
   DatabaseError,
   ValidationError,
 } from "../../utils/errors.js";
+import { tipoPerteneceACategoriaConRol } from "../Tesoreria/tipoMovimientoSistema.service.js";
 
 /**
  * Servicio CRUD para DetMovsEntRendirPescaConsumo
@@ -106,15 +107,17 @@ async function crear(data) {
       }
     }
 
+    // Es asignación si el tipo pertenece a la categoría con el rol GASTOS_A_RENDIR
+    const esAsignacion = await tipoPerteneceACategoriaConRol(data.tipoMovimientoId, "GASTOS_A_RENDIR");
+
     // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
-    if (data.tipoMovimientoId === 1 || data.tipoMovimientoId === 2) {
+    if (esAsignacion) {
       data.formaParteCalculoEntregaARendir = true;
     }
 
     // Validación: Si NO es asignación Y formaParteCalculoEntregaARendir=true → asignacionOrigenId es obligatorio
     if (
-      data.tipoMovimientoId !== 1 &&
-      data.tipoMovimientoId !== 2 &&
+      !esAsignacion &&
       data.formaParteCalculoEntregaARendir === true &&
       (!data.asignacionOrigenId || data.asignacionOrigenId === null)
     ) {
@@ -141,13 +144,16 @@ async function actualizar(id, data) {
     if (!existente)
       throw new NotFoundError("DetMovsEntRendirPescaConsumo no encontrado");
 
+    // Es asignación si el tipo final pertenece a la categoría con el rol GASTOS_A_RENDIR
+    const tipoMovFinal = data.tipoMovimientoId || existente.tipoMovimientoId;
+    const esAsignacion = await tipoPerteneceACategoriaConRol(tipoMovFinal, "GASTOS_A_RENDIR");
+
     // Validación de regla de negocio: Asignaciones deben tener formaParteCalculoEntregaARendir=true
-    if (data.tipoMovimientoId === 1 || data.tipoMovimientoId === 2) {
+    if (data.tipoMovimientoId && esAsignacion) {
       data.formaParteCalculoEntregaARendir = true;
     }
 
     // Validación: Si NO es asignación Y formaParteCalculoEntregaARendir=true → asignacionOrigenId es obligatorio
-    const tipoMovFinal = data.tipoMovimientoId || existente.tipoMovimientoId;
     const formaParteCalculo =
       data.formaParteCalculoEntregaARendir !== undefined
         ? data.formaParteCalculoEntregaARendir
@@ -158,8 +164,7 @@ async function actualizar(id, data) {
         : existente.asignacionOrigenId;
 
     if (
-      tipoMovFinal !== 1 &&
-      tipoMovFinal !== 2 &&
+      !esAsignacion &&
       formaParteCalculo === true &&
       (!asignacionOrigen || asignacionOrigen === null)
     ) {

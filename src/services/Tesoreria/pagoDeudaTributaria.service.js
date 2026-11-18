@@ -26,14 +26,6 @@ const ESTADOS_MOVIMIENTO_CAJA = {
   ASIENTO_GENERADO: 22
 };
  
-const CATEGORIA_IMPUESTOS = 24;
- 
-const TIPOS_MOVIMIENTO_IMPUESTOS = {
-  SUNAT: 165,
-  MUNICIPIOS: 166,
-  RENTA_ALQUILERES: 167
-};
-
 async function validarPagoDeudaTributaria(data) {
   if (data.deudaTributariaId) {
     const deuda = await prisma.deudaTributaria.findUnique({ where: { id: data.deudaTributariaId } });

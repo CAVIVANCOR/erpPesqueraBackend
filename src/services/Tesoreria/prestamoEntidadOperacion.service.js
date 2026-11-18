@@ -1,6 +1,7 @@
 import prisma from "../../config/prismaClient.js";
 import { NotFoundError, ValidationError, DatabaseError } from "../../utils/errors.js";
 import correlativoService from "./correlativoOperacionCaja.service.js";
+import { obtenerIdTipoPorRol } from "./tipoMovimientoSistema.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { entidadDeBanco } from "../../utils/entidadBanco.js";
 import { ESTADO_PRESTAMO_RELACIONADO as ESTADO } from "../../utils/estados.constants.js";
@@ -11,7 +12,6 @@ import {
 } from "../../utils/prestamoEntidad.constants.js";
 import {
   MONEDA_SOLES_ID,
-  TIPO_MOVIMIENTO_ITF_COMISION,
   CODIGOS_CUENTAS_ITF_COMISION,
   ESTADO_MOVIMIENTO_CAJA_VALIDADO,
 } from "../../utils/letrasCambio.constants.js";
@@ -57,6 +57,9 @@ async function procesar(datos, operacion) {
     if (comision < 0) throw new ValidationError("La comisión no puede ser negativa.");
 
     return await prisma.$transaction(async (tx) => {
+      // ITF y comisión comparten el mismo tipo de movimiento (rol ITF_COMISION)
+      const TIPO_MOVIMIENTO_ITF_COMISION = await obtenerIdTipoPorRol("ITF_COMISION", tx);
+
       // ── 1. Préstamo (pago/cobro) o datos del préstamo nuevo (desembolso) ──
       let prestamo = null;
       let empresaId;

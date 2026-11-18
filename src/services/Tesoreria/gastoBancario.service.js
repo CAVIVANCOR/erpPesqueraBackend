@@ -4,7 +4,8 @@ import correlativoService from "./correlativoOperacionCaja.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { entidadDeBanco } from "../../utils/entidadBanco.js";
 import { CONCEPTOS_GASTO_BANCARIO } from "../../utils/gastoBancario.constants.js";
-import { MONEDA_SOLES_ID, TIPO_MOVIMIENTO_ITF_COMISION, ESTADO_MOVIMIENTO_CAJA_VALIDADO } from "../../utils/letrasCambio.constants.js";
+import { MONEDA_SOLES_ID, ESTADO_MOVIMIENTO_CAJA_VALIDADO } from "../../utils/letrasCambio.constants.js";
+import { obtenerTipoPorRol } from "./tipoMovimientoSistema.service.js";
 import { obtenerCuentas, exigirCentroCosto, obtenerPeriodoAbierto, crearAsientoLetra } from "./letraCambioBase.service.js";
 
 /**
@@ -17,7 +18,7 @@ import { obtenerCuentas, exigirCentroCosto, obtenerPeriodoAbierto, crearAsientoL
  *
  * Una operación (un correlativo) puede tener varias líneas; cada línea es un EGRESO de caja aparte (tipo de
  * movimiento ITF/COMISIÓN) con su saldo en cascada y su asiento:
- *     DEBE 679401 (comisiones) o 641101 (ITF)  ·  HABER cuenta contable del banco de la cuenta corriente elegida
+ *     DEBE 679401 (comisiones) o 641201 (ITF)  ·  HABER cuenta contable del banco de la cuenta corriente elegida
  * El ITF y la comisión nunca se restan de otro monto: siempre son movimientos aparte.
  */
 
@@ -59,13 +60,8 @@ export async function registrar(datos) {
       }
       const medioPago = await tx.medioPago.findUnique({ where: { id: Number(medioPagoId) } });
       if (!medioPago) throw new NotFoundError("Medio de pago no encontrado.");
-      const tipoMovimiento = await tx.tipoMovEntregaRendir.findFirst({ where: { id: TIPO_MOVIMIENTO_ITF_COMISION, activo: true } });
-      if (!tipoMovimiento) {
-        throw new ValidationError(`No existe o está inactivo el tipo de movimiento de caja ITF / COMISIÓN (id ${TIPO_MOVIMIENTO_ITF_COMISION}), necesario para registrar gastos bancarios.`);
-      }
-      if (tipoMovimiento.esIngreso) {
-        throw new ValidationError(`El tipo de movimiento "${tipoMovimiento.nombre}" (id ${TIPO_MOVIMIENTO_ITF_COMISION}) está configurado como ingreso: los gastos bancarios son egresos de caja.`);
-      }
+      // Rol ITF_COMISION: el resolutor valida que exista, esté activo y sea un egreso de caja
+      const tipoMovimiento = await obtenerTipoPorRol("ITF_COMISION", tx);
 
       const monedaId = Number(cuenta.monedaId);
       const extranjera = monedaId !== MONEDA_SOLES_ID;

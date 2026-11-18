@@ -1,13 +1,13 @@
 import prisma from "../../config/prismaClient.js";
 import { NotFoundError, ValidationError, DatabaseError } from "../../utils/errors.js";
 import correlativoService from "./correlativoOperacionCaja.service.js";
+import { obtenerIdTipoPorRol } from "./tipoMovimientoSistema.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { entidadDeBanco } from "../../utils/entidadBanco.js";
 import {
   TIPO_LETRA,
   MONEDA_SOLES_ID,
   CUENTAS_LETRA,
-  TIPO_MOVIMIENTO_ITF_COMISION,
   CODIGOS_CUENTAS_ITF_COMISION,
   ESTADO_MOVIMIENTO_CAJA_VALIDADO,
 } from "../../utils/letrasCambio.constants.js";
@@ -46,7 +46,7 @@ import {
  *   PAGAR : DEBE 423101/423102 letras por pagar (capital, entidad proveedor) + 673111 intereses + 679403 mora
  *           HABER banco
  *   COBRAR: DEBE banco
- *           HABER 123201/123202 letras por cobrar (capital, entidad cliente) + 772101 intereses + 7791 mora
+ *           HABER 123201/123202 letras por cobrar (capital, entidad cliente) + 779201 intereses + 7791 mora
  *
  * La letra se paga en la moneda de la cuenta bancaria elegida: si difiere de la de la letra, se convierte con el
  * tipo de cambio de la operación (solo soles <-> moneda extranjera). No se genera diferencia de cambio.
@@ -132,6 +132,9 @@ export async function procesarPago(datos) {
     if (comision < 0) throw new ValidationError("La comisión no puede ser negativa.");
 
     return await prisma.$transaction(async (tx) => {
+      // ITF y comisión comparten el mismo tipo de movimiento (rol ITF_COMISION)
+      const TIPO_MOVIMIENTO_ITF_COMISION = await obtenerIdTipoPorRol("ITF_COMISION", tx);
+
       // ── 1. Letra (bloqueada) ───────────────────────────────
       await tx.$queryRaw`SELECT id FROM "LetraCambio" WHERE id = ${BigInt(letraCambioId)} FOR UPDATE`;
       const letra = await tx.letraCambio.findUnique({

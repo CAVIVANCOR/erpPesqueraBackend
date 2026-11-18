@@ -31,31 +31,6 @@ const ESTADOS_DEUDA = {
 };
 
 // ════════════════════════════════════════════════════════════
-// CONSTANTES DE NEGOCIO - TIPOS DE MOVIMIENTO CAJA
-// ════════════════════════════════════════════════════════════
-
-const CATEGORIA_REMUNERACIONES = 21; // REMUNERACIONES (DEUDAS CON EL PERSONAL)
-const CATEGORIA_IMPUESTOS = 24;      // IMPUESTOS (DEUDAS TRIBUTARIAS)
-
-const TIPOS_MOVIMIENTO_REMUNERACIONES = {
-  SUELDOS: 149,
-  SALARIOS: 150,
-  COMISIONES: 151,
-  PRESTAMOS: 152,
-  ADELANTOS: 153,
-  INDEMNIZACIONES_CTS: 154,
-  VACACIONES: 155,
-  GRATIFICACIONES: 156,
-  LIQUIDACIONES: 157
-};
-
-const TIPOS_MOVIMIENTO_IMPUESTOS = {
-  SUNAT: 165,
-  MUNICIPIOS: 166,
-  RENTA_ALQUILERES: 167
-};
-
-// ════════════════════════════════════════════════════════════
 // CONSTANTES DE NEGOCIO - ESTADOS MOVIMIENTOS CAJA
 // ════════════════════════════════════════════════════════════
 
