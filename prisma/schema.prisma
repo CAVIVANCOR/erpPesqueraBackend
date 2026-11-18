@@ -5742,6 +5742,7 @@ model TipoMovEntregaRendir {
   esTransferencia              Boolean   @default(false)  // 🆕 NUEVO CAMPO
   activo                       Boolean                        @default(true)
   categoriaId                  BigInt?
+  codigoSistema                String?   @unique @db.VarChar(100)  // 🆕 Rol que el código del sistema le da a este tipo (ej. ITF_COMISION). Único: un rol, un tipo.
 
   detMovsEntregaRendir DetMovsEntregaRendir[]
   movimientosConsumo DetMovsEntRendirPescaConsumo[]
@@ -5761,13 +5762,14 @@ model CategoriaTipoMovEntregaRendir {
   nombre            String?  @db.VarChar(255)
   cesado            Boolean  @default(false)
   tipo              Boolean  @default(false)// 🆕 NUEVO CAMPO false=INGRESO y true=EGRESO
-  
+  codigoSistema     String?  @unique @db.VarChar(100)  // 🆕 Rol que el código del sistema le da a esta categoría (ej. GASTOS_A_RENDIR). Único: un rol, una categoría.
+
   // Auditoría
   creadoEn          DateTime  @default(now())
   actualizadoEn     DateTime? @updatedAt
   creadoPor         BigInt?
   actualizadoPor    BigInt?
-  
+
   // RELACIONES
   tiposMovimiento   TipoMovEntregaRendir[]
   creador           Personal? @relation("CategoriaTipoMovCreador", fields: [creadoPor], references: [id])
