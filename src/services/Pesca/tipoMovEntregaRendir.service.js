@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 import { ROLES_TIPO_MOV, normalizarRolSistema } from '../../utils/tiposMovimientoSistema.constants.js';
+import { usoDeTipo, resumenUso } from './usoTipoMovimiento.service.js';
 
 /**
  * Servicio CRUD para TipoMovEntregaRendir
@@ -136,8 +137,11 @@ const eliminar = async (id) => {
         `El tipo "${conRol.nombre}" cumple el rol "${ROLES_TIPO_MOV[conRol.codigoSistema]?.etiqueta || conRol.codigoSistema}" que el sistema necesita: no se puede eliminar. Quite o reasigne el rol antes.`
       );
     }
-    if (await tieneDependencias(id)) {
-      throw new ConflictError('No se puede eliminar porque tiene movimientos asociados.');
+    const uso = await usoDeTipo(id);
+    if (uso.total > 0) {
+      throw new ConflictError(
+        `No se puede eliminar el tipo "${conRol?.nombre || id}": tiene historial en ${uso.tablas.length} tabla(s). ${resumenUso(uso)}.`
+      );
     }
     await prisma.tipoMovEntregaRendir.delete({ where: { id } });
     return true;
@@ -148,10 +152,18 @@ const eliminar = async (id) => {
   }
 };
 
+/** Historial del tipo en todas las tablas (para avisar al usuario antes de eliminar). */
+const uso = async (id) => {
+  const tipo = await prisma.tipoMovEntregaRendir.findUnique({ where: { id }, select: { id: true, nombre: true, codigoSistema: true } });
+  if (!tipo) throw new NotFoundError('TipoMovEntregaRendir no encontrado');
+  return { ...(await usoDeTipo(id)), nombre: tipo.nombre, codigoSistema: tipo.codigoSistema };
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  uso
 };

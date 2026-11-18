@@ -17,6 +17,14 @@ router.get(
   tipoMovEntregaRendirController.listar
 );
 
+// Historial del tipo en todas las tablas (se consulta antes de eliminar)
+router.get(
+  '/:id/uso',
+  autenticarJWT,
+  checkPermission('tipoMovEntregaRendir', 'ver'),
+  tipoMovEntregaRendirController.uso
+);
+
 router.get(
   '/:id', 
   autenticarJWT, 

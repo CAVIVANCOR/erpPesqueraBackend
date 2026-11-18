@@ -32,6 +32,14 @@ router.post(
   subirDocumento,
 );
 
+// Reemplazo masivo del tipo de movimiento de los movimientos seleccionados (todo o nada)
+router.post(
+  "/reasignar-tipo-masivo",
+  autenticarJWT,
+  checkPermission("movimientoCaja", "editar"),
+  movimientoCajaController.reasignarTipoMasivo,
+);
+
 // ⚠️ RUTAS QUE YO BORRÉ Y AHORA RESTAURO (3/8)
 router.get(
   "/archivo-comprobante/*",

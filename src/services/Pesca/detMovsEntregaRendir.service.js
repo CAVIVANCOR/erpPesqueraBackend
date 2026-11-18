@@ -1,5 +1,5 @@
 import prisma from '../../config/prismaClient.js';
-import { obtenerIdTipoPorRolSinValidar, tipoTieneCategoriaConRol } from '../Tesoreria/tipoMovimientoSistema.service.js';
+import { obtenerIdTipoPorRolSinValidar, tipoTieneCategoriaConRol, validarReasignacionTipoMasiva } from '../Tesoreria/tipoMovimientoSistema.service.js';
 import {
   ESTADO_ORDEN_COMPRA,
   ESTADO_CUENTA_POR_PAGAR,
@@ -2419,7 +2419,45 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
   return resultado;
 }
 
+/**
+ * Reemplaza de forma masiva el tipo de movimiento de los movimientos seleccionados (todo o nada, en una transacción).
+ * Las reglas de integridad (sentido, funciones del sistema, tipo activo y no antiguo) están en
+ * validarReasignacionTipoMasiva. El asiento contable no guarda el tipo de movimiento, así que no se regenera.
+ *
+ * @param {number} tipoMovimientoId - Tipo de movimiento nuevo
+ * @param {Array<number>} movimientosIds - IDs de los movimientos a actualizar
+ */
+const reasignarTipoMovimientoMasivo = async (tipoMovimientoId, movimientosIds) => {
+  try {
+    const ids = [...new Set(movimientosIds.map((id) => Number(id)))];
+    return await prisma.$transaction(async (tx) => {
+      const movimientos = await tx.detMovsEntregaRendir.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, tipoMovimientoId: true },
+      });
+      if (movimientos.length !== ids.length) {
+        throw new ValidationError("Algunos movimientos seleccionados ya no existen: actualice la lista y vuelva a seleccionar.");
+      }
+      const destino = await validarReasignacionTipoMasiva(tx, tipoMovimientoId, movimientos.map((m) => m.tipoMovimientoId));
+      const resultado = await tx.detMovsEntregaRendir.updateMany({
+        where: { id: { in: ids }, tipoMovimientoId: { not: Number(destino.id) } },
+        data: { tipoMovimientoId: Number(destino.id) },
+      });
+      return {
+        success: true,
+        count: resultado.count,
+        message: `${resultado.count} movimiento(s) cambiados al tipo "${destino.nombre}"${resultado.count < ids.length ? ` (${ids.length - resultado.count} ya tenían ese tipo)` : ""}.`,
+      };
+    });
+  } catch (err) {
+    if (err.code && err.code.startsWith("P"))
+      throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 export default {
+  reasignarTipoMovimientoMasivo,
   listar,
   obtenerPorId,
   crear,

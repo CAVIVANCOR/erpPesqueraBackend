@@ -17,6 +17,14 @@ router.get(
   categoriaTipoMovEntregaRendirController.listar
 );
 
+// Historial de la categoría en todas las tablas (se consulta antes de eliminar)
+router.get(
+  '/:id/uso',
+  autenticarJWT,
+  checkPermission('categoriaTipoMovEntregaRendir', 'ver'),
+  categoriaTipoMovEntregaRendirController.uso
+);
+
 router.get(
   '/:id', 
   autenticarJWT, 

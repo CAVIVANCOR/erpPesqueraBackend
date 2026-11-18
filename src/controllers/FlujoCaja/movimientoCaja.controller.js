@@ -385,6 +385,27 @@ const revertir = async (req, res, next) => {
 };
 
 /**
+ * Reemplaza de forma masiva el tipo de movimiento de los movimientos de caja seleccionados
+ * Body: { tipoMovimientoId: number, movimientosIds: number[] }
+ */
+const reasignarTipoMasivo = async (req, res, next) => {
+  try {
+    const { tipoMovimientoId, movimientosIds } = req.body;
+    if (!tipoMovimientoId || !Array.isArray(movimientosIds) || movimientosIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        mensaje: 'Seleccione el nuevo tipo de movimiento y al menos un movimiento de caja.',
+        message: 'Seleccione el nuevo tipo de movimiento y al menos un movimiento de caja.',
+      });
+    }
+    const resultado = await movimientoCajaService.reasignarTipoMasivo(tipoMovimientoId, movimientosIds);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * Listar movimientos con filtros avanzados
  * Query params:
  * - empresaId, origen, cuentaCorrienteId, fechaDesde, fechaHasta, estadoId, limite, pagina
@@ -504,6 +525,7 @@ export const regenerarVoucherContable = async (req, res, next) => {
 
 
 export default {
+  reasignarTipoMasivo,
   listar,
   obtenerPorId,
   crear,

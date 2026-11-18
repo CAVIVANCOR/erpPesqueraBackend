@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 import { ROLES_CATEGORIA_MOV, normalizarRolSistema } from '../../utils/tiposMovimientoSistema.constants.js';
+import { usoDeCategoria, resumenUso } from './usoTipoMovimiento.service.js';
 
 /**
  * Servicio CRUD para CategoriaTipoMovEntregaRendir
@@ -228,8 +229,11 @@ const eliminar = async (id) => {
         `La categoría "${conRol.nombre}" cumple el rol "${ROLES_CATEGORIA_MOV[conRol.codigoSistema]?.etiqueta || conRol.codigoSistema}" que el sistema necesita: no se puede eliminar. Quite o reasigne el rol antes.`
       );
     }
-    if (await tieneDependencias(id)) {
-      throw new ConflictError('No se puede eliminar porque tiene tipos de movimiento asociados.');
+    const uso = await usoDeCategoria(id);
+    if (uso.total > 0) {
+      throw new ConflictError(
+        `No se puede eliminar la categoría "${conRol?.nombre || id}": tiene historial en ${uso.tablas.length} tabla(s). ${resumenUso(uso)}.`
+      );
     }
     await prisma.categoriaTipoMovEntregaRendir.delete({ where: { id } });
     return true;
@@ -242,10 +246,18 @@ const eliminar = async (id) => {
   }
 };
 
+/** Historial de la categoría en todas las tablas (para avisar al usuario antes de eliminar). */
+const uso = async (id) => {
+  const categoria = await prisma.categoriaTipoMovEntregaRendir.findUnique({ where: { id }, select: { id: true, nombre: true, codigoSistema: true } });
+  if (!categoria) throw new NotFoundError('CategoriaTipoMovEntregaRendir no encontrada');
+  return { ...(await usoDeCategoria(id)), nombre: categoria.nombre, codigoSistema: categoria.codigoSistema };
+};
+
 export default {
   listar,
   obtenerPorId,
   crear,
   actualizar,
-  eliminar
+  eliminar,
+  uso
 };

@@ -99,6 +99,58 @@ export async function tipoPerteneceACategoriaConRol(tipoMovimientoId, rolCategor
   return tipo?.categoria?.codigoSistema === rolCategoria;
 }
 
+/**
+ * Valida el reemplazo MASIVO del tipo de movimiento de unos registros (DetMovsEntregaRendir o MovimientoCaja) por un
+ * tipo destino, y devuelve el tipo destino. Reglas, todas para no alterar la contabilidad ni la lógica por roles:
+ *  - El destino existe, está activo y no es un tipo antiguo (" XXX").
+ *  - Ni el destino ni los tipos de origen cumplen una función del sistema (codigoSistema): el ITF, SUNAT, las
+ *    remuneraciones, las devoluciones y los préstamos entre relacionadas se trasladan junto con su rol, no por aquí.
+ *  - Mismo sentido (ingreso/egreso) y misma condición de transferencia (salvo los tipos antiguos " XXX", que no
+ *    tienen la marca y justamente se migran al catálogo nuevo).
+ *  - Misma función de categoría: un gasto no puede pasar a ser asignación a rendir ni al revés.
+ * El asiento contable no guarda el tipo de movimiento, por eso no hay que regenerarlo.
+ */
+export async function validarReasignacionTipoMasiva(tx, tipoDestinoId, tiposOrigenIds) {
+  const destino = await tx.tipoMovEntregaRendir.findUnique({
+    where: { id: Number(tipoDestinoId) },
+    include: { categoria: true },
+  });
+  if (!destino) throw new ValidationError("El tipo de movimiento elegido no existe.");
+  if (!destino.activo) throw new ValidationError(`El tipo de movimiento "${destino.nombre}" está inactivo: elija un tipo activo.`);
+  if (/ XXX$/.test(destino.nombre)) {
+    throw new ValidationError(`El tipo "${destino.nombre}" es un tipo antiguo (XXX): elija un tipo del catálogo nuevo.`);
+  }
+  if (destino.codigoSistema) {
+    throw new ValidationError(
+      `El tipo "${destino.nombre}" cumple una función del sistema (${destino.codigoSistema}): sus movimientos se registran solo desde las operaciones de Tesorería, no por reemplazo masivo.`,
+    );
+  }
+
+  const idsUnicos = [...new Set((tiposOrigenIds || []).map((id) => Number(id)))].filter((id) => id !== Number(destino.id));
+  if (idsUnicos.length === 0) return destino;
+  const origenes = await tx.tipoMovEntregaRendir.findMany({ where: { id: { in: idsUnicos } }, include: { categoria: true } });
+
+  const problemas = [];
+  for (const o of origenes) {
+    if (o.codigoSistema) {
+      problemas.push(`"${o.nombre}" cumple la función ${o.codigoSistema}`);
+    } else if (o.esIngreso !== destino.esIngreso) {
+      problemas.push(`"${o.nombre}" es de ${ingresoEgreso(o.esIngreso)} y el destino es de ${ingresoEgreso(destino.esIngreso)}`);
+    } else if (!/ XXX$/.test(o.nombre) && Boolean(o.esTransferencia) !== Boolean(destino.esTransferencia)) {
+      // Los tipos antiguos (" XXX") nacieron sin la marca de transferencia: se exceptúan para poder migrarlos al catálogo nuevo
+      problemas.push(`"${o.nombre}" ${o.esTransferencia ? "es" : "no es"} de transferencia y el destino ${destino.esTransferencia ? "sí" : "no"} lo es`);
+    } else if ((o.categoria?.codigoSistema || null) !== (destino.categoria?.codigoSistema || null)) {
+      problemas.push(`"${o.nombre}" y el destino tienen distinta función de categoría (asignaciones a rendir, remuneraciones o tributos)`);
+    }
+  }
+  if (problemas.length > 0) {
+    throw new ValidationError(
+      `No se puede reemplazar por "${destino.nombre}": ${problemas.join("; ")}. Quite esos registros de la selección o elija otro tipo.`,
+    );
+  }
+  return destino;
+}
+
 /** ¿Este tipo (ya cargado con `include: { categoria }`) pertenece a la categoría que cumple el rol? */
 export const tipoTieneCategoriaConRol = (tipoMovimiento, rolCategoria) =>
   tipoMovimiento?.categoria?.codigoSistema === rolCategoria;

@@ -120,6 +120,13 @@ router.get('/:id/saldo-final', autenticarJWT, detMovsEntregaRendirController.cal
 router.post('/asignar-centro-costo-masivo', autenticarJWT, detMovsEntregaRendirController.asignarCentroCostoMasivo);
 
 /**
+ * POST /api/det-movs-entrega-rendir/reasignar-tipo-movimiento-masivo
+ * Reemplaza el tipo de movimiento de múltiples movimientos seleccionados (todo o nada)
+ * Body: { tipoMovimientoId: number, movimientosIds: number[] }
+ */
+router.post('/reasignar-tipo-movimiento-masivo', autenticarJWT, detMovsEntregaRendirController.reasignarTipoMovimientoMasivo);
+
+/**
  * POST /api/det-movs-entrega-rendir/asignar-activo-masivo
  * Asigna un activo a múltiples movimientos seleccionados
  * Actualiza el campo activoAfectoId en todos los registros especificados

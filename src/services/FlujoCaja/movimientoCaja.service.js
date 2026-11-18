@@ -5,6 +5,7 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
+import { validarReasignacionTipoMasiva } from "../Tesoreria/tipoMovimientoSistema.service.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -1289,7 +1290,54 @@ const listarConFiltrosAvanzados = async (filtros = {}) => {
   }
 };
 
+/**
+ * Reemplaza de forma masiva el tipo de movimiento de los movimientos de caja seleccionados (todo o nada).
+ * El asiento contable no guarda el tipo de movimiento ni depende de él (las cuentas salen de la operación), por eso
+ * no se regenera. Las reglas del tipo (sentido, funciones del sistema, activo y no antiguo) están en
+ * validarReasignacionTipoMasiva. Se rechazan además las reversiones y los movimientos ya revertidos, porque el
+ * reverso es el espejo del original y deben conservar el mismo tipo.
+ *
+ * @param {number} tipoMovimientoId - Tipo de movimiento nuevo
+ * @param {Array<number>} movimientosIds - IDs de los movimientos a actualizar
+ */
+const reasignarTipoMasivo = async (tipoMovimientoId, movimientosIds) => {
+  try {
+    const ids = [...new Set(movimientosIds.map((id) => Number(id)))];
+    return await prisma.$transaction(async (tx) => {
+      const movimientos = await tx.movimientoCaja.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, tipoMovimientoId: true, esReversion: true, _count: { select: { reversiones: true } } },
+      });
+      if (movimientos.length !== ids.length) {
+        throw new ValidationError("Algunos movimientos seleccionados ya no existen: actualice la lista y vuelva a seleccionar.");
+      }
+      const conReversion = movimientos.filter((m) => m.esReversion || m._count.reversiones > 0);
+      if (conReversion.length > 0) {
+        throw new ValidationError(
+          `Los movimientos ${conReversion.map((m) => `#${m.id}`).join(", ")} son reversiones o ya fueron revertidos: conservan el tipo del movimiento original. Quítelos de la selección.`,
+        );
+      }
+      const destino = await validarReasignacionTipoMasiva(tx, tipoMovimientoId, movimientos.map((m) => m.tipoMovimientoId));
+      const resultado = await tx.movimientoCaja.updateMany({
+        where: { id: { in: ids }, tipoMovimientoId: { not: Number(destino.id) } },
+        data: { tipoMovimientoId: Number(destino.id) },
+      });
+      return {
+        success: true,
+        count: resultado.count,
+        message: `${resultado.count} movimiento(s) de caja cambiados al tipo "${destino.nombre}"${resultado.count < ids.length ? ` (${ids.length - resultado.count} ya tenían ese tipo)` : ""}.`,
+      };
+    });
+  } catch (err) {
+    if (err.code && String(err.code).startsWith("P")) {
+      throw new DatabaseError("Error de base de datos al reemplazar el tipo de movimiento", err.message);
+    }
+    throw err;
+  }
+};
+
 export default {
+  reasignarTipoMasivo,
   listar,
   obtenerPorId,
   crear,

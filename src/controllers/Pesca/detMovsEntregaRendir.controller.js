@@ -246,6 +246,32 @@ export async function asignarCentroCostoMasivo(req, res, next) {
 }
 
 /**
+ * Reemplaza el tipo de movimiento de múltiples movimientos de forma masiva
+ *
+ * @route POST /api/det-movs-entrega-rendir/reasignar-tipo-movimiento-masivo
+ * @param {number} req.body.tipoMovimientoId - Tipo de movimiento nuevo
+ * @param {Array<number>} req.body.movimientosIds - IDs de los movimientos seleccionados
+ */
+export async function reasignarTipoMovimientoMasivo(req, res, next) {
+  try {
+    const { tipoMovimientoId, movimientosIds } = req.body;
+
+    if (!tipoMovimientoId || !Array.isArray(movimientosIds) || movimientosIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        mensaje: "Seleccione el nuevo tipo de movimiento y al menos un movimiento.",
+        message: "Seleccione el nuevo tipo de movimiento y al menos un movimiento.",
+      });
+    }
+
+    const resultado = await detMovsEntregaRendirService.reasignarTipoMovimientoMasivo(tipoMovimientoId, movimientosIds);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Asigna un activo a múltiples movimientos de forma masiva
  * Actualiza el campo activoAfectoId en todos los movimientos seleccionados
  * 
@@ -311,6 +337,7 @@ export default {
   calcularSaldoFinal,
   recalcularSaldosResponsable,
   asignarCentroCostoMasivo,
+  reasignarTipoMovimientoMasivo,
   asignarActivoMasivo,
   generarDocumentosFinancieros
 };

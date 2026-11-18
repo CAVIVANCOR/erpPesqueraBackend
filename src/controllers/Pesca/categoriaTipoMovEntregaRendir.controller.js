@@ -43,6 +43,15 @@ export async function actualizar(req, res, next) {
   }
 }
 
+export async function uso(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    res.json(toJSONBigInt(await categoriaTipoMovEntregaRendirService.uso(id)));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function eliminar(req, res, next) {
   try {
     const id = Number(req.params.id);
