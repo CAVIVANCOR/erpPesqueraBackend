@@ -1,4 +1,5 @@
 import detMovsEntregaRendirService from "../../services/Pesca/detMovsEntregaRendir.service.js";
+import revertirDocumentosRendicionService from "../../services/Pesca/revertirDocumentosRendicion.service.js";
 import toJSONBigInt from "../../utils/toJSONBigInt.js";
 import { obtenerIdTipoPorRolSinValidar } from "../../services/Tesoreria/tipoMovimientoSistema.service.js";
 
@@ -321,8 +322,65 @@ export async function generarDocumentosFinancieros(req, res, next) {
   }
 }
 
+/**
+ * Plan (sin cambiar nada) de la reversión de los documentos generados desde Rendición de Gastos para un movimiento
+ * @route GET /api/det-movs-entrega-rendir/:id/revertir-documentos/plan
+ */
+export async function planRevertirDocumentos(req, res, next) {
+  try {
+    const resultado = await revertirDocumentosRendicionService.planPorMovimiento(Number(req.params.id));
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Revierte (sin volver a generar) los documentos generados desde Rendición de Gastos para un movimiento
+ * @route POST /api/det-movs-entrega-rendir/:id/revertir-documentos
+ */
+export async function revertirDocumentos(req, res, next) {
+  try {
+    const resultado = await revertirDocumentosRendicionService.revertirPorMovimiento(Number(req.params.id), req.user?.id || null);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Órdenes de compra de Rendición de Gastos cuyo movimiento ya no existe, con lo que se eliminaría de cada una
+ * @route GET /api/det-movs-entrega-rendir/documentos-huerfanos
+ */
+export async function listarDocumentosHuerfanos(req, res, next) {
+  try {
+    const resultado = await revertirDocumentosRendicionService.listarHuerfanas();
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Elimina las órdenes de compra huérfanas indicadas (con sus CxP, pagos y asientos)
+ * @route POST /api/det-movs-entrega-rendir/documentos-huerfanos/revertir
+ * @param {Array<number>} req.body.ordenCompraIds
+ */
+export async function revertirDocumentosHuerfanos(req, res, next) {
+  try {
+    const resultado = await revertirDocumentosRendicionService.revertirHuerfanas(req.body?.ordenCompraIds, req.user?.id || null);
+    res.json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
 
 export default {
+  planRevertirDocumentos,
+  revertirDocumentos,
+  listarDocumentosHuerfanos,
+  revertirDocumentosHuerfanos,
   listar,
   obtenerPorId,
   crear,

@@ -97,6 +97,15 @@ const upload = multer({
 });
 
 // Rutas CRUD para DetMovsEntregaRendir
+/**
+ * Reversión de los documentos generados desde Rendición de Gastos (OC, CxP, pago automático y asientos), sin regenerar.
+ * Las rutas fijas van antes de '/:id'.
+ */
+router.get('/documentos-huerfanos', autenticarJWT, detMovsEntregaRendirController.listarDocumentosHuerfanos);
+router.post('/documentos-huerfanos/revertir', autenticarJWT, detMovsEntregaRendirController.revertirDocumentosHuerfanos);
+router.get('/:id/revertir-documentos/plan', autenticarJWT, detMovsEntregaRendirController.planRevertirDocumentos);
+router.post('/:id/revertir-documentos', autenticarJWT, detMovsEntregaRendirController.revertirDocumentos);
+
 router.get('/', detMovsEntregaRendirController.listar);
 router.get('/:id/con-gastos', detMovsEntregaRendirController.obtenerConGastosAsociados);
 router.get('/:id/label-enlace', detMovsEntregaRendirController.obtenerLabelEnlacePorId);  // ⭐ AGREGAR ESTA LÍNEA
