@@ -2549,6 +2549,9 @@ model Empresa {
   // ⭐ FACTURACIÓN ELECTRÓNICA - Credenciales del proveedor OSE/PSE de la empresa
   facturacionElectronicaUrl           String?     // URL base del API del proveedor
   facturacionElectronicaToken         String?     // Token de autenticación (Bearer) de la empresa
+  facturacionElectronicaUsuario       String?     // Usuario CPE (usuario_secundaria) de Smart PSE
+  facturacionElectronicaEntorno       String      @default("DEMO") @db.VarChar(12) // "DEMO" | "PRODUCCION"
+  facturacionElectronicaBoletaModo    String      @default("INDIVIDUAL") @db.VarChar(20) // "INDIVIDUAL" | "RESUMEN_DIARIO"
 
   ultimoCorrelativoOperacionCaja      BigInt?     @default(0)
   porcentajePercepcion                Decimal?    @db.Decimal(5, 2)  // 🆕 AGREGAR ESTA LÍNEA
@@ -2627,6 +2630,7 @@ model Empresa {
   prestamosRelacionadosOtorgados   PrestamoRelacionado[]  @relation("PrestamoRelacionadoPrestamista")
   prestamosRelacionadosRecibidos   PrestamoRelacionado[]  @relation("PrestamoRelacionadoPrestataria")
   prestamosEntidad         PrestamoEntidad[]
+  resumenesSunat           ResumenSunat[]          // Resúmenes diarios de boletas (RC) y comunicaciones de baja (RA) de la empresa
 
   // ⭐ RRHH FASE 1
   regimenLaboral      RegimenLaboral?     @relation(fields: [regimenLaboralId], references: [id])  // Régimen laboral de la empresa
@@ -5387,6 +5391,7 @@ model SerieDoc {
   numCerosIzqSerie  Int                 @default(0)
   activo            Boolean             @default(true)
   empresaId         BigInt?
+  esElectronica     Boolean             @default(false)  // true = serie SUNAT (F001, B001, FC01...) para comprobantes electrónicos
 
   movimientos       MovimientoAlmacen[]
   requerimientosCompra RequerimientoCompra[]
@@ -7042,6 +7047,8 @@ model ComprobanteElectronico {
   motivoNotaCreditoDebitoId BigInt?                                      // ⭐ NUEVO: Motivo de NC/ND (reemplaza motivoNotaId)
   comprobanteModificaId     BigInt?                                      // FK al comprobante que modifica (solo para NC/ND)
   
+  nombreArchivo             String?                 @db.VarChar(60)      // RUC-TIPO-SERIE-CORRELATIVO enviado a Smart PSE
+
   // Respuesta del proveedor de facturación electrónica
   aceptadoPorSunat          Boolean?                                     // true = SUNAT aceptó el comprobante
   codigoEstadoProveedor     String?                 @db.VarChar(10)      // Código de estado del proveedor (ej: "01"=REGISTRADO, "05"=ACEPTADO)
@@ -7105,7 +7112,8 @@ model ComprobanteElectronico {
   detalles                  DetalleComprobante[]                         // Detalles de productos
   cuotas                    CuotaPagoComprobante[]                       // Cuotas de pago
   enviosOSE                 EnvioOSE[]                                   // Envíos a OSE
-
+  detallesResumenSunat      DetalleResumenSunat[]                        // Resúmenes (RC) o bajas (RA) en que se informó este comprobante
+  
   // Índices
   @@index([preFacturaId])
   @@index([empresaId])
@@ -7171,7 +7179,45 @@ model DetalleComprobante {
   @@index([tipoAfectacionIGVId])
 }
 
+model ResumenSunat {
+  id                 BigInt                @id @default(autoincrement())
+  empresaId          BigInt
+  tipo               String                @db.VarChar(2)       // "RC" resumen diario de boletas | "RA" comunicación de baja
+  fechaReferencia    DateTime              @db.Date             // Día de emisión de los comprobantes que agrupa
+  correlativoDia     Int                                        // Orden dentro del día (RUC-RC-AAAAMMDD-n)
+  nombreArchivo      String                @db.VarChar(60)
+  ticket             String?               @db.VarChar(60)
+  estado             String                @db.VarChar(20)      // "PENDIENTE" | "ENVIADO" | "ACEPTADO" | "RECHAZADO" | "ERROR"
+  codigoRespuesta    String?               @db.VarChar(10)
+  mensajeRespuesta   String?               @db.Text
+  rutaLocalXML       String?               @db.VarChar(500)
+  rutaLocalCDR       String?               @db.VarChar(500)
+  fechaCreacion      DateTime              @default(now())
+  fechaRespuesta     DateTime?
+  creadoPor          BigInt?
 
+  empresa            Empresa               @relation(fields: [empresaId], references: [id])
+  detalles           DetalleResumenSunat[]
+
+  @@unique([empresaId, nombreArchivo])
+  @@index([empresaId, tipo, fechaReferencia])
+  @@index([estado])
+}
+
+model DetalleResumenSunat {
+  id                        BigInt                  @id @default(autoincrement())
+  resumenSunatId            BigInt
+  numeroLinea               Int
+  comprobanteElectronicoId  BigInt
+  estadoItem                Int                                    // 1 adicionar | 2 modificar | 3 anular (RC); en RA solo baja
+  motivo                    String?                 @db.VarChar(250)
+
+  resumenSunat              ResumenSunat            @relation(fields: [resumenSunatId], references: [id], onDelete: Cascade)
+  comprobanteElectronico    ComprobanteElectronico  @relation(fields: [comprobanteElectronicoId], references: [id])
+
+  @@index([resumenSunatId])
+  @@index([comprobanteElectronicoId])
+}
 
 // ============================================
 // CuotaPagoComprobante
