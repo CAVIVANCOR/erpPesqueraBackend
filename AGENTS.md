@@ -58,3 +58,5 @@
 
 ## Forma de trabajo
 - Producción crítica: no ejecutar verificaciones innecesarias; sí probar con rollback cuando se toquen flujos contables.
+- Cuando el usuario pida aplicar una corrección (o confirme "procede"), se aplica directamente en los archivos, sin volver a pedir aprobación.
+- Todo código nuevo o modificado lleva comentarios profesionales que expliquen el porqué (no el qué): reglas contables, convenciones copiadas de otros servicios, casos límite.

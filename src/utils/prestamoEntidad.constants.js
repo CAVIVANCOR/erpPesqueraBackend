@@ -25,6 +25,6 @@ export const CUENTAS_PRESTAMO_ENTIDAD = {
   },
   OTORGADO: {
     accionista: { 1: "142211", 2: "142212" },
-    tercero: { 1: "161111", 2: "161112" },
+    tercero: { 1: "171111", 2: "171112" },
   },
 };

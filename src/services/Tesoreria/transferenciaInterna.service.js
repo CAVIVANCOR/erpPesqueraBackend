@@ -88,16 +88,16 @@ const SUBMODULOS = {
 // data.operacionPrestamoRelacionado.
 //
 // Asientos (cada empresa registra los suyos, con su propia cuenta bancaria):
-//   DESEMBOLSO   origen:  DEBE 171201 Cuentas por cobrar a relacionadas / HABER banco
+//   DESEMBOLSO   origen:  DEBE 171111 Cuentas por cobrar a relacionadas / HABER banco
 //                destino: DEBE banco / HABER 471101 Cuentas por pagar a relacionadas
 //   DEVOLUCIÓN   origen:  DEBE 471101 Cuentas por pagar a relacionadas  / HABER banco
-//                destino: DEBE banco / HABER 171201 Cuentas por cobrar a relacionadas
-// En moneda extranjera: 171202 y 471112.
+//                destino: DEBE banco / HABER 171111 Cuentas por cobrar a relacionadas
+// En moneda extranjera: 171112 y 471112.
 const OPERACIONES_PRESTAMO_RELACIONADO = ['DESEMBOLSO', 'DEVOLUCION'];
 
 const CUENTAS_PRESTAMO_RELACIONADO = {
-  POR_COBRAR_MN: '171201',
-  POR_COBRAR_ME: '171202',
+  POR_COBRAR_MN: '171111',
+  POR_COBRAR_ME: '171112',
   POR_PAGAR_MN: '471101',
   POR_PAGAR_ME: '471112'
 };
@@ -832,8 +832,8 @@ async function crearAsientoSegunTipo(
   // ════════════════════════════════════════════════════════════
   //
   // Cada empresa registra su propio asiento con su cuenta bancaria y la cuenta de relacionadas:
-  //   DESEMBOLSO:  origen  DEBE 171201 / HABER banco      destino DEBE banco / HABER 471101
-  //   DEVOLUCIÓN:  origen  DEBE 471101 / HABER banco      destino DEBE banco / HABER 171201
+  //   DESEMBOLSO:  origen  DEBE 171111 / HABER banco      destino DEBE banco / HABER 471101
+  //   DEVOLUCIÓN:  origen  DEBE 471101 / HABER banco      destino DEBE banco / HABER 171111
   // La línea de la cuenta por cobrar/pagar lleva como entidad a la empresa relacionada.
   //
   else if (
@@ -842,7 +842,7 @@ async function crearAsientoSegunTipo(
     [TIPOS_PRESTAMO_RELACIONADO.EGRESO, TIPOS_PRESTAMO_RELACIONADO.INGRESO].includes(Number(movimiento.tipoMovimientoId))
   ) {
     // La cuenta de relacionadas sigue la moneda del PRÉSTAMO, no la del movimiento: un préstamo en dólares que la
-    // prestataria recibe en soles se registra igual en 171202/471112, con su monto en dólares en la línea.
+    // prestataria recibe en soles se registra igual en 171112/471112, con su monto en dólares en la línea.
     const esMonedaExtranjera = Number(prestamoRelacionado.monedaPrestamoId) !== 1;
     montoMonedaExtranjeraPrestamo = esMonedaExtranjera ? Number(prestamoRelacionado.montoPrestamo) : null;
     const cuentaPorCobrar = prestamoRelacionado.cuentas[esMonedaExtranjera ? CUENTAS_PRESTAMO_RELACIONADO.POR_COBRAR_ME : CUENTAS_PRESTAMO_RELACIONADO.POR_COBRAR_MN];

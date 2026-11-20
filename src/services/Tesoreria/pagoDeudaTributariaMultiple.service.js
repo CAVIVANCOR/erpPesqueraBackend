@@ -71,6 +71,8 @@ const SUBMODULO_ORIGEN_DEUDAS_TRIBUTARIAS_ID = 137;
 const CODIGOS_CUENTAS_CONTABLES = {
   ITF: "641201",
   COMISIONES_BANCARIAS: "679401",
+  // Intereses que el fisco cobra junto con el tributo: son un gasto financiero aparte, no reducen la deuda
+  INTERESES: "659201",
 };
 
 const MESES = [
@@ -335,6 +337,8 @@ const crearAsiento = async ({
  * @param {string} [datos.observaciones]
  * @param {number} [datos.itf=0]
  * @param {number} [datos.comision=0]
+ * @param {number} [datos.intereses=0] - Intereses del tributo: egreso de caja aparte (misma entidad y tipo
+ *        de movimiento que el pago), con su propio asiento DEBE 659201 / HABER banco. No reduce el saldo de las deudas.
  * @param {number} [datos.tipoCambio] - Solo si la moneda de las deudas no es soles
  * @param {number} datos.usuarioId
  */
@@ -380,8 +384,12 @@ const procesarPagoMultiple = async (datos) => {
     }
     const itf = Number(datos.itf || 0);
     const comision = Number(datos.comision || 0);
+    const intereses = Number(datos.intereses || 0);
     if (itf < 0) throw new ValidationError("El ITF no puede ser negativo.");
     if (comision < 0) throw new ValidationError("La comisión no puede ser negativa.");
+    if (!Number.isFinite(intereses) || intereses < 0) {
+      throw new ValidationError("Los intereses no pueden ser negativos.");
+    }
 
     // ITF y comisión comparten el mismo tipo de movimiento (rol ITF_COMISION)
     const TIPO_MOVIMIENTO_ITF_COMISION = await obtenerIdTipoPorRol("ITF_COMISION");
@@ -535,7 +543,9 @@ const procesarPagoMultiple = async (datos) => {
         throw new ValidationError("No se encontró el estado PENDIENTE para asientos contables");
       }
 
-      // Las cuentas de gasto solo se exigen si hay ITF / comisión
+      // Las cuentas de gasto solo se exigen si hay intereses / ITF / comisión
+      const cuentaGastoIntereses =
+        intereses > 0 ? await obtenerCuentaGasto(tx, CODIGOS_CUENTAS_CONTABLES.INTERESES) : null;
       const cuentaGastoITF =
         itf > 0 ? await obtenerCuentaGasto(tx, CODIGOS_CUENTAS_CONTABLES.ITF) : null;
       const cuentaGastoComision =
@@ -597,12 +607,32 @@ const procesarPagoMultiple = async (datos) => {
         },
       });
 
+      // Intereses: egreso adicional a la misma entidad y con el mismo tipo de movimiento del pago. Como el ITF y la
+      // comisión, la cuenta bancaria va en cuentaCorrienteOrigenId y el saldo se encadena a continuación del egreso.
+      const interesesRegistro =
+        intereses > 0
+          ? await registrarMovimientoEgreso({
+              tx,
+              cuenta,
+              saldoAnteriorManual: egreso.saldoActual,
+              data: {
+                ...baseMovimiento,
+                tipoMovimientoId: tipoMovimiento.id,
+                entidadComercialId: entidad.id,
+                monto: intereses,
+                cuentaCorrienteOrigenId: cuenta.id,
+                descripcion: `INTERESES - ${descripcionMovimiento}`,
+              },
+            })
+          : null;
+
       const itfRegistro =
         itf > 0
           ? await registrarMovimientoEgreso({
               tx,
               cuenta,
-              saldoAnteriorManual: egreso.saldoActual,
+              // ?? y no ||: un saldo de 0 es válido y no debe retroceder al saldo anterior
+              saldoAnteriorManual: interesesRegistro?.saldoActual ?? egreso.saldoActual,
               data: {
                 ...baseMovimiento,
                 // ITF: lo cobra el banco de la cuenta (null si el banco no tiene entidad enlazada)
@@ -621,7 +651,8 @@ const procesarPagoMultiple = async (datos) => {
               tx,
               cuenta,
               // ?? y no ||: un saldo de 0 es válido y no debe retroceder al saldo anterior
-              saldoAnteriorManual: itfRegistro?.saldoActual ?? egreso.saldoActual,
+              saldoAnteriorManual:
+                itfRegistro?.saldoActual ?? interesesRegistro?.saldoActual ?? egreso.saldoActual,
               data: {
                 ...baseMovimiento,
                 // Comisión: la cobra el banco de la cuenta (null si el banco no tiene entidad enlazada)
@@ -734,6 +765,24 @@ const procesarPagoMultiple = async (datos) => {
         }),
       );
 
+      // Intereses: gasto financiero aparte (DEBE 659201 / HABER banco); no forma parte del asiento del tributo
+      if (interesesRegistro) {
+        asientos.push(
+          await crearAsiento({
+            ...paramsAsiento,
+            movimiento: interesesRegistro.movimiento,
+            lineasDebe: [
+              {
+                cuentaId: cuentaGastoIntereses.id,
+                monto: intereses,
+                centroCostoId: cuentaGastoIntereses.centroCostoId,
+              },
+            ],
+            glosa: `POR LOS INTERESES - ${descripcionMovimiento}`,
+          }),
+        );
+      }
+
       if (itfRegistro) {
         asientos.push(
           await crearAsiento({
@@ -766,6 +815,7 @@ const procesarPagoMultiple = async (datos) => {
 
       const movimientos = [
         egreso.movimiento,
+        interesesRegistro?.movimiento,
         itfRegistro?.movimiento,
         comisionRegistro?.movimiento,
       ].filter(Boolean);
@@ -797,6 +847,7 @@ const procesarPagoMultiple = async (datos) => {
 
       const etiquetasSaldo = {
         [egreso.movimiento.id]: "Egreso",
+        ...(interesesRegistro && { [interesesRegistro.movimiento.id]: "Intereses" }),
         ...(itfRegistro && { [itfRegistro.movimiento.id]: "ITF Origen" }),
         ...(comisionRegistro && { [comisionRegistro.movimiento.id]: "Comisión Origen" }),
       };
@@ -815,7 +866,12 @@ const procesarPagoMultiple = async (datos) => {
           saldoActual: Number(s.saldoActual),
         }));
 
-      const saldoFinalCuenta = comisionRegistro?.saldoActual ?? itfRegistro?.saldoActual ?? egreso.saldoActual;
+      // El último movimiento de la cascada (comisión, ITF, intereses o egreso) deja el saldo final de la cuenta
+      const saldoFinalCuenta =
+        comisionRegistro?.saldoActual ??
+        itfRegistro?.saldoActual ??
+        interesesRegistro?.saldoActual ??
+        egreso.saldoActual;
 
       return {
         success: true,
@@ -823,10 +879,14 @@ const procesarPagoMultiple = async (datos) => {
         data: {
         correlativo: Number(correlativo),
         movimientoEgresoId: egreso.movimiento.id,
+        movimientoInteresesId: interesesRegistro?.movimiento.id || null,
         movimientoITFOrigenId: itfRegistro?.movimiento.id || null,
         movimientoComisionOrigenId: comisionRegistro?.movimiento.id || null,
         movimientos: {
           egreso: movimientosMap[egreso.movimiento.id.toString()] || null,
+          intereses: interesesRegistro
+            ? movimientosMap[interesesRegistro.movimiento.id.toString()]
+            : null,
           itfOrigen: itfRegistro ? movimientosMap[itfRegistro.movimiento.id.toString()] : null,
           comisionOrigen: comisionRegistro
             ? movimientosMap[comisionRegistro.movimiento.id.toString()]
@@ -838,11 +898,13 @@ const procesarPagoMultiple = async (datos) => {
         resumen: {
           deudasPagadas: distribucion.length,
           montoPagado: montoPago,
+          intereses,
           itf,
           comision,
-          totalDescontado: redondear2(montoPago + itf + comision),
+          totalDescontado: redondear2(montoPago + intereses + itf + comision),
           saldoFinalCuenta,
-          movimientosCreados: 1 + (itfRegistro ? 1 : 0) + (comisionRegistro ? 1 : 0),
+          movimientosCreados:
+            1 + (interesesRegistro ? 1 : 0) + (itfRegistro ? 1 : 0) + (comisionRegistro ? 1 : 0),
         },
         },
       };

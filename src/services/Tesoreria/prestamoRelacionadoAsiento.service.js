@@ -13,7 +13,7 @@ import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
  * Cada empresa registra el suyo, por el saldo pendiente a la fecha contable
  * (montoDesembolsado - montoPagadoAnterior):
  *
- *   Prestamista:  DEBE 171201/171202 Cuentas por cobrar a relacionadas (entidad: prestataria)
+ *   Prestamista:  DEBE 171111/171112 Cuentas por cobrar a relacionadas (entidad: prestataria)
  *                 HABER 591101 Utilidades acumuladas
  *   Prestataria:  DEBE 591101 Utilidades acumuladas
  *                 HABER 471101/471112 Cuentas por pagar a relacionadas (entidad: prestamista)
@@ -25,7 +25,7 @@ import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 const RUTA_SUBMODULO = "prestamoRelacionado";
 const CUENTA_APERTURA = "591101";
 const CUENTAS_RELACIONADAS = {
-  porCobrar: { 1: "171201", 2: "171202" },
+  porCobrar: { 1: "171111", 2: "171112" },
   porPagar: { 1: "471101", 2: "471112" },
 };
 const MONEDA_SOLES_ID = 1;

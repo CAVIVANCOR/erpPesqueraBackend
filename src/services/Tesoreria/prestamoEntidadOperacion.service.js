@@ -30,8 +30,8 @@ import prestamoEntidadService, { crearConNumero, num, r2 } from "./prestamoEntid
  *     DESEMBOLSO = INGRESO  DEBE banco / HABER 441111-2 (accionista) o 461101-2 (tercero)
  *     PAGO       = EGRESO   DEBE 441111-2 o 461101-2 / HABER banco
  *   OTORGADO (la empresa es acreedora)
- *     DESEMBOLSO = EGRESO   DEBE 142211-2 (accionista) o 161111-2 (tercero) / HABER banco
- *     COBRO      = INGRESO  DEBE banco / HABER 142211-2 o 161111-2
+ *     DESEMBOLSO = EGRESO   DEBE 142211-2 (accionista) o 171111-2 (tercero) / HABER banco
+ *     COBRO      = INGRESO  DEBE banco / HABER 142211-2 o 171111-2
  *
  * La cuenta bancaria debe ser de la empresa del préstamo y estar en la moneda del préstamo. Si la moneda es
  * extranjera, el tipo de cambio de la fecha convierte los asientos a soles.

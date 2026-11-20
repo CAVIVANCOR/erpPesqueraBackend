@@ -14,7 +14,7 @@ import { SENTIDO_PRESTAMO_ENTIDAD as SENTIDO, CUENTAS_PRESTAMO_ENTIDAD, RUTA_SUB
  * por el saldo pendiente a la fecha contable (montoDesembolsado - montoPagadoAnterior):
  *
  *   RECIBIDO : DEBE 591101 Utilidades acumuladas / HABER 441111-2 (accionista) o 461101-2 (tercero), entidad = acreedor
- *   OTORGADO : DEBE 142211-2 (accionista) o 161111-2 (tercero), entidad = deudor / HABER 591101
+ *   OTORGADO : DEBE 142211-2 (accionista) o 171111-2 (tercero), entidad = deudor / HABER 591101
  *
  * El asiento se vincula al préstamo con submoduloOrigenId (submódulo 'prestamoEntidad') y procesoOrigenId
  * (id del préstamo). Los pagos y cobros posteriores nacen de Tesorería con sus propios asientos.
