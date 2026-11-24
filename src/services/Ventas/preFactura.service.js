@@ -5940,6 +5940,8 @@ const obtenerArchivoComprobante = async (preFacturaId, tipo) => {
   if (!comprobante) throw new NotFoundError('La venta no tiene comprobante electrónico generado.');
   return emisionComprobanteService.obtenerArchivo(Number(comprobante.id), String(tipo).toLowerCase());
 };
+
+export default {
   obtenerArchivoComprobante,
   listar,
   listarDetalleExportacion,
