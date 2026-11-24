@@ -1369,6 +1369,11 @@ model PreFactura {
   dcmtoAfectoNCND             PreFactura?             @relation("PreFacturaAfectadaNCND", fields: [dcmtoAfectoNCNDId], references: [id])
   notasCreditoDebito          PreFactura[]            @relation("PreFacturaAfectadaNCND")  // NC/ND que afectan a esta PreFactura
   pagoCanjeNC                 PagoCuentaPorCobrar?    @relation("PagoCxCNotaCredito")
+
+  esAnticipo                  Boolean         @default(false)   // Factura de anticipo recibido del cliente: carga a 122101, no genera stock ni kardex
+  preFacturaFinalAnticipoId   BigInt?                           // Factura final en la que se descontó este anticipo (null = disponible)
+  preFacturaFinalAnticipo     PreFactura?     @relation("PreFacturaAnticiposAplicados", fields: [preFacturaFinalAnticipoId], references: [id])
+  anticiposAplicados          PreFactura[]    @relation("PreFacturaAnticiposAplicados")  // Anticipos descontados en esta factura final
   // ========================================
   // ⭐ RELACIONES NUEVAS - FACTURACIÓN ELECTRÓNICA
   // ========================================
@@ -1412,6 +1417,7 @@ model PreFactura {
   @@index([unidadNegocioId])
   @@index([tipoAfectacionIGVId])
   @@index([tipoOperacionSunatId])
+  @@index([preFacturaFinalAnticipoId])                                   // Anticipos aplicados a una factura final
 }
 
 
@@ -7946,6 +7952,12 @@ model OrdenCompra {
   notasCreditoDebito          OrdenCompra[]           @relation("OrdenCompraAfectadaNCND")  // NC/ND que afectan a esta OC
   pagoCanjeNC                 PagoCuentaPorPagar?     @relation("PagoCxPNotaCredito")
 
+  esAnticipo                  Boolean         @default(false)   // Factura de anticipo entregado al proveedor: carga a 422101, no genera stock ni kardex
+  ordenCompraFinalAnticipoId  BigInt?                           // Factura final en la que se descontó este anticipo (null = disponible)
+
+  ordenCompraFinalAnticipo    OrdenCompra?    @relation("OrdenCompraAnticiposAplicados", fields: [ordenCompraFinalAnticipoId], references: [id])
+  anticiposAplicados          OrdenCompra[]   @relation("OrdenCompraAnticiposAplicados")  // Anticipos descontados en esta factura final
+
   // ========================================
   // RELACIONES EXISTENTES
   // ========================================
@@ -8015,6 +8027,7 @@ model OrdenCompra {
   @@index([tipoOperacionSunatId])
   @@index([activoAfectoId])                                              // ⭐ NUEVO: Índice para activo afecto
   @@index([bancoFactoringId])
+  @@index([ordenCompraFinalAnticipoId])                                  // Anticipos aplicados a una factura final
 }
 
 
