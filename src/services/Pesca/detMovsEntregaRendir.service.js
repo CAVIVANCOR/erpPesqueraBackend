@@ -2049,7 +2049,10 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
     if (asientosYaExisten) {
       // Nada que crear: los asientos existentes se respetan
     } else if (esGerencial) {
-      // SIN FACTURA: 1 Asiento con 4 líneas
+      // SIN FACTURA: 1 Asiento. Gasto de una entrega a rendir: 4 líneas (gasto / entrega a rendir + destino).
+      // GASTO DIRECTO (urgente o solicitado por el responsable): SOLO las 2 líneas de DESTINO. El gasto contra caja/banco lo
+      // registra el asiento del PAGO desde Tesorería (DEBE cuenta del producto / HABER caja o banco); si aquí se cargara también
+      // el gasto contra 421201, el gasto quedaría duplicado y 421201 sin cancelar.
       const ultimoAsiento = await tx.asientoContable.findFirst({
         where: {
           empresaId: detMov.empresaId,
@@ -2074,8 +2077,8 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
           glosa: esGastoDirecto
             ? `GASTO GERENCIAL DIRECTO - ${detMov.descripcion || ''} - MOV-${detMovId}`
             : `PAGO SIN FACTURA - ${detMov.descripcion || ''} - MOV-${detMovId}`,
-          totalDebe: ordenCompra.total * 2,
-          totalHaber: ordenCompra.total * 2,
+          totalDebe: esGastoDirecto ? ordenCompra.total : ordenCompra.total * 2,
+          totalHaber: esGastoDirecto ? ordenCompra.total : ordenCompra.total * 2,
           diferencia: 0,
           estaCuadrado: true,
           monedaId: ordenCompra.monedaId,
@@ -2094,8 +2097,10 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
       const totalPEN = esMonedaExtranjera ? ordenCompra.total * Number(ordenCompra.tipoCambio) : ordenCompra.total;
       const totalExtranjero = esMonedaExtranjera ? ordenCompra.total : null;
 
-      await tx.detalleAsientoContable.createMany({
-        data: [
+      // Líneas de gasto y contrapartida: solo en gastos de entrega a rendir (en gasto directo las registra el pago)
+      const lineasGasto = esGastoDirecto
+        ? []
+        : [
           {
             asientoContableId: asientoPago.id,
             numeroLinea: 1,
@@ -2113,10 +2118,10 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
           {
             asientoContableId: asientoPago.id,
             numeroLinea: 2,
-            planCuentaId: esGastoDirecto ? cuentaFacturasPorPagar.id : cuentaEntregasRendir.id,
+            planCuentaId: cuentaEntregasRendir.id,
             debe: 0,
             haber: totalPEN,
-            glosa: esGastoDirecto ? 'PROVEEDOR' : 'PAGO',
+            glosa: 'PAGO',
             monedaId: 1,
             tipoCambio: ordenCompra.tipoCambio,
             debeMonedaExtranjera: null,
@@ -2124,9 +2129,15 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
             submoduloOrigenLineaId: ordenCompra.submoduloOrigenId,
             procesoOrigenLineaId: BigInt(detMovId),
           },
+        ];
+      const lineaDestino = lineasGasto.length;
+
+      await tx.detalleAsientoContable.createMany({
+        data: [
+          ...lineasGasto,
           {
             asientoContableId: asientoPago.id,
-            numeroLinea: 3,
+            numeroLinea: lineaDestino + 1,
             planCuentaId: centroCosto.cuentaContableId,
             debe: totalPEN,
             haber: 0,
@@ -2140,7 +2151,7 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
           },
           {
             asientoContableId: asientoPago.id,
-            numeroLinea: 4,
+            numeroLinea: lineaDestino + 2,
             planCuentaId: cuenta791101.id,
             debe: 0,
             haber: totalPEN,
@@ -2415,7 +2426,7 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
         cuentaPorPagar: { id: cuentaPorPagar.id, montoTotal: ordenCompra.total },
         ...(pago ? { pago: { id: pago.id, montoPago: ordenCompra.total } } : {}),
         asientoPago: asientoPago
-          ? { id: asientoPago.id, totalDebe: ordenCompra.total * (esGerencial ? 2 : 1), totalHaber: ordenCompra.total * (esGerencial ? 2 : 1) }
+          ? { id: asientoPago.id, totalDebe: ordenCompra.total * (esGerencial && !esGastoDirecto ? 2 : 1), totalHaber: ordenCompra.total * (esGerencial && !esGastoDirecto ? 2 : 1) }
           : null,
       },
     };
