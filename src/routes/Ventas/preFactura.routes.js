@@ -77,6 +77,11 @@ router.post(
   preFacturaController.facturarPreFacturaBlanca
 );
 
+// ANTICIPOS DE CLIENTES: disponibles / aplicar / revertir
+router.get('/:id/anticipos-disponibles', autenticarJWT, checkPermission('preFactura', 'ver'), preFacturaController.listarAnticiposDisponibles);
+router.post('/:id/aplicar-anticipos', autenticarJWT, checkPermission('preFactura', 'editar'), preFacturaController.aplicarAnticipos);
+router.post('/:id/revertir-anticipos', autenticarJWT, checkPermission('preFactura', 'editar'), preFacturaController.revertirAnticipos);
+
 router.post(
   '/:id/aplicar-nota-credito',
   autenticarJWT,

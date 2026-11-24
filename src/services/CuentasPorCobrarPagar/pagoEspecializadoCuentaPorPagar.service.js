@@ -709,8 +709,13 @@ async function generarAsientoParaMovimiento({
   // ✅ NUEVO: Detectar GASTOS SIN FACTURA por CuentaPorPagar.esGerencial = true (Compra Negra/Gerencial/No SUNAT)
   const esGerencialCxP = Boolean(cuentaPorPagar?.esGerencial);
   const esGastoSinFactura = esGerencialCxP && esEgreso && !esDetraccion && !esHonorarios;
+
+  // ANTICIPO entregado al proveedor: no tuvo asiento de provisión; el pago registra DEBE 422101 (cuenta de anticipos del
+  // producto) / HABER caja o banco por el TOTAL pagado (incluye IGV: se reclasifica al aplicar el anticipo en la factura final)
+  const esAnticipoProveedor = Boolean(ordenCompra?.esAnticipo) && esEgreso && !esDetraccion && !esHonorarios;
   
-  const tipoAsiento = esHonorarios ? 'HONORARIOS' :
+  const tipoAsiento = esAnticipoProveedor ? 'ANTICIPO A PROVEEDOR' :
+                      esHonorarios ? 'HONORARIOS' :
                       esGastoSinFactura ? 'GASTO SIN FACTURA' :
                       esDetraccion ? 'DETRACCIÓN' :
                       esAutodetraccionEgreso ? 'AUTODETRACCIÓN EGRESO' :
@@ -750,6 +755,30 @@ async function generarAsientoParaMovimiento({
     
     cuentaDebe = cuentaHonorarios.id;
     cuentaHaber = movimientoCompleto.cuentaCorrienteDestino.cuentaContable.id;
+
+  } else if (esAnticipoProveedor) {
+    if (!movimientoCompleto.cuentaCorrienteDestino?.cuentaContable) {
+      return null;
+    }
+    cuentaHaber = movimientoCompleto.cuentaCorrienteDestino.cuentaContable.id;
+
+    // Cuenta de anticipos: la del producto de la línea del anticipo (422101 / 422102); si no la tuviera, 422101 en soles o 422102 en dólares
+    const lineaAnticipo = await tx.detalleOrdenCompra.findFirst({
+      where: { ordenCompraId: ordenCompra.id },
+      include: { producto: true },
+      orderBy: { id: 'asc' },
+    });
+    let cuentaAnticipoId = lineaAnticipo?.producto?.cuentaComprasId || null;
+    if (!cuentaAnticipoId) {
+      const codigo = Number(cuentaPorPagar?.monedaId || movimientoCompleto.monedaId) === 1 ? '422101' : '422102';
+      const cuentaDefecto = await tx.planCuentasContable.findFirst({ where: { codigoCuenta: codigo, activo: true } });
+      if (!cuentaDefecto) {
+        throw new ValidationError(`No se encontró la cuenta ${codigo} (Anticipos a proveedores). Configure el plan de cuentas antes de pagar el anticipo.`);
+      }
+      cuentaAnticipoId = cuentaDefecto.id;
+    }
+    // Una sola línea al DEBE por el total pagado (la lógica de conversión por moneda es la de los gastos sin factura)
+    cuentasDebeMultiples = [{ cuentaId: cuentaAnticipoId, monto: Number(movimientoCompleto.monto), origen: 'Anticipo' }];
 
   } else if (esGastoSinFactura && esEgreso) {
     // ═══════════════════════════════════════════════════════════
@@ -1003,7 +1032,10 @@ async function generarAsientoParaMovimiento({
   let tipoOperacion = 'PAGO CXP';
   let detalleConcepto = null;
   
-  if (esHonorarios) {
+  if (esAnticipoProveedor) {
+    tipoOperacion = 'PAGO DE ANTICIPO A PROVEEDOR';
+    detalleConcepto = 'Anticipo entregado al proveedor';
+  } else if (esHonorarios) {
     tipoOperacion = 'PAGO HONORARIOS';
     detalleConcepto = 'Pago de Recibo por Honorarios';
   } else if (esGastoSinFactura) {

@@ -212,6 +212,28 @@ router.post(
   ordenCompraController.aplicarNotaCredito
 );
 
+// ANTICIPOS A PROVEEDORES: disponibles / aplicar / revertir
+router.get(
+  '/:id/anticipos-disponibles',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'ver'),
+  ordenCompraController.listarAnticiposDisponibles
+);
+
+router.post(
+  '/:id/aplicar-anticipos',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'editar'),
+  ordenCompraController.aplicarAnticipos
+);
+
+router.post(
+  '/:id/revertir-anticipos',
+  autenticarJWT,
+  checkPermission('ordenCompra', 'editar'),
+  ordenCompraController.revertirAnticipos
+);
+
 router.post(
   '/:id/revertir-nota-credito',
   autenticarJWT,

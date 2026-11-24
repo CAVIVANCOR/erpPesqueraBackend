@@ -229,6 +229,45 @@ export async function aplicarNotaCredito(req, res, next) {
 }
 
 /**
+ * Anticipos pagados y sin aplicar que se pueden descontar en esta factura final
+ * GET /api/ordenes-compra/:id/anticipos-disponibles
+ */
+export async function listarAnticiposDisponibles(req, res, next) {
+  try {
+    const resultado = await ordenCompraService.listarAnticiposDisponibles(Number(req.params.id));
+    res.status(200).json(toJSONBigInt(resultado));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Descuenta anticipos en una factura final (línea negativa por anticipo)
+ * POST /api/ordenes-compra/:id/aplicar-anticipos   body: { anticipoIds: [] }
+ */
+export async function aplicarAnticipos(req, res, next) {
+  try {
+    const resultado = await ordenCompraService.aplicarAnticipos(Number(req.params.id), req.body?.anticipoIds);
+    res.status(200).json(toJSONBigInt({ success: true, mensaje: "Anticipos aplicados a la factura", data: resultado }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Revierte los anticipos descontados en una factura final
+ * POST /api/ordenes-compra/:id/revertir-anticipos
+ */
+export async function revertirAnticipos(req, res, next) {
+  try {
+    const resultado = await ordenCompraService.revertirAnticipos(Number(req.params.id));
+    res.status(200).json(toJSONBigInt({ success: true, mensaje: "Anticipos revertidos", data: resultado }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Revierte la aplicación de una Nota de Crédito de compra
  * POST /api/ordenes-compra/:id/revertir-nota-credito
  */

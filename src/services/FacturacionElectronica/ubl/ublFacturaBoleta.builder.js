@@ -161,10 +161,21 @@ export const revisarComprobante = (c) => {
     if (!mismaCifra(Number(d.subtotal) + Number(d.igv), d.total)) {
       problemas.push(`${etiqueta}: el total de la línea (${dec(d.total)}) no es valor de venta + IGV.`);
     }
-    sumas[categoria] += Number(d.subtotal);
-    sumaIgv += Number(d.igv);
-    sumaTotal += Number(d.total);
+    // Una línea de ANTICIPO (anticipo = true) guarda sus montos en positivo pero DESCUENTA: resta de la base, del IGV y del total
+    const signo = d.anticipo ? -1 : 1;
+    if (d.anticipo) {
+      if (!/^[A-Z0-9]{4}-\d{1,8}$/.test(String(d.codigoProducto || '').trim())) {
+        problemas.push(`${etiqueta}: el anticipo no tiene la serie y número del comprobante que lo emitió (ej. F001-00000001).`);
+      }
+      if (!['02', '03'].includes(String(d.codigoProductoSunat || '').trim())) {
+        problemas.push(`${etiqueta}: el tipo del comprobante del anticipo debe ser 02 (factura) o 03 (boleta) del catálogo 12.`);
+      }
+    }
+    sumas[categoria] += signo * Number(d.subtotal);
+    sumaIgv += signo * Number(d.igv);
+    sumaTotal += signo * Number(d.total);
   }
+  if (detalles.length > 0 && detalles.every((d) => d.anticipo)) problemas.push('El comprobante solo tiene anticipos: debe tener al menos una línea de bien o servicio.');
 
   // Totales de cabecera contra las líneas
   if (!mismaCifra(sumas.GRAVADO, c.totalGravado)) problemas.push(`El total gravado (${dec(c.totalGravado)}) no coincide con la suma de las líneas (${dec(sumas.GRAVADO)}).`);
@@ -325,19 +336,54 @@ export const construirXmlFacturaBoleta = (c) => {
   const numeroCliente = String(c.numeroDocumentoCliente || '').trim() || '-';
   const nombreMoneda = NOMBRE_MONEDA[moneda] || String(c.moneda.nombreLargo || moneda).toUpperCase();
 
-  // Resumen de impuestos de la cabecera por categoría presente en las líneas
+  // ANTICIPOS: las líneas con anticipo = true NO son líneas del XML. Se informan como documento relacionado (catálogo 12), pago
+  // anticipado, descuento global (catálogo 53: 04 gravado, 05 exonerado, 06 inafecto) y total de anticipos (PrepaidAmount).
+  const lineasItems = c.detalles.filter((d) => !d.anticipo);
+  const lineasAnticipo = c.detalles.filter((d) => d.anticipo);
+  const CODIGO_DESCUENTO_ANTICIPO = { GRAVADO: '04', EXONERADO: '05', INAFECTO: '06', EXPORTACION: '06' };
+  const totalAnticipos = lineasAnticipo.reduce((suma, d) => suma + Number(d.total), 0);
+  const descuentosAnticipo = {};
+  for (const d of lineasAnticipo) {
+    const codigo = CODIGO_DESCUENTO_ANTICIPO[categoriaDeLinea(d)];
+    descuentosAnticipo[codigo] = (descuentosAnticipo[codigo] || 0) + Number(d.subtotal);
+  }
+
+  // Resumen de impuestos de la cabecera por categoría presente en las líneas. La base y el IGV son NETOS de anticipos
+  // (la base gravada y el IGV de SUNAT restan el descuento 04).
   const bases = {};
   const impuestos = {};
   for (const d of c.detalles) {
     const categoria = categoriaDeLinea(d);
-    bases[categoria] = (bases[categoria] || 0) + Number(d.subtotal);
-    impuestos[categoria] = (impuestos[categoria] || 0) + Number(d.igv);
+    const signo = d.anticipo ? -1 : 1;
+    bases[categoria] = (bases[categoria] || 0) + signo * Number(d.subtotal);
+    impuestos[categoria] = (impuestos[categoria] || 0) + signo * Number(d.igv);
   }
   const subtotalesCabecera = Object.keys(bases)
     .map((categoria) => bloqueSubtotalImpuesto(TRIBUTO_POR_CATEGORIA[categoria], bases[categoria], impuestos[categoria], moneda))
     .join('');
 
-  const valorVenta = Object.values(bases).reduce((s, v) => s + v, 0);
+  // El total valor de venta (LineExtensionAmount) suma solo las líneas reales: SUNAT no le resta el descuento por anticipos
+  const valorVenta = lineasItems.reduce((suma, d) => suma + Number(d.subtotal), 0);
+  const referenciasAnticipo = lineasAnticipo
+    .map(
+      (d, i) =>
+        `<cac:AdditionalDocumentReference><cbc:ID>${esc(d.codigoProducto)}</cbc:ID><cbc:DocumentTypeCode listAgencyName="PE:SUNAT" listName="Documento Relacionado" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo12">${esc(d.codigoProductoSunat)}</cbc:DocumentTypeCode>` +
+        `<cbc:DocumentStatusCode>${i + 1}</cbc:DocumentStatusCode>` +
+        `<cac:IssuerParty><cac:PartyIdentification><cbc:ID schemeID="6" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">${ruc}</cbc:ID></cac:PartyIdentification></cac:IssuerParty></cac:AdditionalDocumentReference>`,
+    )
+    .join('');
+  const pagosAnticipados = lineasAnticipo
+    .map(
+      (d, i) =>
+        `<cac:PrepaidPayment><cbc:ID schemeName="Anticipo" schemeAgencyName="PE:SUNAT">${i + 1}</cbc:ID>${montoMoneda('PaidAmount', d.total, moneda)}<cbc:InstructionID schemeID="6">${ruc}</cbc:InstructionID></cac:PrepaidPayment>`,
+    )
+    .join('');
+  const descuentosGlobalesAnticipo = Object.entries(descuentosAnticipo)
+    .map(
+      ([codigo, monto]) =>
+        `<cac:AllowanceCharge><cbc:ChargeIndicator>false</cbc:ChargeIndicator><cbc:AllowanceChargeReasonCode listAgencyName="PE:SUNAT" listName="Cargo/descuento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo53">${codigo}</cbc:AllowanceChargeReasonCode>${montoMoneda('Amount', monto, moneda)}${montoMoneda('BaseAmount', valorVenta, moneda)}</cac:AllowanceCharge>`,
+    )
+    .join('');
 
   const xml = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
@@ -358,11 +404,12 @@ export const construirXmlFacturaBoleta = (c) => {
     // Leyenda 2006: operación sujeta a detracción
     c.sujetoDetraccion ? `<cbc:Note languageLocaleID="2006">Operación sujeta a detracción</cbc:Note>` : '',
     `<cbc:DocumentCurrencyCode listID="ISO 4217 Alpha" listName="Currency" listAgencyName="United Nations Economic Commission for Europe">${moneda}</cbc:DocumentCurrencyCode>`,
-    `<cbc:LineCountNumeric>${c.detalles.length}</cbc:LineCountNumeric>`,
+    `<cbc:LineCountNumeric>${lineasItems.length}</cbc:LineCountNumeric>`,
     c.ordenCompra ? `<cac:OrderReference><cbc:ID>${esc(String(c.ordenCompra).trim())}</cbc:ID></cac:OrderReference>` : '',
     c.guiaRemision
       ? `<cac:DespatchDocumentReference><cbc:ID>${esc(String(c.guiaRemision).trim())}</cbc:ID><cbc:DocumentTypeCode listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">09</cbc:DocumentTypeCode></cac:DespatchDocumentReference>`
       : '',
+    referenciasAnticipo,
     // Firma: identifica al firmante; el valor de la firma lo inserta Smart PSE en ext:UBLExtensions.
     // El ID de cac:Signature pasa a ser el atributo Id de ds:Signature (xs:ID): NO puede empezar con un dígito, por eso lleva
     // el prefijo SIGN- (con solo el RUC SUNAT rechaza con [0306] cvc-type 3.1.1). Debe coincidir con la URI de abajo.
@@ -386,10 +433,12 @@ export const construirXmlFacturaBoleta = (c) => {
         : '') +
       `</cac:PartyLegalEntity></cac:Party></cac:AccountingCustomerParty>`,
     bloquesPago(c, moneda),
+    pagosAnticipados,
+    descuentosGlobalesAnticipo,
     // Impuestos de la cabecera
     `<cac:TaxTotal>${montoMoneda('TaxAmount', c.totalIgv, moneda)}${subtotalesCabecera}</cac:TaxTotal>`,
-    `<cac:LegalMonetaryTotal>${montoMoneda('LineExtensionAmount', valorVenta, moneda)}${montoMoneda('TaxInclusiveAmount', c.totalComprobante, moneda)}${montoMoneda('PayableAmount', c.totalComprobante, moneda)}</cac:LegalMonetaryTotal>`,
-    ...c.detalles.map((d) => bloqueLinea(d, moneda)),
+    `<cac:LegalMonetaryTotal>${montoMoneda('LineExtensionAmount', valorVenta, moneda)}${montoMoneda('TaxInclusiveAmount', Number(c.totalComprobante) + totalAnticipos, moneda)}${totalAnticipos > 0 ? montoMoneda('PrepaidAmount', totalAnticipos, moneda) : ''}${montoMoneda('PayableAmount', c.totalComprobante, moneda)}</cac:LegalMonetaryTotal>`,
+    ...lineasItems.map((d) => bloqueLinea(d, moneda)),
     `</Invoice>`,
   ];
 

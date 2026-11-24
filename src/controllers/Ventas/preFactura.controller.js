@@ -248,6 +248,32 @@ export async function facturarPreFacturaBlanca(req, res, next) {
  * Aplica una Nota de Crédito a su documento afecto (canje por NC)
  * POST /api/pre-facturas/:id/aplicar-nota-credito
  */
+export async function listarAnticiposDisponibles(req, res, next) {
+  try {
+    res.status(200).json(toJSONBigInt(await preFacturaService.listarAnticiposDisponibles(Number(req.params.id))));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function aplicarAnticipos(req, res, next) {
+  try {
+    const resultado = await preFacturaService.aplicarAnticipos(Number(req.params.id), req.body?.anticipoIds);
+    res.status(200).json(toJSONBigInt({ success: true, mensaje: "Anticipos aplicados a la venta", data: resultado }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function revertirAnticipos(req, res, next) {
+  try {
+    const resultado = await preFacturaService.revertirAnticipos(Number(req.params.id));
+    res.status(200).json(toJSONBigInt({ success: true, mensaje: "Anticipos revertidos", data: resultado }));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function aplicarNotaCredito(req, res, next) {
   try {
     const id = Number(req.params.id);

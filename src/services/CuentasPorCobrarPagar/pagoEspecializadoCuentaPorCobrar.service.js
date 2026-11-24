@@ -724,6 +724,26 @@ async function generarAsientoParaMovimiento({
     cuentaHaber = Number(monedaFactura) === 1 
       ? cuentaCxCSoles.id 
       : cuentaCxCDolares.id;
+
+    // ANTICIPO recibido del cliente: no tuvo asiento de venta; el cobro registra DEBE caja o banco / HABER 122101 (anticipos de
+    // clientes, cuenta del producto) por el TOTAL cobrado (incluye IGV: se reclasifica al descontarlo en la factura final)
+    if (preFactura?.esAnticipo) {
+      const lineaAnticipo = await tx.detallePreFactura.findFirst({
+        where: { preFacturaId: preFactura.id },
+        include: { producto: true },
+        orderBy: { id: 'asc' },
+      });
+      let cuentaAnticipoId = lineaAnticipo?.producto?.cuentaVentasId || null;
+      if (!cuentaAnticipoId) {
+        const codigo = Number(monedaFactura) === 1 ? '122101' : '122102';
+        const cuentaDefecto = await tx.planCuentasContable.findFirst({ where: { codigoCuenta: codigo, activo: true } });
+        if (!cuentaDefecto) {
+          throw new ValidationError(`No se encontró la cuenta ${codigo} (Anticipos de clientes). Configure el plan de cuentas antes de cobrar el anticipo.`);
+        }
+        cuentaAnticipoId = cuentaDefecto.id;
+      }
+      cuentaHaber = cuentaAnticipoId;
+    }
     
 
   } else if (esAutodetraccionEgreso) {

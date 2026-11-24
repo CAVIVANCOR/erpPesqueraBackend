@@ -622,6 +622,7 @@ const crear = async (data) => {
         facturado: data.facturado,
         fechaFacturacion: data.fechaFacturacion,
         esGerencial: data.esGerencial,
+        esAnticipo: data.esAnticipo === true,
         preFacturaOrigenId: data.preFacturaOrigenId,
         esParticionada:
           data.esParticionada !== undefined ? data.esParticionada : false,
@@ -986,6 +987,7 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma, descuentoNot
             },
           },
         },
+        anticiposAplicados: { select: { total: true } }, // la detracción se calcula sobre la operación completa
       },
     });
     if (!preFactura) {
@@ -1045,7 +1047,9 @@ const calcularTotalesEImpuestos = async (preFacturaId, tx = prisma, descuentoNot
         if (porcentajeMax > 0 && tipoDetraccionMax) {
           // Convertir total a soles si es necesario
           const esSoles = preFactura.moneda.codigoSunat === 'PEN';
-          const totalEnSoles = esSoles ? total : total * Number(preFactura.tipoCambio);
+          // El comprobante final va neto de anticipos, pero la detracción se calcula sobre la operación COMPLETA
+          const totalOperacion = total + (preFactura.anticiposAplicados || []).reduce((sum, a) => sum + Number(a.total || 0), 0);
+          const totalEnSoles = esSoles ? totalOperacion : totalOperacion * Number(preFactura.tipoCambio);
 
           const umbralMinimo = Number(
             tipoDetraccionMax.montoMinimo || preFactura.empresa.montoMinimoDetraccion || 700
@@ -2311,7 +2315,31 @@ const construirLineasComprobante = async (tx, preFactura) => {
 
   const totales = { totalGravado: 0, totalExonerado: 0, totalInafecto: 0, totalGratuito: 0, totalDescuentos: 0, totalIsc: 0, totalIgv: 0, totalComprobante: 0 };
 
-  const detalles = detallesPreFactura.map((detalle, indice) => {
+  // ANTICIPOS descontados: las líneas con precio NEGATIVO de la venta no son líneas del comprobante; se declaran a SUNAT como
+  // anticipos (documento relacionado + pago anticipado + descuento global). Cada una se empareja por orden con un anticipo.
+  const lineasNegativas = detallesPreFactura.filter((d) => Number(d.precioUnitario) < 0);
+  const detallesNormales = detallesPreFactura.filter((d) => !(Number(d.precioUnitario) < 0));
+  const anticiposAplicados = lineasNegativas.length
+    ? await tx.preFactura.findMany({
+        where: { preFacturaFinalAnticipoId: preFactura.id },
+        include: {
+          comprobantesElectronicos: {
+            where: { aceptadoPorSunat: true },
+            include: { tipoComprobante: true },
+            orderBy: { id: "desc" },
+            take: 1,
+          },
+        },
+        orderBy: { id: "asc" },
+      })
+    : [];
+  if (lineasNegativas.length !== anticiposAplicados.length) {
+    throw new ValidationError(
+      `La venta ${preFactura.codigo} tiene ${lineasNegativas.length} línea(s) negativa(s) y ${anticiposAplicados.length} anticipo(s) aplicados: deben coincidir. Revierta y vuelva a aplicar los anticipos.`,
+    );
+  }
+
+  const detalles = detallesNormales.map((detalle, indice) => {
     const nombreLinea = detalle.producto?.descripcionBase || `línea ${indice + 1}`;
     const afectacion = afectacionDeLinea(detalle);
     if (!afectacion) {
@@ -2350,6 +2378,56 @@ const construirLineasComprobante = async (tx, preFactura) => {
       porcentajeIgv,
       total: redondear2(subtotal + igv),
     };
+  });
+
+  // Líneas de ANTICIPO del comprobante (anticipo = true, montos en positivo): SUNAT rechaza (3218) una final cuyo anticipo no figura
+  // aceptado, por eso cada anticipo debe tener ya su comprobante aceptado. Descuentan de la base, del IGV y del total.
+  lineasNegativas.forEach((detalle, i) => {
+    const anticipo = anticiposAplicados[i];
+    const comprobanteAnticipo = anticipo.comprobantesElectronicos?.[0];
+    const nombreAnticipo = anticipo.numeroDocumentoFinal || anticipo.numeroDocumento || anticipo.codigo;
+    if (!comprobanteAnticipo) {
+      throw new ValidationError(
+        `El anticipo ${nombreAnticipo} aún no tiene comprobante electrónico ACEPTADO por SUNAT: emítalo y espere su aceptación antes de emitir la factura final.`,
+      );
+    }
+    const tipoSunat = String(comprobanteAnticipo.tipoComprobante?.codigoSunat || "");
+    if (!["01", "03"].includes(tipoSunat)) {
+      throw new ValidationError(`El comprobante del anticipo ${nombreAnticipo} no es una factura ni una boleta.`);
+    }
+    const afectacion = afectacionDeLinea(detalle);
+    if (!afectacion) throw new ValidationError(`La línea del anticipo ${nombreAnticipo} no tiene tipo de afectación del IGV.`);
+    const porcentajeIgv = afectacion.calculaIGV ? porcentajeIgvPreFactura : 0;
+    const base = redondear2(Math.abs(Number(detalle.precioUnitario)) * Number(detalle.cantidad));
+    const igv = redondear2((base * porcentajeIgv) / 100);
+
+    totales.totalIgv -= igv;
+    totales.totalComprobante -= base + igv;
+    if (afectacion.categoria === "GRAVADO") totales.totalGravado -= base;
+    else if (afectacion.categoria === "EXONERADO") totales.totalExonerado -= base;
+    else totales.totalInafecto -= base;
+
+    const unidad = detalle.producto?.unidadMedida;
+    detalles.push({
+      numeroLinea: detalles.length + 1,
+      productoId: detalle.productoId,
+      // Serie-número y tipo (catálogo 12: 02 factura / 03 boleta emitida por anticipos) del comprobante del anticipo
+      codigoProducto: comprobanteAnticipo.numeroCompleto,
+      codigoProductoSunat: tipoSunat === "01" ? "02" : "03",
+      descripcion: `ANTICIPO ${comprobanteAnticipo.numeroCompleto}`,
+      unidadMedidaId: detalle.producto?.unidadMedidaId,
+      codigoUnidadSUNAT: UNIDAD_SUNAT_POR_SIMBOLO[String(unidad?.simbolo || "").toUpperCase()] || "NIU",
+      nombreUnidad: unidad?.nombre || null,
+      cantidad: Number(detalle.cantidad),
+      valorUnitario: base / Number(detalle.cantidad),
+      precioUnitario: (base / Number(detalle.cantidad)) * (1 + porcentajeIgv / 100),
+      subtotal: base,
+      tipoAfectacionIGVId: afectacion.id,
+      igv,
+      porcentajeIgv,
+      total: redondear2(base + igv),
+      anticipo: true,
+    });
   });
 
   // El comprobante es el documento que se declara a SUNAT: su total debe ser el de la venta
@@ -3948,11 +4026,23 @@ const generarBorradorAsiento = async (preFacturaId) => {
             producto: true,
           },
         },
+        // Anticipos descontados en esta factura final (para reclasificar su IGV)
+        anticiposAplicados: {
+          include: { detalles: { include: { producto: true }, orderBy: { id: 'asc' }, take: 1 } },
+        },
       },
     });
 
     if (!preFactura) {
       throw new NotFoundError("PreFactura no encontrada");
+    }
+
+    // El anticipo recibido del cliente NO tiene asiento de venta: su asiento nace al cobrarlo en Tesorería
+    // (DEBE caja o banco / HABER 122101 Anticipos de clientes por el total cobrado).
+    if (preFactura.esAnticipo) {
+      throw new ValidationError(
+        "Un anticipo no genera asiento de venta: su asiento se crea al cobrarlo en Tesorería (DEBE caja o banco / HABER 122101 Anticipos de clientes).",
+      );
     }
 
     if (!preFactura.periodoContable) {
@@ -4344,6 +4434,53 @@ const generarBorradorAsiento = async (preFacturaId) => {
         ];
       }
     }
+    // ANTICIPOS aplicados: la línea negativa (monto < 0 contra 122101) pasa al lado contrario y se reclasifica el IGV del anticipo
+    // (el cobro llevó el TOTAL a 122101): DEBE 122101 / HABER 401111 por el IGV de cada anticipo descontado.
+    for (const d of borrador.detalles) {
+      if (Number(d.haber) < 0) {
+        d.debe = Math.abs(Number(d.haber));
+        d.debeMonedaExtranjera = Math.abs(Number(d.haberMonedaExtranjera || 0));
+        d.haber = 0;
+        d.haberMonedaExtranjera = 0;
+      } else if (Number(d.debe) < 0) {
+        d.haber = Math.abs(Number(d.debe));
+        d.haberMonedaExtranjera = Math.abs(Number(d.debeMonedaExtranjera || 0));
+        d.debe = 0;
+        d.debeMonedaExtranjera = 0;
+      }
+    }
+    if (!esNotaCredito && !preFactura.esGerencial && !preFactura.exoneradoIgv) {
+      const cuentaIGVAnt = await prisma.planCuentasContable.findFirst({ where: { codigoCuenta: "401111", activo: true } });
+      let siguienteLinea = borrador.detalles.length + 1;
+      for (const anticipo of preFactura.anticiposAplicados || []) {
+        const igvAnticipo = Number(anticipo.totalIGV || 0);
+        if (!(igvAnticipo > 0)) continue;
+        const cuentaAnticipoId = anticipo.detalles?.[0]?.producto?.cuentaVentasId;
+        if (!cuentaAnticipoId || !cuentaIGVAnt) {
+          throw new ValidationError(
+            `El anticipo ${anticipo.numeroDocumentoFinal || anticipo.numeroDocumento} no tiene cuenta de anticipos (122101) en su producto o falta la cuenta 401111: revise el producto y el plan de cuentas.`,
+          );
+        }
+        const igvSoles = convertirMontoASoles(igvAnticipo, preFactura);
+        const comun = {
+          monedaId: MONEDA_SOLES_ID,
+          tipoCambio: preFactura.tipoCambio,
+          entidadComercialId: preFactura.clienteId,
+          tipoDocumentoOrigenId: preFactura.tipoDocumentoId,
+          numeroDocumentoOrigen: preFactura.numeroDocumento,
+          fechaDocumentoOrigen: preFactura.fechaDocumento,
+          glosa: `Reclasificación IGV anticipo ${anticipo.numeroDocumentoFinal || anticipo.numeroDocumento}`,
+        };
+        borrador.detalles.push({ ...comun, numeroLinea: siguienteLinea++, planCuentaId: cuentaAnticipoId, debe: igvSoles, haber: 0, debeMonedaExtranjera: igvAnticipo, haberMonedaExtranjera: 0 });
+        borrador.detalles.push({ ...comun, numeroLinea: siguienteLinea++, planCuentaId: cuentaIGVAnt.id, debe: 0, haber: igvSoles, debeMonedaExtranjera: 0, haberMonedaExtranjera: igvAnticipo });
+      }
+      if ((preFactura.anticiposAplicados || []).length > 0) {
+        const factor = Number(preFactura.monedaId) === 1 ? 1 : Number(preFactura.tipoCambio) || 1;
+        borrador.totalDebe = Math.round((borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0) / factor) * 100) / 100;
+        borrador.totalHaber = Math.round((borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0) / factor) * 100) / 100;
+      }
+    }
+
     // Validar que el borrador esté cuadrado (detalles en PEN)
     const totalDebePEN = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
     const totalHaberPEN = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
@@ -5941,6 +6078,191 @@ const obtenerArchivoComprobante = async (preFacturaId, tipo) => {
   return emisionComprobanteService.obtenerArchivo(Number(comprobante.id), String(tipo).toLowerCase());
 };
 
+// ════════════════════════════════════════════════════════════
+// ANTICIPOS DE CLIENTES
+// ════════════════════════════════════════════════════════════
+// Un anticipo es una PreFactura marcada esAnticipo (producto "ANTICIPO DE CLIENTES", cuenta 122101) que se cobra por Tesorería
+// (DEBE caja o banco / HABER 122101 por el total). La factura final por el total del comprobante descuenta cada anticipo con una
+// línea NEGATIVA (base del anticipo, editable). Cada anticipo se aplica completo a UNA sola factura final; una final puede
+// descontar varios. La línea negativa usa el mismo producto del anticipo y un precio unitario negativo.
+const numeroVisiblePF = (pf) => pf.numeroDocumentoFinal || pf.numeroDocumento || String(pf.id);
+
+/** Reglas de la factura final: sin CxC ni asientos (se generan DESPUÉS de aplicar o revertir anticipos). */
+const validarFinalAnticiposSinDocumentos = (final) => {
+  if (final.esAnticipo) throw new ValidationError("Un anticipo no puede descontar otros anticipos: use una factura final.");
+  if (Number(final.estadoId) === ESTADO_PREFACTURA.ANULADA) throw new ValidationError("La venta está anulada.");
+  if (esPreFacturaNotaCredito(final) || Number(final.tipoDocumentoFinalId || final.tipoDocumentoId) === Number(TIPO_DOC_ID.NOTA_DEBITO)) {
+    throw new ValidationError("Una nota de crédito o de débito no puede descontar anticipos.");
+  }
+  if (final.cuentaPorCobrar) {
+    throw new ValidationError(
+      "La venta ya tiene cuenta por cobrar: elimínela antes de aplicar o revertir anticipos y vuélvala a generar después (su monto cambia).",
+    );
+  }
+  if ((final.asientosContables || []).length > 0) {
+    throw new ValidationError("La venta ya tiene asientos contables: elimínelos antes de aplicar o revertir anticipos.");
+  }
+  if ((final.comprobantesElectronicos || []).length > 0) {
+    throw new ValidationError("La venta ya tiene comprobante electrónico: no se pueden cambiar los anticipos descontados.");
+  }
+};
+
+const recalcularTotalesFinalAnticipos = async (tx, preFacturaId) => {
+  const totales = await calcularTotalesEImpuestos(preFacturaId, tx);
+  if (Number(totales.total) < 0) {
+    throw new ValidationError(
+      `Los anticipos superan el total de la venta (queda ${Number(totales.total).toFixed(2)}). Revise los importes.`,
+    );
+  }
+  await tx.preFactura.update({ where: { id: preFacturaId }, data: totales });
+  return totales;
+};
+
+const includeFinalAnticipos = {
+  cuentaPorCobrar: { select: { id: true } },
+  asientosContables: { select: { id: true } },
+  comprobantesElectronicos: { select: { id: true } },
+};
+
+/**
+ * Anticipos que se pueden descontar en una factura final: mismo cliente, empresa y moneda, ya cobrados y sin aplicar.
+ * Devuelve también los ya aplicados a esta venta.
+ */
+const listarAnticiposDisponibles = async (preFacturaId) => {
+  const final = await prisma.preFactura.findUnique({
+    where: { id: preFacturaId },
+    select: { id: true, empresaId: true, clienteId: true, monedaId: true },
+  });
+  if (!final) throw new NotFoundError("PreFactura no encontrada");
+
+  const resumir = (a) => ({
+    id: a.id,
+    numero: numeroVisiblePF(a),
+    fechaDocumento: a.fechaDocumento,
+    subtotal: Number(a.subtotal || 0),
+    totalIGV: Number(a.totalIGV || 0),
+    total: Number(a.total || 0),
+    simboloMoneda: a.moneda?.simbolo || "",
+  });
+
+  const [disponibles, aplicados] = await Promise.all([
+    prisma.preFactura.findMany({
+      where: {
+        esAnticipo: true,
+        preFacturaFinalAnticipoId: null,
+        id: { not: final.id },
+        empresaId: final.empresaId,
+        clienteId: final.clienteId,
+        monedaId: final.monedaId,
+        estadoId: { not: ESTADO_PREFACTURA.ANULADA },
+        cuentaPorCobrar: { is: { saldoPendiente: { lte: 0.005 } } },
+      },
+      include: { moneda: true },
+      orderBy: [{ fechaDocumento: "asc" }, { id: "asc" }],
+    }),
+    prisma.preFactura.findMany({
+      where: { preFacturaFinalAnticipoId: final.id },
+      include: { moneda: true },
+      orderBy: { id: "asc" },
+    }),
+  ]);
+  return { disponibles: disponibles.map(resumir), aplicados: aplicados.map(resumir) };
+};
+
+/**
+ * Descuenta anticipos en una factura final: crea una línea negativa por anticipo y recalcula los totales.
+ */
+const aplicarAnticipos = async (preFacturaFinalId, anticipoIds) => {
+  try {
+    const ids = [...new Set((anticipoIds || []).map(Number).filter(Boolean))];
+    if (ids.length === 0) throw new ValidationError("Seleccione al menos un anticipo para aplicar.");
+
+    return await prisma.$transaction(async (tx) => {
+      const final = await tx.preFactura.findUnique({ where: { id: preFacturaFinalId }, include: includeFinalAnticipos });
+      if (!final) throw new NotFoundError("PreFactura no encontrada");
+      validarFinalAnticiposSinDocumentos(final);
+
+      const anticipos = await tx.preFactura.findMany({
+        where: { id: { in: ids } },
+        include: { cuentaPorCobrar: true, detalles: { orderBy: { id: "asc" }, take: 1 } },
+      });
+      if (anticipos.length !== ids.length) throw new NotFoundError("Alguno de los anticipos seleccionados no existe.");
+
+      for (const a of anticipos) {
+        const n = numeroVisiblePF(a);
+        if (!a.esAnticipo) throw new ValidationError(`El documento ${n} no está marcado como anticipo.`);
+        if (Number(a.estadoId) === ESTADO_PREFACTURA.ANULADA) throw new ValidationError(`El anticipo ${n} está anulado.`);
+        if (a.preFacturaFinalAnticipoId) throw new ValidationError(`El anticipo ${n} ya fue descontado en otra factura final.`);
+        if (Number(a.empresaId) !== Number(final.empresaId)) throw new ValidationError(`El anticipo ${n} es de otra empresa.`);
+        if (Number(a.clienteId) !== Number(final.clienteId)) throw new ValidationError(`El anticipo ${n} es de otro cliente.`);
+        if (Number(a.monedaId) !== Number(final.monedaId)) throw new ValidationError(`El anticipo ${n} está en otra moneda.`);
+        if (!a.cuentaPorCobrar || Number(a.cuentaPorCobrar.saldoPendiente) > 0.005) {
+          throw new ValidationError(`El anticipo ${n} aún no está cobrado por Tesorería: cóbrelo antes de descontarlo.`);
+        }
+        if (!a.detalles[0]) throw new ValidationError(`El anticipo ${n} no tiene líneas.`);
+        const base = redondear2NC(a.subtotal);
+        if (!(base > 0)) throw new ValidationError(`El anticipo ${n} no tiene un importe válido.`);
+
+        const linea = a.detalles[0];
+        await tx.detallePreFactura.create({
+          data: {
+            preFacturaId: final.id,
+            productoId: linea.productoId,
+            cantidad: 1,
+            precioUnitario: -base,
+            tipoAfectacionIGVId: linea.tipoAfectacionIGVId,
+          },
+        });
+        await tx.preFactura.update({ where: { id: a.id }, data: { preFacturaFinalAnticipoId: final.id } });
+      }
+
+      const totales = await recalcularTotalesFinalAnticipos(tx, final.id);
+      return { preFacturaId: final.id, anticiposAplicados: ids.length, subtotal: totales.subtotal, totalIGV: totales.totalIGV, total: totales.total };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith("P")) throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Revierte los anticipos descontados en una factura final: borra una línea negativa por anticipo (la del mismo producto),
+ * libera los anticipos y recalcula los totales.
+ */
+const revertirAnticipos = async (preFacturaFinalId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const final = await tx.preFactura.findUnique({
+        where: { id: preFacturaFinalId },
+        include: { ...includeFinalAnticipos, anticiposAplicados: { include: { detalles: { orderBy: { id: "asc" }, take: 1 } } } },
+      });
+      if (!final) throw new NotFoundError("PreFactura no encontrada");
+      if (final.anticiposAplicados.length === 0) throw new ValidationError("La venta no tiene anticipos aplicados.");
+      validarFinalAnticiposSinDocumentos(final);
+
+      for (const a of final.anticiposAplicados) {
+        const productoId = a.detalles[0]?.productoId;
+        const lineaNegativa = productoId
+          ? await tx.detallePreFactura.findFirst({
+              where: { preFacturaId: final.id, productoId, precioUnitario: { lt: 0 } },
+              orderBy: { id: "asc" },
+            })
+          : null;
+        if (lineaNegativa) await tx.detallePreFactura.delete({ where: { id: lineaNegativa.id } });
+        await tx.preFactura.update({ where: { id: a.id }, data: { preFacturaFinalAnticipoId: null } });
+      }
+
+      const totales = await recalcularTotalesFinalAnticipos(tx, final.id);
+      return { preFacturaId: final.id, anticiposRevertidos: final.anticiposAplicados.length, total: totales.total };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith("P")) throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 export default {
   obtenerArchivoComprobante,
   listar,
@@ -5974,5 +6296,8 @@ export default {
   exportarRegistroVentasSUNAT, // ⭐ NUEVO
   aplicarNotaCredito,
   revertirNotaCredito,
+  listarAnticiposDisponibles,
+  aplicarAnticipos,
+  revertirAnticipos,
   obtenerEstadoAplicacionNotaCredito,
 };

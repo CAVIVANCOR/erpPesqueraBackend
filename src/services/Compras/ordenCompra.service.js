@@ -3,6 +3,7 @@ import {
   NotFoundError,
   DatabaseError,
   ValidationError,
+  ConflictError,
 } from "../../utils/errors.js";
 import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
 import { validarTipoCambio, obtenerTipoCambioEfectivo } from "../../utils/tipoCambio.util.js";
@@ -573,6 +574,7 @@ const crear = async (data) => {
           facturado: data.facturado !== undefined ? data.facturado : false,
           fechaFacturacion: data.fechaFacturacion,
           esGerencial: data.esGerencial !== undefined ? data.esGerencial : false,
+          esAnticipo: data.esAnticipo === true,
           ordenCompraOrigenId: data.ordenCompraOrigenId,
           esParticionada: data.esParticionada !== undefined ? data.esParticionada : false,
           motivoNotaCreditoDebitoId: data.motivoNotaCreditoDebitoId,
@@ -627,6 +629,13 @@ const actualizar = async (id, data) => {
     }
 
     await validarForaneas(data);
+
+    // Un anticipo ya descontado en una factura final no puede dejar de ser anticipo (su línea negativa en la final lo referencia)
+    if (data.esAnticipo === false && existe.esAnticipo && existe.ordenCompraFinalAnticipoId) {
+      throw new ValidationError(
+        "Este anticipo ya fue descontado en una factura final: revierta primero su aplicación para poder cambiarlo.",
+      );
+    }
 
     // ✅ Validar y obtener tipo de cambio si es necesario
     if (data.hasOwnProperty("tipoCambio")) {
@@ -683,6 +692,7 @@ const actualizar = async (id, data) => {
           facturado: data.facturado,
           fechaFacturacion: data.fechaFacturacion,
           esGerencial: data.esGerencial,
+          esAnticipo: data.esAnticipo,
           ordenCompraOrigenId: data.ordenCompraOrigenId,
           esParticionada: data.esParticionada,
           motivoNotaCreditoDebitoId: data.motivoNotaCreditoDebitoId,
@@ -785,6 +795,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
             tipoDetraccion: true, // Detracción elegida en la línea (copiada de la factura del proveedor)
           },
         },
+        anticiposAplicados: { select: { total: true } }, // Anticipos descontados: la detracción se calcula sobre la operación completa
       },
     });
 
@@ -860,7 +871,10 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
       if (porcentajeMax > 0 && tipoDetraccionMax) {
         // Convertir total a soles si es necesario
         const esSoles = orden.moneda.codigoSunat === 'PEN';
-        const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
+        // La factura final llega NETA de anticipos, pero la detracción se calcula sobre la operación COMPLETA:
+        // total de la factura + total de los anticipos descontados
+        const totalOperacion = total + (orden.anticiposAplicados || []).reduce((sum, a) => sum + Number(a.total || 0), 0);
+        const totalEnSoles = esSoles ? totalOperacion : totalOperacion * Number(orden.tipoCambio);
 
         const umbralMinimo = Number(
           tipoDetraccionMax.montoMinimo || orden.empresa.montoMinimoDetraccion || 700
@@ -3969,6 +3983,16 @@ const calcularTotalesEnMonedaOriginal = (ordenCompra, esNotaCredito = false) => 
  * @param {boolean} esNotaCredito - Si es NC
  * @returns {Object} - { debe, haber } invertidos si es NC
  */
+/**
+ * Línea de ítem/gasto del asiento. Un monto NEGATIVO (línea de anticipo descontado en la factura final, p. ej. -5,000 contra
+ * 422101) se registra en el lado contrario: HABER en una compra, DEBE en una nota de crédito.
+ */
+const lineaDeItem = (monto, esNotaCredito) => {
+  const valor = Number(monto);
+  const alHaber = esNotaCredito !== (valor < 0);
+  return alHaber ? { debe: 0, haber: Math.abs(valor) } : { debe: Math.abs(valor), haber: 0 };
+};
+
 const invertirSiEsNC = (debe, haber, esNotaCredito) => {
   if (esNotaCredito) {
     return {
@@ -4013,11 +4037,23 @@ const generarBorradorAsiento = async (ordenCompraId) => {
             },
           },
         },
+        // Anticipos descontados en esta factura final (para reclasificar su IGV)
+        anticiposAplicados: {
+          include: { detalles: { include: { producto: true }, orderBy: { id: 'asc' }, take: 1 } },
+        },
       },
     });
 
     if (!ordenCompra) {
       throw new NotFoundError("OrdenCompra no encontrada");
+    }
+
+    // El anticipo entregado al proveedor NO tiene asiento de provisión: su único asiento nace al pagarlo en Tesorería
+    // (DEBE 422101 anticipos a proveedores / HABER caja o banco por el total pagado).
+    if (ordenCompra.esAnticipo) {
+      throw new ValidationError(
+        "Un anticipo no genera asiento de provisión: su asiento se crea al pagarlo en Tesorería (DEBE 422101 Anticipos a proveedores / HABER caja o banco).",
+      );
     }
 
     if (!ordenCompra.periodoContable) {
@@ -4339,8 +4375,8 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           const subtotalDetalle = Number(detalle.subtotal);
           const montoDetalle = convertirMontoASoles(subtotalDetalle, ordenCompra);
 
-          const { debe, haber } = invertirSiEsNC(montoDetalle, 0, esNotaCredito);
-          const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(subtotalDetalle, 0, esNotaCredito);
+          const { debe, haber } = lineaDeItem(montoDetalle, esNotaCredito);
+          const { debe: debeOriginal, haber: haberOriginal } = lineaDeItem(subtotalDetalle, esNotaCredito);
 
           borrador.detalles.push({
             numeroLinea: numeroLinea++,
@@ -4368,7 +4404,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         const totalDebeGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
         const totalHaberGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
 
-        const montoCxPAjustado = esNotaCredito ? totalHaberGenerado : totalDebeGenerado;
+        const montoCxPAjustado = esNotaCredito ? totalHaberGenerado - totalDebeGenerado : totalDebeGenerado - totalHaberGenerado;
 
         const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
         const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(0, total, esNotaCredito);
@@ -4482,8 +4518,8 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           const subtotalDetalle = Number(detalle.subtotal);
           const montoDetalle = convertirMontoASoles(subtotalDetalle, ordenCompra);
 
-          const { debe, haber } = invertirSiEsNC(montoDetalle, 0, esNotaCredito);
-          const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(subtotalDetalle, 0, esNotaCredito);
+          const { debe, haber } = lineaDeItem(montoDetalle, esNotaCredito);
+          const { debe: debeOriginal, haber: haberOriginal } = lineaDeItem(subtotalDetalle, esNotaCredito);
 
           borrador.detalles.push({
             numeroLinea: numeroLinea++,
@@ -4511,7 +4547,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         const totalDebeGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
         const totalHaberGenerado = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
 
-        const montoCxPAjustado = esNotaCredito ? totalHaberGenerado : totalDebeGenerado;
+        const montoCxPAjustado = esNotaCredito ? totalHaberGenerado - totalDebeGenerado : totalDebeGenerado - totalHaberGenerado;
         const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
         const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(0, total, esNotaCredito);
 
@@ -4639,8 +4675,8 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           const subtotalDetalle = Number(detalle.subtotal);
           const montoDetalle = convertirMontoASoles(subtotalDetalle, ordenCompra);
 
-          const { debe, haber } = invertirSiEsNC(montoDetalle, 0, esNotaCredito);
-          const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(subtotalDetalle, 0, esNotaCredito);
+          const { debe, haber } = lineaDeItem(montoDetalle, esNotaCredito);
+          const { debe: debeOriginal, haber: haberOriginal } = lineaDeItem(subtotalDetalle, esNotaCredito);
 
           borrador.detalles.push({
             numeroLinea: numeroLinea++,
@@ -4684,6 +4720,33 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           fechaDocumentoOrigen: ordenCompra.fechaDocumento,
         });
 
+        // ANTICIPOS aplicados: el pago del anticipo cargó el TOTAL (base + IGV) a 422101. Al descontarlo, la línea negativa ya
+        // cancela la base; aquí se reclasifica su IGV: DEBE IGV (crédito fiscal) / HABER 422101, para que 422101 quede en cero.
+        if (!esNotaCredito) {
+          for (const anticipo of ordenCompra.anticiposAplicados || []) {
+            const igvAnticipo = Number(anticipo.totalIGV || 0);
+            if (!(igvAnticipo > 0)) continue;
+            const cuentaAnticipoId = anticipo.detalles?.[0]?.producto?.cuentaComprasId;
+            if (!cuentaAnticipoId) {
+              throw new ValidationError(
+                `El anticipo ${anticipo.numeroDocumentoFinal || anticipo.numeroDocumento} no tiene cuenta de anticipos en su producto (422101): asígnela en el producto del anticipo.`,
+              );
+            }
+            const igvSoles = convertirMontoASoles(igvAnticipo, ordenCompra);
+            const glosaRecl = `Reclasificación IGV anticipo ${anticipo.numeroDocumentoFinal || anticipo.numeroDocumento}`;
+            const comun = {
+              monedaId: 1,
+              tipoCambio: ordenCompra.tipoCambio,
+              entidadComercialId: ordenCompra.proveedorId,
+              tipoDocumentoOrigenId: ordenCompra.tipoDocumentoId,
+              numeroDocumentoOrigen: ordenCompra.numeroDocumento,
+              fechaDocumentoOrigen: ordenCompra.fechaDocumento,
+            };
+            borrador.detalles.push({ ...comun, numeroLinea: numeroLinea++, planCuentaId: cuentaIGV.id, glosa: glosaRecl, debe: igvSoles, haber: 0, debeMonedaExtranjera: igvAnticipo, haberMonedaExtranjera: 0 });
+            borrador.detalles.push({ ...comun, numeroLinea: numeroLinea++, planCuentaId: cuentaAnticipoId, glosa: glosaRecl, debe: 0, haber: igvSoles, debeMonedaExtranjera: 0, haberMonedaExtranjera: igvAnticipo });
+          }
+        }
+
         // ⭐ CALCULAR MONTO DE CUENTA POR PAGAR (reducido si hay retención)
         let montoCuentaPorPagar = total;
         const tieneRetencion = ordenCompra.aplicaRetencion && ordenCompra.montoRetencion > 0;
@@ -4712,7 +4775,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         // CxP debe ser igual al total DEBE para cuadrar perfectamente
         // ⭐ PARA NC: usar totalHaberGenerado porque los gastos están en HABER
         const montoCxPEnSoles = convertirMontoASoles(montoCuentaPorPagar, ordenCompra);
-        const montoCxPAjustado = tieneRetencion ? montoCxPEnSoles : (esNotaCredito ? totalHaberGenerado : totalDebeGenerado);
+        const montoCxPAjustado = tieneRetencion ? montoCxPEnSoles : (esNotaCredito ? totalHaberGenerado - totalDebeGenerado : totalDebeGenerado - totalHaberGenerado);
         const { debe, haber } = invertirSiEsNC(0, montoCxPAjustado, esNotaCredito);
 
         const { debe: debeOriginal, haber: haberOriginal } = invertirSiEsNC(0, montoCuentaPorPagar, esNotaCredito);
@@ -4834,6 +4897,12 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     const totalDebe = borrador.detalles.reduce((sum, d) => sum + Number(d.debe || 0), 0);
     const totalHaber = borrador.detalles.reduce((sum, d) => sum + Number(d.haber || 0), 0);
     const diferencia = totalDebe - totalHaber;
+
+    if ((ordenCompra.anticiposAplicados || []).length > 0) {
+      const factor = Number(ordenCompra.monedaId) === 1 ? 1 : Number(ordenCompra.tipoCambio) || 1;
+      borrador.totalDebe = Math.round((totalDebe / factor) * 100) / 100;
+      borrador.totalHaber = Math.round((totalHaber / factor) * 100) / 100;
+    }
 
     return borrador;
   } catch (err) {
@@ -5915,6 +5984,187 @@ async function exportarRegistroComprasSUNAT(empresaId, periodoContableId, inclui
   }
 }
 
+// ════════════════════════════════════════════════════════════
+// ANTICIPOS A PROVEEDORES
+// ════════════════════════════════════════════════════════════
+// Un anticipo es una OC marcada esAnticipo (producto "ANTICIPO A PROVEEDORES", cuenta 422101) que se paga por Tesorería
+// (DEBE 422101 / HABER caja o banco por el total). La factura final del proveedor llega NETA de anticipos: se registra con
+// una línea NEGATIVA por cada anticipo descontado (base del anticipo, editable para igualar el comprobante físico). Cada
+// anticipo se aplica completo a UNA sola factura final (ordenCompraFinalAnticipoId); una final puede descontar varios.
+const MARCA_ANTICIPO = (anticipoId) => `ANTICIPO-OC:${anticipoId} `;
+
+const numeroVisibleOC = (oc) => oc.numeroDocumentoFinal || oc.numeroDocumento || String(oc.id);
+
+/** Reglas de la factura final: sin CxP ni asiento (se generan DESPUÉS de aplicar o revertir anticipos). */
+const validarFinalSinDocumentos = async (tx, final) => {
+  if (final.esAnticipo) throw new ValidationError("Un anticipo no puede descontar otros anticipos: use una factura final.");
+  if (Number(final.estadoId) === ESTADO_ORDEN_COMPRA.ANULADO) throw new ValidationError("La orden está anulada.");
+  if ([TIPO_DOC_ID.NOTA_CREDITO, TIPO_DOC_ID.NOTA_DEBITO].includes(Number(final.tipoDocumentoFinalId))) {
+    throw new ValidationError("Una nota de crédito o de débito no puede descontar anticipos.");
+  }
+  if (final.cuentaPorPagar) {
+    throw new ValidationError(
+      "La factura ya tiene cuenta por pagar: elimínela antes de aplicar o revertir anticipos y vuélvala a generar después (su monto cambia).",
+    );
+  }
+  const asientos = await tx.asientoContable.count({ where: { ordenesCompra: { some: { id: final.id } } } });
+  if (asientos > 0) {
+    throw new ValidationError("La factura ya tiene asientos contables: elimínelos antes de aplicar o revertir anticipos.");
+  }
+};
+
+const recalcularTotalesFinal = async (tx, ordenCompraId) => {
+  const totales = await calcularTotalesEImpuestos(ordenCompraId, tx);
+  if (Number(totales.total) < 0) {
+    throw new ValidationError(
+      `Los anticipos superan el total de la factura (queda ${Number(totales.total).toFixed(2)}). Revise los importes.`,
+    );
+  }
+  await tx.ordenCompra.update({ where: { id: ordenCompraId }, data: totales });
+  return totales;
+};
+
+/**
+ * Anticipos que se pueden descontar en una factura final: mismo proveedor, empresa y moneda, ya pagados y sin aplicar.
+ */
+const listarAnticiposDisponibles = async (ordenCompraId) => {
+  const final = await prisma.ordenCompra.findUnique({
+    where: { id: ordenCompraId },
+    select: { id: true, empresaId: true, proveedorId: true, monedaId: true },
+  });
+  if (!final) throw new NotFoundError("OrdenCompra no encontrada");
+
+  const anticipos = await prisma.ordenCompra.findMany({
+    where: {
+      esAnticipo: true,
+      ordenCompraFinalAnticipoId: null,
+      id: { not: final.id },
+      empresaId: final.empresaId,
+      proveedorId: final.proveedorId,
+      monedaId: final.monedaId,
+      estadoId: { not: ESTADO_ORDEN_COMPRA.ANULADO },
+      cuentaPorPagar: { is: { saldoPendiente: { lte: 0.005 } } },
+    },
+    include: { moneda: true },
+    orderBy: [{ fechaDocumento: "asc" }, { id: "asc" }],
+  });
+
+  const aplicados = await prisma.ordenCompra.findMany({
+    where: { ordenCompraFinalAnticipoId: final.id },
+    include: { moneda: true },
+    orderBy: { id: "asc" },
+  });
+
+  const resumir = (a) => ({
+    id: a.id,
+    numero: numeroVisibleOC(a),
+    fechaDocumento: a.fechaDocumento,
+    subtotal: Number(a.subtotal || 0),
+    totalIGV: Number(a.totalIGV || 0),
+    total: Number(a.total || 0),
+    simboloMoneda: a.moneda?.simbolo || "",
+  });
+  return { disponibles: anticipos.map(resumir), aplicados: aplicados.map(resumir) };
+};
+
+/**
+ * Descuenta anticipos en una factura final: crea una línea negativa por anticipo y recalcula los totales.
+ * @param {Number} ordenCompraFinalId
+ * @param {Array<Number>} anticipoIds
+ */
+const aplicarAnticipos = async (ordenCompraFinalId, anticipoIds) => {
+  try {
+    const ids = [...new Set((anticipoIds || []).map(Number).filter(Boolean))];
+    if (ids.length === 0) throw new ValidationError("Seleccione al menos un anticipo para aplicar.");
+
+    return await prisma.$transaction(async (tx) => {
+      const final = await tx.ordenCompra.findUnique({
+        where: { id: ordenCompraFinalId },
+        include: { cuentaPorPagar: { select: { id: true } } },
+      });
+      if (!final) throw new NotFoundError("OrdenCompra no encontrada");
+      await validarFinalSinDocumentos(tx, final);
+
+      const anticipos = await tx.ordenCompra.findMany({
+        where: { id: { in: ids } },
+        include: { cuentaPorPagar: true, detalles: { orderBy: { id: "asc" }, take: 1 } },
+      });
+      if (anticipos.length !== ids.length) throw new NotFoundError("Alguno de los anticipos seleccionados no existe.");
+
+      for (const a of anticipos) {
+        const n = numeroVisibleOC(a);
+        if (!a.esAnticipo) throw new ValidationError(`El documento ${n} no está marcado como anticipo.`);
+        if (Number(a.estadoId) === ESTADO_ORDEN_COMPRA.ANULADO) throw new ValidationError(`El anticipo ${n} está anulado.`);
+        if (a.ordenCompraFinalAnticipoId) throw new ValidationError(`El anticipo ${n} ya fue descontado en otra factura final.`);
+        if (Number(a.empresaId) !== Number(final.empresaId)) throw new ValidationError(`El anticipo ${n} es de otra empresa.`);
+        if (Number(a.proveedorId) !== Number(final.proveedorId)) throw new ValidationError(`El anticipo ${n} es de otro proveedor.`);
+        if (Number(a.monedaId) !== Number(final.monedaId)) throw new ValidationError(`El anticipo ${n} está en otra moneda.`);
+        if (!a.cuentaPorPagar || Number(a.cuentaPorPagar.saldoPendiente) > 0.005) {
+          throw new ValidationError(`El anticipo ${n} aún no está pagado por Tesorería: páguelo antes de descontarlo.`);
+        }
+        if (!a.detalles[0]) throw new ValidationError(`El anticipo ${n} no tiene líneas.`);
+        const base = redondear2NC(a.subtotal);
+        if (!(base > 0)) throw new ValidationError(`El anticipo ${n} no tiene un importe válido.`);
+
+        const linea = a.detalles[0];
+        await tx.detalleOrdenCompra.create({
+          data: {
+            ordenCompraId: final.id,
+            productoId: linea.productoId,
+            cantidad: 1,
+            precioUnitario: -base,
+            subtotal: -base,
+            cantidadRecibida: 0,
+            tipoAfectacionIGVId: linea.tipoAfectacionIGVId,
+            tipoDetraccionId: null,
+            porcentajeDetraccion: null,
+            observaciones: `${MARCA_ANTICIPO(a.id)}| Anticipo ${n} descontado (monto editable si el comprobante del proveedor difiere)`,
+          },
+        });
+        await tx.ordenCompra.update({ where: { id: a.id }, data: { ordenCompraFinalAnticipoId: final.id } });
+      }
+
+      const totales = await recalcularTotalesFinal(tx, final.id);
+      return { ordenCompraId: final.id, anticiposAplicados: ids.length, subtotal: totales.subtotal, totalIGV: totales.totalIGV, total: totales.total };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith("P")) throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
+/**
+ * Revierte los anticipos descontados en una factura final: borra sus líneas negativas, libera los anticipos y recalcula.
+ */
+const revertirAnticipos = async (ordenCompraFinalId) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const final = await tx.ordenCompra.findUnique({
+        where: { id: ordenCompraFinalId },
+        include: { cuentaPorPagar: { select: { id: true } }, anticiposAplicados: true },
+      });
+      if (!final) throw new NotFoundError("OrdenCompra no encontrada");
+      if (final.anticiposAplicados.length === 0) throw new ValidationError("La factura no tiene anticipos aplicados.");
+      await validarFinalSinDocumentos(tx, final);
+
+      for (const a of final.anticiposAplicados) {
+        await tx.detalleOrdenCompra.deleteMany({
+          where: { ordenCompraId: final.id, observaciones: { startsWith: MARCA_ANTICIPO(a.id) } },
+        });
+        await tx.ordenCompra.update({ where: { id: a.id }, data: { ordenCompraFinalAnticipoId: null } });
+      }
+
+      const totales = await recalcularTotalesFinal(tx, final.id);
+      return { ordenCompraId: final.id, anticiposRevertidos: final.anticiposAplicados.length, total: totales.total };
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof ValidationError || err instanceof ConflictError) throw err;
+    if (err.code && err.code.startsWith("P")) throw new DatabaseError("Error de base de datos", err.message);
+    throw err;
+  }
+};
+
 export default {
   listar,
   listarDetalleExportacion,
@@ -5933,6 +6183,9 @@ export default {
   generarCuentaPorPagar,
   aplicarNotaCredito,
   revertirNotaCredito,
+  listarAnticiposDisponibles,
+  aplicarAnticipos,
+  revertirAnticipos,
   obtenerEstadoAplicacionNotaCredito,
   generarBorradorAsiento,
   generarAsientoDestinoCentroCosto,
