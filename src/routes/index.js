@@ -18,6 +18,7 @@ import documentosOrigenRoutes from './Contabilidad/documentosOrigen.routes.js';
 import tipoAfectacionIGVRoutes from './FacturacionElectronica/tipoAfectacionIGV.routes.js';
 import tipoOperacionSunatRoutes from './FacturacionElectronica/tipoOperacionSunat.routes.js';
 import comprobanteElectronicoRoutes from './FacturacionElectronica/comprobanteElectronico.routes.js';
+import resumenSunatRoutes from './FacturacionElectronica/resumenSunat.routes.js';
 import cuentaPorCobrarRoutes from './CuentasPorCobrarPagar/cuentaPorCobrar.routes.js';
 import cuentaPorPagarRoutes from './CuentasPorCobrarPagar/cuentaPorPagar.routes.js';
 import tipoDetraccionRoutes from './Tesoreria/tipoDetraccion.routes.js';
@@ -720,6 +721,7 @@ router.use('/contabilidad/tipo-libro-contable-sunat', tipoLibroContableSunatRout
 router.use('/facturacion-electronica/tipo-operacion-sunat', tipoOperacionSunatRoutes);
 router.use('/facturacion-electronica/tipo-afectacion-igv', tipoAfectacionIGVRoutes);
 router.use('/facturacion-electronica/comprobante-electronico', comprobanteElectronicoRoutes);
+router.use('/facturacion-electronica/resumen-sunat', resumenSunatRoutes);
 // Rutas para Cuentas Por Cobrar/Pagar
 router.use('/cuentas-por-cobrar-pagar/cuenta-por-cobrar', cuentaPorCobrarRoutes);
 router.use('/cuentas-por-cobrar-pagar/cuenta-por-pagar', cuentaPorPagarRoutes);

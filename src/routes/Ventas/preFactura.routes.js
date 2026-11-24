@@ -98,18 +98,11 @@ router.get(
   preFacturaController.obtenerEstadoNotaCredito
 );
 
-router.post(
-  '/:id/obtener-pdf-factpro',
-  autenticarJWT,
-  checkPermission('preFactura', 'editar'),
-  preFacturaController.obtenerPdfDesdeFactpro
-);
-
 router.get(
-  '/factpro-archivo/:id/:tipo',
+  '/comprobante-archivo/:id/:tipo',
   autenticarJWT,
   checkPermission('preFactura', 'ver'),
-  preFacturaController.descargarArchivoFactpro
+  preFacturaController.descargarArchivoComprobante
 );
 
 router.put(

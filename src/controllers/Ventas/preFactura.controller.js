@@ -129,25 +129,12 @@ export async function reactivarDocumento(req, res, next) {
 }
 
 /**
- * Obtener desde Factpro el PDF del documento final de la venta
+ * Descarga el XML firmado o el CDR guardados del comprobante electrónico de la venta
  */
-export async function obtenerPdfDesdeFactpro(req, res, next) {
+export async function descargarArchivoComprobante(req, res, next) {
   try {
-    const resultado = await preFacturaService.obtenerPdfDesdeFactpro(Number(req.params.id));
-    res.status(200).json(toJSONBigInt(resultado));
-  } catch (err) {
-    next(err);
-  }
-}
-
-/**
- * Entrega el PDF, XML o CDR de Factpro a través del servidor (el navegador no accede directo a Factpro)
- */
-export async function descargarArchivoFactpro(req, res, next) {
-  try {
-    const { buffer, contentType } = await preFacturaService.obtenerArchivoFactpro(Number(req.params.id), req.params.tipo);
-    res.setHeader('Content-Type', contentType);
-    res.send(buffer);
+    const { ruta, nombre } = await preFacturaService.obtenerArchivoComprobante(Number(req.params.id), req.params.tipo);
+    res.download(ruta, nombre);
   } catch (err) {
     next(err);
   }

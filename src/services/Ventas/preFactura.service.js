@@ -1,5 +1,5 @@
 import prisma from "../../config/prismaClient.js";
-import factproService from "../FacturacionElectronica/factpro.service.js";
+import emisionComprobanteService from "../FacturacionElectronica/emisionComprobante.service.js";
 import pdfService from "../pdf/pdfService.js";
 import {
   NotFoundError,
@@ -2451,7 +2451,7 @@ const generarComprobanteElectronico = async (preFacturaId) => {
         );
       }
 
-      // El usuario solo elige el tipo de documento final: la serie se deduce del tipo y el correlativo lo asigna Factpro al emitir
+      // El usuario solo elige el tipo de documento final: la serie electrónica se deduce del tipo y el correlativo se asigna al emitir (con bloqueo de la serie)
       if (!preFactura.tipoDocumentoFinalId) {
         throw new ValidationError(
           "Seleccione el tipo de documento final (factura, boleta, nota de crédito o nota de débito) en la sección de facturación de Datos Generales antes de generar el comprobante electrónico."
@@ -2460,10 +2460,10 @@ const generarComprobanteElectronico = async (preFacturaId) => {
       const codigoTipoFinal = preFactura.tipoDocumentoFinal?.codigoSunat;
       if (!["01", "03", "07", "08"].includes(codigoTipoFinal)) {
         throw new ValidationError(
-          `El tipo de documento final "${preFactura.tipoDocumentoFinal?.descripcion || preFactura.tipoDocumentoFinalId}" no se emite por Factpro: solo factura, boleta, nota de crédito y nota de débito.`
+          `El tipo de documento final "${preFactura.tipoDocumentoFinal?.descripcion || preFactura.tipoDocumentoFinalId}" no se emite como comprobante electrónico: solo factura, boleta, nota de crédito y nota de débito.`
         );
       }
-      // Factpro usa prefijo F para facturas y B para boletas; las notas toman el prefijo del documento que afectan
+      // SUNAT exige prefijo F para facturas y B para boletas; las notas toman el prefijo del documento que afectan
       let prefijoSerie = codigoTipoFinal === "01" ? "F" : codigoTipoFinal === "03" ? "B" : null;
       if (!prefijoSerie) {
         const serieAfectado =
@@ -2473,35 +2473,28 @@ const generarComprobanteElectronico = async (preFacturaId) => {
         prefijoSerie = String(serieAfectado).trim().toUpperCase().charAt(0);
         if (!["F", "B"].includes(prefijoSerie)) {
           throw new ValidationError(
-            `La ${codigoTipoFinal === "07" ? "nota de crédito" : "nota de débito"} debe indicar el documento que afecta (factura o boleta) para saber qué serie de Factpro usar.`
+            `La ${codigoTipoFinal === "07" ? "nota de crédito" : "nota de débito"} debe indicar el documento que afecta (factura o boleta) para saber qué serie electrónica usar.`
           );
         }
       }
-      // Serie configurada en el ERP (SerieDoc del tipo, con letra inicial) o, si no hay, la serie estándar de Factpro
-      const SERIES_FACTPRO_ESTANDAR = {
-        "01": { F: "F001" },
-        "03": { B: "B001" },
-        "07": { F: "FC01", B: "BC01" },
-        "08": { F: "FD01", B: "BD01" },
-      };
+      // Solo se usan series marcadas como electrónicas (SerieDoc.esElectronica) de la empresa emisora: las series internas
+      // (001, 002...) y las del portal SOL no se mezclan con la numeración que controla el ERP ante SUNAT
       const serieConfigurada = await tx.serieDoc.findFirst({
         where: {
           empresaId: preFactura.empresaId,
           tipoDocumentoId: preFactura.tipoDocumentoFinalId,
           activo: true,
+          esElectronica: true,
           serie: { startsWith: prefijoSerie },
         },
         orderBy: { id: "asc" },
       });
-      const serieDocumentoFinal =
-        serieConfigurada && /^[A-Z][A-Z0-9]{3}$/.test(String(serieConfigurada.serie).toUpperCase())
-          ? String(serieConfigurada.serie).toUpperCase()
-          : SERIES_FACTPRO_ESTANDAR[codigoTipoFinal]?.[prefijoSerie];
-      if (!serieDocumentoFinal) {
+      if (!serieConfigurada) {
         throw new ValidationError(
-          `No hay una serie de Factpro para el tipo de documento final "${preFactura.tipoDocumentoFinal?.descripcion}" con prefijo ${prefijoSerie}.`
+          `La empresa no tiene una serie electrónica activa del tipo "${preFactura.tipoDocumentoFinal?.descripcion}" con prefijo ${prefijoSerie}. Créela en Almacén > Series de documento con el check "Serie electrónica SUNAT".`
         );
       }
+      const serieDocumentoFinal = String(serieConfigurada.serie).toUpperCase();
 
       // ========================================
       // 3. CREAR COMPROBANTE ELECTRÓNICO
@@ -2532,9 +2525,9 @@ const generarComprobanteElectronico = async (preFacturaId) => {
           sedeId: preFactura.empresa.sedeId || Number(1),
           // Tipo y serie SUNAT
           tipoComprobanteId: preFactura.tipoDocumentoFinalId,
-          serieDocId: serieConfigurada?.id || preFactura.serieDocFinalId || preFactura.serieDocId,
+          serieDocId: serieConfigurada.id,
           numeroSerie: serieDocumentoFinal,
-          numeroCorrelativo: 0, // provisional: Factpro asigna el correlativo al emitir
+          numeroCorrelativo: 0, // provisional: se asigna al emitir, con bloqueo de la serie
           numeroCompleto: `${serieDocumentoFinal}-PENDIENTE`,
           // Fechas
           fechaEmision: ahora,
@@ -5936,92 +5929,18 @@ async function exportarRegistroVentasSUNAT(empresaId, periodoContableId, incluir
 }
 
 /**
- * Obtiene desde Factpro el PDF del documento final de la venta (consulta por serie y correlativo)
- * y guarda su enlace en la venta. Solo existe en Factpro si el documento se emitió a través de Factpro.
+ * Entrega el XML firmado o el CDR guardados del último comprobante electrónico de la venta (se guardan al emitir con Smart PSE).
  */
-const obtenerPdfDesdeFactpro = async (preFacturaId) => {
-  const preFactura = await prisma.preFactura.findUnique({
-    where: { id: preFacturaId },
-    select: { id: true, esGerencial: true, numSerieDocFinal: true, numCorreDocFinal: true, empresa: true },
+const obtenerArchivoComprobante = async (preFacturaId, tipo) => {
+  const comprobante = await prisma.comprobanteElectronico.findFirst({
+    where: { preFacturaId },
+    orderBy: { id: 'desc' },
+    select: { id: true },
   });
-  if (!preFactura) throw new NotFoundError("PreFactura no encontrada");
-  if (preFactura.esGerencial) {
-    throw new ValidationError("Los documentos gerenciales no se emiten en Factpro: genere la Nota de Venta.");
-  }
-  const serie = String(preFactura.numSerieDocFinal || "").trim().toUpperCase();
-  const correlativo = Number(preFactura.numCorreDocFinal);
-  if (!serie || !(correlativo > 0)) {
-    throw new ValidationError("Registre la serie y el correlativo del documento final para consultarlo en Factpro.");
-  }
-
-  let consulta;
-  try {
-    consulta = await factproService.consultarDocumento(preFactura.empresa, serie, correlativo);
-  } catch (error) {
-    throw new ConflictError(`No se pudo obtener el documento ${serie}-${correlativo} desde Factpro: ${error.message}`);
-  }
-  const enlacePDF = consulta.resultado.enlacePDF;
-  if (!enlacePDF) {
-    throw new ConflictError(`Factpro respondió, pero el documento ${serie}-${correlativo} no tiene PDF disponible.`);
-  }
-
-  // FLUJO B: se trae el PDF de Factpro y se guarda en el ERP (reintento manual del guardado automático al aceptarse el comprobante)
-  const pdfUrl = await guardarPdfFactproEnVenta(preFacturaId, enlacePDF);
-  return { success: true, pdfUrl, documento: `${serie}-${correlativo}`, estado: consulta.resultado.descripcionEstado };
+  if (!comprobante) throw new NotFoundError('La venta no tiene comprobante electrónico generado.');
+  return emisionComprobanteService.obtenerArchivo(Number(comprobante.id), String(tipo).toLowerCase());
 };
-/**
- * FLUJO B (comprobantes nuevos emitidos con Factpro): guarda en el ERP una copia del PDF que entrega Factpro.
- * Se guarda con el servicio de PDF del módulo "pre-factura" (uploads/pdf-system/pre-facturas/PRE-FACTURA-<id>.pdf) y ese mismo
- * servicio deja la URL en PreFactura.urlPreFacturaPdf. Así la venta conserva su PDF aunque Factpro no esté disponible, y la
- * pantalla lo muestra con el mismo componente que el FLUJO A. El PDF de Factpro reemplaza al anterior: es el comprobante legal.
- * Ver la bifurcación completa en el encabezado de comprobanteElectronico.controller.js.
- */
-const guardarPdfFactproEnVenta = async (preFacturaId, enlacePDF) => {
-  const { buffer } = await factproService.descargarArchivo(enlacePDF);
-  if (buffer.subarray(0, 4).toString("latin1") !== "%PDF") {
-    throw new ConflictError("El archivo que entregó Factpro no es un PDF válido.");
-  }
-  const guardado = await pdfService.uploadSingle(
-    { buffer, size: buffer.length, mimetype: "application/pdf" },
-    "pre-factura",
-    { entityId: preFacturaId },
-  );
-  return guardado.url;
-};
-const CAMPO_ARCHIVO_FACTPRO = { pdf: "enlacePDF", xml: "enlaceXML", cdr: "enlaceCDR" };
-
-/**
- * Entrega el PDF, XML o CDR del documento final de la venta tal como lo guarda Factpro (consulta por serie y correlativo).
- */
-const obtenerArchivoFactpro = async (preFacturaId, tipo) => {
-  const campo = CAMPO_ARCHIVO_FACTPRO[tipo];
-  if (!campo) throw new ValidationError(`Tipo de archivo "${tipo}" no válido: use pdf, xml o cdr.`);
-  const preFactura = await prisma.preFactura.findUnique({
-    where: { id: preFacturaId },
-    select: { numSerieDocFinal: true, numCorreDocFinal: true, empresa: true },
-  });
-  if (!preFactura) throw new NotFoundError("PreFactura no encontrada");
-  const serie = String(preFactura.numSerieDocFinal || "").trim().toUpperCase();
-  const correlativo = Number(preFactura.numCorreDocFinal);
-  if (!serie || !(correlativo > 0)) {
-    throw new ValidationError("Registre la serie y el correlativo del documento final para consultarlo en Factpro.");
-  }
-  let consulta;
-  try {
-    consulta = await factproService.consultarDocumento(preFactura.empresa, serie, correlativo);
-  } catch (error) {
-    throw new ConflictError(`No se pudo obtener el documento ${serie}-${correlativo} desde Factpro: ${error.message}`);
-  }
-  const enlace = consulta.resultado[campo];
-  if (!enlace) {
-    throw new ConflictError(`Factpro aún no tiene el ${tipo.toUpperCase()} del documento ${serie}-${correlativo}${tipo === "cdr" ? " (SUNAT todavía no respondió)" : ""}.`);
-  }
-  return factproService.descargarArchivo(enlace);
-};
-export default {
-  guardarPdfFactproEnVenta,
-  obtenerPdfDesdeFactpro,
-  obtenerArchivoFactpro,
+  obtenerArchivoComprobante,
   listar,
   listarDetalleExportacion,
   obtenerPorId,

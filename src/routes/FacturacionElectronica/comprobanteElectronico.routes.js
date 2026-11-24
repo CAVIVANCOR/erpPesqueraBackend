@@ -9,6 +9,7 @@ const router = Router();
 router.post('/:id/enviar-sunat', comprobanteElectronicoController.enviarASunat);
 router.get('/:id/consultar-sunat', comprobanteElectronicoController.consultarEnSunat);
 router.post('/:id/anular', comprobanteElectronicoController.anularComprobante);
+router.get('/:id/archivo/:tipo', comprobanteElectronicoController.descargarArchivo);
 
 // Rutas CRUD básicas
 router.get('/', comprobanteElectronicoController.listar);

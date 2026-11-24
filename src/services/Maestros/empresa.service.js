@@ -123,6 +123,24 @@ async function validarEmpresa(data) {
     }
   }
 
+  // Smart PSE: usuario CPE de la empresa, entorno de emisión y modo de envío de boletas
+  if (data.facturacionElectronicaUsuario !== undefined && data.facturacionElectronicaUsuario !== null) {
+    if (String(data.facturacionElectronicaUsuario).trim().length > 100) {
+      throw new ValidationError('El usuario de facturación electrónica no puede exceder 100 caracteres');
+    }
+  }
+  if (data.facturacionElectronicaEntorno !== undefined && data.facturacionElectronicaEntorno !== null) {
+    if (!['DEMO', 'PRODUCCION'].includes(String(data.facturacionElectronicaEntorno).trim().toUpperCase())) {
+      throw new ValidationError('El entorno de facturación electrónica debe ser DEMO o PRODUCCION');
+    }
+  }
+  // INDIVIDUAL: cada boleta se envía a SUNAT al emitirla. RESUMEN_DIARIO: las boletas se agrupan en un resumen diario (RC)
+  if (data.facturacionElectronicaBoletaModo !== undefined && data.facturacionElectronicaBoletaModo !== null) {
+    if (!['INDIVIDUAL', 'RESUMEN_DIARIO'].includes(String(data.facturacionElectronicaBoletaModo).trim().toUpperCase())) {
+      throw new ValidationError('El modo de envío de boletas debe ser INDIVIDUAL o RESUMEN_DIARIO');
+    }
+  }
+
   // ⭐ RRHH FASE 1: configuración de planilla de la empresa
   if (data.regimenLaboralId !== undefined && data.regimenLaboralId !== null) {
     const regimen = await prisma.regimenLaboral.findUnique({ where: { id: data.regimenLaboralId } });
