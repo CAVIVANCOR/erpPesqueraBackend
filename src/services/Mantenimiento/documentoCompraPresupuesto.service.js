@@ -2,6 +2,7 @@ import prisma from "../../config/prismaClient.js";
 import ordenCompraService from "../Compras/ordenCompra.service.js";
 import { ESTADO_ORDEN_COMPRA } from "../../utils/estados.constants.js";
 import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
+import { detraccionDeProducto } from "../../utils/detraccionLinea.js";
 import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
 import {
   NotFoundError,
@@ -456,6 +457,8 @@ const generarDocumentoCompra = async (presupuestoId, datos, usuarioId) => {
             precioUnitarioCompra: precioUnitario,
             subtotal,
             tipoAfectacionIGVId: sinIGV ? null : producto.tipoAfectacionIGVId || null,
+            // Detracción sugerida por el producto; el usuario puede cambiarla luego en la línea de la compra
+            ...detraccionDeProducto(producto),
             observaciones: item.descripcion || null,
             creadoPor: usuarioId ? Number(usuarioId) : null,
           },

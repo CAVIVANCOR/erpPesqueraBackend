@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ConflictError } from '../../utils/errors.js';
 import { ESTADO_PREFACTURA } from '../../utils/estados.constants.js';
+import { montoEnLetras } from './ubl/ublFacturaBoleta.builder.js';
 
 /**
  * Servicio de consulta y eliminación de ComprobanteElectronico (facturas, boletas, notas de crédito/débito).
@@ -36,6 +37,8 @@ const adjuntarEstados = async (comprobantes) => {
     ...c,
     estadoOSE: porId.get(String(c.estadoOSEId)) || null,
     estadoSUNAT: porId.get(String(c.estadoSUNATId)) || null,
+    // Para la representación impresa (PDF) del comprobante: es la misma leyenda 1000 del XML
+    montoEnLetras: c.moneda ? montoEnLetras(c) : null,
   }));
 };
 

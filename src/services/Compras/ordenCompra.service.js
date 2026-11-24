@@ -15,6 +15,7 @@ import {
 import { aplicarSignoMonto, TIPO_DOC_ID } from '../../utils/tiposDocumento.constants.js';
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
+import { detraccionesDeProductos } from "../../utils/detraccionLinea.js";
 
 // ========================================
 // CONSTANTES PARA IMPUESTOS TRIBUTARIOS
@@ -781,6 +782,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
               },
             },
             tipoAfectacionIGV: true, // AGREGADO
+            tipoDetraccion: true, // Detracción elegida en la línea (copiada de la factura del proveedor)
           },
         },
       },
@@ -835,8 +837,10 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
     let montoDetraccion = null;
     let mensajeDetraccion = null;
 
+    // La detracción sale de lo elegido en cada LÍNEA (el producto solo la sugiere al agregar la línea). Si las líneas traen
+    // tipos distintos prevalece el de mayor porcentaje, y se calcula sobre el total del documento.
     const detallesConDetraccion = orden.detalles.filter(
-      (d) => d.producto?.tipoDetraccionId
+      (d) => d.tipoDetraccionId
     );
 
 
@@ -845,10 +849,10 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
       let tipoDetraccionMax = null;
 
       for (const detalle of detallesConDetraccion) {
-        const porcentaje = Number(detalle.producto.porcentajeDetraccion || 0);
+        const porcentaje = Number(detalle.porcentajeDetraccion ?? detalle.tipoDetraccion?.tasa ?? 0);
         if (porcentaje > porcentajeMax) {
           porcentajeMax = porcentaje;
-          tipoDetraccionMax = detalle.producto.tipoDetraccion;
+          tipoDetraccionMax = detalle.tipoDetraccion;
         }
       }
 
@@ -874,13 +878,13 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
           mensajeDetraccion = `⚠️ No aplica detracción: Total S/ ${totalEnSoles.toFixed(2)} ≤ Umbral S/ ${umbralMinimo}`;
         }
       } else {
-        mensajeDetraccion = '⚠️ No aplica detracción: Producto sin porcentaje o tipo de detracción configurado';
+        mensajeDetraccion = '⚠️ No aplica detracción: La línea no tiene porcentaje o tipo de detracción';
       }
     } else {
       if (!aplicaImpuestos) {
         mensajeDetraccion = '⚠️ No aplica detracción: Documento no es Factura/Boleta';
       } else if (detallesConDetraccion.length === 0) {
-        mensajeDetraccion = '⚠️ No aplica detracción: Ningún producto tiene detracción configurada';
+        mensajeDetraccion = '⚠️ No aplica detracción: Ninguna línea tiene tipo de detracción';
       }
     }
 
@@ -2598,6 +2602,9 @@ async function crearOrdenCompraDirecta(
     data: { correlativo: Number(nuevoCorrelativo) },
   });
 
+  // La detracción de cada línea se copia de la sugerencia del producto; el usuario la confirma contra la factura del proveedor
+  const detraccionesProducto = await detraccionesDeProductos(tx, detalles.map((d) => d.productoId));
+
   const ordenCompra = await tx.ordenCompra.create({
     data: {
       empresaId: requerimiento.empresaId,
@@ -2626,6 +2633,7 @@ async function crearOrdenCompraDirecta(
           cantidad: detalle.cantidad,
           precioUnitario: detalle.costoUnitario,
           observaciones: detalle.observaciones,
+          ...detraccionesProducto.get(String(detalle.productoId)),
         })),
       },
     },
@@ -2682,6 +2690,8 @@ async function crearOrdenCompraConCotizacion(
     data: { correlativo: Number(nuevoCorrelativo) },
   });
 
+  const detraccionesProducto = await detraccionesDeProductos(tx, detallesCotizacion.map((d) => d.productoId));
+
   const ordenCompra = await tx.ordenCompra.create({
     data: {
       empresaId: requerimiento.empresaId,
@@ -2710,6 +2720,7 @@ async function crearOrdenCompraConCotizacion(
           cantidad: detalle.cantidad,
           precioUnitario: detalle.precioUnitario,
           observaciones: detalle.observaciones,
+          ...detraccionesProducto.get(String(detalle.productoId)),
         })),
       },
     },

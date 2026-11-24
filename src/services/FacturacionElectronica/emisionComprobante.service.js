@@ -102,6 +102,8 @@ const asignarNumeracion = async (comprobante) => {
 };
 
 // Texto del código QR del comprobante según el formato de SUNAT (campos separados por |)
+// Formato oficial de SUNAT (RS 097-2012, anexo técnico, numeral 5.1.3): 10 campos separados por |, el último es el Valor Resumen
+// (hash en base 64 del XML firmado)
 const contenidoQr = (c, serie, correlativo, hash) =>
   [
     c.empresa.ruc,
@@ -111,7 +113,7 @@ const contenidoQr = (c, serie, correlativo, hash) =>
     Number(c.totalIgv).toFixed(2),
     Number(c.totalComprobante).toFixed(2),
     new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date(c.fechaEmision)),
-    c.tipoDocumentoCliente?.codSunat ?? '0',
+    String(Number(c.tipoDocumentoCliente?.codSunat) || 0),
     c.numeroDocumentoCliente || '-',
     hash || '',
   ].join('|') + '|';
@@ -200,7 +202,11 @@ const emitirComprobante = async (id, usuarioId = null) => {
     advertencia = `El comprobante fue enviado, pero no se pudieron guardar el XML y el CDR en el servidor: ${error.message}`;
   }
 
+  // Sin CDR, sin ticket y sin aceptación SUNAT no registró el comprobante (p. ej. error de lectura del XML): el mensaje del
+  // proveedor es el motivo y se muestra al usuario, que puede corregir y reenviar con el mismo número
+  const sinAceptar = !resultado.aceptado && !resultado.pendiente;
   const errores = [].concat(resultado.errores || []).filter(Boolean);
+  if (sinAceptar && errores.length === 0 && resultado.mensaje) errores.push(resultado.mensaje);
   const qr = resultado.aceptado ? await QRCode.toDataURL(contenidoQr(final, serie, correlativo, resultado.hash)) : null;
 
   const actualizado = await prisma.comprobanteElectronico.update({
@@ -214,7 +220,7 @@ const emitirComprobante = async (id, usuarioId = null) => {
       eventosProveedor: JSON.stringify({ observaciones: resultado.observaciones, errores, notasCdr: resultado.cdr?.notas || [] }),
       errorEnvio: errores.length > 0 ? errores.join(' | ') : null,
       fechaRespuestaOSE: new Date(),
-      estadoOSEId: resultado.aceptado ? ESTADO_OSE.ACEPTADO : resultado.rechazado ? ESTADO_OSE.RECHAZADO : ESTADO_OSE.ENVIADO,
+      estadoOSEId: resultado.aceptado ? ESTADO_OSE.ACEPTADO : resultado.rechazado ? ESTADO_OSE.RECHAZADO : sinAceptar ? ESTADO_OSE.ERROR : ESTADO_OSE.ENVIADO,
       ...rutas,
     },
   });

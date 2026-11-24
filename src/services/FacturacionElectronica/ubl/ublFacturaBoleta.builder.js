@@ -34,6 +34,13 @@ const TRIBUTO_POR_CATEGORIA = {
 
 const NOMBRE_MONEDA = { PEN: 'SOLES', USD: 'DOLARES AMERICANOS', EUR: 'EUROS' };
 
+// Leyenda 1000 (monto en letras): la usan el XML y la representación impresa (PDF), que deben decir exactamente lo mismo
+export const montoEnLetras = (c) => {
+  const codigo = String(c.moneda?.codigoSunat || '').trim().toUpperCase();
+  const nombre = NOMBRE_MONEDA[codigo] || String(c.moneda?.nombreLargo || codigo).toUpperCase();
+  return numeroALetras(Number(c.totalComprobante), nombre);
+};
+
 const NS = {
   inv: 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2',
   cac: 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
@@ -59,6 +66,14 @@ const fechaISO = (fecha) => new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_HO
 const mismaCifra = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) <= TOLERANCIA;
 
 const codigoTipo = (c) => String(c.tipoComprobante?.codigoSunat || '').trim();
+
+// Catálogo 06 de SUNAT: el ERP guarda el código con cero a la izquierda ("06" RUC, "01" DNI) pero el XML y las reglas
+// usan "6", "1", "0"; los códigos con letras (carnet, pasaporte en otras tablas) se respetan tal cual
+const codigoDocCliente = (v, porDefecto = '') => {
+  const t = String(v ?? '').trim();
+  if (!t) return porDefecto;
+  return /^\d+$/.test(t) ? String(Number(t)) : t;
+};
 const numeroSerieCorrelativo = (c) => `${c.numeroSerie}-${c.numeroCorrelativo}`;
 const categoriaDeLinea = (d) => d.tipoAfectacionIGV?.categoria;
 
@@ -96,7 +111,7 @@ export const revisarComprobante = (c) => {
   }
 
   // Cliente (catálogo 06)
-  const docCliente = String(c.tipoDocumentoCliente?.codSunat ?? '');
+  const docCliente = codigoDocCliente(c.tipoDocumentoCliente?.codSunat);
   const numeroCliente = String(c.numeroDocumentoCliente || '').trim();
   const totalEnSoles = moneda === 'PEN' ? Number(c.totalComprobante) : Number(c.totalComprobante) * Number(c.tipoCambio || 1);
   if (!String(c.razonSocialCliente || '').trim()) problemas.push('El cliente no tiene razón social o nombre.');
@@ -306,7 +321,7 @@ export const construirXmlFacturaBoleta = (c) => {
   const moneda = String(c.moneda.codigoSunat).trim().toUpperCase();
   const ruc = String(c.empresa.ruc).trim();
   const tipoOperacion = c.preFactura?.tipoOperacionSunat?.codigo || '0101'; // Catálogo 51: 0101 = venta interna
-  const docCliente = String(c.tipoDocumentoCliente?.codSunat ?? '0');
+  const docCliente = codigoDocCliente(c.tipoDocumentoCliente?.codSunat, '0');
   const numeroCliente = String(c.numeroDocumentoCliente || '').trim() || '-';
   const nombreMoneda = NOMBRE_MONEDA[moneda] || String(c.moneda.nombreLargo || moneda).toUpperCase();
 
@@ -330,7 +345,9 @@ export const construirXmlFacturaBoleta = (c) => {
     // Contenedor donde Smart PSE inserta la firma digital
     `<ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions>`,
     `<cbc:UBLVersionID>2.1</cbc:UBLVersionID><cbc:CustomizationID>2.0</cbc:CustomizationID>`,
-    `<cbc:ID>${esc(c.numeroSerie)}-${Number(c.numeroCorrelativo)}</cbc:ID>`,
+    // El correlativo va con 8 dígitos, igual que en el nombre del archivo (RUC-TIPO-SERIE-00000001): SUNAT compara ambos
+    // textos y rechaza con [1036] si uno lleva ceros y el otro no
+    `<cbc:ID>${esc(c.numeroSerie)}-${String(Number(c.numeroCorrelativo)).padStart(8, '0')}</cbc:ID>`,
     `<cbc:IssueDate>${fechaISO(c.fechaEmision)}</cbc:IssueDate>`,
     c.horaEmision ? `<cbc:IssueTime>${esc(c.horaEmision)}</cbc:IssueTime>` : '',
     // La fecha de vencimiento solo se informa en la factura
@@ -346,8 +363,10 @@ export const construirXmlFacturaBoleta = (c) => {
     c.guiaRemision
       ? `<cac:DespatchDocumentReference><cbc:ID>${esc(String(c.guiaRemision).trim())}</cbc:ID><cbc:DocumentTypeCode listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">09</cbc:DocumentTypeCode></cac:DespatchDocumentReference>`
       : '',
-    // Firma: identifica al firmante; el valor de la firma lo inserta Smart PSE en ext:UBLExtensions
-    `<cac:Signature><cbc:ID>${ruc}</cbc:ID><cac:SignatoryParty><cac:PartyIdentification><cbc:ID>${ruc}</cbc:ID></cac:PartyIdentification>` +
+    // Firma: identifica al firmante; el valor de la firma lo inserta Smart PSE en ext:UBLExtensions.
+    // El ID de cac:Signature pasa a ser el atributo Id de ds:Signature (xs:ID): NO puede empezar con un dígito, por eso lleva
+    // el prefijo SIGN- (con solo el RUC SUNAT rechaza con [0306] cvc-type 3.1.1). Debe coincidir con la URI de abajo.
+    `<cac:Signature><cbc:ID>SIGN-${ruc}</cbc:ID><cac:SignatoryParty><cac:PartyIdentification><cbc:ID>${ruc}</cbc:ID></cac:PartyIdentification>` +
       `<cac:PartyName><cbc:Name><![CDATA[${c.empresa.razonSocial}]]></cbc:Name></cac:PartyName></cac:SignatoryParty>` +
       `<cac:DigitalSignatureAttachment><cac:ExternalReference><cbc:URI>#SIGN-${ruc}</cbc:URI></cac:ExternalReference></cac:DigitalSignatureAttachment></cac:Signature>`,
     // Emisor
@@ -377,4 +396,4 @@ export const construirXmlFacturaBoleta = (c) => {
   return xml.filter(Boolean).join('');
 };
 
-export default { construirXmlFacturaBoleta, validarComprobante, revisarComprobante };
+export default { construirXmlFacturaBoleta, validarComprobante, revisarComprobante, montoEnLetras };

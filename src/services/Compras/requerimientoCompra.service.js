@@ -5,6 +5,7 @@ import {
   ValidationError,
 } from "../../utils/errors.js";
 import { validarTipoCambio } from "../../utils/tipoCambio.util.js";
+import { detraccionesDeProductos } from "../../utils/detraccionLinea.js";
 
 /**
  * Servicio CRUD para RequerimientoCompra
@@ -745,7 +746,8 @@ async function crearOrdenCompraDirectaInterno(
     data: { correlativo: BigInt(nuevoCorrelativo) },
   });
 
-  // 5. Crear la Orden de Compra
+  // 5. Crear la Orden de Compra. Cada línea copia la detracción sugerida por su producto (el usuario la confirma luego en la compra)
+  const detraccionesProducto = await detraccionesDeProductos(tx, detalles.map((d) => d.productoId));
   const ordenCompra = await tx.ordenCompra.create({
     data: {
       empresaId: requerimiento.empresaId,
@@ -773,6 +775,7 @@ async function crearOrdenCompraDirectaInterno(
           cantidad: detalle.cantidad,
           precioUnitario: detalle.costoUnitario,
           observaciones: detalle.observaciones,
+          ...detraccionesProducto.get(String(detalle.productoId)),
         })),
       },
     },
@@ -837,7 +840,8 @@ async function crearOrdenCompraConCotizacionInterno(
     data: { correlativo: BigInt(nuevoCorrelativo) },
   });
 
-  // 5. Crear la Orden de Compra
+  // 5. Crear la Orden de Compra (cada línea copia la detracción sugerida por su producto)
+  const detraccionesProducto = await detraccionesDeProductos(tx, detallesCotizacion.map((d) => d.productoId));
   const ordenCompra = await tx.ordenCompra.create({
     data: {
       empresaId: requerimiento.empresaId,
@@ -865,6 +869,7 @@ async function crearOrdenCompraConCotizacionInterno(
           cantidad: detalle.cantidad,
           precioUnitario: detalle.precioUnitario,
           observaciones: detalle.observaciones,
+          ...detraccionesProducto.get(String(detalle.productoId)),
         })),
       },
     },

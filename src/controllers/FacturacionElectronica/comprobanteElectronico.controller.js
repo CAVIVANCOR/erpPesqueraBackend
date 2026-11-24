@@ -97,7 +97,7 @@ export async function enviarASunat(req, res, next) {
     const observaciones = [].concat(resultado.observaciones || []).filter(Boolean).join(' | ');
     const mensaje = resultado.aceptado
       ? `Comprobante ${comprobante.numeroCompleto} aceptado por SUNAT${observaciones ? ` con observaciones: ${observaciones}` : ''}`
-      : resultado.rechazado
+      : resultado.rechazado || !resultado.pendiente
         ? `SUNAT rechazó el comprobante ${comprobante.numeroCompleto}: ${comprobante.errorEnvio || resultado.mensaje || 'sin detalle'}. Corrija los datos y reenvíe: se conserva el mismo número.`
         : `Comprobante ${comprobante.numeroCompleto} enviado; SUNAT aún no responde: ${resultado.mensaje || 'pendiente de respuesta'}.`;
 

@@ -13,6 +13,7 @@ import {
 import { puedeEditarRegistroCerrado } from "../../utils/checkSuperUsuario.js";
 import { validarTipoCambio } from '../../utils/tipoCambio.util.js';
 import { TIPO_DOC_ID } from '../../utils/tiposDocumento.constants.js';
+import { detraccionesDeProductos } from '../../utils/detraccionLinea.js';
 
 /**
  * Servicio CRUD para DetMovsEntregaRendir
@@ -1933,6 +1934,9 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
       },
     });
 
+    // La línea nace con la detracción sugerida por el producto (la OC se genera sola, sin que el usuario elija el tipo)
+    const detraccionProducto = (await detraccionesDeProductos(tx, [detMov.productoId])).get(String(detMov.productoId));
+
     await tx.detalleOrdenCompra.create({
       data: {
         ordenCompraId: ordenCompra.id,
@@ -1944,6 +1948,7 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
         observaciones: detMov.descripcion,
         cantidadCompra: 1,
         precioUnitarioCompra: subtotal,
+        ...detraccionProducto,
       },
     });
     }

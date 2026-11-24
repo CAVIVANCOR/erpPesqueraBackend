@@ -1,5 +1,6 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import { detraccionDeProducto, resolverDetraccionLinea } from '../../utils/detraccionLinea.js';
 
 /**
  * Servicio CRUD para DetalleOrdenCompra
@@ -73,7 +74,8 @@ const listar = async (ordenCompraId) => {
             subfamilia: true
           }
         },
-        tipoAfectacionIGV: true
+        tipoAfectacionIGV: true,
+        tipoDetraccion: true
       },
       orderBy: {
         id: 'asc'
@@ -143,6 +145,13 @@ const crear = async (data) => {
     }
 
     let datosFinales = { ...data };
+
+    // Detracción de la línea: lo que eligió el usuario (null = sin detracción). Si la línea llega sin ese dato (alta
+    // automática), se copia la sugerencia del producto, igual que antes salía del producto.
+    Object.assign(
+      datosFinales,
+      data.tipoDetraccionId === undefined ? detraccionDeProducto(producto) : await resolverDetraccionLinea(prisma, data),
+    );
 
     // Si se proporcionaron datos comerciales, calcular datos de almacén
     if (tieneCantidadCompra && data.precioUnitarioCompra !== undefined && data.precioUnitarioCompra !== null) {
@@ -221,6 +230,11 @@ const actualizar = async (id, data) => {
     }
 
     let datosFinales = { ...data };
+
+    // Detracción de la línea: solo se toca si la petición la trae (null = quitar la detracción de esta línea)
+    if (data.tipoDetraccionId !== undefined) {
+      Object.assign(datosFinales, await resolverDetraccionLinea(prisma, data));
+    }
 
     // Si se proporcionaron datos comerciales, calcular datos de almacén
     const tieneCantidadCompra = data.cantidadCompra !== undefined && data.cantidadCompra !== null;
