@@ -231,6 +231,7 @@ async function validarProducto(data, excluirId = null) {
     }
   }
 
+  // DEPRECADO: exoneradoRetencion ya no se usa en ninguna lógica ni se muestra en la ficha (la columna se conserva).
   // Validar que exoneradoRetencion sea booleano
   if (data.exoneradoRetencion !== undefined && typeof data.exoneradoRetencion !== 'boolean') {
     throw new ValidationError('exoneradoRetencion debe ser un valor booleano.');

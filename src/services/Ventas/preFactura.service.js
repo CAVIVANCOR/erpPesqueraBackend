@@ -513,6 +513,21 @@ const obtenerPorCotizacion = async (cotizacionVentaId) => {
 
 
 
+// Día calendario en Lima (YYYY-MM-DD): las fechas se guardan a medianoche local y SUNAT compara por día
+const diaLima = (fecha) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date(fecha));
+
+/**
+ * El vencimiento no puede ser anterior a la fecha del documento. Se avisa al GRABAR la venta (y no recién al emitir el
+ * comprobante), porque SUNAT rechaza una factura cuyo vencimiento es anterior a su emisión.
+ */
+const validarFechasVenta = (fechaDocumento, fechaVencimiento) => {
+  if (fechaDocumento && fechaVencimiento && diaLima(fechaVencimiento) < diaLima(fechaDocumento)) {
+    throw new ValidationError(
+      `La fecha de vencimiento (${diaLima(fechaVencimiento)}) no puede ser anterior a la fecha del documento (${diaLima(fechaDocumento)}). Corrija la fecha de vencimiento.`,
+    );
+  }
+};
+
 const crear = async (data) => {
   try {
     // Validar campos obligatorios
@@ -600,6 +615,7 @@ const crear = async (data) => {
 
       const fechaDocumento = new Date(data.fechaDocumento);
       const fechaVencimiento = new Date(data.fechaVencimiento);
+      validarFechasVenta(fechaDocumento, fechaVencimiento);
 
       // 10. Crear objeto limpio solo con campos del modelo (patrón estándar)
       // El código se asigna con el id después de crear (ver paso 12)
@@ -851,6 +867,10 @@ const actualizar = async (id, data) => {
     }
     if (data.hasOwnProperty("fechaVencimiento") && !data.fechaVencimiento) {
       throw new ValidationError('La fecha de vencimiento es obligatoria');
+    }
+    // Con las fechas que quedarían guardadas (las enviadas o, si no vienen, las actuales)
+    if (data.hasOwnProperty("fechaDocumento") || data.hasOwnProperty("fechaVencimiento")) {
+      validarFechasVenta(data.fechaDocumento ?? existente.fechaDocumento, data.fechaVencimiento ?? existente.fechaVencimiento);
     }
 
     // ════════════════════════════════════════════════════════════
@@ -2580,6 +2600,14 @@ const generarComprobanteElectronico = async (preFacturaId) => {
       const ahora = new Date();
       const horaEmision = ahora.toTimeString().split(" ")[0]; // HH:MM:SS
 
+      // Al CRÉDITO la cuota vence después de la fecha de emisión (hoy): si la venta quedó con un vencimiento de hoy o anterior, se avisa
+      // ANTES de crear el comprobante. Al contado el vencimiento no tiene efecto y se ajusta solo (ver fechaVencimiento más abajo).
+      if (preFactura.formaPago?.esCredito && preFactura.fechaVencimiento && diaLima(preFactura.fechaVencimiento) <= diaLima(ahora)) {
+        throw new ValidationError(
+          `La venta es al crédito y vence el ${diaLima(preFactura.fechaVencimiento)}, que no es posterior a la fecha de emisión del comprobante (${diaLima(ahora)}). Corrija la fecha de vencimiento de la venta y vuelva a generar el comprobante.`,
+        );
+      }
+
       // Líneas del comprobante, totales por tipo de afectación y datos de notas/cuotas
       const lineasComprobante = await construirLineasComprobante(tx, preFactura);
 
@@ -2610,7 +2638,14 @@ const generarComprobanteElectronico = async (preFacturaId) => {
           // Fechas
           fechaEmision: ahora,
           horaEmision: horaEmision,
-          fechaVencimiento: preFactura.fechaVencimiento,
+          // Al contado, un vencimiento anterior a la emisión (venta de días atrás emitida hoy) no es válido para SUNAT: vence el día de emisión
+          fechaVencimiento:
+            !preFactura.formaPago?.esCredito &&
+            preFactura.fechaVencimiento &&
+            new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date(preFactura.fechaVencimiento)) <
+              new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(ahora)
+              ? ahora
+              : preFactura.fechaVencimiento,
           // Cliente
           entidadComercialId: preFactura.clienteId,
           tipoDocumentoClienteId: preFactura.cliente.tipoDocumentoId || Number(6),

@@ -62,7 +62,7 @@ const esc = (valor) =>
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
 const dec = (valor, decimales = 2) => Number(valor || 0).toFixed(decimales);
 const redondear2 = (valor) => Math.round((Number(valor || 0) + Number.EPSILON) * 100) / 100;
-const fechaISO = (fecha) => new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_HORARIA }).format(new Date(fecha));
+export const fechaISO = (fecha) => new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_HORARIA }).format(new Date(fecha));
 const mismaCifra = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) <= TOLERANCIA;
 
 const codigoTipo = (c) => String(c.tipoComprobante?.codigoSunat || '').trim();

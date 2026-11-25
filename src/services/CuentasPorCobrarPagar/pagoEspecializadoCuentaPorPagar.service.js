@@ -5,7 +5,7 @@ import correlativoService from '../Tesoreria/correlativoOperacionCaja.service.js
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import periodoContableService from '../Contabilidad/periodoContable.service.js';
 import { TIPO_LIBRO } from '../../utils/tiposLibroContable.js';
-import { ESTADO_ASIENTO_CONTABLE } from '../../utils/estados.constants.js';
+import { ESTADO_ASIENTO_CONTABLE, ESTADO_CUENTA_POR_PAGAR } from '../../utils/estados.constants.js';
 import { generarVoucherContableMovimientoCaja } from '../FlujoCaja/voucherContableMovimientoCaja.service.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -78,13 +78,15 @@ async function copiarComprobanteOrdenCompraAMovimiento(urlDocumentoRef, movimien
 // CONSTANTES DE NEGOCIO - ESTADOS
 // ════════════════════════════════════════════════════════════
 
+// Estados del catalogo de CUENTAS POR PAGAR (106-111). Los ids 100-105 son del catalogo de Cuentas por Cobrar: usarlos aqui dejaba
+// la CxP con un estado de otro catalogo (p. ej. "PAGADO" 102 en vez de 108) que el resto del sistema y la reversion no reconocen.
 const ESTADOS_CXP = {
-  PENDIENTE: 100,
-  PAGO_PARCIAL: 101,
-  PAGADO: 102,
-  VENCIDO: 103,
-  ANULADO: 104,
-  CANJEADO: 105
+  PENDIENTE: ESTADO_CUENTA_POR_PAGAR.PENDIENTE,
+  PAGO_PARCIAL: ESTADO_CUENTA_POR_PAGAR.PAGO_PARCIAL,
+  PAGADO: ESTADO_CUENTA_POR_PAGAR.PAGADO,
+  VENCIDO: ESTADO_CUENTA_POR_PAGAR.VENCIDO,
+  ANULADO: ESTADO_CUENTA_POR_PAGAR.ANULADO,
+  CANJEADO: ESTADO_CUENTA_POR_PAGAR.CANJEADO
 };
 
 const ESTADOS_MOVIMIENTO_CAJA = {

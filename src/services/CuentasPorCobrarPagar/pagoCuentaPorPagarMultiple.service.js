@@ -8,7 +8,7 @@ import {
 import correlativoService from "../Tesoreria/correlativoOperacionCaja.service.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
-import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
+import { ESTADO_ASIENTO_CONTABLE, ESTADO_CUENTA_POR_PAGAR } from "../../utils/estados.constants.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -90,13 +90,14 @@ import { ESTADO_ASIENTO_CONTABLE } from "../../utils/estados.constants.js";
 // ════════════════════════════════════════════════════════════
 // CONSTANTES (mismos valores que pagoEspecializadoCuentaPorPagar.service.js)
 // ════════════════════════════════════════════════════════════
+// Catalogo de CUENTAS POR PAGAR (106-111); los ids 100-105 pertenecen a Cuentas por Cobrar
 const ESTADOS_CXP = {
-  PENDIENTE: 100,
-  PAGO_PARCIAL: 101,
-  PAGADO: 102,
-  VENCIDO: 103,
-  ANULADO: 104,
-  CANJEADO: 105,
+  PENDIENTE: ESTADO_CUENTA_POR_PAGAR.PENDIENTE,
+  PAGO_PARCIAL: ESTADO_CUENTA_POR_PAGAR.PAGO_PARCIAL,
+  PAGADO: ESTADO_CUENTA_POR_PAGAR.PAGADO,
+  VENCIDO: ESTADO_CUENTA_POR_PAGAR.VENCIDO,
+  ANULADO: ESTADO_CUENTA_POR_PAGAR.ANULADO,
+  CANJEADO: ESTADO_CUENTA_POR_PAGAR.CANJEADO,
 };
 
 const ESTADO_MOVIMIENTO_CAJA_VALIDADO = 21;

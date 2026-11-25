@@ -42,15 +42,18 @@ async function referenciasA(db, tabla) {
 }
 
 /** Referencias de otras tablas (no propias) a los ids indicados de una tabla. Devuelve [{ tabla, registros }]. */
-async function referenciasAjenas(db, tabla, ids) {
+async function referenciasAjenas(db, tabla, ids, movimientosIgnorados = []) {
   if (ids.length === 0) return [];
   const resultado = [];
   for (const ref of await referenciasA(db, tabla)) {
     const clave = `${ref.tabla}.${ref.columna}`;
     if (REFERENCIAS_PROPIAS.has(clave) || String(ref.tabla).startsWith("_")) continue;
+    // Los movimientos de caja de la operación que se está revirtiendo referencian la CxP, pero se eliminan en esa misma reversión
+    const excluir = ref.tabla === "MovimientoCaja" && movimientosIgnorados.length > 0;
     const filas = await db.$queryRawUnsafe(
-      `SELECT COUNT(*)::int AS n FROM ${ident(ref.tabla)} WHERE ${ident(ref.columna)} = ANY($1::bigint[])`,
+      `SELECT COUNT(*)::int AS n FROM ${ident(ref.tabla)} WHERE ${ident(ref.columna)} = ANY($1::bigint[])${excluir ? " AND id <> ALL($2::bigint[])" : ""}`,
       ids,
+      ...(excluir ? [movimientosIgnorados] : []),
     );
     if (filas[0].n > 0) resultado.push({ tabla: ref.tabla, columna: ref.columna, registros: filas[0].n });
   }
@@ -75,8 +78,12 @@ async function asientosDe(db, ordenCompra, cuentaPorPagarId, pagosIds) {
   return filas;
 }
 
-/** Analiza qué se eliminaría y qué lo impide, para una Orden de Compra de Rendición de Gastos. */
-async function analizarOrdenCompra(db, ordenCompraId) {
+/**
+ * Analiza qué se eliminaría y qué lo impide, para una Orden de Compra de Rendición de Gastos.
+ * pagosIgnorados / asientosIgnorados: pagos y asientos que OTRA reversión (la de la operación de caja) ya va a eliminar; así se puede
+ * evaluar de antemano cómo quedaría la OC una vez revertido su pago.
+ */
+async function analizarOrdenCompra(db, ordenCompraId, { pagosIgnorados = [], asientosIgnorados = [], movimientosIgnorados = [] } = {}) {
   const ordenCompra = await db.ordenCompra.findUnique({ where: { id: BigInt(ordenCompraId) } });
   if (!ordenCompra) throw new NotFoundError(`La Orden de Compra ${ordenCompraId} no existe.`);
   if (Number(ordenCompra.submoduloOrigenId) !== SUBMODULO_RENDICION_GASTOS) {
@@ -87,10 +94,15 @@ async function analizarOrdenCompra(db, ordenCompraId) {
 
   const cuentasPorPagar = await db.cuentaPorPagar.findMany({ where: { ordenCompraId: ordenCompra.id } });
   const cuentaIds = cuentasPorPagar.map((c) => c.id);
-  const pagos = cuentaIds.length > 0 ? await db.pagoCuentaPorPagar.findMany({ where: { cuentaPorPagarId: { in: cuentaIds } } }) : [];
+  const ignoradosPagos = new Set(pagosIgnorados.map(String));
+  const ignoradosAsientos = new Set(asientosIgnorados.map(String));
+  const todosLosPagos = cuentaIds.length > 0 ? await db.pagoCuentaPorPagar.findMany({ where: { cuentaPorPagarId: { in: cuentaIds } } }) : [];
+  const pagos = todosLosPagos.filter((p) => !ignoradosPagos.has(String(p.id)));
   const pagosIds = aNumeros(pagos.map((p) => p.id));
 
-  const asientos = await asientosDe(db, ordenCompra, cuentasPorPagar[0]?.id ?? null, pagosIds);
+  const asientos = (await asientosDe(db, ordenCompra, cuentasPorPagar[0]?.id ?? null, pagosIds)).filter(
+    (a) => !ignoradosAsientos.has(String(a.id)),
+  );
 
   const bloqueos = [];
   const pagosAjenos = pagos.filter(
@@ -112,7 +124,7 @@ async function analizarOrdenCompra(db, ordenCompraId) {
     ["CuentaPorPagar", aNumeros(cuentaIds)],
     ["PagoCuentaPorPagar", pagosIds],
   ]) {
-    for (const ref of await referenciasAjenas(db, tabla, ids)) {
+    for (const ref of await referenciasAjenas(db, tabla, ids, aNumeros(movimientosIgnorados))) {
       bloqueos.push(`La tabla ${ref.tabla} tiene ${ref.registros} registro(s) que usan este documento (${ref.columna}).`);
     }
   }
@@ -155,6 +167,22 @@ const resumen = (a) => ({
   movimientosApuntando: a.movimientosApuntando.map((m) => m.id),
   bloqueos: a.bloqueos,
 });
+
+/**
+ * Gasto DIRECTO (Gasto Urgente o solicitado por el responsable): OC de Rendición de Gastos cuyo movimiento NO pertenece a una entrega a rendir
+ * (sin asignación de origen). Devuelve su análisis, o null si la OC no es de ese tipo. Lo usa la reversión de operaciones de Tesorería para
+ * revertir también el gasto cuando se revierte su pago.
+ */
+export async function analizarGastoDirecto(db, ordenCompraId, opciones = {}) {
+  const oc = await db.ordenCompra.findUnique({
+    where: { id: BigInt(ordenCompraId) },
+    select: { id: true, submoduloOrigenId: true, procesoOrigenId: true },
+  });
+  if (!oc || Number(oc.submoduloOrigenId) !== SUBMODULO_RENDICION_GASTOS || !oc.procesoOrigenId) return null;
+  const mov = await db.detMovsEntregaRendir.findUnique({ where: { id: oc.procesoOrigenId }, select: { id: true, asignacionOrigenId: true } });
+  if (!mov || mov.asignacionOrigenId) return null;
+  return resumen(await analizarOrdenCompra(db, ordenCompraId, opciones));
+}
 
 async function ordenesDeMovimiento(db, detMovId) {
   const detMov = await db.detMovsEntregaRendir.findUnique({ where: { id: BigInt(detMovId) }, select: { id: true } });
@@ -204,10 +232,14 @@ async function exigirSuperUsuario(usuarioId) {
   }
 }
 
-/** Revierte una Orden de Compra (todo o nada): elimina asientos, pagos, CxP, detalle y OC, y restaura los movimientos. */
-async function revertirOrdenCompra(ordenCompraId, usuarioId) {
-  return prisma.$transaction(
-    async (tx) => {
+/**
+ * Revierte una Orden de Compra (todo o nada): elimina asientos, pagos, CxP, detalle y OC, y restaura los movimientos.
+ * txExterno: si se indica, se ejecuta dentro de esa transacción (la reversión de operaciones de Tesorería la usa para que el pago y el
+ * gasto se reviertan juntos o ninguno).
+ */
+export async function revertirOrdenCompra(ordenCompraId, usuarioId, txExterno = null) {
+  const ejecutar = async (tx) => {
+    {
       const analisis = await analizarOrdenCompra(tx, ordenCompraId);
       if (analisis.bloqueos.length > 0) {
         throw new ValidationError(
@@ -269,9 +301,9 @@ async function revertirOrdenCompra(ordenCompraId, usuarioId) {
         cuentasPorPagarEliminadas: cuentaIds.length,
         movimientosRestaurados: analisis.movimientosApuntando.length,
       };
-    },
-    { maxWait: 15000, timeout: 120000 },
-  );
+    }
+  };
+  return txExterno ? ejecutar(txExterno) : prisma.$transaction(ejecutar, { maxWait: 15000, timeout: 120000 });
 }
 
 /** Revierte los documentos generados para un movimiento de rendición (no vuelve a generarlos). */

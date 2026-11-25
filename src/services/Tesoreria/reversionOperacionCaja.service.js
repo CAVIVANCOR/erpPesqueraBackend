@@ -1,4 +1,5 @@
 import prisma from "../../config/prismaClient.js";
+import { analizarGastoDirecto, revertirOrdenCompra } from "../Pesca/revertirDocumentosRendicion.service.js";
 import { NotFoundError, ValidationError, DatabaseError } from "../../utils/errors.js";
 import {
   ESTADO_CUENTA_POR_COBRAR,
@@ -120,8 +121,11 @@ const etiquetaDocumento = (objeto) => {
   return campo ? String(objeto[campo]) : `#${objeto.id}`;
 };
 
-const estadoDeuda = (estados, estadoActual, saldo, pagado, fechaVencimiento) => {
-  const gestionables = [estados.PENDIENTE, estados.PAGO_PARCIAL, estados.PAGADO, estados.VENCIDO];
+// estadosLegados: ids de OTRO catalogo que pagos antiguos dejaron en la deuda (p. ej. CxP con 102 "PAGADO" de Cuentas por Cobrar en vez de
+// 108). Se tratan como gestionables para que la reversion los recalcule y los deje en el catalogo correcto; antes conservaban el estado
+// viejo y la deuda quedaba con saldo pero con la etiqueta PAGADO.
+const estadoDeuda = (estados, estadoActual, saldo, pagado, fechaVencimiento, estadosLegados = []) => {
+  const gestionables = [estados.PENDIENTE, estados.PAGO_PARCIAL, estados.PAGADO, estados.VENCIDO, ...estadosLegados];
   // Un documento anulado o canjeado conserva su estado
   if (!gestionables.includes(Number(estadoActual))) return Number(estadoActual);
   if (saldo <= 0) return estados.PAGADO;
@@ -411,12 +415,12 @@ function agruparPorDeuda(pagos, campoDeudaId, campoDeuda, campoMonto) {
 }
 
 /** Calcula cómo quedaría cada deuda (sin escribir nada). */
-function proyectarDeuda({ tipo, deuda, aplicado, estados, maximoSaldo, pagadoAnterior = 0, revierteCanje = false, estadoCanje = ESTADO_CUENTA_POR_COBRAR.CANJEADO }) {
+function proyectarDeuda({ tipo, deuda, aplicado, estados, maximoSaldo, pagadoAnterior = 0, revierteCanje = false, estadoCanje = ESTADO_CUENTA_POR_COBRAR.CANJEADO, estadosLegados = [] }) {
   const pagadoDespues = r2(Math.max(0, num(deuda.montoPagado) - aplicado));
   const saldoDespues = r2(Math.min(maximoSaldo, num(deuda.saldoPendiente) + aplicado));
   // Si lo que se revierte es el canje que dejó la factura en CANJEADA (factoring), vuelve a calcularse como pendiente
   const estadoActual = revierteCanje && Number(deuda.estadoId) === Number(estadoCanje) ? estados.PENDIENTE : deuda.estadoId;
-  const estadoDespues = estadoDeuda(estados, estadoActual, saldoDespues, pagadoDespues + pagadoAnterior, deuda.fechaVencimiento);
+  const estadoDespues = estadoDeuda(estados, estadoActual, saldoDespues, pagadoDespues + pagadoAnterior, deuda.fechaVencimiento, estadosLegados);
   return {
     tipo,
     id: deuda.id,
@@ -562,7 +566,17 @@ async function analizar(db, ctx) {
     // Un pago sin caja ligado a un préstamo de factoring indirecto es el canje de la factura (la dejó CANJEADA)
     const revierteCanje = g.pagos.some((p) => p.prestamoBancarioId && !p.movimientoCajaId);
     deudas.push(
-      proyectarDeuda({ tipo: "Cuenta por pagar", deuda: g.deuda, aplicado: g.aplicado, estados: ESTADOS_CXP, maximoSaldo: num(g.deuda.montoTotal), revierteCanje, estadoCanje: ESTADO_CUENTA_POR_PAGAR.CANJEADO }),
+      proyectarDeuda({
+        tipo: "Cuenta por pagar",
+        deuda: g.deuda,
+        aplicado: g.aplicado,
+        estados: ESTADOS_CXP,
+        maximoSaldo: num(g.deuda.montoTotal),
+        revierteCanje,
+        estadoCanje: ESTADO_CUENTA_POR_PAGAR.CANJEADO,
+        // 100-103 (pendiente, parcial, pagado, vencido de Cuentas por Cobrar): los dejaban los servicios de pago antes de usar el catalogo 106-111
+        estadosLegados: [100, 101, 102, 103],
+      }),
     );
   }
   for (const g of agruparPorDeuda(ctx.pagosPersonal, "deudaConPersonalId", "deudaConPersonal", "montoPago").values()) {
@@ -801,6 +815,33 @@ async function analizar(db, ctx) {
     asignaciones.push({ id: detMov.id, descripcion: detMov.descripcion || `Asignación #${detMov.id}`, monto: num(detMov.monto), gastosRendidos: gastos });
   }
 
+  // ── Gastos directos (Gasto Urgente o solicitado por el responsable) ─────
+  // Un gasto directo nace de UNA acción (se genera el gasto y Caja lo paga). Si solo se revirtiera el pago, el gasto quedaría como cuenta
+  // por pagar pendiente y, al registrarlo de nuevo, aparecerían duplicados. Por eso, cuando la OC del pago es un gasto directo y tras
+  // revertir el pago queda sin otros pagos ni asientos ajenos, se revierte también el gasto (OC, CxP y asiento de destino) y su
+  // movimiento vuelve a "pendiente de procesar". Si algo lo impide, solo se revierte el pago y se avisa.
+  const documentosGasto = [];
+  const pagosIgnorados = ctx.pagosCxP.map((p) => p.id);
+  const asientosIgnorados = ctx.asientos.map((a) => a.id);
+  for (const ocId of unicos(ctx.pagosCxP.map((p) => p.cuentaPorPagar?.ordenCompraId).filter(Boolean))) {
+    const doc = await analizarGastoDirecto(db, ocId, { pagosIgnorados, asientosIgnorados, movimientosIgnorados: ctx.movIds });
+    if (!doc) continue;
+    // Ids como número: el plan viaja por la API (JSON no admite BigInt)
+    documentosGasto.push({
+      ...doc,
+      ordenCompraId: Number(doc.ordenCompraId),
+      movimientoId: Number(doc.movimientoId),
+      total: num(doc.total),
+      saldoPendiente: num(doc.saldoPendiente),
+      movimientosApuntando: doc.movimientosApuntando.map(Number),
+    });
+    avisos.push(
+      doc.bloqueos.length === 0
+        ? `Gasto directo MOV-${doc.movimientoId} (orden de compra ${doc.numeroDocumento}): se eliminarán también su orden de compra, su cuenta por pagar y su asiento de destino; el movimiento vuelve a quedar pendiente de procesar.`
+        : `El gasto directo MOV-${doc.movimientoId} (orden de compra ${doc.numeroDocumento}) NO se eliminará, solo se revierte su pago: ${doc.bloqueos.join(" ")}`,
+    );
+  }
+
   const aprobados = ctx.asientos.filter((a) => Number(a.estadoId) === 77).length;
   if (aprobados > 0) avisos.push(`${aprobados} asiento(s) contable(s) está(n) aprobado(s) y se eliminará(n).`);
 
@@ -836,6 +877,7 @@ async function analizar(db, ctx) {
     impuestos,
     prestamos,
     asignaciones,
+    documentosGasto,
     avisos,
     bloqueos,
     puedeRevertir: bloqueos.length === 0,
@@ -1083,6 +1125,15 @@ export async function ejecutarReversion(tx, { motivo, usuarioId, ...parametros }
   // 8. Movimientos de caja
   await tx.movimientoCaja.deleteMany({ where: { id: { in: movIds } } });
 
+  // 9. Gastos directos cuyo pago se acaba de revertir: se revierte también el gasto (OC, CxP, asientos de destino y restauración del
+  //    movimiento). Va DESPUES de borrar los movimientos de caja porque estos referencian la CxP y bloquearían la reversión del gasto.
+  //    Misma transacción: si algo falla, no se revierte nada.
+  const documentosGastoRevertidos = [];
+  for (const doc of plan.documentosGasto || []) {
+    if (doc.bloqueos.length > 0) continue;
+    documentosGastoRevertidos.push(await revertirOrdenCompra(doc.ordenCompraId, usuarioId, tx));
+  }
+
   // Informativo: no se borra ningún archivo (algunos comprobantes son el PDF de la PreFactura u OC)
   const archivosAsociados = [...urlsOperacion];
   const auditoria = {
@@ -1094,6 +1145,7 @@ export async function ejecutarReversion(tx, { motivo, usuarioId, ...parametros }
     movimientos: movIds.map(Number),
     asientos: ctx.asientos.map((a) => a.numeroAsiento),
     deudas: plan.deudas.map((d) => `${d.tipo} ${d.documento}`),
+    gastosDirectosRevertidos: documentosGastoRevertidos.map((d) => d.numeroDocumento),
     filasSaldoRecalculadas: filasRecalculadas,
   };
   console.log("[REVERSION_OPERACION]", JSON.stringify(auditoria));
@@ -1107,6 +1159,7 @@ export async function ejecutarReversion(tx, { motivo, usuarioId, ...parametros }
       ctx.pagosCxC.length + ctx.pagosCxP.length + ctx.pagosPersonal.length + ctx.pagosTributaria.length + ctx.pagosCuota.length +
       ctx.pagosPrestamoRel.length + ctx.pagosLetra.length + ctx.pagosPrestamoEnt.length,
     deudasRestauradas: plan.deudas.length,
+    gastosDirectosRevertidos: documentosGastoRevertidos.length,
     impuestosRestaurados: plan.impuestos.length,
     asignacionesRestauradas: ctx.detMovs.length,
     cuentasRecalculadas: inicios.size,

@@ -5,7 +5,7 @@ import prisma from '../../config/prismaClient.js';
 import { NotFoundError, ValidationError, ConflictError } from '../../utils/errors.js';
 import { ESTADO_PREFACTURA } from '../../utils/estados.constants.js';
 import smartpseService from './smartpse.service.js';
-import { construirXmlFacturaBoleta, validarComprobante } from './ubl/ublFacturaBoleta.builder.js';
+import { construirXmlFacturaBoleta, validarComprobante, fechaISO } from './ubl/ublFacturaBoleta.builder.js';
 
 /**
  * Orquestador de la emisión de comprobantes electrónicos con Smart PSE (Flujo A: firma + envío en una llamada).
@@ -160,6 +160,15 @@ const emitirComprobante = async (id, usuarioId = null) => {
     throw new ValidationError(
       `La empresa está configurada para enviar boletas por resumen diario (RC), que se habilita en la siguiente entrega. Cambie "Envío de boletas" a Individual en Maestros > Empresas para emitir esta boleta.`,
     );
+  }
+
+  // Al CONTADO (sin cuotas) la fecha de vencimiento no tiene efecto tributario: si la venta quedó con un vencimiento anterior a la
+  // fecha de emisión del comprobante (p. ej. una venta de días atrás que se emite hoy), SUNAT no lo admite; se corrige con la fecha de
+  // emisión y se guarda para que el comprobante conserve lo que realmente se envía. En ventas al crédito NO se corrige: ahí el
+  // vencimiento y las cuotas son una decisión comercial y el validador avisa para que la persona los ajuste.
+  if (comprobante.fechaVencimiento && (comprobante.cuotas || []).length === 0 && fechaISO(comprobante.fechaVencimiento) < fechaISO(comprobante.fechaEmision)) {
+    await prisma.comprobanteElectronico.update({ where: { id }, data: { fechaVencimiento: comprobante.fechaEmision } });
+    comprobante.fechaVencimiento = comprobante.fechaEmision;
   }
 
   // 1. Validar antes de consumir un correlativo y un crédito (con un correlativo provisional si todavía no tiene)

@@ -914,12 +914,9 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
       const proveedorSujeto = orden.proveedor.sujetoRetencion || false;
       const umbralRetencion = Number(orden.empresa.montoMinimoRetencion || 700);
 
-      // Verificar si algún producto está exonerado de retención
-      const hayProductoExonerado = orden.detalles.some(
-        (d) => d.producto?.exoneradoRetencion === true
-      );
-
-      if (empresaEsAgente && proveedorSujeto && total > umbralRetencion && !hayProductoExonerado) {
+      // Producto.exoneradoRetencion está DEPRECADO y no interviene: la retención se decide solo por el documento
+      // (empresa agente, proveedor sujeto, total sobre el mínimo, sin detracción)
+      if (empresaEsAgente && proveedorSujeto && total > umbralRetencion) {
         aplicaRetencion = true;
         porcentajeRetencion = Number(orden.empresa.porcentajeRetencion || 3);
         const esSoles = orden.moneda.codigoSunat === 'PEN';
