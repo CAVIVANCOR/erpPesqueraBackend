@@ -2,6 +2,7 @@ import prestamoBancarioService from '../../services/Tesoreria/prestamoBancario.s
 import cuotaPrestamoService from '../../services/Tesoreria/cuotaPrestamo.service.js';
 import facturasCuotaPrestamoService from '../../services/Tesoreria/facturasCuotaPrestamo.service.js';
 import toJSONBigInt from '../../utils/toJSONBigInt.js';
+import { ValidationError } from '../../utils/errors.js';
 /**
  * Controlador para PrestamoBancario
  * Documentado en español.
@@ -191,7 +192,10 @@ export async function generarBorradorAsiento(req, res, next) {
 }
 
 /**
- * Guarda asiento contable de saldo inicial
+ * Guarda el asiento contable de SALDO INICIAL del préstamo (DEBE 591101 / HABER 451101-2).
+ * Solo aplica a préstamos de saldo inicial: un préstamo nuevo se contabiliza únicamente con el desembolso desde Caja
+ * (operacionPrestamo.service.js). El asiento "de desembolso" que generaba este botón para préstamos nuevos usaba otro modelo
+ * (bruto con 373101), bloqueaba el desembolso en Caja y, si se usaban ambos, duplicaba la contabilidad.
  */
 export async function guardarAsientoContable(req, res, next) {
   try {
@@ -200,12 +204,13 @@ export async function guardarAsientoContable(req, res, next) {
     const integracionService = (await import('../../services/Tesoreria/integracionContablePrestamo.service.js')).default;
     const prisma = (await import('../../config/prismaClient.js')).default;
     const prestamo = await prestamoBancarioService.obtenerPorId(id);
+    if (!prestamo.esSaldoInicial) {
+      throw new ValidationError(
+        `El préstamo ${prestamo.numeroPrestamo} no es de saldo inicial: su contabilización se registra únicamente con el desembolso desde Tesorería Pendientes (Caja). Este botón solo genera el asiento de saldo inicial.`
+      );
+    }
     const asiento = await prisma.$transaction(async (tx) => {
-      if (prestamo.esSaldoInicial) {
-        return await integracionService.generarAsientoSaldoInicial(prestamo, tx, creadoPor);
-      } else {
-        return await integracionService.generarAsientoPrestamoNuevo(prestamo, tx, creadoPor);
-      }
+      return await integracionService.generarAsientoSaldoInicial(prestamo, tx, creadoPor);
     });
     res.json(toJSONBigInt(asiento));
   } catch (err) {
