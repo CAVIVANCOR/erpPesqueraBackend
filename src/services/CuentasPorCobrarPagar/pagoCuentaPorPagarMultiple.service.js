@@ -433,7 +433,12 @@ const procesarPagoMultiple = async (datos) => {
         });
 
         if (cxpsBD.length !== idsItems.length) {
-          throw new NotFoundError("Alguno de los documentos seleccionados no existe");
+          // Mensaje específico: indica qué cuenta por pagar no se encontró para poder actualizar la lista o corregir el dato
+          const encontrados = new Set(cxpsBD.map((c) => Number(c.id)));
+          const faltantes = idsItems.filter((id) => !encontrados.has(id));
+          throw new NotFoundError(
+            `No se encontró la cuenta por pagar N° ${faltantes.join(", ")} en la base de datos (de ${idsItems.length} documento(s) enviados, ${cxpsBD.length} encontrado(s)). Actualice la lista de pendientes y vuelva a intentar; si persiste, el documento fue eliminado o regenerado.`
+          );
         }
         const cxpPorId = new Map(cxpsBD.map((c) => [Number(c.id), c]));
         // Se respeta el orden en que el usuario envió los documentos

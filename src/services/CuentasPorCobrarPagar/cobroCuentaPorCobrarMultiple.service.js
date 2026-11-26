@@ -390,7 +390,12 @@ const procesarCobroMultiple = async (datos) => {
         });
 
         if (cxcsBD.length !== idsItems.length) {
-          throw new NotFoundError("Alguno de los documentos seleccionados no existe");
+          // Mensaje específico: indica qué cuenta por cobrar no se encontró para poder actualizar la lista o corregir el dato
+          const encontrados = new Set(cxcsBD.map((c) => Number(c.id)));
+          const faltantes = idsItems.filter((id) => !encontrados.has(id));
+          throw new NotFoundError(
+            `No se encontró la cuenta por cobrar N° ${faltantes.join(", ")} en la base de datos (de ${idsItems.length} documento(s) enviados, ${cxcsBD.length} encontrado(s)). Actualice la lista de pendientes y vuelva a intentar; si persiste, el documento fue eliminado o regenerado.`
+          );
         }
         const cxcPorId = new Map(cxcsBD.map((c) => [Number(c.id), c]));
         // Se respeta el orden en que el usuario envió los documentos
