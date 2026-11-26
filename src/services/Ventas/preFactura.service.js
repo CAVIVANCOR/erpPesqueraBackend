@@ -2386,7 +2386,10 @@ const construirLineasComprobante = async (tx, preFactura) => {
       numeroLinea: indice + 1,
       productoId: detalle.productoId,
       codigoProducto: detalle.producto?.codigo || null,
-      descripcion: nombreLinea,
+      // Descripción armada del producto (la misma que se ve en la venta); solo si faltara se usa la base
+      descripcion: String(detalle.producto?.descripcionArmada || "").trim() || nombreLinea,
+      // Descripción complementaria escrita en la venta: queda congelada en el comprobante y viaja dentro del XML
+      observaciones: String(detalle.observaciones || "").trim() || null,
       unidadMedidaId: detalle.producto?.unidadMedidaId,
       codigoUnidadSUNAT: UNIDAD_SUNAT_POR_SIMBOLO[String(unidad?.simbolo || "").toUpperCase()] || "NIU",
       nombreUnidad: unidad?.nombre || null,
@@ -5069,7 +5072,8 @@ const generarKardex = async (id, datosKardex, usuarioId, esRegeneracion = false)
         esCustodia: false,
         empresaId: preFactura.empresaId,
         costoUnitario: det.precioUnitario || 0,
-        observaciones: null,
+        // Descripción complementaria de la línea de venta: sale también en el voucher de almacén
+        observaciones: String(det.observaciones || "").trim() || null,
       }));
 
       // ========================================
@@ -5472,7 +5476,8 @@ const despacharStock = async (id, payload, usuarioId) => {
             costoUnitario: 0,
             cantidadComercial: razonComercial ? Math.round(l.cantidad * razonComercial * 10000) / 10000 : null,
             costoComercial: null,
-            observaciones: null,
+            // Descripción complementaria de la línea de venta: sale también en el voucher de almacén
+            observaciones: String(lineaVenta.observaciones || "").trim() || null,
             ubicacionFisicaOrigenId: s.ubicacionFisicaId || null,
             permitirDimensionesNulas: true,
           };
@@ -5665,7 +5670,8 @@ const regenerarKardex = async (id, usuarioId) => {
         esCustodia: false,
         empresaId: preFactura.empresaId,
         costoUnitario: det.precioUnitario || 0,
-        observaciones: null,
+        // Descripción complementaria de la línea de venta: sale también en el voucher de almacén
+        observaciones: String(det.observaciones || "").trim() || null,
       }));
 
       // ========================================

@@ -32,6 +32,16 @@ const TRIBUTO_POR_CATEGORIA = {
   EXPORTACION: { categoria: 'G', id: '9995', nombre: 'EXP', tipo: 'FRE' },
 };
 
+// SUNAT admite hasta 500 caracteres en la descripción del ítem (cac:Item/cbc:Description)
+const LIMITE_DESCRIPCION_ITEM = 500;
+
+// Texto de la línea en el XML: descripción del producto y, debajo (salto de línea), la observación escrita en la venta
+export const textoDescripcionLinea = (d) =>
+  [d.descripcion, d.observaciones]
+    .map((texto) => String(texto ?? '').replace(/\r\n?/g, '\n').trim())
+    .filter(Boolean)
+    .join('\n');
+
 const NOMBRE_MONEDA = { PEN: 'SOLES', USD: 'DOLARES AMERICANOS', EUR: 'EUROS' };
 
 // Leyenda 1000 (monto en letras): la usan el XML y la representación impresa (PDF), que deben decir exactamente lo mismo
@@ -146,6 +156,12 @@ export const revisarComprobante = (c) => {
       continue;
     }
     if (!String(d.descripcion || '').trim()) problemas.push(`${etiqueta}: no tiene descripción.`);
+    const largoDescripcion = textoDescripcionLinea(d).length;
+    if (largoDescripcion > LIMITE_DESCRIPCION_ITEM) {
+      problemas.push(
+        `${etiqueta}: la descripción más la observación suman ${largoDescripcion} caracteres y SUNAT admite hasta ${LIMITE_DESCRIPCION_ITEM}. Acorte la observación en ${largoDescripcion - LIMITE_DESCRIPCION_ITEM} caracteres.`
+      );
+    }
     if (!String(d.codigoUnidadSUNAT || '').trim()) problemas.push(`${etiqueta}: no tiene código de unidad de medida SUNAT.`);
     if (!(Number(d.cantidad) > 0)) problemas.push(`${etiqueta}: la cantidad debe ser mayor a cero.`);
     if (Number(d.isc) > 0) problemas.push(`${etiqueta}: tiene ISC, todavía no se admite.`);
@@ -270,7 +286,7 @@ const bloqueLinea = (d, moneda) => {
   );
 
   partes.push(
-    `<cac:Item><cbc:Description><![CDATA[${String(d.descripcion).replace(/\]\]>/g, ']]]]><![CDATA[>')}]]></cbc:Description>` +
+    `<cac:Item><cbc:Description><![CDATA[${textoDescripcionLinea(d).replace(/\]\]>/g, ']]]]><![CDATA[>')}]]></cbc:Description>` +
       (d.codigoProducto ? `<cac:SellersItemIdentification><cbc:ID>${esc(d.codigoProducto)}</cbc:ID></cac:SellersItemIdentification>` : '') +
       (d.codigoProductoSunat
         ? `<cac:CommodityClassification><cbc:ItemClassificationCode listID="UNSPSC" listAgencyName="GS1 US" listName="Item Classification">${esc(d.codigoProductoSunat)}</cbc:ItemClassificationCode></cac:CommodityClassification>`
