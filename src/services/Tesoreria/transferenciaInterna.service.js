@@ -393,6 +393,18 @@ async function validarDatosTransferenciaInterna(data, tx = null) {
     esPrestamoRelacionado = true;
   }
 
+  // Una transferencia común mueve dinero entre cuentas de la MISMA empresa (un solo asiento: DEBE destino / HABER origen).
+  // Entre empresas distintas cada una lleva su propio libro y el movimiento necesita una contrapartida con la otra empresa
+  // (171111 / 471101): eso solo lo contabiliza el préstamo entre relacionadas. Sin él, ambos asientos quedarían con cuentas propias
+  // de la otra empresa y los activos de las dos se distorsionarían.
+  if (!esPrestamoRelacionado && cuentaOrigen && cuentaDestino && Number(cuentaOrigen.empresaId) !== Number(cuentaDestino.empresaId)) {
+    throw new ValidationError(
+      `La cuenta de origen pertenece a ${cuentaOrigen.empresa?.razonSocial || 'otra empresa'} y la de destino a ${cuentaDestino.empresa?.razonSocial || 'otra empresa'}. ` +
+      'Una transferencia solo se permite entre cuentas de la misma empresa. Para mover dinero entre empresas registre un préstamo entre relacionadas ' +
+      '(tipo de movimiento PRESTAMOS RELACIONADOS, operación Desembolso o Devolución).'
+    );
+  }
+
   return { cuentaOrigen, cuentaDestino, saldoOrigen, advertenciaSaldo, esPrestamoRelacionado, prestamoValidado };
 }
 
