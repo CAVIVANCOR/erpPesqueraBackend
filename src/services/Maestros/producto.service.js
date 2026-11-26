@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { NotFoundError, DatabaseError, ValidationError, ConflictError } from '../../utils/errors.js';
 import { toUpperCaseSafe } from '../../utils/numberUtils.js';
+import { relacionesDeProducto } from './reemplazoProducto.service.js';
 
 // Producto es un maestro único del grupo: pertenece a MEGUI. Producto.empresaId está depreciado y siempre vale 1;
 // Producto.clienteId (depreciado) siempre es la entidad comercial de esa empresa, leída de la base (no se escribe a mano).
@@ -613,29 +614,19 @@ const actualizarCampoMasa = async (ids, campo, valorId, usuarioId) => {
  */
 const eliminar = async (id) => {
   try {
-    const existente = await prisma.producto.findUnique({
-      where: { id },
-      include: {
-        detallesMovimiento: true,
-        kardexAlmacenes: true,
-        detallesRequerimientosCompra: true,
-        detallesOrdenCompra: true,
-        detallesPreFactura: true
-      }
-    });
+    const existente = await prisma.producto.findUnique({ where: { id } });
 
     if (!existente) throw new NotFoundError('Producto no encontrado');
 
-    // Verificar dependencias antes de eliminar
-    const tieneDependencias =
-      existente.detallesMovimiento?.length > 0 ||
-      existente.kardexAlmacenes?.length > 0 ||
-      existente.detallesRequerimientosCompra?.length > 0 ||
-      existente.detallesOrdenCompra?.length > 0 ||
-      existente.detallesPreFactura?.length > 0;
-
-    if (tieneDependencias) {
-      throw new ConflictError('No se puede eliminar el producto porque tiene movimientos, órdenes o documentos asociados.');
+    // Se revisan TODAS las tablas que referencian al producto (no solo las principales) y se informa cuántas relaciones hay en cada una,
+    // para que el usuario sepa qué reemplazar antes de eliminarlo (botón "Reemplazar" de la lista de productos).
+    const relaciones = await relacionesDeProducto(prisma, id);
+    if (relaciones.length > 0) {
+      const total = relaciones.reduce((acc, r) => acc + r.filas, 0);
+      const detalle = relaciones.map((r) => `${r.tabla}.${r.columna}: ${r.filas}`).join('; ');
+      throw new ConflictError(
+        `No se puede eliminar el producto "${existente.descripcionArmada || existente.descripcionBase}" porque tiene ${total} relación(es) en ${relaciones.length} tabla(s): ${detalle}. Use "Reemplazar" para pasarlas a otro producto y luego elimínelo o déjelo cesado.`
+      );
     }
 
     await prisma.producto.delete({ where: { id } });

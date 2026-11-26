@@ -268,6 +268,18 @@ async function validarDatosPagoEspecializado(data, tx = null) {
   }
 
   // ========================================
+  // LA CUENTA ES OBLIGATORIA
+  // ========================================
+  // Todo movimiento de caja debe pertenecer a una cuenta corriente o caja: de ella salen el saldo corrido, el asiento contable y el
+  // reporte de Movimiento de Fondos. Un cobro sin cuenta quedaba sin saldo ni asiento (ni siquiera el efectivo: la caja también es una
+  // cuenta). El pago de solo la detracción tiene su propio flujo y no pasa por esta validación.
+  if (!data.cuentaBancariaId) {
+    throw new ValidationError(
+      'Debe seleccionar la cuenta corriente o caja donde ingresa el cobro. Un cobro sin cuenta no afecta ningún saldo ni genera asiento contable.'
+    );
+  }
+
+  // ========================================
   // VALIDAR CUENTA CORRIENTE
   // ========================================
   if (data.cuentaBancariaId) {
