@@ -1449,6 +1449,7 @@ model DetallePreFactura {
   tipoAfectacionIGVId         BigInt?    // 10 = Gravado (Venta Local), 40 = Exportación (Venta Exterior)
   tipoDetraccionId            BigInt?   // Código Sunat (004 Recursos Hidrobiológicos)
   porcentajeDetraccion        Decimal?  @db.Decimal(5, 2)
+  observaciones               String?     @db.Text                // Descripción complementaria de la línea: se imprime bajo la descripción armada y viaja en el XML
 
   preFactura                  PreFactura @relation(fields: [preFacturaId], references: [id], onDelete: Cascade)
   producto                    Producto @relation(fields: [productoId], references: [id])
@@ -7174,7 +7175,8 @@ model DetalleComprobante {
   total                     Decimal                 @db.Decimal(18, 2)
   
   anticipo                  Boolean?                @default(false)
-  
+  observaciones             String?                 @db.Text            // Copia congelada de la observación de la línea de venta al emitir (va dentro del XML)
+
   comprobanteElectronico    ComprobanteElectronico  @relation(fields: [comprobanteElectronicoId], references: [id], onDelete: Cascade)
   producto                  Producto?               @relation(fields: [productoId], references: [id])
   unidadMedida              UnidadMedida            @relation(fields: [unidadMedidaId], references: [id])
