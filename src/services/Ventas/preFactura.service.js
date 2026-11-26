@@ -7,6 +7,7 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
+import { resolverCuentaAnticipoCliente, obtenerIdsCuentasAnticipoCliente, cuentaDeIngresoDelDetalle } from "../../utils/cuentaAnticipoCliente.js";
 import { validarTipoCambio, obtenerTipoCambioEfectivo } from "../../utils/tipoCambio.util.js";
 import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
 import {
@@ -4196,12 +4197,15 @@ const generarBorradorAsiento = async (preFacturaId) => {
     };
 
     const MONEDA_SOLES_ID = 1;
+    // La línea negativa del anticipo descontado debe ir a su cuenta de anticipos (122101), no a la cuenta de ingresos que el producto
+    // tenga en "Cuenta Ventas" (p. ej. 703211)
+    const idsCuentasAnticipo = await obtenerIdsCuentasAnticipoCliente(prisma);
     // CASO 1: GERENCIAL (sin IGV)
     if (preFactura.esGerencial) {
       const detallesVentas = esSaldoInicial
         ? [{ planCuentaId: cuentaHaber.id, monto: total }]
         : preFactura.detalles.reduce((acc, det) => {
-          const cuentaId = det.producto?.cuentaVentasId || cuentaHaber.id;
+          const cuentaId = cuentaDeIngresoDelDetalle(det.producto, idsCuentasAnticipo) || cuentaHaber.id;
           const existing = acc.find(a => a.planCuentaId === cuentaId);
           const montoDetalle = Math.round(Number(det.cantidad) * Number(det.precioUnitario) * 100) / 100;
           if (existing) {
@@ -4253,7 +4257,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
       const detallesVentas = esSaldoInicial
         ? [{ planCuentaId: cuentaHaber.id, monto: total }]
         : preFactura.detalles.reduce((acc, det) => {
-          const cuentaId = det.producto?.cuentaVentasId || cuentaHaber.id;
+          const cuentaId = cuentaDeIngresoDelDetalle(det.producto, idsCuentasAnticipo) || cuentaHaber.id;
           const existing = acc.find(a => a.planCuentaId === cuentaId);
           const montoDetalle = Math.round(Number(det.cantidad) * Number(det.precioUnitario) * 100) / 100;
           if (existing) {
@@ -4355,7 +4359,7 @@ const generarBorradorAsiento = async (preFacturaId) => {
       const detallesVentas = esSaldoInicial
         ? [{ planCuentaId: cuentaHaber.id, monto: subtotal }]
         : preFactura.detalles.reduce((acc, det) => {
-          const cuentaId = det.producto?.cuentaVentasId || cuentaHaber.id;
+          const cuentaId = cuentaDeIngresoDelDetalle(det.producto, idsCuentasAnticipo) || cuentaHaber.id;
           const existing = acc.find(a => a.planCuentaId === cuentaId);
           const montoDetalle = Math.round(Number(det.cantidad) * Number(det.precioUnitario) * 100) / 100;
           if (existing) {
@@ -4490,7 +4494,9 @@ const generarBorradorAsiento = async (preFacturaId) => {
       for (const anticipo of preFactura.anticiposAplicados || []) {
         const igvAnticipo = Number(anticipo.totalIGV || 0);
         if (!(igvAnticipo > 0)) continue;
-        const cuentaAnticipoId = anticipo.detalles?.[0]?.producto?.cuentaVentasId;
+        const cuentaAnticipoId = cuentaIGVAnt
+          ? await resolverCuentaAnticipoCliente(prisma, anticipo.detalles?.[0]?.producto, Number(anticipo.monedaId) === 1)
+          : null;
         if (!cuentaAnticipoId || !cuentaIGVAnt) {
           throw new ValidationError(
             `El anticipo ${anticipo.numeroDocumentoFinal || anticipo.numeroDocumento} no tiene cuenta de anticipos (122101) en su producto o falta la cuenta 401111: revise el producto y el plan de cuentas.`,

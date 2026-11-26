@@ -5,6 +5,7 @@ import {
   DatabaseError,
   ValidationError,
 } from "../../utils/errors.js";
+import { resolverCuentaAnticipoCliente } from "../../utils/cuentaAnticipoCliente.js";
 import correlativoService from "../Tesoreria/correlativoOperacionCaja.service.js";
 import periodoContableService from "../Contabilidad/periodoContable.service.js";
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
@@ -381,6 +382,7 @@ const procesarCobroMultiple = async (datos) => {
                 fechaFacturacion: true,
                 fechaVencimiento: true,
                 aplicaDetraccion: true,
+                esAnticipo: true,
                 detraccion: { select: { saldoPendiente: true } },
               },
             },
@@ -532,6 +534,22 @@ const procesarCobroMultiple = async (datos) => {
         // el usuario no escribió una: "Cobro de fact. {NumDoc} por venta de {Concepto}".
         // {Concepto} = productos / servicios del detalle de las pre-facturas, sin repetir.
         // Debe mantenerse idéntica a la que propone el formulario (CobroMultipleEspecializadoForm).
+        // ANTICIPOS de clientes (venta marcada "Es anticipo"): no tuvo asiento de venta, por lo que no existe una factura por cobrar que cancelar.
+        // El cobro registra DEBE banco / HABER 122101 (122102 en dólares: cuenta de ventas del producto de anticipo) por el total cobrado,
+        // igual que el cobro individual (pagoEspecializadoCuentaPorCobrar.service.js). Sin esto el cobro iba contra 121201.
+        const cuentaAnticipoPorPreFactura = new Map();
+        for (const c of cxcs) {
+          if (esGerencial || !c.preFactura?.esAnticipo) continue;
+          const lineaAnticipo = await tx.detallePreFactura.findFirst({
+            where: { preFacturaId: c.preFactura.id },
+            include: { producto: true },
+            orderBy: { id: "asc" },
+          });
+          // Cuenta del anticipo del producto (grupo 122, en Cuenta Compras o Cuenta Ventas); nunca una cuenta de ingresos como 703211
+          const cuentaAnticipoId = await resolverCuentaAnticipoCliente(tx, lineaAnticipo?.producto, esMonedaNacional);
+          cuentaAnticipoPorPreFactura.set(String(c.preFactura.id), cuentaAnticipoId);
+        }
+
         const idsPreFactura = cxcs.map((c) => c.preFactura?.id).filter(Boolean);
         const detallesVenta = idsPreFactura.length
           ? await tx.detallePreFactura.findMany({
@@ -697,9 +715,9 @@ const procesarCobroMultiple = async (datos) => {
               documento: documentoOrigen,
             });
           } else {
-            // [CASO A] VENTA FORMAL: HABER 121201 / 121202 Facturas por cobrar
+            // [CASO A] VENTA FORMAL: HABER 121201 / 121202 Facturas por cobrar (o 122101 / 122102 si el documento es un anticipo)
             lineasHaberCxC.push({
-              cuentaId: cuentaHaberDocumentos.id,
+              cuentaId: cuentaAnticipoPorPreFactura.get(String(cxc.preFactura?.id)) ?? cuentaHaberDocumentos.id,
               monto: montoAplicado,
               procesoId: pago.id,
               documento: documentoOrigen,

@@ -2132,16 +2132,26 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
         ];
       const lineaDestino = lineasGasto.length;
 
+      // Segundo asiento de la compra sin factura:
+      //  - Producto SIN existencias (gasto, servicio): DESTINO del costo al centro de costo (DEBE cuenta del centro / HABER 791101).
+      //  - Producto CON existencias (tiene cuenta de inventario y de variación, p. ej. materia prima o mercadería): la compra ingresa
+      //    al inventario, así que va DEBE 24x existencias / HABER 61x variación de existencias. Cargar además el destino de costo
+      //    registraría como consumido algo que sigue en el almacén.
+      const ingresaAExistencias = Boolean(producto.cuentaInventarioId && producto.cuentaVariacionId);
+      const cuentaSegundoDebe = ingresaAExistencias ? producto.cuentaInventarioId : centroCosto.cuentaContableId;
+      const cuentaSegundoHaber = ingresaAExistencias ? producto.cuentaVariacionId : cuenta791101.id;
+      const glosaSegundoAsiento = ingresaAExistencias ? 'INGRESO A ALMACEN' : 'DESTINO';
+
       await tx.detalleAsientoContable.createMany({
         data: [
           ...lineasGasto,
           {
             asientoContableId: asientoPago.id,
             numeroLinea: lineaDestino + 1,
-            planCuentaId: centroCosto.cuentaContableId,
+            planCuentaId: cuentaSegundoDebe,
             debe: totalPEN,
             haber: 0,
-            glosa: 'DESTINO',
+            glosa: glosaSegundoAsiento,
             monedaId: 1,
             tipoCambio: ordenCompra.tipoCambio,
             debeMonedaExtranjera: totalExtranjero,
@@ -2152,10 +2162,10 @@ async function generarDocumentosFinancieros(detMovId, accionOcExistente = null, 
           {
             asientoContableId: asientoPago.id,
             numeroLinea: lineaDestino + 2,
-            planCuentaId: cuenta791101.id,
+            planCuentaId: cuentaSegundoHaber,
             debe: 0,
             haber: totalPEN,
-            glosa: 'DESTINO',
+            glosa: glosaSegundoAsiento,
             monedaId: 1,
             tipoCambio: ordenCompra.tipoCambio,
             debeMonedaExtranjera: null,

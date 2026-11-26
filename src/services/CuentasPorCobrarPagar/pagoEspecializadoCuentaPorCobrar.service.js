@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { obtenerIdTipoPorRol, obtenerIdTipoPorRolSinValidar } from '../Tesoreria/tipoMovimientoSistema.service.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import { resolverCuentaAnticipoCliente } from "../../utils/cuentaAnticipoCliente.js";
 import correlativoService from '../Tesoreria/correlativoOperacionCaja.service.js';
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import periodoContableService from '../Contabilidad/periodoContable.service.js';
@@ -733,16 +734,8 @@ async function generarAsientoParaMovimiento({
         include: { producto: true },
         orderBy: { id: 'asc' },
       });
-      let cuentaAnticipoId = lineaAnticipo?.producto?.cuentaVentasId || null;
-      if (!cuentaAnticipoId) {
-        const codigo = Number(monedaFactura) === 1 ? '122101' : '122102';
-        const cuentaDefecto = await tx.planCuentasContable.findFirst({ where: { codigoCuenta: codigo, activo: true } });
-        if (!cuentaDefecto) {
-          throw new ValidationError(`No se encontró la cuenta ${codigo} (Anticipos de clientes). Configure el plan de cuentas antes de cobrar el anticipo.`);
-        }
-        cuentaAnticipoId = cuentaDefecto.id;
-      }
-      cuentaHaber = cuentaAnticipoId;
+      // Cuenta del anticipo del producto (grupo 122, en Cuenta Compras o Cuenta Ventas); nunca una cuenta de ingresos como 703211
+      cuentaHaber = await resolverCuentaAnticipoCliente(tx, lineaAnticipo?.producto, Number(monedaFactura) === 1);
     }
     
 

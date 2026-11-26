@@ -177,6 +177,7 @@ const obtenerCuentasParaSaldos = async ({ desde, hasta } = {}) => {
         empresaId: true,
         numeroCuenta: true,
         descripcion: true,
+        tipoCuentaCorriente: { select: { esTarjetaCredito: true } },
         empresa: { select: { id: true, razonSocial: true, ruc: true, logo: true } },
         banco: { select: { id: true, nombre: true } },
         moneda: { select: { id: true, codigoSunat: true, simbolo: true } },

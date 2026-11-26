@@ -1,6 +1,7 @@
 import prisma from '../../config/prismaClient.js';
 import { obtenerIdTipoPorRol, obtenerIdTipoPorRolSinValidar } from '../Tesoreria/tipoMovimientoSistema.service.js';
 import { NotFoundError, DatabaseError, ValidationError } from '../../utils/errors.js';
+import { resolverCuentaAnticipoProveedor } from "../../utils/cuentaAnticipoProveedor.js";
 import correlativoService from '../Tesoreria/correlativoOperacionCaja.service.js';
 import asientoContableService from '../Contabilidad/asientoContable.service.js';
 import periodoContableService from '../Contabilidad/periodoContable.service.js';
@@ -770,15 +771,12 @@ async function generarAsientoParaMovimiento({
       include: { producto: true },
       orderBy: { id: 'asc' },
     });
-    let cuentaAnticipoId = lineaAnticipo?.producto?.cuentaComprasId || null;
-    if (!cuentaAnticipoId) {
-      const codigo = Number(cuentaPorPagar?.monedaId || movimientoCompleto.monedaId) === 1 ? '422101' : '422102';
-      const cuentaDefecto = await tx.planCuentasContable.findFirst({ where: { codigoCuenta: codigo, activo: true } });
-      if (!cuentaDefecto) {
-        throw new ValidationError(`No se encontró la cuenta ${codigo} (Anticipos a proveedores). Configure el plan de cuentas antes de pagar el anticipo.`);
-      }
-      cuentaAnticipoId = cuentaDefecto.id;
-    }
+    // Solo se respeta la cuenta del producto si es del grupo 422; si no (p. ej. una cuenta de gasto) se usa 422101 / 422102
+    const cuentaAnticipoId = await resolverCuentaAnticipoProveedor(
+      tx,
+      lineaAnticipo?.producto,
+      Number(cuentaPorPagar?.monedaId || movimientoCompleto.monedaId) === 1
+    );
     // Una sola línea al DEBE por el total pagado (la lógica de conversión por moneda es la de los gastos sin factura)
     cuentasDebeMultiples = [{ cuentaId: cuentaAnticipoId, monto: Number(movimientoCompleto.monto), origen: 'Anticipo' }];
 

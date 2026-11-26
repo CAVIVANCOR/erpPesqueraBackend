@@ -5,6 +5,7 @@ import {
   ValidationError,
   ConflictError,
 } from "../../utils/errors.js";
+import { resolverCuentaAnticipoProveedor } from "../../utils/cuentaAnticipoProveedor.js";
 import crearMovimientoAlmacenService from "../Almacen/crearMovimientoAlmacen.service.js";
 import { validarTipoCambio, obtenerTipoCambioEfectivo } from "../../utils/tipoCambio.util.js";
 import { ESTADO_ORDEN_COMPRA, ESTADO_PERIODO_CONTABLE, ESTADO_ASIENTO_CONTABLE, ESTADO_CUENTA_POR_PAGAR } from "../../utils/estados.constants.js";
@@ -4723,12 +4724,12 @@ const generarBorradorAsiento = async (ordenCompraId) => {
           for (const anticipo of ordenCompra.anticiposAplicados || []) {
             const igvAnticipo = Number(anticipo.totalIGV || 0);
             if (!(igvAnticipo > 0)) continue;
-            const cuentaAnticipoId = anticipo.detalles?.[0]?.producto?.cuentaComprasId;
-            if (!cuentaAnticipoId) {
-              throw new ValidationError(
-                `El anticipo ${anticipo.numeroDocumentoFinal || anticipo.numeroDocumento} no tiene cuenta de anticipos en su producto (422101): asígnela en el producto del anticipo.`,
-              );
-            }
+            // Cuenta de anticipos del producto (grupo 422); si no tuviera una válida se usa 422101 / 422102 según la moneda
+            const cuentaAnticipoId = await resolverCuentaAnticipoProveedor(
+              prisma,
+              anticipo.detalles?.[0]?.producto,
+              Number(anticipo.monedaId) === 1
+            );
             const igvSoles = convertirMontoASoles(igvAnticipo, ordenCompra);
             const glosaRecl = `Reclasificación IGV anticipo ${anticipo.numeroDocumentoFinal || anticipo.numeroDocumento}`;
             const comun = {

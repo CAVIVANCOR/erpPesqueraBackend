@@ -18,6 +18,8 @@ const incluirRelaciones = {
     select: {
       id: true,
       numeroCuenta: true,
+      // Los reportes de movimiento de fondos separan las tarjetas de crédito del resto de cuentas
+      tipoCuentaCorriente: { select: { esTarjetaCredito: true } },
       banco: { select: { id: true, nombre: true } },
       moneda: { select: { id: true, simbolo: true } },
     },
@@ -26,6 +28,7 @@ const incluirRelaciones = {
     select: {
       id: true,
       numeroCuenta: true,
+      tipoCuentaCorriente: { select: { esTarjetaCredito: true } },
       banco: { select: { id: true, nombre: true } },
       moneda: { select: { id: true, simbolo: true } },
     },
