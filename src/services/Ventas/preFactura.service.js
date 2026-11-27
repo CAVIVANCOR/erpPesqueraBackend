@@ -2385,7 +2385,8 @@ const construirLineasComprobante = async (tx, preFactura) => {
     return {
       numeroLinea: indice + 1,
       productoId: detalle.productoId,
-      codigoProducto: detalle.producto?.codigo || null,
+      // El código que ve el cliente en la factura es el ID del producto (no el código interno del catálogo)
+      codigoProducto: detalle.producto?.id != null ? String(detalle.producto.id) : null,
       // Descripción armada del producto (la misma que se ve en la venta); solo si faltara se usa la base
       descripcion: String(detalle.producto?.descripcionArmada || "").trim() || nombreLinea,
       // Descripción complementaria escrita en la venta: queda congelada en el comprobante y viaja dentro del XML
@@ -2495,7 +2496,9 @@ const generarComprobanteElectronico = async (preFacturaId) => {
       const preFactura = await tx.preFactura.findUnique({
         where: { id: preFacturaId },
         include: {
-          cliente: true,
+          // La dirección del comprobante sale de la dirección fiscal elegida en la pre-factura y, si no hay, de la fiscal activa del cliente
+          cliente: { include: { direcciones: { where: { activo: true, fiscal: true }, take: 1 } } },
+          dirFiscal: true,
           moneda: true,
           detalles: {
             include: {
@@ -2655,7 +2658,13 @@ const generarComprobanteElectronico = async (preFacturaId) => {
           tipoDocumentoClienteId: preFactura.cliente.tipoDocumentoId || Number(6),
           numeroDocumentoCliente: preFactura.cliente.numeroDocumento || "",
           razonSocialCliente: preFactura.cliente.razonSocial || "",
-          direccionCliente: preFactura.cliente.direccion || "Sin dirección",
+          direccionCliente:
+            preFactura.dirFiscal?.direccionArmada ||
+            preFactura.dirFiscal?.direccion ||
+            preFactura.cliente.direccion ||
+            preFactura.cliente.direcciones?.[0]?.direccionArmada ||
+            preFactura.cliente.direcciones?.[0]?.direccion ||
+            "Sin dirección",
           emailCliente: preFactura.cliente.email,
           // Moneda
           monedaId: preFactura.monedaId,
