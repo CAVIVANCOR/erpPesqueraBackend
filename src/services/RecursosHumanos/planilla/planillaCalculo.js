@@ -35,6 +35,44 @@ function calcularDias(planilla, contrato, personal) {
   return periodoCompleto ? periodicidad : Math.min(efectivos, periodicidad);
 }
 
+/**
+ * Semestre de gratificación que se paga en el periodo (Ley 27735: hasta el 15 de julio y el 15 de diciembre).
+ * Es la planilla cuyo periodo contiene el 15 de julio (semestre enero-junio) o el 15 de diciembre (julio-diciembre).
+ * Las fechas son de la ley, no un parámetro: no cambian con el régimen.
+ */
+function semestreGratificacion(planilla, anio) {
+  const inicio = indiceDia(planilla.fechaInicio);
+  const fin = indiceDia(planilla.fechaFin);
+  const contiene = (mes, dia) => {
+    const d = indiceDia(Date.UTC(anio, mes, dia));
+    return inicio <= d && d <= fin;
+  };
+  if (contiene(6, 15)) return { desdeAnio: anio, mesInicial: 0 };
+  if (contiene(11, 15)) return { desdeAnio: anio, mesInicial: 6 };
+  return null;
+}
+
+/**
+ * Meses calendario COMPLETOS laborados en el semestre (la gratificación paga 1/6 por cada uno). El inicio es el más antiguo entre el
+ * ingreso del trabajador y el contrato (un cambio de sueldo crea un contrato nuevo, pero no reinicia la antigüedad); el fin, el menor
+ * entre el fin del contrato y el cese.
+ */
+function mesesCompletosGratificacion(semestre, personal, contrato) {
+  const inicios = [contrato.fechaInicio, personal.fechaIngreso].filter(Boolean).map((f) => new Date(f).getTime());
+  const inicioLaboral = indiceDia(Math.min(...inicios));
+  const finales = [];
+  if (contrato.fechaFin) finales.push(indiceDia(contrato.fechaFin));
+  if (personal.cesado && personal.fechaCese) finales.push(indiceDia(personal.fechaCese));
+  const finLaboral = finales.length ? Math.min(...finales) : Infinity;
+  let meses = 0;
+  for (let mes = semestre.mesInicial; mes < semestre.mesInicial + 6; mes++) {
+    const primero = indiceDia(Date.UTC(semestre.desdeAnio, mes, 1));
+    const ultimo = indiceDia(Date.UTC(semestre.desdeAnio, mes + 1, 0));
+    if (inicioLaboral <= primero && finLaboral >= ultimo) meses++;
+  }
+  return meses;
+}
+
 /** Parte de la remuneración del periodo que corresponde a esta planilla según las líneas de pago del contrato. */
 function remuneracionDelDestino(contrato, remuneracionTotal) {
   const lineas = contrato.lineasPago || [];
@@ -85,7 +123,7 @@ export async function calcularPlanilla(tx, planilla) {
       lineasPago: { orderBy: { orden: 'asc' } },
       personal: {
         select: {
-          id: true, nombres: true, apellidos: true, cargoId: true, esObrero: true, cesado: true, fechaCese: true,
+          id: true, nombres: true, apellidos: true, cargoId: true, esObrero: true, cesado: true, fechaCese: true, fechaIngreso: true,
           entidadPensionId: true, comisionMixta: true, tieneAsignacionFamiliar: true, aplicaSctr: true,
         },
       },
@@ -166,7 +204,12 @@ export async function calcularPlanilla(tx, planilla) {
     const basico = redondear(remuneracionDelDestino(contrato, remuneracionTotal));
 
     const esPescador = CARGOS_PESCADOR_IDS.includes(Number(personal.cargoId));
+    // Gratificación: solo la planilla que contiene el 15 de julio o el 15 de diciembre la paga; las locaciones no la tienen
+    const semestre = contrato.esLocacionServicios ? null : semestreGratificacion(planilla, anio);
     const variables = {
+      // Monto de cada concepto ya calculado en esta boleta (MONTO_<CODIGO>); en 0 hasta que se calcula o si no aplica.
+      // Permite fórmulas encadenadas, p. ej. la bonificación extraordinaria = MONTO_GRATIFICACION * 9 / 100.
+      ...Object.fromEntries(conceptos.map((c) => [`MONTO_${String(c.codigo).toUpperCase()}`, 0])),
       ...variablesLegales,
       BASICO: basico,
       DIAS: dias,
@@ -179,6 +222,11 @@ export async function calcularPlanilla(tx, planilla) {
       TIENE_PENSION: 0, ES_ONP: 0, PENSION_APORTE: 0, PENSION_SEGURO: 0, PENSION_COMISION: 0, REM_MAX_ASEGURABLE: 0,
       BASE_AFP: 0, BASE_ESSALUD: 0, BASE_QUINTA: 0, BASE_QUINTA_ORDINARIA: 0, BASE_SCTR: 0,
       BASE_GRATIFICACION: 0, BASE_CTS: 0, BASE_VACACIONES: 0,
+      // Equivalente MENSUAL de cada base (base del periodo / días × días del mes): la gratificación, la CTS y las vacaciones se calculan
+      // sobre la remuneración mensual aunque la planilla sea semanal o la persona haya ingresado a mitad de mes
+      BASE_GRATIFICACION_MENSUAL: 0, BASE_CTS_MENSUAL: 0, BASE_VACACIONES_MENSUAL: 0,
+      PAGA_GRATIFICACION: semestre ? 1 : 0,
+      MESES_GRATIFICACION: semestre ? mesesCompletosGratificacion(semestre, personal, contrato) : 0,
       TOTAL_INGRESOS: 0, TOTAL_DESCUENTOS: 0,
       DIAS_BASE_MES: diasBaseMes,
       PERIODICIDAD_DIAS: planilla.periodicidadDias || 0,
@@ -222,6 +270,7 @@ export async function calcularPlanilla(tx, planilla) {
           monto = 0; // Manual: la jefa de personal escribe el valor con una corrección
         }
         monto = redondear(monto);
+        variables[`MONTO_${String(concepto.codigo).toUpperCase()}`] = monto;
         if (monto === 0 && !concepto.esManual) continue;
 
         const naturaleza = naturalezaDe(concepto);
@@ -238,6 +287,10 @@ export async function calcularPlanilla(tx, planilla) {
           if (concepto.cuentaParaGratificacion) variables.BASE_GRATIFICACION += monto;
           if (concepto.cuentaParaCts) variables.BASE_CTS += monto;
           if (concepto.cuentaParaVacaciones) variables.BASE_VACACIONES += monto;
+          const aMensual = (base) => (variables.DIAS > 0 ? (base / variables.DIAS) * diasBaseMes : 0);
+          variables.BASE_GRATIFICACION_MENSUAL = aMensual(variables.BASE_GRATIFICACION);
+          variables.BASE_CTS_MENSUAL = aMensual(variables.BASE_CTS);
+          variables.BASE_VACACIONES_MENSUAL = aMensual(variables.BASE_VACACIONES);
         } else if (naturaleza === 'DESCUENTO') {
           variables.TOTAL_DESCUENTOS += monto;
         }

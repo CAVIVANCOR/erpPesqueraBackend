@@ -18,6 +18,7 @@ import { aplicarSignoMonto, TIPO_DOC_ID } from '../../utils/tiposDocumento.const
 import { TIPO_LIBRO } from "../../utils/tiposLibroContable.js";
 import { SUBMODULO_ORIGEN } from "../../utils/submodulos.constants.js";
 import { detraccionesDeProductos } from "../../utils/detraccionLinea.js";
+import { observacionImprimible } from "../../utils/observacionLinea.js";
 
 // ========================================
 // CONSTANTES PARA IMPUESTOS TRIBUTARIOS
@@ -1904,7 +1905,8 @@ const generarKardex = async (id, datosKardex, usuarioId) => {
         empresaId: orden.empresaId,
         costoUnitario: det.precioUnitario || 0,
         ...calcularDatosComerciales(det),
-        observaciones: null,
+        // Descripción complementaria de la línea de compra (sin las notas internas de la importación SIRE ni la marca de anticipos)
+        observaciones: observacionImprimible(det.observaciones),
         detalleReqCompraId: det.detalleReqCompraId || null,
         ubicacionFisicaDestinoId: datosKardex.ubicacionFisicaId ? Number(datosKardex.ubicacionFisicaId) : null, // ⭐ AGREGAR ESTA LÍNEA
       }));
@@ -2160,7 +2162,7 @@ const regenerarKardex = async (id, usuarioId) => {
           empresaId: orden.empresaId,
           costoUnitario: det.precioUnitario || 0,
           ...calcularDatosComerciales(det),
-          observaciones: null,
+          observaciones: observacionImprimible(det.observaciones),
           detalleReqCompraId: det.detalleReqCompraId || null,
           ubicacionFisicaDestinoId: previo?.ubicacionFisicaDestinoId || null,
         };

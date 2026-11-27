@@ -54,12 +54,10 @@ function normalizarDatosProducto(data) {
     return value;
   };
 
-  // ✅ LÓGICA CRÍTICA: Si no se envía unidadMedidaComercialId, igualar a unidadMedidaId
-  const unidadMedidaComercialId = data.unidadMedidaComercialId !== undefined &&
-    data.unidadMedidaComercialId !== null &&
-    data.unidadMedidaComercialId !== 0
-    ? data.unidadMedidaComercialId  // Respetar valor ingresado
-    : data.unidadMedidaId;           // Fallback a unidadMedidaId
+  // La Unidad Comercial es obligatoria y ya no se iguala a la Presentación en silencio: lo vacío se normaliza a null y lo rechaza
+  // validarProducto. Si el campo no viene en la petición (actualización parcial) se deja sin tocar.
+  const unidadMedidaComercialId =
+    data.unidadMedidaComercialId === undefined ? undefined : data.unidadMedidaComercialId || null;
 
   return {
     ...data,
@@ -84,7 +82,6 @@ function normalizarDatosProducto(data) {
     unidadLargoId: data.unidadLargoId && data.unidadLargoId !== 0 ? data.unidadLargoId : null,
     unidadEspesorId: data.unidadEspesorId && data.unidadEspesorId !== 0 ? data.unidadEspesorId : null,
     unidadAnguloId: data.unidadAnguloId && data.unidadAnguloId !== 0 ? data.unidadAnguloId : null,
-    // ✅ ASIGNAR unidadMedidaComercialId con lógica de fallback
     unidadMedidaComercialId: unidadMedidaComercialId,
   };
 }
@@ -101,6 +98,17 @@ async function validarProducto(data, excluirId = null) {
     const where = excluirId ? { codigo: data.codigo, id: { not: excluirId } } : { codigo: data.codigo };
     const existe = await prisma.producto.findFirst({ where });
     if (existe) throw new ConflictError('Ya existe un producto con ese código.');
+  }
+
+  // Presentación y Unidad Comercial: obligatorias al crear; al actualizar se exigen si el campo viene en la petición
+  const esCreacion = excluirId === null;
+  for (const [campo, etiqueta] of [
+    ['unidadMedidaId', 'la Presentación'],
+    ['unidadMedidaComercialId', 'la Unidad Comercial'],
+  ]) {
+    if ((esCreacion || data[campo] !== undefined) && !data[campo]) {
+      throw new ValidationError(`Debe indicar ${etiqueta} del producto.`);
+    }
   }
 
   // Validar existencia de referencias foráneas obligatorias
@@ -190,7 +198,7 @@ async function validarProducto(data, excluirId = null) {
   }
 
   // Validar unidadMedidaComercialId si se envía explícitamente
-  // NOTA: Si es null/undefined, normalizarDatosProducto ya lo iguala a unidadMedidaId
+  // NOTA: la obligatoriedad se exige más arriba; aquí solo se comprueba que la unidad exista
   if (data.unidadMedidaComercialId !== undefined &&
     data.unidadMedidaComercialId !== null &&
     data.unidadMedidaComercialId !== 0) {
