@@ -347,7 +347,15 @@ export const construirXmlFacturaBoleta = (c) => {
   const tipo = codigoTipo(c);
   const moneda = String(c.moneda.codigoSunat).trim().toUpperCase();
   const ruc = String(c.empresa.ruc).trim();
-  const tipoOperacion = c.preFactura?.tipoOperacionSunat?.codigo || '0101'; // Catálogo 51: 0101 = venta interna
+  let tipoOperacion = c.preFactura?.tipoOperacionSunat?.codigo || '0101'; // Catálogo 51: 0101 = venta interna
+  // SUNAT (error 3128): un comprobante con detracción no puede ir como venta interna (0101); el tipo de operación (catálogo 51) debe
+  // corresponder al código del bien o servicio sujeto a detracción (catálogo 54): 004 recursos hidrobiológicos -> 1002,
+  // 026 transporte de personas -> 1003, 027 transporte de carga -> 1004 y el resto -> 1001. Si el usuario ya eligió un tipo 1001-1004
+  // se respeta; no se toca ninguna otra operación (exportación, etc.).
+  if (c.sujetoDetraccion && !['1001', '1002', '1003', '1004'].includes(tipoOperacion) && tipoOperacion === '0101') {
+    const porCodigoDetraccion = { '004': '1002', '026': '1003', '027': '1004' };
+    tipoOperacion = porCodigoDetraccion[String(c.codigoDetraccion || '').trim().padStart(3, '0')] || '1001';
+  }
   const docCliente = codigoDocCliente(c.tipoDocumentoCliente?.codSunat, '0');
   const numeroCliente = String(c.numeroDocumentoCliente || '').trim() || '-';
   const nombreMoneda = NOMBRE_MONEDA[moneda] || String(c.moneda.nombreLargo || moneda).toUpperCase();
