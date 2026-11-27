@@ -61,17 +61,17 @@ const obtenerPorId = async (id) => {
 };
 
 /**
- * Obtiene la unidad de medida por defecto para métricas (nombre="S/UM" y esMedidaMetrica=true).
+ * Obtiene la unidad de medida por defecto para las dimensiones del producto: la unidad "UNIDAD".
+ * Ya no se exige que sea métrica: el catálogo actual no tiene "S/UM" y la unidad neutra que se usa es UNIDAD.
  */
 const obtenerDefaultMetrica = async () => {
   try {
     const unidadDefault = await prisma.unidadMedida.findFirst({ 
       where: { 
-        nombre: 'S/UM',
-        esMedidaMetrica: true 
+        nombre: 'UNIDAD'
       }
     });
-    if (!unidadDefault) throw new NotFoundError('Unidad de medida por defecto S/UM no encontrada');
+    if (!unidadDefault) throw new NotFoundError('Unidad de medida por defecto UNIDAD no encontrada: créela en Unidades de Medida o revise su nombre');
     return unidadDefault;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
