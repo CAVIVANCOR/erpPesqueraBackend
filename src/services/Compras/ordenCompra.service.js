@@ -804,6 +804,19 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
     if (!orden) {
       throw new NotFoundError("OrdenCompra no encontrada");
     }
+    // La detracción, la retención y la percepción se calculan en SOLES: sin moneda (y sin tipo de cambio si no es soles) no se pueden
+    // calcular. Antes esto reventaba con un error interno ("moneda null") oculto tras un mensaje genérico; ahora dice qué falta.
+    const aSoles = (monto) => {
+      if (!orden.moneda) {
+        throw new ValidationError('Seleccione la moneda del documento antes de guardar: sin moneda no se puede calcular la detracción, la retención ni la percepción.');
+      }
+      if (orden.moneda.codigoSunat === 'PEN') return monto;
+      if (!(Number(orden.tipoCambio) > 0)) {
+        throw new ValidationError('Ingrese el tipo de cambio del documento: la detracción, la retención y la percepción se calculan en soles.');
+      }
+      return monto * Number(orden.tipoCambio);
+    };
+
     // ========================================
     // PASO 1: CALCULAR SUBTOTAL (suma de detalles)
     // ========================================
@@ -872,11 +885,10 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
 
       if (porcentajeMax > 0 && tipoDetraccionMax) {
         // Convertir total a soles si es necesario
-        const esSoles = orden.moneda.codigoSunat === 'PEN';
         // La factura final llega NETA de anticipos, pero la detracción se calcula sobre la operación COMPLETA:
         // total de la factura + total de los anticipos descontados
         const totalOperacion = total + (orden.anticiposAplicados || []).reduce((sum, a) => sum + Number(a.total || 0), 0);
-        const totalEnSoles = esSoles ? totalOperacion : totalOperacion * Number(orden.tipoCambio);
+        const totalEnSoles = aSoles(totalOperacion);
 
         const umbralMinimo = Number(
           tipoDetraccionMax.montoMinimo || orden.empresa.montoMinimoDetraccion || 700
@@ -921,8 +933,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
       if (empresaEsAgente && proveedorSujeto && total > umbralRetencion) {
         aplicaRetencion = true;
         porcentajeRetencion = Number(orden.empresa.porcentajeRetencion || 3);
-        const esSoles = orden.moneda.codigoSunat === 'PEN';
-        const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
+        const totalEnSoles = aSoles(total);
         montoRetencion = totalEnSoles * (porcentajeRetencion / 100);
       }
     }
@@ -939,8 +950,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
     if (aplicaImpuestos && proveedorEsAgente) {
       aplicaPercepcion = true;
       porcentajePercepcion = Number(orden.empresa.porcentajePercepcion || 1);
-      const esSoles = orden.moneda.codigoSunat === 'PEN';
-      const totalEnSoles = esSoles ? total : total * Number(orden.tipoCambio);
+      const totalEnSoles = aSoles(total);
       montoPercepcion = totalEnSoles * (porcentajePercepcion / 100);
     }
 
@@ -978,7 +988,7 @@ const calcularTotalesEImpuestos = async (ordenCompraId, tx = prisma, descuentoNo
 
     return resultado;
   } catch (err) {
-    if (err instanceof NotFoundError) throw err;
+    if (err instanceof NotFoundError || err instanceof ValidationError) throw err;
     throw new DatabaseError("Error al calcular totales e impuestos", err.message);
   }
 };
