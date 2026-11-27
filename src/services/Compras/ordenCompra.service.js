@@ -4622,7 +4622,7 @@ const generarBorradorAsiento = async (ordenCompraId) => {
     // CASO 3: FISCAL CON IGV
     // ========================================
     else {
-      const cuentaIGV = await prisma.planCuentasContable.findFirst({
+      let cuentaIGV = await prisma.planCuentasContable.findFirst({
         where: {
           codigoCuenta: { startsWith: "40111" },
           activo: true,
@@ -4636,6 +4636,21 @@ const generarBorradorAsiento = async (ordenCompraId) => {
         throw new ValidationError(
           "No se encontró la cuenta de IGV (40111). Configure el plan de cuentas antes de generar el asiento."
         );
+      }
+
+      // Compra sujeta a detracción: el crédito fiscal solo se puede usar cuando la detracción esté depositada (hasta el 5.º día
+      // útil del mes siguiente al de la factura, o en el mes del depósito dentro de los 12 meses). Mientras tanto el IGV queda en
+      // 167301 "IGV por acreditar en compras" y se reclasifica a 40111 al terminar de pagar toda la detracción.
+      if (ordenCompra.aplicaDetraccion && Number(ordenCompra.montoDetraccion) > 0 && !esNotaCredito && !esSaldoInicial) {
+        const cuentaIGVPorAcreditar = await prisma.planCuentasContable.findFirst({
+          where: { codigoCuenta: "167301", activo: true },
+        });
+        if (!cuentaIGVPorAcreditar) {
+          throw new ValidationError(
+            "No se encontró la cuenta 167301 (IGV por acreditar en compras) activa. Esta compra tiene detracción y su IGV debe registrarse ahí hasta depositar la detracción: créela o actívela en el plan de cuentas."
+          );
+        }
+        cuentaIGV = cuentaIGVPorAcreditar;
       }
 
       if (esSaldoInicial && cuentaDebe) {
