@@ -1450,6 +1450,7 @@ model DetallePreFactura {
   tipoDetraccionId            BigInt?   // Código Sunat (004 Recursos Hidrobiológicos)
   porcentajeDetraccion        Decimal?  @db.Decimal(5, 2)
   observaciones               String?     @db.Text                // Descripción complementaria de la línea: se imprime bajo la descripción armada y viaja en el XML
+  mostrarDescripcionArmada    Boolean     @default(true)                  // true = el comprobante muestra la descripción armada + la observación; false = solo la observación
 
   preFactura                  PreFactura @relation(fields: [preFacturaId], references: [id], onDelete: Cascade)
   producto                    Producto @relation(fields: [productoId], references: [id])
@@ -4164,7 +4165,9 @@ model Personal {
   bancoId                  BigInt?                                    // Banco donde se le paga
   numeroCuenta             String?                 @db.VarChar(30)    // Número de cuenta
   cci                      String?                 @db.VarChar(25)    // Código de cuenta interbancario
-
+  tipoComisionPensionId    BigInt?
+  tipoComisionPension      TipoComisionPension?    @relation(fields: [tipoComisionPensionId], references: [id])
+  
   documentaciones           DocumentacionPersonal[]
   cargo                     CargosPersonal?    @relation(fields: [cargoId], references: [id])
   ubigeo                    Ubigeo?            @relation(fields: [ubigeoId], references: [id])
@@ -4396,9 +4399,36 @@ model TarifaEntidadPension {
 
   // Relaciones
   entidadPension               EntidadPension @relation(fields: [entidadPensionId], references: [id])
+  comisiones                   TarifaEntidadPensionComision[]
 
   @@unique([entidadPensionId, vigenteDesde])
 }
+
+model TipoComisionPension {
+  id          BigInt   @id @default(autoincrement())
+  codigo      String   @unique @db.VarChar(30)   // FLUJO | MIXTA | SIN_COMISION | ...
+  nombre      String   @db.VarChar(100)
+  sinComision Boolean  @default(false)           // true = no se descuenta comisión (porcentaje 0)
+  orden       Int      @default(0)
+  activo      Boolean  @default(true)
+
+  personal    Personal[]
+  tarifas     TarifaEntidadPensionComision[]
+}
+
+model TarifaEntidadPensionComision {
+  id                     BigInt  @id @default(autoincrement())
+  tarifaEntidadPensionId BigInt
+  tipoComisionPensionId  BigInt
+  porcentaje             Decimal @default(0) @db.Decimal(7, 4)
+
+  tarifaEntidadPension   TarifaEntidadPension @relation(fields: [tarifaEntidadPensionId], references: [id], onDelete: Cascade)
+  tipoComisionPension    TipoComisionPension  @relation(fields: [tipoComisionPensionId], references: [id])
+
+  @@unique([tarifaEntidadPensionId, tipoComisionPensionId])
+  @@index([tipoComisionPensionId])
+}
+
 
 // ════════════════════════════════════════════════════════════
 // RRHH — CONTRATO DE PERSONAL
@@ -4419,6 +4449,7 @@ model ContratoPersonal {
   pagaPorTemporada          Boolean   @default(false)     // true = se paga por temporada o faena
   liquidaBeneficiosEnBoleta Boolean   @default(false)     // true = gratificación, vacaciones y CTS en cada boleta (pescadores); false = se provisionan
   activo                    Boolean   @default(true)
+  movilidadFija             Decimal?  @db.Decimal(18, 2)  // Monto fijo mensual de movilidad (no remunerativo); vacío = sin movilidad
 
   // Auditoría
   creadoEn                  DateTime  @default(now())
@@ -5648,6 +5679,7 @@ model TipoContrato {
   cesado    Boolean    @default(false)
   createdAt DateTime   @default(now())
   updatedAt DateTime
+  esGerencial Boolean    @default(false)   // true = personal sin contrato formal (gerencial); lo usa el filtro de la lista de Personal
 
   personal Personal[]
 }
@@ -7176,6 +7208,7 @@ model DetalleComprobante {
   
   anticipo                  Boolean?                @default(false)
   observaciones             String?                 @db.Text            // Copia congelada de la observación de la línea de venta al emitir (va dentro del XML)
+  mostrarDescripcionArmada    Boolean     @default(true)                  // Copia congelada de la elección de la línea de venta al emitir (define qué descripción va en el XML y el PDF)
 
   comprobanteElectronico    ComprobanteElectronico  @relation(fields: [comprobanteElectronicoId], references: [id], onDelete: Cascade)
   producto                  Producto?               @relation(fields: [productoId], references: [id])
