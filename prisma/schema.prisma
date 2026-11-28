@@ -6212,7 +6212,9 @@ model UnidadMedida {
   id               BigInt     @id @default(autoincrement())
   esMedidaMetrica  Boolean    @default(false)
   factorConversion Decimal?
-
+  esParaPresentacion          Boolean    @default(true)   // true = se puede elegir como Presentación (Producto.unidadMedidaId)
+  esParaUnidadMedidaComercial Boolean    @default(true)   // true = se puede elegir como Unidad Comercial (Producto.unidadMedidaComercialId)
+  
   productos              Producto[]      @relation("UnidadMedidaToProducto")
   productosComerciales   Producto[]      @relation("UnidadMedidaComercialToProducto")  // ⭐ NUEVO: Productos que usan esta unidad para ventas
   // ========================================
