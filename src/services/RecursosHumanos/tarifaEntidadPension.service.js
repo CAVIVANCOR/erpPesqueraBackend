@@ -66,11 +66,42 @@ function validarValores(campos) {
   }
 }
 
+/**
+ * Mantiene el catálogo de porcentajes por tipo de comisión (TarifaEntidadPensionComision) en sincronía con la tarifa:
+ * FLUJO y MIXTA salen de sus columnas de siempre (así nunca queda una fila desactualizada que la planilla lea antes que la columna) y los
+ * demás tipos abiertos del catálogo se guardan con el porcentaje que envía la pantalla. "Sin comisión" no lleva porcentaje.
+ */
+const sincronizarComisiones = async (tx, tarifa, comisionesExtra) => {
+  const tipos = await tx.tipoComisionPension.findMany();
+  const porcentajes = new Map();
+  for (const tipo of tipos) {
+    if (tipo.codigo === 'FLUJO') porcentajes.set(Number(tipo.id), Number(tarifa.porcentajeComisionFlujo));
+    else if (tipo.codigo === 'MIXTA') porcentajes.set(Number(tipo.id), Number(tarifa.porcentajeComisionMixta));
+  }
+  for (const extra of comisionesExtra || []) {
+    const tipo = tipos.find((t) => Number(t.id) === Number(extra.tipoComisionPensionId));
+    if (!tipo) throw new ValidationError('El tipo de comisión indicado en la tarifa no existe.');
+    if (tipo.codigo === 'FLUJO' || tipo.codigo === 'MIXTA' || tipo.sinComision) continue;
+    const porcentaje = Number(extra.porcentaje);
+    if (Number.isNaN(porcentaje) || porcentaje < 0 || porcentaje > 100) {
+      throw new ValidationError(`Ingrese el porcentaje de "${tipo.nombre}" entre 0 y 100.`);
+    }
+    porcentajes.set(Number(tipo.id), porcentaje);
+  }
+  for (const [tipoComisionPensionId, porcentaje] of porcentajes) {
+    await tx.tarifaEntidadPensionComision.upsert({
+      where: { tarifaEntidadPensionId_tipoComisionPensionId: { tarifaEntidadPensionId: tarifa.id, tipoComisionPensionId } },
+      update: { porcentaje },
+      create: { tarifaEntidadPensionId: tarifa.id, tipoComisionPensionId, porcentaje },
+    });
+  }
+};
+
 const listar = async (filtros = {}) => {
   try {
     return await prisma.tarifaEntidadPension.findMany({
       where: filtros.entidadPensionId ? { entidadPensionId: Number(filtros.entidadPensionId) } : {},
-      include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } } },
+      include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } }, comisiones: true },
       orderBy: [{ entidadPensionId: 'asc' }, { vigenteDesde: 'desc' }],
     });
   } catch (err) {
@@ -88,7 +119,7 @@ const obtenerVigentes = async (fecha) => {
         OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: referencia } }],
         entidadPension: { activo: true },
       },
-      include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } } },
+      include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } }, comisiones: true },
       orderBy: [{ entidadPensionId: 'asc' }, { vigenteDesde: 'desc' }],
     });
   } catch (err) {
@@ -100,7 +131,7 @@ const obtenerPorId = async (id) => {
   try {
     const tarifa = await prisma.tarifaEntidadPension.findUnique({
       where: { id },
-      include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } } },
+      include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } }, comisiones: true },
     });
     if (!tarifa) throw new NotFoundError('Tarifa de pensión no encontrada');
     return tarifa;
@@ -143,10 +174,9 @@ const crear = async (data) => {
           data: { vigenteHasta: new Date(campos.vigenteDesde.getTime() - MS_DIA), actualizadoPor: data.creadoPor || null },
         });
       }
-      return await tx.tarifaEntidadPension.create({
-        data: { ...campos, creadoPor: data.creadoPor || null },
-        include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } } },
-      });
+      const nueva = await tx.tarifaEntidadPension.create({ data: { ...campos, creadoPor: data.creadoPor || null } });
+      await sincronizarComisiones(tx, nueva, data.comisiones);
+      return await tx.tarifaEntidadPension.findUnique({ where: { id: nueva.id }, include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } }, comisiones: true } });
     });
   } catch (err) {
     manejarError(err, 'crear la tarifa de pensión');
@@ -168,10 +198,13 @@ const actualizar = async (id, data) => {
       });
       if (duplicada) throw new ConflictError('La entidad ya tiene una tarifa con vigencia desde esa fecha.');
     }
-    return await prisma.tarifaEntidadPension.update({
-      where: { id },
-      data: { ...campos, actualizadoPor: data.actualizadoPor || null },
-      include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } } },
+    return await prisma.$transaction(async (tx) => {
+      const actualizada = await tx.tarifaEntidadPension.update({
+        where: { id },
+        data: { ...campos, actualizadoPor: data.actualizadoPor || null },
+      });
+      await sincronizarComisiones(tx, actualizada, data.comisiones);
+      return await tx.tarifaEntidadPension.findUnique({ where: { id }, include: { entidadPension: { select: { id: true, descripcion: true, esOnp: true } }, comisiones: true } });
     });
   } catch (err) {
     manejarError(err, 'actualizar la tarifa de pensión');

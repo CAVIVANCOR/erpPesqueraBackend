@@ -1448,6 +1448,165 @@ async function generarAsientosContablesPagoCxC(
 }
 
 // ════════════════════════════════════════════════════════════
+// RECLASIFICACIÓN DEL IGV POR ACREDITAR (167301) A CRÉDITO FISCAL (40111)
+// ════════════════════════════════════════════════════════════
+// Una compra con detracción registra su IGV en 167301 "IGV por acreditar en compras" porque el crédito fiscal solo puede usarse cuando
+// la detracción está depositada. Al terminar de depositarla (saldo de la detracción en cero) este asiento mueve el IGV a 40111:
+//   - Depósito hasta el 5.º día útil (lunes a viernes) del mes siguiente al de la factura: el crédito es del mes de la factura, así que
+//     el asiento va al último día de ese mes (si ese período sigue abierto; si ya está cerrado se usa la fecha del depósito y se avisa).
+//   - Depósito posterior: el crédito es del mes del depósito (asiento con la fecha del depósito), hasta 12 meses después de la factura.
+//     Pasado ese plazo no se reclasifica y se avisa para que el usuario y su contador decidan (por ejemplo, llevar el IGV a gasto).
+// El asiento queda ligado al movimiento de caja de la detracción: la reversión por operación lo elimina junto con el pago.
+// Devuelve { asiento, avisos }: los avisos se muestran al usuario; nunca debe tumbar el pago.
+const sumarDiasUtilesLaV = (fechaInicio, diasUtiles) => {
+  const f = new Date(fechaInicio);
+  let contados = 0;
+  while (contados < diasUtiles) {
+    f.setDate(f.getDate() + 1);
+    if (f.getDay() !== 0 && f.getDay() !== 6) contados++;
+  }
+  return f;
+};
+
+async function reclasificarIgvPorDetraccion({ tx, cuentaPorPagar, detraccion, movimientoDetraccion, empresaId, creadoPor }) {
+  const avisos = [];
+  if (!cuentaPorPagar?.ordenCompraId || !detraccion || !movimientoDetraccion || Number(detraccion.saldoPendiente) > 0) {
+    return { asiento: null, avisos };
+  }
+  if (cuentaPorPagar.esGerencial) return { asiento: null, avisos };
+
+  const [submoduloOC, submoduloCaja, cuentaPorAcreditar, cuentaIGV, estadoPendiente] = await Promise.all([
+    tx.submoduloSistema.findFirst({ where: { nombreModeloOrigen: 'OrdenCompra', activo: true } }),
+    tx.submoduloSistema.findFirst({ where: { nombreModeloOrigen: 'MovimientoCaja', activo: true } }),
+    tx.planCuentasContable.findFirst({ where: { codigoCuenta: '167301' } }),
+    tx.planCuentasContable.findFirst({ where: { codigoCuenta: { startsWith: '40111' }, activo: true }, orderBy: { codigoCuenta: 'desc' } }),
+    tx.estadoMultiFuncion.findFirst({ where: { id: Number(ESTADO_ASIENTO_CONTABLE.PENDIENTE) } }),
+  ]);
+  if (!submoduloOC || !submoduloCaja || !cuentaPorAcreditar || !cuentaIGV || !estadoPendiente) return { asiento: null, avisos };
+
+  const orden = await tx.ordenCompra.findUnique({
+    where: { id: cuentaPorPagar.ordenCompraId },
+    select: { id: true, numeroDocumento: true, fechaDocumento: true, periodoContableId: true },
+  });
+  if (!orden) return { asiento: null, avisos };
+
+  // IGV que la compra dejó en 167301 y lo que ya se reclasificó (solo se reclasifica el saldo: así el proceso no duplica)
+  const lineasCompra = await tx.detalleAsientoContable.findMany({
+    where: { planCuentaId: cuentaPorAcreditar.id, asientoContable: { submoduloOrigenId: submoduloOC.id, procesoOrigenId: orden.id } },
+    select: { debe: true, haber: true },
+  });
+  const igvEnCuentaPorAcreditar = lineasCompra.reduce((s, l) => s + Number(l.debe || 0) - Number(l.haber || 0), 0);
+  if (igvEnCuentaPorAcreditar <= 0) return { asiento: null, avisos };
+  const lineasYaReclasificadas = await tx.detalleAsientoContable.findMany({
+    where: {
+      planCuentaId: cuentaPorAcreditar.id,
+      numeroDocumentoOrigen: orden.numeroDocumento,
+      asientoContable: { submoduloOrigenId: submoduloCaja.id },
+    },
+    select: { debe: true, haber: true },
+  });
+  const yaReclasificado = lineasYaReclasificadas.reduce((s, l) => s + Number(l.haber || 0) - Number(l.debe || 0), 0);
+  const monto = Math.round((igvEnCuentaPorAcreditar - yaReclasificado) * 100) / 100;
+  if (monto <= 0) return { asiento: null, avisos };
+
+  const periodoFactura = orden.periodoContableId
+    ? await tx.periodoContable.findUnique({ where: { id: orden.periodoContableId }, include: { estado: true } })
+    : null;
+  const fechaFactura = new Date(orden.fechaDocumento);
+  const finMesFactura = periodoFactura ? new Date(periodoFactura.fechaFin) : new Date(fechaFactura.getFullYear(), fechaFactura.getMonth() + 1, 0);
+  const fechaDeposito = new Date(movimientoDetraccion.fechaOperacionMovCaja);
+  const limite12Meses = new Date(fechaFactura);
+  limite12Meses.setMonth(limite12Meses.getMonth() + 12);
+  const etiquetaDoc = `${orden.numeroDocumento}`;
+
+  if (fechaDeposito > limite12Meses) {
+    avisos.push(
+      `El IGV de ${etiquetaDoc} (S/ ${monto.toFixed(2)}) NO se reclasificó a crédito fiscal: la detracción se depositó después de 12 meses de la factura y el crédito se perdió. Consulte con su contador si ese IGV debe llevarse a gasto.`,
+    );
+    return { asiento: null, avisos };
+  }
+
+  const periodoAbierto = (p) => Boolean(p) && String(p.estado?.descripcion || '').toUpperCase().includes('ABIERT');
+  const buscarPeriodo = (fecha) =>
+    tx.periodoContable.findFirst({
+      where: { empresaId: Number(empresaId), anio: fecha.getFullYear(), mes: fecha.getMonth() + 1 },
+      include: { estado: true },
+    });
+
+  const plazoDeposito = sumarDiasUtilesLaV(finMesFactura, 5);
+  let fechaAsiento;
+  let periodoAsiento;
+  if (fechaDeposito <= plazoDeposito) {
+    // El crédito es del mes de la factura: el asiento va al cierre de ese mes si el período sigue abierto
+    periodoAsiento = periodoFactura || (await buscarPeriodo(finMesFactura));
+    fechaAsiento = finMesFactura;
+    if (!periodoAbierto(periodoAsiento)) {
+      avisos.push(
+        `La detracción de ${etiquetaDoc} se depositó dentro del plazo, pero el período de la factura ya está cerrado: el IGV (S/ ${monto.toFixed(2)}) se reclasificó con la fecha del depósito. El IGV declarado y el saldo de 40111 de ese mes pueden diferir; revíselo con su contador.`,
+      );
+      periodoAsiento = await buscarPeriodo(fechaDeposito);
+      fechaAsiento = fechaDeposito;
+    }
+  } else {
+    periodoAsiento = await buscarPeriodo(fechaDeposito);
+    fechaAsiento = fechaDeposito;
+  }
+  if (!periodoAbierto(periodoAsiento)) {
+    avisos.push(
+      `El IGV de ${etiquetaDoc} (S/ ${monto.toFixed(2)}) NO se reclasificó: no hay un período contable abierto para la fecha ${fechaAsiento.toISOString().slice(0, 10)}. Abra el período y regenere la reclasificación.`,
+    );
+    return { asiento: null, avisos };
+  }
+
+  const ultimo = await tx.asientoContable.findFirst({
+    where: { empresaId: Number(empresaId), periodoContableId: Number(periodoAsiento.id) },
+    orderBy: { correlativo: 'desc' },
+  });
+  const correlativo = ultimo ? ultimo.correlativo + 1 : 1;
+  const glosa = `Reclasificación IGV por acreditar a crédito fiscal - detracción depositada - ${etiquetaDoc}`;
+  const linea = (numeroLinea, planCuentaId, debe, haber) => ({
+    numeroLinea,
+    planCuentaId,
+    glosa,
+    debe,
+    haber,
+    monedaId: 1,
+    entidadComercialId: cuentaPorPagar.proveedorId,
+    numeroDocumentoOrigen: orden.numeroDocumento,
+    fechaDocumentoOrigen: orden.fechaDocumento,
+    submoduloOrigenLineaId: submoduloCaja.id,
+    creadoPor,
+  });
+
+  const asiento = await tx.asientoContable.create({
+    data: {
+      empresaId: Number(empresaId),
+      periodoContableId: Number(periodoAsiento.id),
+      numeroAsiento: `ASI-${fechaAsiento.getFullYear()}-${String(correlativo).padStart(5, '0')}`,
+      correlativo,
+      fechaAsiento,
+      glosa,
+      tipoLibro: 'FISCAL',
+      tipoLibroId: TIPO_LIBRO.CAJA_BANCOS,
+      esGerencial: false,
+      esSaldoInicial: false,
+      origenAsiento: 'AUTOMATICO',
+      submoduloOrigenId: submoduloCaja.id,
+      procesoOrigenId: movimientoDetraccion.id,
+      estadoId: estadoPendiente.id,
+      totalDebe: monto,
+      totalHaber: monto,
+      diferencia: 0,
+      estaCuadrado: true,
+      monedaId: 1,
+      creadoPor,
+      detalles: { create: [linea(1, cuentaIGV.id, monto, 0), linea(2, cuentaPorAcreditar.id, 0, monto)] },
+    },
+  });
+  return { asiento, avisos };
+}
+
+// ════════════════════════════════════════════════════════════
 // FUNCIÓN HELPER: ACTUALIZAR SALDO DE CUENTA CORRIENTE
 // ════════════════════════════════════════════════════════════
 /**
@@ -2239,6 +2398,23 @@ const procesarPagoEspecializado = async (data) => {
       // PASO 11: ACTUALIZAR SALDO DE CUENTA POR COBRAR
       // ════════════════════════════════════════════════════════════
 
+      // Reclasificación del IGV por acreditar (167301 -> 40111) cuando la detracción queda totalmente depositada.
+      // No tumba el pago: si algo impide reclasificar, el usuario recibe un aviso específico.
+      let avisosIgvDetraccion = [];
+      try {
+        const reclasificacion = await reclasificarIgvPorDetraccion({
+          tx,
+          cuentaPorPagar,
+          detraccion: detraccionActualizada,
+          movimientoDetraccion: movimientoDetraccionEgreso || movimientoAutodetraccionIngreso,
+          empresaId: data.empresaId,
+          creadoPor: data.creadoPor,
+        });
+        avisosIgvDetraccion = reclasificacion.avisos;
+      } catch (errorReclasificacion) {
+        avisosIgvDetraccion = [`No se pudo reclasificar el IGV por acreditar a crédito fiscal: ${errorReclasificacion.message}`];
+      }
+
       const pagosRealizados = await tx.pagoCuentaPorPagar.findMany({
         where: { cuentaPorPagarId: Number(data.cuentaPorPagarId) }
       });
@@ -2350,6 +2526,7 @@ const procesarPagoEspecializado = async (data) => {
           percepcion: percepcion
         },
         asientosContables: asientosGenerados || [],
+        avisosIgvDetraccion,
         saldosCuentaCorriente: saldosCuentaCorriente,  // ← AGREGADO
         resumen: {
           // ✅ CALCULADO DINÁMICAMENTE DESDE MOVIMIENTOS CREADOS
