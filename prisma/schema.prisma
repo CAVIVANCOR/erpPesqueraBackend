@@ -4158,7 +4158,6 @@ model Personal {
   // ========================================
   entidadPensionId         BigInt?                                    // AFP u ONP del trabajador
   cuspp                    String?                 @db.VarChar(20)    // Código único de afiliado al sistema privado de pensiones
-  comisionMixta            Boolean                 @default(false)    // true = comisión mixta; false = comisión sobre flujo
   tieneAsignacionFamiliar  Boolean                 @default(false)    // Si le corresponde asignación familiar (hijos)
   aplicaSctr               Boolean                 @default(false)    // Seguro complementario de trabajo de riesgo
   acuerdoCompensacionHoras Boolean                 @default(false)    // Acuerdo para compensar horas con descanso
