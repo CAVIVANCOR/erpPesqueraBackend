@@ -2311,7 +2311,7 @@ const redondear2 = (valor) => Math.round(valor * 100) / 100;
 const construirLineasComprobante = async (tx, preFactura) => {
   const detallesPreFactura = await tx.detallePreFactura.findMany({
     where: { preFacturaId: preFactura.id },
-    include: { producto: { include: { unidadMedida: true } } },
+    include: { producto: { include: { unidadMedida: true, unidadMedidaComercial: true } } },
     orderBy: { id: "asc" },
   });
   if (detallesPreFactura.length === 0) {
@@ -2400,7 +2400,9 @@ const construirLineasComprobante = async (tx, preFactura) => {
       mostrarDescripcionArmada: detalle.mostrarDescripcionArmada !== false,
       unidadMedidaId: detalle.producto?.unidadMedidaId,
       codigoUnidadSUNAT: UNIDAD_SUNAT_POR_SIMBOLO[String(unidad?.simbolo || "").toUpperCase()] || "NIU",
-      nombreUnidad: unidad?.nombre || null,
+      // Lo que se imprime en la columna Unidad: el símbolo de la unidad comercial del producto (la que usa la venta); si no tiene, la del almacén.
+      // El código de unidad que viaja al XML sigue siendo el de SUNAT (codigoUnidadSUNAT), no el símbolo.
+      nombreUnidad: detalle.producto?.unidadMedidaComercial?.simbolo || unidad?.simbolo || unidad?.nombre || null,
       cantidad,
       valorUnitario,
       precioUnitario: valorUnitario * (1 + porcentajeIgv / 100),
@@ -2668,9 +2670,9 @@ const generarComprobanteElectronico = async (preFacturaId) => {
           direccionCliente:
             preFactura.dirFiscal?.direccionArmada ||
             preFactura.dirFiscal?.direccion ||
-            preFactura.cliente.direccion ||
             preFactura.cliente.direcciones?.[0]?.direccionArmada ||
             preFactura.cliente.direcciones?.[0]?.direccion ||
+            preFactura.cliente.direccion ||
             "Sin dirección",
           emailCliente: preFactura.cliente.email,
           // Moneda
