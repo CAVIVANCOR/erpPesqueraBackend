@@ -76,9 +76,10 @@ const obtenerOFallar = async (id, include = undefined) => {
 
 /** Guarda las boletas calculadas y actualiza los totales de la planilla. Se usa dentro de una transacción. */
 async function guardarBoletas(tx, planillaId, boletas, usuarioId) {
-  for (const { conceptos, ...boleta } of boletas) {
+  for (const { conceptos, suspensiones = [], ...boleta } of boletas) {
     await tx.planillaTrabajador.create({
-      data: { ...boleta, planillaId, creadoPor: usuarioId, conceptos: { create: conceptos } },
+      // Las suspensiones que entraron en la boleta quedan como foto (no cambian si luego se edita la suspensión)
+      data: { ...boleta, planillaId, creadoPor: usuarioId, conceptos: { create: conceptos }, suspensiones: { create: suspensiones } },
     });
   }
   await actualizarTotales(tx, planillaId);

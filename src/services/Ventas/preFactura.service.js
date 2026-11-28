@@ -248,7 +248,8 @@ const INCLUDE_PREFACTURA_LISTA = {
   tipoDocumentoFinal: { select: { id: true, codigo: true, codigoSunat: true, descripcion: true } },
   tipoOperacionSunat: { select: { id: true, codigo: true, descripcion: true } },
   tipoAfectacionIGV: { select: { id: true, codigo: true, nombre: true } },
-  detalles: { select: { id: true, producto: { select: { id: true, descripcionArmada: true } } } },
+  // tipoAfectacionIGVId de la línea y del producto: la lista de ventas los compara para marcar los documentos cuyo IGV se calculó con la afectación del documento
+  detalles: { select: { id: true, tipoAfectacionIGVId: true, producto: { select: { id: true, descripcionArmada: true, tipoAfectacionIGVId: true } } } },
 };
 
 // Agrega montos en PEN para reportes SUNAT.

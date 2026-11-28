@@ -149,6 +149,12 @@ const crear = async (data) => {
 
     let datosFinales = { ...data };
 
+    // La línea hereda el tipo de afectación al IGV del producto cuando no se indica uno: sin él, el IGV se calculaba con la afectación
+    // del documento (gravado) aunque el producto sea exonerado o inafecto
+    if (!datosFinales.tipoAfectacionIGVId && producto.tipoAfectacionIGVId) {
+      datosFinales.tipoAfectacionIGVId = producto.tipoAfectacionIGVId;
+    }
+
     // Si se proporcionaron datos comerciales, calcular datos de almacén
     if (tieneCantidadVenta && data.precioUnitarioVenta !== undefined && data.precioUnitarioVenta !== null) {
       const datosAlmacen = calcularDatosAlmacen(
@@ -222,6 +228,11 @@ const actualizar = async (id, data) => {
     }
 
     let datosFinales = { ...data };
+
+    // Si la línea no tiene tipo de afectación al IGV (líneas anteriores), toma el del producto al guardarla
+    if (!datosFinales.tipoAfectacionIGVId && !existente.tipoAfectacionIGVId && producto.tipoAfectacionIGVId) {
+      datosFinales.tipoAfectacionIGVId = producto.tipoAfectacionIGVId;
+    }
 
     // Si se proporcionaron datos comerciales, calcular datos de almacén
     const tieneCantidadVenta = data.cantidadVenta !== undefined && data.cantidadVenta !== null;

@@ -4,6 +4,7 @@ import { evaluarFormula } from './evaluadorFormula.js';
 import { RUTINAS_PLANILLA } from './rutinasPlanilla.js';
 import parametroLegalService from '../parametroLegal.service.js';
 import tarifaEntidadPensionService from '../tarifaEntidadPension.service.js';
+import vacacionesService from '../vacaciones.service.js';
 
 /**
  * Cálculo de una planilla: toma los contratos activos de la empresa para el periodo, aplica los conceptos
@@ -14,6 +15,10 @@ import tarifaEntidadPensionService from '../tarifaEntidadPension.service.js';
 const MS_DIA = 24 * 60 * 60 * 1000;
 // Mes comercial: si el parámetro DIAS_BASE_MES no está cargado se usa 30
 const DIAS_BASE_MES_POR_DEFECTO = 30;
+// Jornada ordinaria si los parámetros HORAS_JORNADA_MES, HORAS_DIA_HABIL y HORAS_SABADO no están cargados
+const HORAS_JORNADA_MES_POR_DEFECTO = 180;
+const HORAS_DIA_HABIL_POR_DEFECTO = 8;
+const HORAS_SABADO_POR_DEFECTO = 4;
 
 const redondear = (valor) => Math.round((valor + Number.EPSILON) * 100) / 100;
 const indiceDia = (fecha) => Math.floor(new Date(fecha).getTime() / MS_DIA);
@@ -33,6 +38,51 @@ function calcularDias(planilla, contrato, personal) {
   const periodicidad = planilla.periodicidadDias;
   if (!periodicidad) return efectivos;
   return periodoCompleto ? periodicidad : Math.min(efectivos, periodicidad);
+}
+
+/** Planilla de un mes calendario completo (del día 1 al último día del mes) con periodicidad mensual */
+function esMesCalendarioCompleto(planilla) {
+  if (planilla.periodicidadDias !== 30) return false;
+  const inicio = new Date(planilla.fechaInicio);
+  const fin = new Date(planilla.fechaFin);
+  const ultimoDia = new Date(Date.UTC(inicio.getUTCFullYear(), inicio.getUTCMonth() + 1, 0));
+  return inicio.getUTCDate() === 1 && indiceDia(fin) === indiceDia(ultimoDia);
+}
+
+const diasCalendarioDelPeriodo = (planilla) => indiceDia(planilla.fechaFin) - indiceDia(planilla.fechaInicio) + 1;
+
+/** Rango de días (índices) en que el contrato está vigente dentro del periodo, o null si no cubre ninguno */
+function rangoEfectivo(planilla, contrato, personal) {
+  const inicio = Math.max(indiceDia(planilla.fechaInicio), indiceDia(contrato.fechaInicio));
+  const limites = [indiceDia(planilla.fechaFin)];
+  if (contrato.fechaFin) limites.push(indiceDia(contrato.fechaFin));
+  if (personal.cesado && personal.fechaCese) limites.push(indiceDia(personal.fechaCese));
+  const fin = Math.min(...limites);
+  return fin >= inicio ? { inicio, fin } : null;
+}
+
+/**
+ * Horas de jornada ordinaria del periodo: las del mes menos las que se dejan de trabajar. Cada día no laborado descuenta las horas de ese
+ * día de la semana: lunes a viernes las de un día hábil, sábado las del sábado y domingo cero. Los días del periodo fuera del contrato
+ * (ingreso o cese a mitad de mes) también se descuentan.
+ */
+function calcularHorasJornada(planilla, rango, suspensiones, horasMes, horasHabil, horasSabado) {
+  const noTrabajados = new Set();
+  const inicioPeriodo = indiceDia(planilla.fechaInicio);
+  const finPeriodo = indiceDia(planilla.fechaFin);
+  for (let d = inicioPeriodo; d <= finPeriodo; d++) {
+    if (!rango || d < rango.inicio || d > rango.fin) noTrabajados.add(d);
+  }
+  for (const susp of suspensiones) {
+    for (let d = indiceDia(susp.fechaInicio); d <= indiceDia(susp.fechaFin); d++) noTrabajados.add(d);
+  }
+  let descuento = 0;
+  for (const d of noTrabajados) {
+    const diaSemana = new Date(d * MS_DIA).getUTCDay(); // 0 domingo ... 6 sábado
+    if (diaSemana === 0) continue;
+    descuento += diaSemana === 6 ? horasSabado : horasHabil;
+  }
+  return Math.max(0, horasMes - descuento);
 }
 
 /**
@@ -159,7 +209,10 @@ export async function calcularPlanilla(tx, planilla) {
   const entidades = await tx.entidadPension.findMany({ select: { id: true, descripcion: true, esOnp: true } });
   const entidadPorId = new Map(entidades.map((e) => [Number(e.id), e]));
   // Tipos de comisión (catálogo abierto) y su porcentaje por tarifa: reemplazan al antiguo interruptor comisionMixta (eliminado)
-  const tiposComision = new Map((await tx.tipoComisionPension.findMany()).map((t) => [Number(t.id), t]));
+  // Solo se leen id, código e indicador: el nombre no interviene en el cálculo y así un nombre mal codificado no tumba la planilla
+  const tiposComision = new Map(
+    (await tx.tipoComisionPension.findMany({ select: { id: true, codigo: true, sinComision: true } })).map((t) => [Number(t.id), t]),
+  );
   const comisionPorTarifaYTipo = new Map(
     (await tx.tarifaEntidadPensionComision.findMany({ where: { tarifaEntidadPensionId: { in: tarifas.map((t) => t.id) } } })).map((c) => [
       `${c.tarifaEntidadPensionId}-${c.tipoComisionPensionId}`,
@@ -182,7 +235,7 @@ export async function calcularPlanilla(tx, planilla) {
     if (tipo.codigo === 'FLUJO') return Number(tarifa.porcentajeComisionFlujo);
     if (tipo.codigo === 'MIXTA') return Number(tarifa.porcentajeComisionMixta);
     throw new ValidationError(
-      `${nombrePersonal(personal)} tiene el tipo de comisión "${tipo.nombre}", pero la tarifa vigente de ${entidad?.descripcion || 'su entidad de pensión'} no define el porcentaje para ese tipo. Regístrelo en las tarifas de la entidad de pensión.`,
+      `${nombrePersonal(personal)} tiene el tipo de comisión "${tipo.codigo}", pero la tarifa vigente de ${entidad?.descripcion || 'su entidad de pensión'} no define el porcentaje para ese tipo. Regístrelo en las tarifas de la entidad de pensión.`,
     );
   };
 
@@ -219,16 +272,50 @@ export async function calcularPlanilla(tx, planilla) {
     }
   }
 
+  // Suspensiones de labores (vacaciones, faltas, descansos...) que caen dentro del periodo, por trabajador
+  const suspensionesPorPersonal = await vacacionesService.suspensionesEnPeriodo(
+    tx,
+    [...new Set(contratos.map((c) => Number(c.personalId)))],
+    fechaInicio,
+    fechaFin,
+  );
+  const horasMes = variablesLegales.HORAS_JORNADA_MES || HORAS_JORNADA_MES_POR_DEFECTO;
+  const horasHabil = variablesLegales.HORAS_DIA_HABIL || HORAS_DIA_HABIL_POR_DEFECTO;
+  const horasSabado = variablesLegales.HORAS_SABADO ?? HORAS_SABADO_POR_DEFECTO;
+
   const boletas = [];
   for (const contrato of contratos) {
     const personal = contrato.personal;
-    const dias = calcularDias(planilla, contrato, personal);
-    if (dias <= 0) continue;
+    // Mes calendario completo: se prorratea sobre los días del mes (28 a 31). En los demás periodos se usa el mes comercial (DIAS_BASE_MES)
+    const mesCalendario = !contrato.esLocacionServicios && esMesCalendarioCompleto(planilla);
+    const baseDias = mesCalendario ? diasCalendarioDelPeriodo(planilla) : diasBaseMes;
+    const rango = rangoEfectivo(planilla, contrato, personal);
+    const diasCubiertos = mesCalendario ? (rango ? rango.fin - rango.inicio + 1 : 0) : calcularDias(planilla, contrato, personal);
+    if (diasCubiertos <= 0) continue;
 
-    const remuneracionTotal = contrato.esJornal
-      ? Number(contrato.remuneracionBasica) * dias
-      : (Number(contrato.remuneracionBasica) / diasBaseMes) * dias;
-    const basico = redondear(remuneracionDelDestino(contrato, remuneracionTotal));
+    // Suspensiones del trabajador en el periodo: vacaciones se pagan aparte (remuneración vacacional), los subsidios los paga EsSalud y
+    // las faltas o licencias sin goce no se pagan. Las licencias con goce se pagan dentro del básico.
+    const suspensiones = contrato.esLocacionServicios ? [] : suspensionesPorPersonal.get(Number(personal.id)) || [];
+    const sumaDias = (filtro) => suspensiones.filter(filtro).reduce((total, s) => total + s.dias, 0);
+    const diasVacaciones = sumaDias((s) => s.tipo.esDescansoVacacional);
+    const diasSubsidiados = sumaDias((s) => s.tipo.esSubsidio);
+    const diasSinGoce = sumaDias((s) => !s.tipo.esDescansoVacacional && !s.tipo.esSubsidio && !s.tipo.conGoceRemuneracion);
+    const diasNoLaborados = sumaDias((s) => !s.tipo.esSubsidio);
+    const diasSinMovilidad = sumaDias((s) => !s.tipo.pagaMovilidad);
+    const dias = Math.max(0, diasCubiertos - diasSubsidiados - diasSinGoce); // días con remuneración (laborados, vacaciones y licencias con goce)
+    if (dias <= 0) continue;
+    const diasBasico = Math.max(0, dias - diasVacaciones);
+
+    const tarifaDia = contrato.esJornal ? Number(contrato.remuneracionBasica) : Number(contrato.remuneracionBasica) / baseDias;
+    const totalBasico = tarifaDia * diasBasico;
+    const totalVacacional = tarifaDia * diasVacaciones;
+    const totalRemuneracion = remuneracionDelDestino(contrato, totalBasico + totalVacacional);
+    const proporcionBasico = totalBasico + totalVacacional > 0 ? totalBasico / (totalBasico + totalVacacional) : 1;
+    const basico = redondear(totalRemuneracion * proporcionBasico);
+    const remuneracionVacacional = diasVacaciones > 0 ? redondear(redondear(totalRemuneracion) - basico) : 0;
+    // La movilidad se paga completa durante las vacaciones y se descuenta solo por los días de los tipos que no la pagan (faltas...)
+    const movilidadDevengada = redondear((Number(contrato.movilidadFija || 0) / baseDias) * Math.max(0, diasCubiertos - diasSinMovilidad));
+    const horasJornada = mesCalendario ? calcularHorasJornada(planilla, rango, suspensiones, horasMes, horasHabil, horasSabado) : null;
 
     const esPescador = CARGOS_PESCADOR_IDS.includes(Number(personal.cargoId));
     // Gratificación: solo la planilla que contiene el 15 de julio o el 15 de diciembre la paga; las locaciones no la tienen
@@ -239,11 +326,19 @@ export async function calcularPlanilla(tx, planilla) {
       ...Object.fromEntries(conceptos.map((c) => [`MONTO_${String(c.codigo).toUpperCase()}`, 0])),
       ...variablesLegales,
       BASICO: basico,
+      REMUNERACION_VACACIONAL: remuneracionVacacional,
       DIAS: dias,
+      DIAS_LABORADOS: diasBasico,
+      DIAS_VACACIONES: diasVacaciones,
+      DIAS_SUBSIDIADOS: diasSubsidiados,
+      DIAS_SIN_GOCE: diasSinGoce,
+      DIAS_NO_LABORADOS: diasNoLaborados,
+      DIAS_MES: diasCalendarioDelPeriodo(planilla),
       REMUNERACION_CONTRATO: Number(contrato.remuneracionBasica),
       // Movilidad fija mensual del contrato (no remunerativa): completa y proporcional a los días del periodo; el concepto elige cuál usar
       MOVILIDAD_FIJA: Number(contrato.movilidadFija || 0),
-      MOVILIDAD_PROPORCIONAL: redondear((Number(contrato.movilidadFija || 0) / diasBaseMes) * dias),
+      MOVILIDAD_PROPORCIONAL: movilidadDevengada,
+      MOVILIDAD_DEVENGADA: movilidadDevengada,
       ES_LOCACION: contrato.esLocacionServicios ? 1 : 0,
       ES_OBRERO: personal.esObrero ? 1 : 0,
       ES_PESCADOR: esPescador ? 1 : 0,
@@ -258,7 +353,7 @@ export async function calcularPlanilla(tx, planilla) {
       PAGA_GRATIFICACION: semestre ? 1 : 0,
       MESES_GRATIFICACION: semestre ? mesesCompletosGratificacion(semestre, personal, contrato) : 0,
       TOTAL_INGRESOS: 0, TOTAL_DESCUENTOS: 0,
-      DIAS_BASE_MES: diasBaseMes,
+      DIAS_BASE_MES: baseDias,
       PERIODICIDAD_DIAS: planilla.periodicidadDias || 0,
       MES: mes,
       ANIO: anio,
@@ -317,7 +412,7 @@ export async function calcularPlanilla(tx, planilla) {
           if (concepto.cuentaParaGratificacion) variables.BASE_GRATIFICACION += monto;
           if (concepto.cuentaParaCts) variables.BASE_CTS += monto;
           if (concepto.cuentaParaVacaciones) variables.BASE_VACACIONES += monto;
-          const aMensual = (base) => (variables.DIAS > 0 ? (base / variables.DIAS) * diasBaseMes : 0);
+          const aMensual = (base) => (variables.DIAS > 0 ? (base / variables.DIAS) * baseDias : 0);
           variables.BASE_GRATIFICACION_MENSUAL = aMensual(variables.BASE_GRATIFICACION);
           variables.BASE_CTS_MENSUAL = aMensual(variables.BASE_CTS);
           variables.BASE_VACACIONES_MENSUAL = aMensual(variables.BASE_VACACIONES);
@@ -344,7 +439,18 @@ export async function calcularPlanilla(tx, planilla) {
       contratoPersonalId: contrato.id,
       esObrero: Boolean(personal.esObrero) && !esPescador,
       esPescador,
-      diasTrabajados: dias,
+      diasTrabajados: Math.max(0, diasCubiertos - diasNoLaborados - diasSubsidiados),
+      diasMes: mesCalendario ? baseDias : null,
+      diasNoLaborados,
+      diasSubsidiados,
+      horasJornada,
+      suspensiones: suspensiones.map((s) => ({
+        suspensionLaboralId: s.suspensionLaboralId,
+        tipoSuspensionLaboralId: s.tipoSuspensionLaboralId,
+        fechaInicio: s.fechaInicio,
+        fechaFin: s.fechaFin,
+        dias: s.dias,
+      })),
       remuneracionBasica: basico,
       totalIngresos,
       totalDescuentos,
