@@ -286,8 +286,12 @@ async function evaluarCompatibilidad(db, origen, destino, alcance, impacto) {
 
   if (Number(origen.id) === Number(destino.id)) bloqueos.push("El producto de reemplazo debe ser distinto del producto a retirar.");
   if (destino.cesado) bloqueos.push(`El producto de reemplazo (${nombre(destino)}) está cesado.`);
-  if (Number(origen.unidadMedidaId) !== Number(destino.unidadMedidaId)) {
-    bloqueos.push("Los productos tienen distinta unidad de medida: el reemplazo cambiaría el significado de las cantidades.");
+  // La unidad distinta ya no bloquea: el reemplazo solo cambia el producto de cada línea y conserva cantidades, precios y la elección de
+  // usar la unidad comercial. Es responsabilidad del usuario revisar el significado de esas cantidades y regenerar CxC y asientos.
+  if (Number(origen.unidadMedidaId) !== Number(destino.unidadMedidaId) || String(origen.unidadMedidaComercialId ?? "") !== String(destino.unidadMedidaComercialId ?? "")) {
+    avisos.push(
+      "Los productos tienen distinta unidad de medida (presentación o unidad comercial). Se conservan las cantidades, los precios y la unidad elegida en cada línea tal como están; revise que sigan teniendo sentido y regenere las cuentas por cobrar o pagar y los asientos de los documentos afectados.",
+    );
   }
 
   const tablas = new Set(impacto.map((i) => i.tabla));
