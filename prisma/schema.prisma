@@ -4284,6 +4284,9 @@ model Personal {
   planillasAprobadasJefePersonal Planilla[]         @relation("PlanillaAprobadorJefePersonal")  // Planillas que aprobó como jefa de personal
   planillasAprobadasGerente      Planilla[]         @relation("PlanillaAprobadorGerente")       // Planillas que aprobó como gerente general
 
+  periodosVacacionales   PeriodoVacacional[]
+  suspensionesLaborales  SuspensionLaboral[]
+
   @@index([centroCostoId])         // ⭐ NUEVO
   @@index([entidadPensionId])
 
@@ -4494,6 +4497,98 @@ model ContratoPersonalLineaPago {
   @@unique([contratoPersonalId, orden])
 }
 
+
+// ════════════════════════════════════════════════════════════
+// RRHH — SUSPENSIONES DE LABORES Y VACACIONES
+// ════════════════════════════════════════════════════════════
+model TipoSuspensionLaboral {
+  id                   BigInt    @id @default(autoincrement())
+  codigoPlame          String    @unique @db.VarChar(5)        // "23"
+  descripcion          String    @db.VarChar(150)              // "S.I. DESCANSO VACACIONAL"
+  esDescansoVacacional Boolean   @default(false)               // true = consume días de un periodo vacacional
+  esSubsidio           Boolean   @default(false)               // true = cuenta como días subsidiados (descanso médico, maternidad)
+  conGoceRemuneracion  Boolean   @default(false)               // true = se paga (vacaciones, licencia con goce); false = falta o licencia sin goce
+  pagaMovilidad        Boolean   @default(false)               // true = la movilidad se paga esos días (vacaciones); false = se descuenta (faltas)
+  activo               Boolean   @default(true)
+
+  creadoEn             DateTime  @default(now())
+  creadoPor            BigInt?
+  actualizadoEn        DateTime  @updatedAt
+  actualizadoPor       BigInt?
+
+  suspensiones         SuspensionLaboral[]
+  suspensionesBoleta   PlanillaTrabajadorSuspension[]
+}
+
+model PeriodoVacacional {
+  id                BigInt    @id @default(autoincrement())
+  personalId        BigInt
+  numeroPeriodo     Int                                        // 1 = primer año de servicios
+  fechaInicio       DateTime                                   // Aniversario de ingreso que inicia el año de servicios
+  fechaFin          DateTime                                   // Día anterior al siguiente aniversario
+  diasDerecho       Int                                        // 30 (régimen general) o 15 (pequeña y microempresa), del parámetro VACACIONES_DIAS
+  diasVendidos      Int       @default(0)                      // Días compensados en dinero (no se gozan)
+  fechaLimiteGoce   DateTime                                   // Vencido este día sin gozar, nace la indemnización vacacional
+  observaciones     String?   @db.Text
+  activo            Boolean   @default(true)
+
+  creadoEn          DateTime  @default(now())
+  creadoPor         BigInt?
+  actualizadoEn     DateTime  @updatedAt
+  actualizadoPor    BigInt?
+
+  personal          Personal  @relation(fields: [personalId], references: [id])
+  suspensiones      SuspensionLaboral[]
+
+  @@unique([personalId, numeroPeriodo])
+  @@index([personalId, fechaInicio])
+}
+
+model SuspensionLaboral {
+  id                      BigInt    @id @default(autoincrement())
+  personalId              BigInt
+  tipoSuspensionLaboralId BigInt
+  periodoVacacionalId     BigInt?                               // Solo si el tipo es descanso vacacional
+  fechaInicio             DateTime
+  fechaFin                DateTime
+  dias                    Int                                   // Días calendario del rango (fin - inicio + 1)
+  estado                  String    @default("PROGRAMADA")      // PROGRAMADA | EJECUTADA | ANULADA
+  motivoAnulacion         String?   @db.Text
+  observaciones           String?   @db.Text
+
+  creadoEn                DateTime  @default(now())
+  creadoPor               BigInt?
+  actualizadoEn           DateTime  @updatedAt
+  actualizadoPor          BigInt?
+
+  personal                Personal              @relation(fields: [personalId], references: [id])
+  tipoSuspensionLaboral   TipoSuspensionLaboral @relation(fields: [tipoSuspensionLaboralId], references: [id])
+  periodoVacacional       PeriodoVacacional?    @relation(fields: [periodoVacacionalId], references: [id])
+  suspensionesBoleta      PlanillaTrabajadorSuspension[]
+
+  @@index([personalId, fechaInicio])
+  @@index([periodoVacacionalId])
+  @@index([tipoSuspensionLaboralId])
+  @@index([estado])
+}
+
+model PlanillaTrabajadorSuspension {
+  id                      BigInt    @id @default(autoincrement())
+  planillaTrabajadorId    BigInt
+  tipoSuspensionLaboralId BigInt
+  suspensionLaboralId     BigInt?
+  fechaInicio             DateTime
+  fechaFin                DateTime
+  dias                    Int                                   // Días de la suspensión que caen dentro del periodo de la planilla
+
+  planillaTrabajador      PlanillaTrabajador    @relation(fields: [planillaTrabajadorId], references: [id], onDelete: Cascade)
+  tipoSuspensionLaboral   TipoSuspensionLaboral @relation(fields: [tipoSuspensionLaboralId], references: [id])
+  suspensionLaboral       SuspensionLaboral?    @relation(fields: [suspensionLaboralId], references: [id])
+
+  @@index([planillaTrabajadorId])
+}
+
+
 // ════════════════════════════════════════════════════════════
 // RRHH — CONCEPTO DE PLANILLA (el corazón del módulo)
 // Todo ingreso, descuento, aporte o provisión es una fila: básico, AFP, ONP, CTS, bonos propios...
@@ -4673,6 +4768,11 @@ model PlanillaTrabajador {
   creadoPor             BigInt?
   actualizadoEn         DateTime  @updatedAt
   actualizadoPor        BigInt?
+  diasMes                Int?                                   // Días calendario del periodo (28 a 31)
+  diasNoLaborados        Int            @default(0)
+  diasSubsidiados        Int            @default(0)
+  horasJornada           Decimal?       @db.Decimal(7, 2)       // Horas de jornada ordinaria del periodo
+  suspensiones           PlanillaTrabajadorSuspension[]
 
   // Relaciones
   planilla              Planilla                  @relation(fields: [planillaId], references: [id], onDelete: Cascade)
