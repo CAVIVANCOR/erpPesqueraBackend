@@ -210,6 +210,25 @@ async function validarProducto(data, excluirId = null) {
     }
   }
 
+  // Presentación y Unidad Comercial solo admiten unidades habilitadas para ese uso (Unidades de Medida: esParaPresentacion /
+  // esParaUnidadMedidaComercial). Se tolera la unidad que el producto ya tiene guardada, para no bloquear productos anteriores.
+  const unidadesActuales = excluirId
+    ? await prisma.producto.findUnique({ where: { id: excluirId }, select: { unidadMedidaId: true, unidadMedidaComercialId: true } })
+    : null;
+  for (const [campo, habilitada, etiqueta] of [
+    ['unidadMedidaId', 'esParaPresentacion', 'la Presentación'],
+    ['unidadMedidaComercialId', 'esParaUnidadMedidaComercial', 'la Unidad Comercial'],
+  ]) {
+    const unidadId = data[campo];
+    if (!unidadId || (unidadesActuales && Number(unidadesActuales[campo]) === Number(unidadId))) continue;
+    const unidad = await prisma.unidadMedida.findUnique({ where: { id: unidadId }, select: { nombre: true, [habilitada]: true } });
+    if (unidad && unidad[habilitada] === false) {
+      throw new ValidationError(
+        `La unidad "${unidad.nombre}" no está habilitada para ${etiqueta}. Habilítela en Unidades de Medida o elija otra unidad.`,
+      );
+    }
+  }
+
   // Validar que la subfamilia pertenezca a la familia seleccionada
   if (data.familiaId && data.subfamiliaId) {
     const subfamilia = await prisma.subfamiliaProducto.findUnique({
