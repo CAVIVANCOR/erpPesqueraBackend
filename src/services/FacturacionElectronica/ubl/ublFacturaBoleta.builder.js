@@ -35,9 +35,11 @@ const TRIBUTO_POR_CATEGORIA = {
 // SUNAT admite hasta 500 caracteres en la descripción del ítem (cac:Item/cbc:Description)
 const LIMITE_DESCRIPCION_ITEM = 500;
 
-// Texto de la línea en el XML: descripción del producto y, debajo (salto de línea), la observación escrita en la venta
+// Texto de la línea en el XML: descripción del producto y, debajo (salto de línea), la observación escrita en la venta.
+// Si la línea se marcó sin descripción armada (mostrarDescripcionArmada = false) solo viaja la observación. Las líneas anteriores
+// a este campo no lo traen (undefined) y siguen mostrando ambas.
 export const textoDescripcionLinea = (d) =>
-  [d.descripcion, d.observaciones]
+  [d.mostrarDescripcionArmada === false ? null : d.descripcion, d.observaciones]
     .map((texto) => String(texto ?? '').replace(/\r\n?/g, '\n').trim())
     .filter(Boolean)
     .join('\n');

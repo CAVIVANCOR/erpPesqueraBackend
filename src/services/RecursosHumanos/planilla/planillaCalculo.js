@@ -124,7 +124,7 @@ export async function calcularPlanilla(tx, planilla) {
       personal: {
         select: {
           id: true, nombres: true, apellidos: true, cargoId: true, esObrero: true, cesado: true, fechaCese: true, fechaIngreso: true,
-          entidadPensionId: true, comisionMixta: true, tieneAsignacionFamiliar: true, aplicaSctr: true,
+          entidadPensionId: true, tipoComisionPensionId: true, tieneAsignacionFamiliar: true, aplicaSctr: true,
         },
       },
     },
@@ -158,6 +158,33 @@ export async function calcularPlanilla(tx, planilla) {
   const tarifaPorEntidad = new Map(tarifas.map((t) => [Number(t.entidadPensionId), t]));
   const entidades = await tx.entidadPension.findMany({ select: { id: true, descripcion: true, esOnp: true } });
   const entidadPorId = new Map(entidades.map((e) => [Number(e.id), e]));
+  // Tipos de comisión (catálogo abierto) y su porcentaje por tarifa: reemplazan al antiguo interruptor comisionMixta (eliminado)
+  const tiposComision = new Map((await tx.tipoComisionPension.findMany()).map((t) => [Number(t.id), t]));
+  const comisionPorTarifaYTipo = new Map(
+    (await tx.tarifaEntidadPensionComision.findMany({ where: { tarifaEntidadPensionId: { in: tarifas.map((t) => t.id) } } })).map((c) => [
+      `${c.tarifaEntidadPensionId}-${c.tipoComisionPensionId}`,
+      Number(c.porcentaje),
+    ]),
+  );
+  // Porcentaje de comisión de una persona: sale de su tipo de comisión. La ONP no cobra comisión, por eso no exige tipo.
+  const porcentajeComision = (personal, tarifa, entidad) => {
+    if (entidad?.esOnp) return 0;
+    const tipo = personal.tipoComisionPensionId ? tiposComision.get(Number(personal.tipoComisionPensionId)) : null;
+    if (!tipo) {
+      throw new ValidationError(
+        `${nombrePersonal(personal)} está en ${entidad?.descripcion || 'una AFP'} pero no tiene el tipo de comisión asignado. Elíjalo en la ficha de Personal (Datos laborales y de planilla).`,
+      );
+    }
+    if (tipo.sinComision) return 0;
+    const guardado = comisionPorTarifaYTipo.get(`${tarifa.id}-${tipo.id}`);
+    if (guardado !== undefined) return guardado;
+    // Tarifas registradas antes del catálogo: los dos tipos históricos se leen de sus columnas originales
+    if (tipo.codigo === 'FLUJO') return Number(tarifa.porcentajeComisionFlujo);
+    if (tipo.codigo === 'MIXTA') return Number(tarifa.porcentajeComisionMixta);
+    throw new ValidationError(
+      `${nombrePersonal(personal)} tiene el tipo de comisión "${tipo.nombre}", pero la tarifa vigente de ${entidad?.descripcion || 'su entidad de pensión'} no define el porcentaje para ese tipo. Regístrelo en las tarifas de la entidad de pensión.`,
+    );
+  };
 
   // Renta de 5ta: necesita lo ganado y retenido en los meses anteriores del mismo año (solo planillas, no locaciones)
   const anio = fechaFin.getUTCFullYear();
@@ -214,6 +241,9 @@ export async function calcularPlanilla(tx, planilla) {
       BASICO: basico,
       DIAS: dias,
       REMUNERACION_CONTRATO: Number(contrato.remuneracionBasica),
+      // Movilidad fija mensual del contrato (no remunerativa): completa y proporcional a los días del periodo; el concepto elige cuál usar
+      MOVILIDAD_FIJA: Number(contrato.movilidadFija || 0),
+      MOVILIDAD_PROPORCIONAL: redondear((Number(contrato.movilidadFija || 0) / diasBaseMes) * dias),
       ES_LOCACION: contrato.esLocacionServicios ? 1 : 0,
       ES_OBRERO: personal.esObrero ? 1 : 0,
       ES_PESCADOR: esPescador ? 1 : 0,
@@ -249,7 +279,7 @@ export async function calcularPlanilla(tx, planilla) {
       variables.ES_ONP = entidad?.esOnp ? 1 : 0;
       variables.PENSION_APORTE = Number(tarifa.porcentajeAporte);
       variables.PENSION_SEGURO = Number(tarifa.porcentajeSeguro);
-      variables.PENSION_COMISION = Number(personal.comisionMixta ? tarifa.porcentajeComisionMixta : tarifa.porcentajeComisionFlujo);
+      variables.PENSION_COMISION = porcentajeComision(personal, tarifa, entidad);
       variables.REM_MAX_ASEGURABLE = Number(tarifa.remuneracionMaximaAsegurable || 0);
     }
 

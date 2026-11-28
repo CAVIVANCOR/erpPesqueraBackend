@@ -42,6 +42,13 @@ const camposEditables = (data) => {
   if (data.remuneracionBasica !== undefined && data.remuneracionBasica !== null && data.remuneracionBasica !== '') {
     campos.remuneracionBasica = Number(data.remuneracionBasica);
   }
+  // Movilidad fija mensual (no remunerativa): vacío = sin movilidad; no puede ser negativa
+  if (data.movilidadFija !== undefined) {
+    campos.movilidadFija = data.movilidadFija === null || data.movilidadFija === '' ? null : Number(data.movilidadFija);
+    if (campos.movilidadFija !== null && (Number.isNaN(campos.movilidadFija) || campos.movilidadFija < 0)) {
+      throw new ValidationError('La movilidad fija debe ser un monto mayor o igual a cero (déjela vacía si el contrato no tiene movilidad).');
+    }
+  }
   if (data.esJornal !== undefined) campos.esJornal = Boolean(data.esJornal);
   if (data.periodicidadDias !== undefined) {
     campos.periodicidadDias = data.periodicidadDias === null || data.periodicidadDias === '' ? null : Number(data.periodicidadDias);

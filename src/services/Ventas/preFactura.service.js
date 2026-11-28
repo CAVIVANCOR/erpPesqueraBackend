@@ -2362,6 +2362,11 @@ const construirLineasComprobante = async (tx, preFactura) => {
 
   const detalles = detallesNormales.map((detalle, indice) => {
     const nombreLinea = detalle.producto?.descripcionBase || `línea ${indice + 1}`;
+    if (detalle.mostrarDescripcionArmada === false && !String(detalle.observaciones || "").trim()) {
+      throw new ValidationError(
+        `La línea ${indice + 1} (${nombreLinea}) de la PreFactura ${preFactura.codigo} está marcada sin descripción armada y no tiene observación: el comprobante saldría sin descripción. Escriba la observación de la línea o vuelva a marcar "Mostrar descripción armada".`,
+      );
+    }
     const afectacion = afectacionDeLinea(detalle);
     if (!afectacion) {
       throw new ValidationError(`La línea ${indice + 1} (${nombreLinea}) de la PreFactura ${preFactura.codigo} no tiene tipo de afectación del IGV.`);
@@ -2391,6 +2396,8 @@ const construirLineasComprobante = async (tx, preFactura) => {
       descripcion: String(detalle.producto?.descripcionArmada || "").trim() || nombreLinea,
       // Descripción complementaria escrita en la venta: queda congelada en el comprobante y viaja dentro del XML
       observaciones: String(detalle.observaciones || "").trim() || null,
+      // Elección de la línea de venta (descripción armada + observación, o solo la observación): también queda congelada
+      mostrarDescripcionArmada: detalle.mostrarDescripcionArmada !== false,
       unidadMedidaId: detalle.producto?.unidadMedidaId,
       codigoUnidadSUNAT: UNIDAD_SUNAT_POR_SIMBOLO[String(unidad?.simbolo || "").toUpperCase()] || "NIU",
       nombreUnidad: unidad?.nombre || null,

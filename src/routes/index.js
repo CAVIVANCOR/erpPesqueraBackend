@@ -40,6 +40,7 @@ import personalRoutes from './Usuarios/personal.routes.js';
 import cargosPersonalRoutes from './Usuarios/cargosPersonal.routes.js';
 import tipoLibroContableSunatRoutes from './Contabilidad/tipoLibroContableSunat.routes.js';
 import tipoContratoRoutes from './Usuarios/tipoContrato.routes.js'; // CRUD profesional de TipoContrato
+import tipoComisionPensionRoutes from './Usuarios/tipoComisionPension.routes.js'; // Catálogo de tipos de comisión de pensiones
 import accesosUsuarioRoutes from './Usuarios/accesosUsuario.routes.js';
 import moduloSistemaRoutes from './Usuarios/moduloSistema.routes.js';
 import submoduloSistemaRoutes from './Usuarios/submoduloSistema.routes.js';
@@ -705,6 +706,7 @@ router.use('/configuraciones-cuenta-contable', configuracionCuentaContableRoutes
 router.use('/asientos-contables-interfaz', asientoContableInterfazRoutes);
 // Rutas para TipoContrato (contratos laborales)
 router.use('/tipos-contrato', tipoContratoRoutes);
+router.use('/tipos-comision-pension', tipoComisionPensionRoutes);
 router.use('/bancos', bancoRoutes);
 router.use('/medio-pago', medioPagoRoutes);
 router.use('/tipos-cuenta-corriente', tipoCuentaCorrienteRoutes);
