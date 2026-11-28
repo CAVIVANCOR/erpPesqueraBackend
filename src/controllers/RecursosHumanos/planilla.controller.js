@@ -12,6 +12,14 @@ export async function listar(req, res, next) {
   }
 }
 
+export async function boletaMensual(req, res, next) {
+  try {
+    res.json(toJSONBigInt(await planillaService.boletaMensual(req.query)));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obtenerPorId(req, res, next) {
   try {
     res.json(toJSONBigInt(await planillaService.obtenerPorId(Number(req.params.id))));

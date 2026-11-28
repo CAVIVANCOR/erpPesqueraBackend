@@ -60,9 +60,12 @@ const incluirDetalle = {
       },
       contratoPersonal: { select: { id: true, esLocacionServicios: true } },
       conceptos: {
-        include: { conceptoPlanilla: { select: { visibleEnBoleta: true } } },
+        // codigoPlame: la boleta en formato R08 de PLAME muestra el código de cada concepto
+        include: { conceptoPlanilla: { select: { visibleEnBoleta: true, codigoPlame: true, orden: true } } },
         orderBy: [{ conceptoPlanilla: { orden: 'asc' } }, { id: 'asc' }],
       },
+      // Foto de las suspensiones que entraron en la boleta (motivo y días no laborados del R08)
+      suspensiones: { include: { tipoSuspensionLaboral: { select: { codigoPlame: true, descripcion: true } } }, orderBy: { fechaInicio: 'asc' } },
     },
     orderBy: [{ personal: { apellidos: 'asc' } }, { id: 'asc' }],
   },
@@ -827,7 +830,89 @@ const eliminar = async (id) => {
   }
 };
 
+/**
+ * Boleta mensual de un trabajador (formato R08 de PLAME, que es mensual): consolida todas las boletas del mes de la empresa,
+ * por ejemplo las dos quincenas. Suma conceptos, totales y días; el periodo del mes se toma por la fecha fin de cada planilla,
+ * igual que el historial de quinta categoría. Si el mes tiene una sola planilla, es esa misma boleta.
+ */
+const boletaMensual = async ({ empresaId, personalId, anio, mes }) => {
+  try {
+    const empresa = Number(empresaId);
+    const personal = Number(personalId);
+    const a = Number(anio);
+    const m = Number(mes);
+    if (!empresa || !personal || !a || !m || m < 1 || m > 12) {
+      throw new ValidationError('Indique empresa, trabajador, año y mes (1 a 12) para armar la boleta mensual.');
+    }
+    const boletas = await prisma.planillaTrabajador.findMany({
+      where: {
+        personalId: personal,
+        planilla: { empresaId: empresa, fechaFin: { gte: new Date(Date.UTC(a, m - 1, 1)), lt: new Date(Date.UTC(a, m, 1)) } },
+      },
+      include: {
+        planilla: { include: { empresa: { select: { id: true, razonSocial: true, ruc: true } } } },
+        personal: {
+          select: {
+            id: true, nombres: true, apellidos: true, numeroDocumento: true, fechaIngreso: true, cuspp: true,
+            cargo: { select: { descripcion: true } },
+            entidadPension: { select: { descripcion: true } },
+          },
+        },
+        conceptos: { include: { conceptoPlanilla: { select: { visibleEnBoleta: true, codigoPlame: true, orden: true } } } },
+        suspensiones: { include: { tipoSuspensionLaboral: { select: { codigoPlame: true, descripcion: true } } }, orderBy: { fechaInicio: 'asc' } },
+      },
+      orderBy: { id: 'asc' },
+    });
+    if (boletas.length === 0) {
+      throw new NotFoundError(`El trabajador no tiene boletas de planilla en ${String(m).padStart(2, '0')}/${a} para esa empresa.`);
+    }
+
+    const suma = (campo) => boletas.reduce((total, b) => total + Number(b[campo] || 0), 0);
+    const porConcepto = new Map();
+    for (const boleta of boletas) {
+      for (const c of boleta.conceptos) {
+        const clave = `${c.conceptoPlanillaId}|${c.naturaleza}`;
+        const actual = porConcepto.get(clave);
+        if (actual) actual.monto = Number(actual.monto) + Number(c.monto);
+        else porConcepto.set(clave, { ...c, monto: Number(c.monto) });
+      }
+    }
+    const horas = boletas.map((b) => b.horasJornada);
+    const fechas = boletas.map((b) => b.planilla);
+    return {
+      planilla: {
+        empresa: boletas[0].planilla.empresa,
+        descripcion: `Boleta mensual ${String(m).padStart(2, '0')}/${a}${boletas.length > 1 ? ` (${boletas.length} planillas)` : ''}`,
+        fechaInicio: new Date(Math.min(...fechas.map((p) => new Date(p.fechaInicio).getTime()))),
+        fechaFin: new Date(Math.max(...fechas.map((p) => new Date(p.fechaFin).getTime()))),
+      },
+      trabajador: {
+        ...boletas[0],
+        // La boleta mensual no es de una sola planilla: no hereda id ni relación de planilla
+        id: undefined,
+        planillaId: undefined,
+        planilla: undefined,
+        diasTrabajados: suma('diasTrabajados'),
+        diasMes: boletas.map((b) => b.diasMes).find((d) => d) || null,
+        diasNoLaborados: suma('diasNoLaborados'),
+        diasSubsidiados: suma('diasSubsidiados'),
+        // Las horas solo se suman si todas las boletas las tienen (periodos mensuales); en quincenas no se calculan
+        horasJornada: horas.every((h) => h !== null && h !== undefined) ? horas.reduce((t, h) => t + Number(h), 0) : null,
+        remuneracionBasica: suma('remuneracionBasica'),
+        totalIngresos: suma('totalIngresos'),
+        totalDescuentos: suma('totalDescuentos'),
+        totalAportesEmpleador: suma('totalAportesEmpleador'),
+        totalNeto: suma('totalNeto'),
+        conceptos: [...porConcepto.values()].sort((x, y) => Number(x.conceptoPlanilla?.orden || 0) - Number(y.conceptoPlanilla?.orden || 0)),
+        suspensiones: boletas.flatMap((b) => b.suspensiones),
+      },
+    };
+  } catch (err) {
+    manejarError(err, 'armar la boleta mensual');
+  }
+};
+
 export default {
-  listar, obtenerPorId, generar, regenerar, corregirConcepto, aprobarJefePersonal, reabrir, aprobarGerencia,
+  boletaMensual, listar, obtenerPorId, generar, regenerar, corregirConcepto, aprobarJefePersonal, reabrir, aprobarGerencia,
   revertirAprobacionGerencia, obtenerDatosAfpnet, obtenerDatosPlame, eliminar,
 };

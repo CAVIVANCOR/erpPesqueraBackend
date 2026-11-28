@@ -150,8 +150,11 @@ const diasDerechoVigente = async (regimenLaboralId, fecha) => {
 };
 
 /** Genera los periodos vacacionales que faltan de un trabajador: uno por cada año de servicios ya completo */
-const generarPeriodos = async (personalId, usuarioId = null) => {
+const generarPeriodos = async (personalId, usuarioId = null, desde = null) => {
   try {
+    // "desde": fecha de inicio del control vacacional en el sistema. Los periodos que terminaron antes no se generan: su historia no se
+    // importa, así que no deben figurar como pendientes ni vencidos (la numeración sigue contando desde el ingreso).
+    const inicioControl = desde ? aFecha(desde, 'La fecha de inicio del control vacacional') : null;
     const personal = await prisma.personal.findUnique({
       where: { id: personalId },
       select: { id: true, nombres: true, apellidos: true, fechaIngreso: true, fechaCese: true, cesado: true, empresaId: true },
@@ -175,6 +178,7 @@ const generarPeriodos = async (personalId, usuarioId = null) => {
       const fin = desdeIndice(indiceDia(sumarAnios(personal.fechaIngreso, n)) - 1);
       if (indiceDia(fin) > limite) break; // el año de servicios todavía no se completa: aún no nace el derecho
       if (existentes.has(n)) continue;
+      if (inicioControl && indiceDia(fin) < indiceDia(inicioControl)) continue;
       nuevos.push({
         personalId,
         numeroPeriodo: n,
@@ -194,7 +198,7 @@ const generarPeriodos = async (personalId, usuarioId = null) => {
 };
 
 /** Genera los periodos de todos los trabajadores activos de una empresa; informa los que no se pudieron */
-const generarPeriodosEmpresa = async (empresaId, usuarioId = null) => {
+const generarPeriodosEmpresa = async (empresaId, usuarioId = null, desde = null) => {
   try {
     const trabajadores = await prisma.personal.findMany({
       where: { empresaId, cesado: false, fechaIngreso: { not: null } },
@@ -204,7 +208,7 @@ const generarPeriodosEmpresa = async (empresaId, usuarioId = null) => {
     const omitidos = [];
     for (const t of trabajadores) {
       try {
-        creados += (await generarPeriodos(Number(t.id), usuarioId)).creados;
+        creados += (await generarPeriodos(Number(t.id), usuarioId, desde)).creados;
       } catch (error) {
         omitidos.push({ personalId: Number(t.id), trabajador: nombreCompleto(t), motivo: error.message });
       }

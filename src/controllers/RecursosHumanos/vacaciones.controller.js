@@ -22,8 +22,8 @@ export const eliminarTipo = accion(async (req) => {
 
 export const generarPeriodos = accion((req) =>
   req.body.personalId
-    ? vacacionesService.generarPeriodos(Number(req.body.personalId), req.body.creadoPor)
-    : vacacionesService.generarPeriodosEmpresa(Number(req.body.empresaId), req.body.creadoPor),
+    ? vacacionesService.generarPeriodos(Number(req.body.personalId), req.body.creadoPor, req.body.desde)
+    : vacacionesService.generarPeriodosEmpresa(Number(req.body.empresaId), req.body.creadoPor, req.body.desde),
 );
 export const actualizarPeriodo = accion((req) => vacacionesService.actualizarPeriodo(id(req), req.body));
 

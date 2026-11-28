@@ -6,6 +6,7 @@ const router = Router();
 router.get('/', planillaController.listar);
 router.get('/afpnet', planillaController.obtenerDatosAfpnet);
 router.get('/plame', planillaController.obtenerDatosPlame);
+router.get('/boleta-mensual', planillaController.boletaMensual);
 router.get('/:id', planillaController.obtenerPorId);
 router.post('/', planillaController.generar);
 router.put('/conceptos/:conceptoId', planillaController.corregirConcepto);
